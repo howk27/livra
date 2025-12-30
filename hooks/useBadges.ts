@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { CounterBadge, BadgeCode } from '../types';
+import { MarkBadge, BadgeCode } from '../types';
 import { query, execute } from '../lib/db';
 import { getMetaValue, setMetaValue } from '../lib/db/meta';
 import { formatDate, daysBetween } from '../lib/date';
@@ -18,12 +18,12 @@ type BadgeDefinition = {
 
 export type BadgeProgress = {
   definition: BadgeDefinition;
-  record: CounterBadge | null;
+  record: MarkBadge | null;
   progress: number;
   earned: boolean;
 };
 
-type BadgeMap = Map<string, Map<BadgeCode, CounterBadge>>;
+type BadgeMap = Map<string, Map<BadgeCode, MarkBadge>>;
 
 const BADGE_DEFINITIONS: BadgeDefinition[] = [
   {
@@ -128,12 +128,14 @@ const computeWindowProgress = (
   return { count, lastDate };
 };
 
-const badgeToMap = (records: CounterBadge[]): BadgeMap => {
+const badgeToMap = (records: MarkBadge[]): BadgeMap => {
   const map: BadgeMap = new Map();
   records.forEach((record) => {
-    const perCounter = map.get(record.counter_id) ?? new Map<BadgeCode, CounterBadge>();
+    // Use mark_id if available, fallback to counter_id for database compatibility
+    const markId = record.mark_id || record.counter_id || '';
+    const perCounter = map.get(markId) ?? new Map<BadgeCode, MarkBadge>();
     perCounter.set(record.badge_code, record);
-    map.set(record.counter_id, perCounter);
+    map.set(markId, perCounter);
   });
   return map;
 };
@@ -187,7 +189,7 @@ export const useBadges = (userId?: string) => {
 
       setLoading(true);
       try {
-        const rows = await query<CounterBadge>('SELECT * FROM lc_badges WHERE deleted_at IS NULL');
+        const rows = await query<MarkBadge & { counter_id: string }>('SELECT * FROM lc_badges WHERE deleted_at IS NULL');
         const filtered = rows.filter((row) => row.user_id === uid);
         setBadgesByCounter(badgeToMap(filtered));
         await loadLoginState(uid);
@@ -216,16 +218,17 @@ export const useBadges = (userId?: string) => {
       progress: number,
       earned: boolean,
       lastProgressDate: string | null
-    ): Promise<CounterBadge> => {
+    ): Promise<MarkBadge> => {
       const perCounter = badgesByCounter.get(markId);
       const existing = perCounter?.get(definition.code) ?? null;
       const nowIso = new Date().toISOString();
       const lastProgressIso = lastProgressDate ? `${lastProgressDate}T00:00:00.000Z` : null;
 
       if (!existing) {
-        const record: CounterBadge = {
+        const record: MarkBadge & { counter_id: string } = {
           id: uuidv4(),
           user_id: uid,
+          mark_id: markId,
           counter_id: markId, // Database column is still counter_id for compatibility
           badge_code: definition.code,
           progress_value: progress,
@@ -395,12 +398,12 @@ export const useBadges = (userId?: string) => {
   );
 
   const getBadgeRecordsForCounter = useCallback(
-    (markId: string): CounterBadge[] => {
+    (markId: string): MarkBadge[] => {
       const perCounter = badgesByCounter.get(markId);
       if (!perCounter) return [];
       return BADGE_DEFINITIONS.map((definition) => {
         return perCounter.get(definition.code) ?? null;
-      }).filter((record): record is CounterBadge => record !== null);
+      }).filter((record): record is MarkBadge => record !== null);
     },
     [badgesByCounter]
   );

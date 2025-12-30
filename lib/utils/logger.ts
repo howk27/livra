@@ -21,7 +21,54 @@ export const logger = {
   },
   error: (...args: any[]) => {
     // Always log errors, even in production (for crash reporting)
-    console.error(...args);
+    // But sanitize any sensitive data before logging
+    const sanitizedArgs = args.map(arg => {
+      if (typeof arg === 'string') {
+        // Remove any potential credential patterns from error messages
+        return arg
+          .replace(/EXPO_PUBLIC_SUPABASE_[A-Z_]+=[^\s]+/gi, '[REDACTED]')
+          .replace(/https?:\/\/[^\s]+supabase[^\s]+/gi, '[REDACTED_URL]')
+          .replace(/eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, '[REDACTED_TOKEN]');
+      }
+      if (arg && typeof arg === 'object') {
+        // Recursively sanitize object properties
+        try {
+          const sanitized = JSON.parse(JSON.stringify(arg));
+          const sanitizeObject = (obj: any): any => {
+            if (typeof obj !== 'object' || obj === null) {
+              if (typeof obj === 'string') {
+                return obj
+                  .replace(/EXPO_PUBLIC_SUPABASE_[A-Z_]+=[^\s]+/gi, '[REDACTED]')
+                  .replace(/https?:\/\/[^\s]+supabase[^\s]+/gi, '[REDACTED_URL]')
+                  .replace(/eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, '[REDACTED_TOKEN]');
+              }
+              return obj;
+            }
+            if (Array.isArray(obj)) {
+              return obj.map(sanitizeObject);
+            }
+            const result: any = {};
+            for (const key in obj) {
+              // Skip logging sensitive keys
+              if (key.toLowerCase().includes('key') || 
+                  key.toLowerCase().includes('secret') || 
+                  key.toLowerCase().includes('token') ||
+                  key.toLowerCase().includes('password')) {
+                result[key] = '[REDACTED]';
+              } else {
+                result[key] = sanitizeObject(obj[key]);
+              }
+            }
+            return result;
+          };
+          return sanitizeObject(sanitized);
+        } catch {
+          return '[Object]';
+        }
+      }
+      return arg;
+    });
+    console.error(...sanitizedArgs);
   },
   debug: (...args: any[]) => {
     if (isDev) {

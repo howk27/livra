@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Animated, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
@@ -39,14 +39,38 @@ export default function CounterDetailScreen() {
 
   const { counters, loading, getCounter, incrementCounter, decrementCounter, resetCounter, deleteCounter } =
     useCounters();
-  const { getEventsByMark, events: allEvents, loadEvents } = useEventsStore();
+  // CRITICAL: Use selector to ensure reactivity - subscribe to events array changes
+  const allEvents = useEventsStore((state) => state.events || []);
+  const getEventsByMark = useEventsStore((state) => state.getEventsByMark);
+  const loadEvents = useEventsStore((state) => state.loadEvents);
   const { user } = useAuth();
 
   // Subscribe to counters array to ensure re-renders when store updates
   // Find counter from the reactive counters array instead of using getCounter
   const counter = id ? counters.find((c) => c.id === id) : null;
   // Get events reactively - filter from allEvents to ensure reactivity to store updates
-  const events = id ? (allEvents || []).filter((e) => e.mark_id === id && !e.deleted_at) : [];
+  // CRITICAL: Use a more reliable dependency - the length and first event ID
+  // This ensures we catch ALL changes, not just the first 20 events
+  const eventsKey = useMemo(() => {
+    if (!allEvents || allEvents.length === 0) return 'no-events';
+    // Use length + first event ID + last event ID to catch all changes
+    const firstId = allEvents[0]?.id || '';
+    const lastId = allEvents[allEvents.length - 1]?.id || '';
+    return `${allEvents.length}-${firstId}-${lastId}`;
+  }, [allEvents]);
+  
+  const events = useMemo(() => {
+    if (!id) return [];
+    const filtered = (allEvents || []).filter((e) => e.mark_id === id && !e.deleted_at);
+    logger.log('[CounterDetail] Events filtered for mark:', {
+      markId: id,
+      allEventsCount: allEvents.length,
+      filteredCount: filtered.length,
+      eventTypes: filtered.slice(0, 5).map(e => `${e.event_type}:${e.amount}`),
+      eventsKey,
+    });
+    return filtered;
+  }, [id, allEvents, eventsKey]); // Include eventsKey to force recalculation
   const [streak, setStreak] = useState<CounterStreak | null>(null);
   const [progressAnim] = useState(new Animated.Value(0));
   const [maxValue, setMaxValue] = useState(100);
@@ -118,13 +142,35 @@ export default function CounterDetailScreen() {
     }
   }, [counter?.total]);
 
-  // Animate ring progress when screen opens
+  // Animate ring progress when screen opens OR when counter total changes
+  // CRITICAL: Use a ref to track previous total to avoid unnecessary animations
+  const prevTotalRef = useRef<number | null>(null);
+  
   useEffect(() => {
     if (counter) {
       const progress = Math.min(counter.total / COUNTER_MAX_QUANTITY, 1);
-      // Reset to 0 first, then animate to current progress
-      ringProgressAnim.setValue(0);
-      setRingProgress(0);
+      const prevTotal = prevTotalRef.current;
+      const isTotalChanged = prevTotal !== null && prevTotal !== counter.total;
+      
+      logger.log('[CounterDetail] Updating ring progress:', {
+        markId: counter.id,
+        total: counter.total,
+        prevTotal,
+        progress,
+        isTotalChanged,
+      });
+      
+      // Update ref
+      prevTotalRef.current = counter.total;
+      
+      // Don't reset to 0 if we're just updating (not initial load)
+      // Only reset on initial load (when ID changes)
+      // Use ringProgress state instead of accessing private _value property
+      const isInitialLoad = ringProgress === 0 && progress > 0;
+      if (isInitialLoad) {
+        ringProgressAnim.setValue(0);
+        setRingProgress(0);
+      }
       
       const listener = ringProgressAnim.addListener(({ value }) => {
         setRingProgress(value);
@@ -140,8 +186,11 @@ export default function CounterDetailScreen() {
       return () => {
         ringProgressAnim.removeListener(listener);
       };
+    } else {
+      // Reset ref when counter is null
+      prevTotalRef.current = null;
     }
-  }, [counter?.id]); // Animate when counter ID changes (screen opens)
+  }, [counter?.id, counter?.total]); // Animate when counter ID changes (screen opens) OR total changes (increment/decrement)
 
   // Only load events once when screen comes into focus
   // Use ref to track loading state to prevent infinite loops
@@ -204,6 +253,45 @@ export default function CounterDetailScreen() {
     }
   }, [id, allEvents]);
 
+  // CRITICAL: All hooks must be called BEFORE any early returns
+  // Prepare chart data
+  // CRITICAL: Include both increment and decrement events to show net daily value
+  // Use useMemo to ensure recalculation when events change
+  const last7Days = useMemo(() => getLast7Days(), []); // Stable - only calculate once per render cycle
+  const chartData = useMemo(() => {
+    logger.log('[CounterDetail] Recalculating chart data:', {
+      markId: id,
+      eventsCount: events.length,
+      eventTypes: events.slice(0, 10).map(e => `${e.event_type}:${e.amount}`).join(', '),
+    });
+    
+    const eventsByDate = new Map<string, number>();
+    
+    events.forEach((event) => {
+      if (event.event_type === 'increment' || event.event_type === 'decrement') {
+        const current = eventsByDate.get(event.occurred_local_date) || 0;
+        // Increments add, decrements subtract
+        const change = event.event_type === 'increment' 
+          ? event.amount 
+          : -event.amount;
+        eventsByDate.set(event.occurred_local_date, current + change);
+      }
+    });
+
+    const result = last7Days.map((date) => ({
+      date,
+      value: Math.max(0, eventsByDate.get(date) || 0), // Ensure non-negative for display
+    }));
+    
+    logger.log('[CounterDetail] Chart data calculated:', {
+      markId: id,
+      chartValues: result.map(d => `${d.date}:${d.value}`).join(', '),
+    });
+    
+    return result;
+  }, [events, last7Days, id]); // Recalculate when events change
+
+  // CRITICAL: Early returns MUST come AFTER all hooks
   if (loading) {
     return <LoadingScreen />;
   }
@@ -219,22 +307,6 @@ export default function CounterDetailScreen() {
       </GradientBackground>
     );
   }
-
-  // Prepare chart data
-  const last7Days = getLast7Days();
-  const eventsByDate = new Map<string, number>();
-  
-  events.forEach((event) => {
-    if (event.event_type === 'increment') {
-      const current = eventsByDate.get(event.occurred_local_date) || 0;
-      eventsByDate.set(event.occurred_local_date, current + event.amount);
-    }
-  });
-
-  const chartData = last7Days.map((date) => ({
-    date,
-    value: eventsByDate.get(date) || 0,
-  }));
 
   const handleIncrement = async (amount: number = 1) => {
     if (!id || !counter) {
@@ -465,7 +537,7 @@ export default function CounterDetailScreen() {
               style={[styles.streakModule, { borderColor: theme === 'dark' ? 'rgba(255,255,255,0.08)' : themeColors.border }]}
             >
               <View style={styles.streakItem}>
-                <Text style={styles.streakIcon}>🔥</Text>
+                <Ionicons name="flame" size={20} color={themeColors.accent.secondary} />
                 <Text style={[styles.streakValue, { color: themeColors.text }]}>
                   {streak.current_streak}
                 </Text>
@@ -476,9 +548,9 @@ export default function CounterDetailScreen() {
               <View style={[styles.streakDivider, { backgroundColor: themeColors.border }]} />
               <View style={styles.streakItem}>
                 {streak.longest_streak > 7 ? (
-                  <Text style={styles.streakIcon}>🏆</Text>
+                  <Ionicons name="trophy" size={20} color={themeColors.accent.secondary} />
                 ) : (
-                  <Text style={styles.streakIcon}>🔥</Text>
+                  <Ionicons name="flame" size={20} color={themeColors.accent.secondary} />
                 )}
                 <Text style={[styles.streakValue, { color: themeColors.text }]}>
                   {streak.longest_streak}

@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { AppState, AppStateStatus } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { Counter, MarkBadge, CounterEvent, CounterStreak } from '../types';
 import { query, execute, queryFirst } from '../lib/db';
@@ -87,10 +88,14 @@ export const useSync = () => {
               
               syncDebounceTimeoutRef.current = setTimeout(async () => {
                 try {
+                  // Allow a short delay so local writes flush, but avoid long race windows
+                  await new Promise(resolve => setTimeout(resolve, 500)); // trimmed to 0.5s
+                  
                   // Pull changes to get updated data
                   await pullChanges(user.id);
                   
                   // Reload stores to reflect changes
+                  // CRITICAL: loadMarks will preserve optimistic updates via recentUpdates tracking
                   const { useCountersStore } = await import('../state/countersSlice');
                   const { useEventsStore } = await import('../state/eventsSlice');
                   await useCountersStore.getState().loadMarks(user.id);
@@ -98,7 +103,7 @@ export const useSync = () => {
                 } catch (error) {
                   logger.error('[REALTIME] Error handling counter change:', error);
                 }
-              }, 1000); // 1 second debounce for real-time updates
+              }, 3000); // 3 second debounce for real-time updates (increased to allow writes to complete)
             }
           )
           .on(
@@ -200,6 +205,24 @@ export const useSync = () => {
     if (!userId || !isValidUUID(userId)) {
       logger.log('[SYNC] Skipping pull - user not authenticated or invalid user_id:', userId);
       return;
+    }
+
+    // CRITICAL: Wait for any pending writes to complete before pulling changes
+    // This prevents pullChanges from overwriting local increments that are still being written
+    // Check store's recentUpdates to see if there are any pending writes
+    const { useCountersStore } = await import('../state/countersSlice');
+    const storeState = useCountersStore.getState();
+    const recentUpdates = storeState.recentUpdates || new Map();
+    const now = Date.now();
+    const hasRecentUpdates = Array.from(recentUpdates.values()).some(
+      (update) => now - update.timestamp < 300000 // 5 minutes
+    );
+    
+    if (hasRecentUpdates) {
+      logger.log('[SYNC] Recent updates detected, checking if pending writes need to complete...');
+      // Small delay to allow pending writes to complete
+      // The mergeCounter function will preserve higher totals anyway, so this is just extra safety
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
 
     const lastPulledAt = await AsyncStorage.getItem('last_synced_at');
@@ -387,8 +410,8 @@ export const useSync = () => {
           'SELECT id, deleted_at FROM lc_counters WHERE user_id = ? AND deleted_at IS NOT NULL AND deleted_at != ""',
           [userId]
         ),
-        query<{ id: string; deleted_at: string | null }>(
-          'SELECT id, deleted_at FROM lc_counters WHERE user_id = ?',
+        query<{ id: string; deleted_at: string | null; updated_at: string }>(
+          'SELECT id, deleted_at, updated_at FROM lc_counters WHERE user_id = ?',
           [userId]
         )
       ]);
@@ -687,9 +710,17 @@ export const useSync = () => {
           'SELECT * FROM lc_events WHERE user_id = ? AND updated_at > ?',
           [userId, timestamp]
         );
+        
+        // CRITICAL: Ensure mark_id is set from counter_id for compatibility
+        // The mock DB stores events with counter_id, but sync code expects mark_id
+        const eventsWithMarkId = eventsRaw.map((e: any) => ({
+          ...e,
+          mark_id: e.mark_id || e.counter_id, // Ensure mark_id is set
+        }));
+        
         // CRITICAL: Filter out events with invalid data and validate dates
         // This prevents trying to push invalid data to Supabase
-        events = eventsRaw.filter((e) => {
+        events = eventsWithMarkId.filter((e) => {
           // Validate user_id
           if (!e.user_id || !isValidUUID(e.user_id)) {
             logger.warn(`[SYNC] Filtering out event ${e.id} with invalid user_id: ${e.user_id}`);
@@ -801,14 +832,30 @@ export const useSync = () => {
 
         // Ensure deleted_at is explicitly included in the upsert
         // CRITICAL: Deleted counters must have deleted_at set and take absolute precedence
+        // CRITICAL: Only include fields that exist in Supabase schema - exclude gating fields
+        // The gating fields (gated, gate_type, min_interval_minutes, max_per_day) are local-only
+        // until the SUPABASE_GATING_MIGRATION.sql is run on the database
         const countersToPush = allCounters.map((c) => {
           // If this counter was locally deleted, ensure deleted_at is set with current timestamp
           // This prevents server from having a non-deleted version
           const isDeleted = c.deleted_at && c.deleted_at.trim() !== '';
+          
+          // Explicitly pick only the fields that exist in Supabase
+          // Excludes: gated, gate_type, min_interval_minutes, max_per_day (local-only until migration)
           return {
-            ...c,
+            id: c.id,
+            user_id: c.user_id,
+            name: c.name,
+            emoji: c.emoji,
+            color: c.color,
+            unit: c.unit,
             enable_streak: c.enable_streak ? true : false,
-            deleted_at: isDeleted ? (c.deleted_at || new Date().toISOString()) : null, // Ensure deleted_at is set
+            sort_index: c.sort_index,
+            total: c.total,
+            last_activity_date: c.last_activity_date,
+            created_at: c.created_at,
+            updated_at: c.updated_at,
+            deleted_at: isDeleted ? (c.deleted_at || new Date().toISOString()) : null,
           };
         });
         
@@ -867,6 +914,19 @@ export const useSync = () => {
             try {
               // Batch large upserts to prevent timeout errors
               const BATCH_SIZE = 100;
+              
+              // Log all events before filtering for debugging
+              logger.log('[SYNC] Events before mark_id filtering:', {
+                total: events.length,
+                sample: events.slice(0, 3).map(e => ({
+                  id: e.id,
+                  mark_id: e.mark_id,
+                  counter_id: (e as any).counter_id,
+                  user_id: e.user_id,
+                  event_type: e.event_type,
+                })),
+              });
+              
               // Filter out events without mark_id before mapping (mark_id is required for Supabase mapping)
               const validEvents = events.filter((e) => 
                 e.mark_id && 
@@ -877,7 +937,14 @@ export const useSync = () => {
               
               if (validEvents.length !== events.length) {
                 const invalidCount = events.length - validEvents.length;
-                logger.warn(`[SYNC] Filtered out ${invalidCount} event(s) with invalid or missing mark_id`);
+                const invalidEvents = events.filter(e => !e.mark_id || !isValidUUID(e.mark_id));
+                logger.warn(`[SYNC] Filtered out ${invalidCount} event(s) with invalid or missing mark_id:`, {
+                  invalidSample: invalidEvents.slice(0, 3).map(e => ({
+                    id: e.id,
+                    mark_id: e.mark_id,
+                    counter_id: (e as any).counter_id,
+                  })),
+                });
               }
               
               if (validEvents.length === 0) {
@@ -885,18 +952,35 @@ export const useSync = () => {
                 return;
               }
               
+              // Log events being pushed
+              logger.log('[SYNC] Pushing events to Supabase:', {
+                count: validEvents.length,
+                sample: validEvents.slice(0, 3).map(e => ({
+                  id: e.id,
+                  mark_id: e.mark_id,
+                  event_type: e.event_type,
+                  occurred_at: e.occurred_at,
+                })),
+              });
+              
               // Map mark_id to counter_id for Supabase using type-safe mapper
               const eventsForSupabase = mapEventsToSupabase(validEvents.map((e) => ({ ...e, meta: e.meta || {} })));
               const eventBatches = batchArray(eventsForSupabase, BATCH_SIZE);
               
               for (let i = 0; i < eventBatches.length; i++) {
                 const batch = eventBatches[i];
-                const { error } = await supabase
+                const { data, error } = await supabase
                   .from('counter_events')
-                  .upsert(batch);
+                  .upsert(batch)
+                  .select('id');
                 
                 if (error) {
                   const parsed = parseError(error);
+                  logger.error(`[SYNC] ❌ Error pushing events batch ${i + 1}/${eventBatches.length}:`, {
+                    error: error.message,
+                    code: error.code,
+                    details: error.details,
+                  });
                   if (parsed.isNetworkError || parsed.shouldRetry) {
                     // For timeout/network errors, log warning but continue with next batch
                     logger.warn(`[SYNC] Error pushing events batch ${i + 1}/${eventBatches.length} (timeout/network):`, parsed.message);
@@ -904,7 +988,15 @@ export const useSync = () => {
                   }
                   throw error;
                 }
+                
+                // Log success
+                logger.log(`[SYNC] ✅ Events batch ${i + 1}/${eventBatches.length} pushed successfully:`, {
+                  batchSize: batch.length,
+                  insertedCount: data?.length || 0,
+                });
               }
+              
+              logger.log(`[SYNC] ✅ All ${validEvents.length} events pushed to Supabase successfully`);
             } catch (error) {
               const parsed = parseError(error);
               if (parsed.isNetworkError || parsed.shouldRetry) {
@@ -1065,7 +1157,7 @@ export const useSync = () => {
                       // Check for timeout errors
                       const parsed = parseError(error);
                       if (parsed.isNetworkError || parsed.shouldRetry) {
-                        console.warn(`[SYNC] Error pushing streaks batch ${i + 1}/${streakBatches.length} (timeout/network):`, parsed.message);
+                        logger.warn(`[SYNC] Error pushing streaks batch ${i + 1}/${streakBatches.length} (timeout/network):`, parsed.message);
                         continue;
                       }
                       throw error;
@@ -1073,7 +1165,7 @@ export const useSync = () => {
                   } catch (batchError) {
                     const parsed = parseError(batchError);
                     if (parsed.isNetworkError || parsed.shouldRetry) {
-                      console.warn(`[SYNC] Error pushing streaks batch ${i + 1}/${streakBatches.length} (timeout/network):`, parsed.message);
+                      logger.warn(`[SYNC] Error pushing streaks batch ${i + 1}/${streakBatches.length} (timeout/network):`, parsed.message);
                       continue;
                     }
                     // If it's a foreign key error, log and continue
@@ -1342,7 +1434,7 @@ export const useSync = () => {
   
   // Debounce ref for rapid sync requests
   const syncDebounceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingSyncRef = useRef<(() => Promise<void>) | null>(null);
+  const pendingSyncRef = useRef<((value: void | PromiseLike<void>) => void) | null>(null);
 
   const sync = useCallback(async () => {
     // Debounce rapid sync requests (e.g., multiple button taps)
@@ -1589,6 +1681,41 @@ export const useSync = () => {
       }
   }, [pullChanges, pushChanges]);
 
+  // Listen for app state changes to trigger sync when coming back online
+  useEffect(() => {
+    let mounted = true;
+    const subscription = AppState.addEventListener('change', async (nextAppState: AppStateStatus) => {
+      if (nextAppState === 'active' && mounted) {
+        // App came to foreground - check if user is authenticated and trigger sync
+        // This ensures offline operations are synced when connection is restored
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user && user.id && isValidUUID(user.id)) {
+            // Small delay to ensure network is ready
+            setTimeout(() => {
+              if (mounted) {
+                sync().catch((error) => {
+                  // Don't log network errors as errors - they're expected when offline
+                  const parsed = parseError(error);
+                  if (!parsed.isNetworkError && !parsed.shouldRetry) {
+                    logger.error('[SYNC] Error syncing on app state change:', error);
+                  }
+                });
+              }
+            }, 1000);
+          }
+        } catch (error) {
+          // Silently handle auth errors - user might not be logged in
+        }
+      }
+    });
+
+    return () => {
+      mounted = false;
+      subscription.remove();
+    };
+  }, [sync]);
+
   return {
     sync,
     syncState,
@@ -1676,14 +1803,14 @@ const mergeCounter = async (counter: Counter, existingCountersMap?: Map<string, 
     if (duplicateByName) {
       // A counter with the same name already exists (and is not deleted)
       // Keep the existing one, don't insert the duplicate
-      console.log(`[SYNC] mergeCounter: ⚠️ Skipping duplicate counter ${counter.id} (${counter.name}) - counter with same name already exists (${duplicateByName.id})`);
+      logger.log(`[SYNC] mergeCounter: ⚠️ Skipping duplicate counter ${counter.id} (${counter.name}) - counter with same name already exists (${duplicateByName.id})`);
       
       // If the incoming counter is newer, update the existing one instead
       const incomingTime = new Date(counter.updated_at).getTime();
       const existingTime = new Date(duplicateByName.updated_at).getTime();
       
       if (incomingTime > existingTime) {
-        console.log(`[SYNC] mergeCounter: Updating existing counter ${duplicateByName.id} with newer data from ${counter.id}`);
+        logger.log(`[SYNC] mergeCounter: Updating existing counter ${duplicateByName.id} with newer data from ${counter.id}`);
         await execute(
           `UPDATE lc_counters SET 
             emoji = ?, color = ?, unit = ?, enable_streak = ?,
@@ -1735,13 +1862,13 @@ const mergeCounter = async (counter: Counter, existingCountersMap?: Map<string, 
     // If local counter is deleted, keep it deleted regardless of remote state
     if (existing.deleted_at) {
       // Counter is deleted locally - don't restore it, even if remote is "newer"
-      console.log(`[SYNC] mergeCounter: Skipping update of deleted counter ${counter.id} (${counter.name}) - local counter is deleted`);
+      logger.log(`[SYNC] mergeCounter: Skipping update of deleted counter ${counter.id} (${counter.name}) - local counter is deleted`);
       return false;
     }
     
     // Additional safety: if the incoming counter has deleted_at set, don't update
     if (counter.deleted_at) {
-      console.log(`[SYNC] mergeCounter: Skipping update - incoming counter ${counter.id} (${counter.name}) is marked as deleted`);
+      logger.log(`[SYNC] mergeCounter: Skipping update - incoming counter ${counter.id} (${counter.name}) is marked as deleted`);
       return false;
     }
     
@@ -1754,7 +1881,7 @@ const mergeCounter = async (counter: Counter, existingCountersMap?: Map<string, 
       );
       
       if (duplicateByName) {
-        console.log(`[SYNC] mergeCounter: ⚠️ Skipping update of ${existing.id} (${existing.name}) - would create duplicate with ${duplicateByName.id} (${duplicateByName.name})`);
+        logger.log(`[SYNC] mergeCounter: ⚠️ Skipping update of ${existing.id} (${existing.name}) - would create duplicate with ${duplicateByName.id} (${duplicateByName.name})`);
         return false;
       }
     }
@@ -1762,7 +1889,67 @@ const mergeCounter = async (counter: Counter, existingCountersMap?: Map<string, 
     const remoteTime = new Date(counter.updated_at).getTime();
     const localTime = new Date(existing.updated_at).getTime();
 
+    // CRITICAL: Preserve higher total to prevent overwriting local increments
+    // Check for pending writes that might not be reflected in current DB state
+    const { useCountersStore } = await import('../state/countersSlice');
+    const storeState = useCountersStore.getState();
+    const recentUpdate = storeState.recentUpdates?.get(counter.id);
+    const hasPendingWrite = recentUpdate && (Date.now() - recentUpdate.timestamp) < 300000; // 5 minutes
+    
+    // Get the authoritative total - prefer pending write, then local, then remote
+    const localTotal = typeof existing.total === 'number' ? existing.total : 0;
+    const remoteTotal = typeof counter.total === 'number' ? counter.total : 0;
+    const pendingTotal = hasPendingWrite ? recentUpdate.total : null;
+    
+    // CRITICAL: If local DB has a value > 0 and remote is 0, ALWAYS preserve local
+    // This prevents connection loss from resetting counters to 0
+    // This is the key fix for the connection loss bug
+    if (localTotal > 0 && remoteTotal === 0) {
+      logger.warn('[SYNC] 🚨 CRITICAL: Preventing reset to 0 from Supabase (connection loss scenario):', {
+        counterId: counter.id,
+        counterName: counter.name,
+        localTotal,
+        remoteTotal,
+        localTime: existing.updated_at,
+        remoteTime: counter.updated_at,
+      });
+      // Don't update - preserve local value
+      return false;
+    }
+    
+    // FIXED: If there's a pending write (user just made a change), ALWAYS use that value
+    // This ensures both increments AND decrements are preserved
+    // Only use Math.max when there's no pending write (to handle sync from other devices)
+    let preservedTotal: number;
+    if (hasPendingWrite && pendingTotal !== null) {
+      // User just made a change - trust their value (could be increment OR decrement)
+      preservedTotal = pendingTotal;
+      logger.log('[SYNC] Using pending write value (user action):', {
+        counterId: counter.id,
+        pendingTotal,
+        localTotal,
+        remoteTotal,
+      });
+    } else {
+      // No pending write - use highest to prevent losing increments from other devices
+      preservedTotal = Math.max(localTotal, remoteTotal);
+    }
+    
+    // Only update if remote is newer, but always preserve higher totals
     if (remoteTime > localTime) {
+      // Log if we're preserving a higher total
+      if (preservedTotal > remoteTotal) {
+        logger.log('[SYNC] Preserving higher local total during merge:', {
+          counterId: counter.id,
+          counterName: counter.name,
+          localTotal,
+          remoteTotal,
+          pendingTotal,
+          preservedTotal,
+          hasPendingWrite: !!hasPendingWrite,
+        });
+      }
+      
       await execute(
         `UPDATE lc_counters SET 
           name = ?, emoji = ?, color = ?, unit = ?, enable_streak = ?,
@@ -1775,7 +1962,7 @@ const mergeCounter = async (counter: Counter, existingCountersMap?: Map<string, 
           counter.unit,
           counter.enable_streak ? 1 : 0,
           counter.sort_index,
-          counter.total,
+          preservedTotal, // Use preserved total instead of remote total
           counter.last_activity_date,
           counter.deleted_at,
           counter.updated_at,
@@ -1783,6 +1970,19 @@ const mergeCounter = async (counter: Counter, existingCountersMap?: Map<string, 
         ]
       );
       return true; // Counter was updated
+    } else if (localTotal < remoteTotal && preservedTotal === remoteTotal) {
+      // Local is newer but remote has higher total - update total only
+      // This handles case where local timestamp is newer but total didn't get updated
+      logger.log('[SYNC] Updating total from remote (remote has higher value):', {
+        counterId: counter.id,
+        localTotal,
+        remoteTotal,
+      });
+      await execute(
+        `UPDATE lc_counters SET total = ? WHERE id = ?`,
+        [preservedTotal, counter.id]
+      );
+      return true;
     }
     return false; // No changes made
   }
@@ -1976,6 +2176,7 @@ const isValidUUID = (str: string): boolean => {
  */
 export const parseError = (error: any): { message: string; isNetworkError: boolean; shouldRetry: boolean } => {
   const errorMessage = error?.message || String(error);
+  const errorString = typeof errorMessage === 'string' ? errorMessage.toLowerCase() : '';
   
   // Check if error is an HTML response (like Cloudflare 520 errors)
   if (typeof errorMessage === 'string' && errorMessage.trim().startsWith('<!DOCTYPE html>')) {
@@ -1997,8 +2198,24 @@ export const parseError = (error: any): { message: string; isNetworkError: boole
     };
   }
   
-  // Check for network errors
-  if (error?.code === 'ECONNREFUSED' || error?.code === 'ENOTFOUND' || error?.code === 'ETIMEDOUT') {
+  // CRITICAL: Check for "Network request failed" - common on mobile when offline or switching apps
+  // This is a TypeError thrown by fetch when the network is unavailable
+  if (errorString.includes('network request failed') || 
+      errorString.includes('network error') ||
+      errorString.includes('failed to fetch') ||
+      errorString.includes('networkerror') ||
+      errorString.includes('no internet') ||
+      error?.name === 'TypeError' && errorString.includes('network')) {
+    return {
+      message: 'Network unavailable. Changes saved locally and will sync when connection is restored.',
+      isNetworkError: true,
+      shouldRetry: true,
+    };
+  }
+  
+  // Check for network errors by error code
+  if (error?.code === 'ECONNREFUSED' || error?.code === 'ENOTFOUND' || error?.code === 'ETIMEDOUT' ||
+      error?.code === 'ECONNRESET' || error?.code === 'ECONNABORTED' || error?.code === 'ENETUNREACH') {
     return {
       message: 'Network connection error. Please check your internet connection.',
       isNetworkError: true,
@@ -2007,10 +2224,19 @@ export const parseError = (error: any): { message: string; isNetworkError: boole
   }
   
   // Check for timeout errors (PostgreSQL statement timeout)
-  if (error?.code === '57014' || (typeof errorMessage === 'string' && errorMessage.toLowerCase().includes('timeout'))) {
+  if (error?.code === '57014' || errorString.includes('timeout') || errorString.includes('timed out')) {
     return {
       message: 'Operation timed out. The server took too long to respond. Sync will retry automatically.',
       isNetworkError: true, // Treat timeout as network-like error (temporary, should retry)
+      shouldRetry: true,
+    };
+  }
+  
+  // Check for abort errors (can happen when app goes to background)
+  if (error?.name === 'AbortError' || errorString.includes('aborted')) {
+    return {
+      message: 'Request was cancelled. Will retry on next sync.',
+      isNetworkError: true,
       shouldRetry: true,
     };
   }

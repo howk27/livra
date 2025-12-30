@@ -20,6 +20,15 @@ export const useAuth = () => {
   });
   const sessionExpiredRef = useRef(false);
 
+  // Check if session is expired (buffered) using expires_at
+  const isSessionExpired = (session: Session | null): boolean => {
+    if (!session?.expires_at) return false;
+    const expiresAt = session.expires_at * 1000; // ms
+    const now = Date.now();
+    const fiveMinutes = 5 * 60 * 1000;
+    return expiresAt - now < fiveMinutes;
+  };
+
   // Initialize auth state and set up listener
   useEffect(() => {
     let mounted = true;
@@ -77,12 +86,8 @@ export const useAuth = () => {
             // This allows us to use the cached session even if network is slow/unavailable
             logger.log('[Auth] Session check timeout, attempting to use cached session from storage');
             
-            // Try to get session from Supabase's internal cache/storage
-            // Even if network times out, getSession() should return cached session immediately
-            // The timeout might have happened during token refresh, but cached session should still be available
             try {
               // Call getSession() again with a very short timeout - this should return cached session quickly
-              // If it still times out, the session might not be in cache
               const cachedSessionPromise = supabase.auth.getSession();
               const quickTimeout = new Promise<{ data: { session: Session | null }; error: any }>((resolve) =>
                 setTimeout(() => resolve({ data: { session: null }, error: { message: 'timeout' } }), 500)
@@ -90,7 +95,6 @@ export const useAuth = () => {
               
               const cachedResult = await Promise.race([cachedSessionPromise, quickTimeout]) as any;
               
-              // If we got a session (even if expired), use it - token refresh can happen later
               if (cachedResult?.data?.session) {
                 session = cachedResult.data.session;
                 logger.log('[Auth] Using cached session from storage (network validation timed out)');
@@ -110,6 +114,27 @@ export const useAuth = () => {
             // Only log non-timeout errors
             logger.warn('[Auth] Error getting session:', result.error);
           }
+
+          // If we got a session, ensure it isn't expired; otherwise refresh/sign out
+          if (session && isSessionExpired(session)) {
+            logger.warn('[Auth] Session expired during initialization, attempting refresh');
+            try {
+              const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
+              if (refreshError || !refreshed.session) {
+                logger.warn('[Auth] Refresh failed, signing out expired session');
+                await AsyncStorage.setItem('session_expired', 'true');
+                await supabase.auth.signOut();
+                session = null;
+              } else {
+                session = refreshed.session;
+              }
+            } catch (refreshError) {
+              logger.error('[Auth] Error refreshing expired session:', refreshError);
+              await AsyncStorage.setItem('session_expired', 'true');
+              await supabase.auth.signOut();
+              session = null;
+            }
+          }
           
           // Set auth state with session (even if null)
           if (mounted) {
@@ -126,12 +151,19 @@ export const useAuth = () => {
           logger.warn('[Auth] Error initializing auth session:', sessionError);
           // Fall through to try getting session directly from storage one more time
           try {
-            // Last attempt: try to get session from storage without timeout
             const storedSession = await supabase.auth.getSession();
-            if (storedSession?.data?.session && mounted) {
+            let session = storedSession?.data?.session ?? null;
+            // If stored session is expired, clear it
+            if (session && isSessionExpired(session)) {
+              logger.warn('[Auth] Stored session is expired during fallback, signing out');
+              await AsyncStorage.setItem('session_expired', 'true');
+              await supabase.auth.signOut();
+              session = null;
+            }
+            if (session && mounted) {
               setAuthState({
-                user: storedSession.data.session.user ?? null,
-                session: storedSession.data.session,
+                user: session.user ?? null,
+                session,
                 loading: false,
                 initialized: true,
               });
@@ -144,7 +176,6 @@ export const useAuth = () => {
         }
 
         // If we reach here, something went wrong - proceed in offline mode
-        // Proceed with no user if auth fails (offline mode)
         if (mounted) {
           setAuthState({
             user: null,
@@ -171,16 +202,6 @@ export const useAuth = () => {
     };
 
     initializeAuth();
-
-    // Check if session is expired
-    const isSessionExpired = (session: Session | null): boolean => {
-      if (!session?.expires_at) return false;
-      // Check if session expires in less than 5 minutes (add buffer)
-      const expiresAt = session.expires_at * 1000; // Convert to milliseconds
-      const now = Date.now();
-      const fiveMinutes = 5 * 60 * 1000;
-      return expiresAt - now < fiveMinutes;
-    };
 
     // Check session expiration periodically
     const checkSessionExpiration = async () => {

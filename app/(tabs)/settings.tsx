@@ -12,12 +12,14 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Modal,
+  Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as MailComposer from 'expo-mail-composer';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../theme/colors';
 import { spacing, borderRadius } from '../../theme/tokens';
@@ -35,6 +37,9 @@ import { AppText } from '../../components/Typography';
 import { useNotification } from '../../contexts/NotificationContext';
 import { useCountersStore } from '../../state/countersSlice';
 import { logger } from '../../lib/utils/logger';
+import { toUserMessage } from '../../lib/utils/errorMessages';
+import { uploadAvatar, getAvatarUrl, deleteAvatar, refreshAvatarUrl } from '../../lib/storage/avatarStorage';
+import Constants from 'expo-constants';
 
 export default function SettingsScreen() {
   const theme = useEffectiveTheme();
@@ -57,9 +62,47 @@ export default function SettingsScreen() {
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [isEmailVerified, setIsEmailVerified] = useState<boolean | null>(null);
   const [isResendingVerification, setIsResendingVerification] = useState(false);
+  const [verificationRetryCount, setVerificationRetryCount] = useState(0);
+  const [lastResendTime, setLastResendTime] = useState<number | null>(null);
   const [csvExportEmail, setCsvExportEmail] = useState('');
   const [showEmailInput, setShowEmailInput] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  
+  // Hidden gesture for diagnostics (tap version 7 times within 1.5 seconds)
+  const versionTapCount = useRef(0);
+  const versionTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleVersionTap = () => {
+    versionTapCount.current += 1;
+
+    // Clear existing timer
+    if (versionTapTimer.current) {
+      clearTimeout(versionTapTimer.current);
+    }
+
+    // If 7 taps reached, open IAP Dashboard (production-safe hidden gesture)
+    if (versionTapCount.current >= 7) {
+      versionTapCount.current = 0;
+      if (versionTapTimer.current) {
+        clearTimeout(versionTapTimer.current);
+        versionTapTimer.current = null;
+      }
+      // Log diagnostic event for tracking
+      const { diagEvent } = require('../lib/debug/iapDiagnostics');
+      diagEvent('diagnostics_opened_hidden_gesture', { 
+        threshold: 7, 
+        screen: 'iap-dashboard' 
+      });
+      router.push('/iap-dashboard');
+      return;
+    }
+
+    // Reset counter after 1.5 seconds of inactivity
+    versionTapTimer.current = setTimeout(() => {
+      versionTapCount.current = 0;
+      versionTapTimer.current = null;
+    }, 1500);
+  };
   
   const profileName = user?.email ?? 'Guest user';
   const profileInitials = user?.email ? user.email.slice(0, 2).toUpperCase() : 'LC';
@@ -68,31 +111,35 @@ export default function SettingsScreen() {
     : 'Sign in to sync safely across devices.';
 
   // Load profile image on mount and when user changes
-  // Note: Requires a Supabase storage bucket named 'profile-pictures' with public access or RLS policies
   useEffect(() => {
     const loadProfileImage = async () => {
       try {
         if (user?.id) {
           // If user is logged in, try to load from Supabase storage
-          const profileImagePath = `avatars/${user.id}.jpg`;
-          const { data, error } = await supabase.storage
-            .from('profile-pictures')
-            .createSignedUrl(profileImagePath, 3600); // 1 hour expiry
+          const avatarUrl = await getAvatarUrl(user.id, 3600); // 1 hour expiry
           
-          if (!error && data) {
-            setProfileImageUri(data.signedUrl);
+          if (avatarUrl) {
+            setProfileImageUri(avatarUrl);
             // Also store locally as cache
-            await AsyncStorage.setItem('profile_image_uri', data.signedUrl);
+            await AsyncStorage.setItem('profile_image_uri', avatarUrl);
             return;
           }
           
-          // If not found in Supabase (404 is expected if no image), check local storage as fallback
-          if (error && error.message?.includes('not found')) {
-            // No image in Supabase, check local storage
-            const storedUri = await AsyncStorage.getItem('profile_image_uri');
-            if (storedUri && !storedUri.startsWith('http')) {
-              // Only use local URI if it's a file path (not a URL)
-              setProfileImageUri(storedUri);
+          // If not found in Supabase, check local storage as fallback
+          const storedUri = await AsyncStorage.getItem('profile_image_uri');
+          if (storedUri && !storedUri.startsWith('http')) {
+            // Only use local URI if it's a file path (not a URL)
+            setProfileImageUri(storedUri);
+          } else if (storedUri && storedUri.startsWith('http')) {
+            // Try to refresh expired signed URL
+            const refreshedUrl = await refreshAvatarUrl(user.id, storedUri, 3600);
+            if (refreshedUrl) {
+              setProfileImageUri(refreshedUrl);
+              await AsyncStorage.setItem('profile_image_uri', refreshedUrl);
+            } else {
+              // URL expired and refresh failed, clear it
+              await AsyncStorage.removeItem('profile_image_uri');
+              setProfileImageUri(null);
             }
           }
         } else {
@@ -107,7 +154,7 @@ export default function SettingsScreen() {
         // Fallback to local storage
         try {
           const storedUri = await AsyncStorage.getItem('profile_image_uri');
-          if (storedUri) {
+          if (storedUri && !storedUri.startsWith('http')) {
             setProfileImageUri(storedUri);
           }
         } catch (fallbackError) {
@@ -119,6 +166,8 @@ export default function SettingsScreen() {
   }, [user?.id]);
 
   // Check email verification status
+  // CRITICAL: This only checks auth status - it does NOT trigger sync or loadMarks
+  // It's safe and won't interfere with mark updates
   useEffect(() => {
     const checkEmailVerification = async () => {
       if (!user) {
@@ -127,26 +176,65 @@ export default function SettingsScreen() {
       }
 
       try {
-        // Check if email is verified
-        // Supabase user object has email_confirmed_at or confirmed_at field
-        const isVerified = !!(user.email_confirmed_at || user.confirmed_at);
-        setIsEmailVerified(isVerified);
-
-        // Also refresh user data to get latest verification status
-        const { data: { user: refreshedUser } } = await supabase.auth.getUser();
+        // Refresh user data to get latest verification status
+        // This is a lightweight auth check - does NOT affect marks or counters
+        const { data: { user: refreshedUser }, error: refreshError } = await supabase.auth.getUser();
+        if (refreshError) {
+          logger.error('Error refreshing user data:', refreshError);
+          return;
+        }
+        
         if (refreshedUser) {
           const refreshedVerified = !!(refreshedUser.email_confirmed_at || refreshedUser.confirmed_at);
           setIsEmailVerified(refreshedVerified);
+          
+          // If verified, reset retry count
+          if (refreshedVerified) {
+            setVerificationRetryCount(0);
+            setLastResendTime(null);
+          }
         }
       } catch (error) {
         logger.error('Error checking email verification:', error);
-        // Default to showing banner if we can't determine status
-        setIsEmailVerified(false);
+        // Don't change status on error - keep current state
+        // This error does NOT affect marks or counters
       }
     };
 
     checkEmailVerification();
   }, [user]);
+
+  // Automatic polling for email verification status when unverified
+  useEffect(() => {
+    // Only poll if email is not verified
+    if (isEmailVerified !== false || !user) {
+      return;
+    }
+
+    // Poll every 10 seconds to check for verification
+    // CRITICAL: This polling does NOT interfere with mark updates - it only checks auth status
+    // It does NOT trigger sync or loadMarks, so it's safe
+    const interval = setInterval(async () => {
+      try {
+        const { data: { user: refreshedUser } } = await supabase.auth.getUser();
+        if (refreshedUser) {
+          const refreshedVerified = !!(refreshedUser.email_confirmed_at || refreshedUser.confirmed_at);
+          if (refreshedVerified) {
+            setIsEmailVerified(true);
+            setVerificationRetryCount(0);
+            setLastResendTime(null);
+          }
+        }
+      } catch (error) {
+        logger.error('Error polling verification status:', error);
+        // Don't let verification polling errors affect the app
+      }
+    }, 10000); // Check every 10 seconds
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [isEmailVerified, user]);
 
   // Listen for auth state changes to update verification status
   useEffect(() => {
@@ -166,27 +254,64 @@ export default function SettingsScreen() {
     router.push('/auth/signin');
   };
 
-  const handleResendVerificationEmail = async () => {
+  const handleResendVerificationEmail = async (retryAttempt: number = 0) => {
     if (!user?.email) {
       showError('No email address found');
       return;
     }
 
+    // Calculate exponential backoff delay (1s, 2s, 4s, 8s, max 30s)
+    const baseDelay = 1000;
+    const maxDelay = 30000;
+    const delay = Math.min(baseDelay * Math.pow(2, retryAttempt), maxDelay);
+    
+    // Check if we need to wait before retrying
+    if (retryAttempt > 0 && lastResendTime) {
+      const timeSinceLastResend = Date.now() - lastResendTime;
+      if (timeSinceLastResend < delay) {
+        const remainingTime = Math.ceil((delay - timeSinceLastResend) / 1000);
+        showError(`Please wait ${remainingTime} second${remainingTime !== 1 ? 's' : ''} before requesting another email.`);
+        return;
+      }
+    }
+
     setIsResendingVerification(true);
     try {
       // Supabase resend verification email
-      // Note: For logged-in users, we use the resend method with type 'signup'
-      // This will send a verification email even if the user is already signed in
-      const { data, error } = await supabase.auth.resend({
+      // Try multiple approaches to ensure email is sent
+      logger.log('[Resend Verification] Attempting to resend verification email to:', user.email);
+      
+      let { data, error } = await supabase.auth.resend({
         type: 'signup',
         email: user.email,
-        options: {
-          emailRedirectTo: undefined, // Let Supabase use default redirect
-        },
       });
 
+      // If signup type fails, try again with signup type (Supabase only supports 'signup' for email verification)
       if (error) {
-        logger.error('Error resending verification email:', error);
+        logger.warn('[Resend Verification] First attempt failed, retrying:', error.message);
+        const retryResult = await supabase.auth.resend({
+          type: 'signup',
+          email: user.email,
+        });
+        if (!retryResult.error) {
+          logger.log('[Resend Verification] Retry succeeded');
+          data = retryResult.data;
+          error = null;
+        } else {
+          logger.error('[Resend Verification] Retry also failed:', retryResult.error);
+          error = retryResult.error;
+        }
+      } else {
+        logger.log('[Resend Verification] Signup type succeeded');
+      }
+
+      if (error) {
+        logger.error('Error resending verification email:', error, {
+          errorCode: error.code,
+          errorMessage: error.message,
+          errorStatus: error.status,
+        });
+        
         // Check if error is because user is already verified
         if (error.message?.includes('already verified') || error.message?.includes('already confirmed')) {
           // Refresh user data to update verification status
@@ -196,15 +321,67 @@ export default function SettingsScreen() {
             setIsEmailVerified(isVerified);
           }
           showSuccess('Your email is already verified!');
+          setVerificationRetryCount(0);
+          setLastResendTime(null);
+        } else if (error.message?.includes('rate limit') || error.message?.includes('too many requests')) {
+          // Handle rate limiting with retry
+          const newRetryCount = verificationRetryCount + 1;
+          setVerificationRetryCount(newRetryCount);
+          setLastResendTime(Date.now());
+          
+          if (retryAttempt < 3) {
+            // Retry with exponential backoff
+            showError(`Too many requests. Retrying in ${Math.ceil(delay / 1000)} seconds...`);
+            setTimeout(() => {
+              handleResendVerificationEmail(retryAttempt + 1);
+            }, delay);
+          } else {
+            showError('Too many verification requests. Please wait a few minutes before trying again.');
+          }
         } else {
-          showError(error.message || 'Failed to send verification email. Please try again.');
+          // Other errors - retry with exponential backoff
+          const newRetryCount = verificationRetryCount + 1;
+          setVerificationRetryCount(newRetryCount);
+          setLastResendTime(Date.now());
+          
+          if (retryAttempt < 3) {
+            showError(`Failed to send email. Retrying... (${retryAttempt + 1}/3)`);
+            setTimeout(() => {
+              handleResendVerificationEmail(retryAttempt + 1);
+            }, delay);
+          } else {
+          showError(toUserMessage(error, 'Failed to send verification email after multiple attempts. Please try again later.'));
+            setVerificationRetryCount(0);
+          }
         }
       } else {
-        showSuccess('Verification email sent! Please check your inbox and spam folder.');
+        // Success
+        const newRetryCount = verificationRetryCount + 1;
+        setVerificationRetryCount(newRetryCount);
+        setLastResendTime(Date.now());
+        
+        showSuccess(
+          `Verification email sent! ${newRetryCount > 1 ? `(Attempt ${newRetryCount})` : ''} Please check your inbox and spam folder.`
+        );
+        
+        // Start polling for verification status
+        // The useEffect will handle the polling automatically
       }
     } catch (error: any) {
       logger.error('Error resending verification email:', error);
-      showError('Failed to send verification email. Please try again.');
+      const newRetryCount = verificationRetryCount + 1;
+      setVerificationRetryCount(newRetryCount);
+      setLastResendTime(Date.now());
+      
+      if (retryAttempt < 3) {
+        showError(`Network error. Retrying... (${retryAttempt + 1}/3)`);
+        setTimeout(() => {
+          handleResendVerificationEmail(retryAttempt + 1);
+        }, delay);
+      } else {
+        showError('Failed to send verification email after multiple attempts. Please check your internet connection and try again.');
+        setVerificationRetryCount(0);
+      }
     } finally {
       setIsResendingVerification(false);
     }
@@ -226,6 +403,10 @@ export default function SettingsScreen() {
             try {
               // Clear sync timestamp so next login pulls all data fresh
               await AsyncStorage.removeItem('last_synced_at');
+              
+              // CRITICAL: Clear pro_unlocked to prevent next user from inheriting premium status
+              // Premium status should be re-verified from database on next login
+              await AsyncStorage.removeItem('pro_unlocked');
               
               // Navigate to signing out screen (it will handle the actual sign out)
               router.push('/auth/signing-out');
@@ -344,65 +525,26 @@ export default function SettingsScreen() {
       setProfileImageUri(uri);
       
       if (user?.id) {
-          // Upload to Supabase storage
-          try {
-            // Read the file
-            const fileInfo = await FileSystem.getInfoAsync(uri);
-            if (!fileInfo.exists) {
-              throw new Error('File does not exist');
-            }
-            
-            // Read file as base64 for React Native
-            const base64 = await FileSystem.readAsStringAsync(uri, {
-              encoding: 'base64',
-            });
-            
-            // Convert base64 to ArrayBuffer for Supabase
-            const byteCharacters = atob(base64);
-            const byteNumbers = new Array(byteCharacters.length);
-            for (let i = 0; i < byteCharacters.length; i++) {
-              byteNumbers[i] = byteCharacters.charCodeAt(i);
-            }
-            const byteArray = new Uint8Array(byteNumbers);
-            
-            // Upload to Supabase storage
-            const profileImagePath = `avatars/${user.id}.jpg`;
-            const { error: uploadError } = await supabase.storage
-              .from('profile-pictures')
-              .upload(profileImagePath, byteArray, {
-                contentType: 'image/jpeg',
-                upsert: true, // Replace existing file
-              });
-            
-            if (uploadError) {
-              logger.error('Error uploading profile image:', uploadError);
-              // Still store locally as fallback
-              await AsyncStorage.setItem('profile_image_uri', uri);
-              showError('Upload failed, saved locally only.');
-              return;
-            }
-            
-            // Get the signed URL
-            const { data: urlData, error: urlError } = await supabase.storage
-              .from('profile-pictures')
-              .createSignedUrl(profileImagePath, 31536000); // 1 year expiry
-            
-            if (!urlError && urlData) {
-              setProfileImageUri(urlData.signedUrl);
-              await AsyncStorage.setItem('profile_image_uri', urlData.signedUrl);
-              showSuccess('Profile picture updated and synced!');
-            } else {
-              // Fallback to local
-              await AsyncStorage.setItem('profile_image_uri', uri);
-              showSuccess('Profile picture updated!');
-            }
-          } catch (uploadError: any) {
-            logger.error('Error uploading to Supabase:', uploadError);
-            // Fallback to local storage
+        // Upload to Supabase storage using helper function
+        try {
+          const avatarUrl = await uploadAvatar(user.id, uri);
+          
+          if (avatarUrl) {
+            setProfileImageUri(avatarUrl);
+            await AsyncStorage.setItem('profile_image_uri', avatarUrl);
+            showSuccess('Profile picture updated and synced!');
+          } else {
+            // Upload failed, but still store locally as fallback
             await AsyncStorage.setItem('profile_image_uri', uri);
-            showSuccess('Profile picture updated (local only).');
+            showError('Upload failed, saved locally only.');
           }
-        } else {
+        } catch (uploadError: any) {
+          logger.error('Error uploading to Supabase:', uploadError);
+          // Fallback to local storage
+          await AsyncStorage.setItem('profile_image_uri', uri);
+          showSuccess('Profile picture updated (local only).');
+        }
+      } else {
         // Not logged in, just store locally
         await AsyncStorage.setItem('profile_image_uri', uri);
         showSuccess('Profile picture updated! Sign in to sync across devices.');
@@ -416,14 +558,11 @@ export default function SettingsScreen() {
   const handleRemoveImage = async () => {
     try {
       if (user?.id) {
-        // Delete from Supabase storage
-        const profileImagePath = `avatars/${user.id}.jpg`;
-        const { error } = await supabase.storage
-          .from('profile-pictures')
-          .remove([profileImagePath]);
+        // Delete from Supabase storage using helper function
+        const deleted = await deleteAvatar(user.id);
         
-        if (error) {
-          logger.error('Error deleting from Supabase:', error);
+        if (!deleted) {
+          logger.error('Error deleting from Supabase');
           // Continue to remove locally anyway
         }
       }
@@ -451,48 +590,10 @@ export default function SettingsScreen() {
       return;
     }
 
-    // Prompt for email address
+    // Show in-app modal for email input
     const defaultEmail = user?.email || csvExportEmail || '';
-    
-    // Use Alert.prompt for iOS/Android, or show modal for web
-    if (Platform.OS === 'web') {
-      // For web, show a modal with TextInput
-      setCsvExportEmail(defaultEmail);
-      setShowEmailInput(true);
-      return;
-    }
-
-    // For iOS/Android, use Alert.prompt
-    Alert.prompt(
-      'Enter Email Address',
-      'Please enter the email address where you want to send the CSV export:',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Export',
-          onPress: async (email?: string) => {
-            if (!email || !email.trim()) {
-              showError('Please enter a valid email address.');
-              return;
-            }
-            
-            // Validate email format
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            if (!emailRegex.test(email.trim())) {
-              showError('Please enter a valid email address.');
-              return;
-            }
-
-            await performCSVExport(email.trim());
-          },
-        },
-      ],
-      'plain-text',
-      defaultEmail
-    );
+    setCsvExportEmail(defaultEmail);
+    setShowEmailInput(true);
   };
 
   const performCSVExport = async (recipientEmail?: string) => {
@@ -525,27 +626,44 @@ export default function SettingsScreen() {
       });
 
       // Check if mail is available
-      const isAvailable = await MailComposer.isAvailableAsync();
-      if (!isAvailable) {
-        Alert.alert(
-          'Email Not Available',
-          'Please set up an email account on your device to use this feature.'
-        );
-        return;
-      }
-
+      const isMailAvailable = await MailComposer.isAvailableAsync();
+      
       // Use provided email or the one from state
       const emailToUse = recipientEmail || csvExportEmail || user?.email || '';
 
-      // Open mail composer with attachment
-      await MailComposer.composeAsync({
-        subject: `Livra Data Export - ${new Date().toLocaleDateString()}`,
-        body: 'Please find your Livra data export attached.',
-        recipients: emailToUse ? [emailToUse] : [],
-        attachments: [fileUri],
-      });
-
-      showSuccess('CSV export opened in email!');
+      if (isMailAvailable) {
+        // Open mail composer with attachment
+        await MailComposer.composeAsync({
+          subject: `Livra Data Export - ${new Date().toLocaleDateString()}`,
+          body: 'Please find your Livra data export attached.',
+          recipients: emailToUse ? [emailToUse] : [],
+          attachments: [fileUri],
+        });
+        showSuccess('CSV export opened in email!');
+      } else {
+        // Fallback to expo-sharing if mail composer is not available
+        try {
+          const isSharingAvailable = await Sharing.isAvailableAsync();
+          if (isSharingAvailable) {
+            await Sharing.shareAsync(fileUri, {
+              mimeType: 'text/csv',
+              dialogTitle: 'Share Livra Data Export',
+            });
+            showSuccess('CSV export shared successfully!');
+          } else {
+            // If sharing is not available, try native Share API as last resort
+            await Share.share({
+              message: `Livra Data Export - ${new Date().toLocaleDateString()}\n\nPlease find your Livra data export attached.`,
+              title: 'Livra Data Export',
+            });
+            showSuccess('CSV export shared successfully!');
+          }
+        } catch (shareError: any) {
+          // If Share also fails, show the file content or provide alternative
+          logger.error('Error sharing CSV:', shareError);
+          showError('Unable to share CSV. Please check your device settings.');
+        }
+      }
     } catch (error: any) {
       logger.error('Error exporting CSV:', error);
       showError(error.message || 'Failed to export CSV. Please try again.');
@@ -583,22 +701,22 @@ export default function SettingsScreen() {
 
   const handleChangePassword = async () => {
     if (!currentPassword.trim()) {
-      showError('Please enter your current password');
+        showError('Please enter your current password');
       return;
     }
 
     if (!newPassword.trim()) {
-      showError('Please enter a new password');
+        showError('Please enter a new password');
       return;
     }
 
     if (newPassword.length < 6) {
-      showError('Password must be at least 6 characters');
+        showError('Password must be at least 6 characters');
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      showError('New passwords do not match');
+        showError('New passwords do not match');
       return;
     }
 
@@ -623,7 +741,7 @@ export default function SettingsScreen() {
       });
 
       if (updateError) {
-        showError(updateError.message || 'Failed to update password');
+        showError(toUserMessage(updateError, 'Failed to update password'));
       } else {
         showSuccess('Password updated successfully!');
         setCurrentPassword('');
@@ -632,7 +750,7 @@ export default function SettingsScreen() {
         setIsProfileExpanded(false);
       }
     } catch (error: any) {
-      showError(error.message || 'Failed to change password');
+      showError(toUserMessage(error, 'Failed to change password'));
     } finally {
       setIsChangingPassword(false);
     }
@@ -853,6 +971,9 @@ export default function SettingsScreen() {
         // Clear session expired flag
         await AsyncStorage.removeItem('session_expired');
         
+        // CRITICAL: Clear pro_unlocked status to prevent new accounts from inheriting premium
+        await AsyncStorage.removeItem('pro_unlocked');
+        
         // Clear database storage keys (for mock database)
         try {
           await AsyncStorage.multiRemove([
@@ -882,12 +1003,30 @@ export default function SettingsScreen() {
         // Continue anyway
       }
 
-      logger.log('[Delete Account] All user data deleted successfully');
+      // 4. Delete the auth user from Supabase auth.users table
+      // This requires a database function with SECURITY DEFINER privileges
+      try {
+        const { error: deleteAuthUserError } = await supabase.rpc('delete_auth_user', {
+          user_id_to_delete: userId
+        });
 
-      // Note: The auth.users record itself will remain in Supabase
-      // To fully delete it, you would need to use Supabase admin API
-      // or a serverless function. For GDPR compliance, deleting all user data
-      // from tables is the most important part.
+        if (deleteAuthUserError) {
+          // If the function doesn't exist, log a warning but don't fail
+          if (deleteAuthUserError.message?.includes('function') && deleteAuthUserError.message?.includes('does not exist')) {
+            logger.warn('[Delete Account] delete_auth_user function not found. Auth user will remain in database. Please run the SQL function to enable full account deletion.');
+          } else {
+            logger.error('[Delete Account] Error deleting auth user:', deleteAuthUserError);
+            // Continue anyway - data is already deleted
+          }
+        } else {
+          logger.log('[Delete Account] Auth user deleted successfully');
+        }
+      } catch (error) {
+        logger.error('[Delete Account] Error calling delete_auth_user function:', error);
+        // Continue anyway - data is already deleted
+      }
+
+      logger.log('[Delete Account] All user data deleted successfully');
     } catch (error: any) {
       logger.error('[Delete Account] Error deleting user data:', error);
       throw new Error('Failed to delete all user data: ' + (error.message || 'Unknown error'));
@@ -969,67 +1108,87 @@ export default function SettingsScreen() {
             )}
           </View>
           {user && (
-            <TouchableOpacity
-              onPress={(e) => {
-                e.stopPropagation();
-                handleSync();
-              }}
-              disabled={syncState.isSyncing}
-              style={styles.refreshButton}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            >
-              <Animated.View
-                style={{
-                  transform: [{ rotate: syncState.isSyncing ? refreshIconRotation : '0deg' }],
+            <View style={styles.refreshButtonContainer}>
+              <TouchableOpacity
+                onPress={(e) => {
+                  e.stopPropagation();
+                  handleSync();
                 }}
+                disabled={syncState.isSyncing}
+                style={styles.refreshButton}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <Ionicons
-                  name={syncState.isSyncing ? 'refresh' : 'refresh-outline'}
-                  size={28}
-                  color={themeColors.textSecondary}
-                />
-              </Animated.View>
+                <Animated.View
+                  style={{
+                    transform: [{ rotate: syncState.isSyncing ? refreshIconRotation : '0deg' }],
+                  }}
+                >
+                  <Ionicons
+                    name={syncState.isSyncing ? 'refresh' : 'refresh-outline'}
+                    size={28}
+                    color={themeColors.textSecondary}
+                  />
+                </Animated.View>
+              </TouchableOpacity>
               {syncState.isSyncing && (
                 <AppText variant="caption" style={[styles.syncStatusText, { color: themeColors.textSecondary }]}>
                   Syncing...
                 </AppText>
               )}
-            </TouchableOpacity>
+            </View>
           )}
         </TouchableOpacity>
 
-        {/* Email Verification Banner - Only show if email is not verified */}
-        {user && isEmailVerified === false && (
-          <View style={[styles.verificationBanner, { backgroundColor: themeColors.warning + '20', borderColor: themeColors.warning }]}>
-            <View style={styles.verificationBannerContent}>
-              <Ionicons name="mail-outline" size={20} color={themeColors.warning} style={styles.verificationIcon} />
-              <View style={styles.verificationTextContainer}>
-                <AppText variant="body" style={[styles.verificationTitle, { color: themeColors.text }]}>
-                  Verify your email address
-                </AppText>
-                <AppText variant="caption" style={[styles.verificationMessage, { color: themeColors.textSecondary }]}>
-                  Please check your inbox and click the verification link to complete your account setup.
-                </AppText>
+        {/* Email Verification Banner - Only show when email is not verified */}
+        {user && isEmailVerified === false && (() => {
+          // Use darker yellow/orange for both themes for better visibility
+          const bannerColor = theme === 'light' ? '#D97706' : '#F59E0B'; // Darker amber/orange for light, brighter amber for dark
+          const bannerBgColor = theme === 'light' ? '#FEF3C7' : 'rgba(217, 119, 6, 0.15)'; // Soft light amber for light, transparent dark orange for dark
+          const iconColor = theme === 'light' ? '#B45309' : '#F59E0B'; // Darker icon color for light, amber for dark
+          const buttonTextColor = theme === 'light' ? '#FFFFFF' : '#FFFFFF'; // White text on both themes for contrast
+          
+          return (
+            <View style={[styles.verificationBanner, { backgroundColor: bannerBgColor, borderColor: bannerColor }]}>
+              <View style={styles.verificationBannerContent}>
+                <Ionicons name="mail-outline" size={20} color={iconColor} style={styles.verificationIcon} />
+                <View style={styles.verificationTextContainer}>
+                  <AppText variant="body" style={[styles.verificationTitle, { color: themeColors.text }]}>
+                    Verify your email address
+                  </AppText>
+                  <AppText variant="caption" style={[styles.verificationMessage, { color: themeColors.textSecondary }]}>
+                    Please check your inbox and click the verification link to complete your account setup.
+                    {verificationRetryCount > 0 && (
+                      <AppText variant="caption" style={{ color: themeColors.textSecondary, fontStyle: 'italic' }}>
+                        {'\n'}Verification email sent {verificationRetryCount} time{verificationRetryCount !== 1 ? 's' : ''}.
+                      </AppText>
+                    )}
+                    {lastResendTime && (
+                      <AppText variant="caption" style={{ color: themeColors.textSecondary, fontStyle: 'italic' }}>
+                        {'\n'}Last sent {Math.floor((Date.now() - lastResendTime) / 1000 / 60)} minute{Math.floor((Date.now() - lastResendTime) / 1000 / 60) !== 1 ? 's' : ''} ago.
+                      </AppText>
+                    )}
+                  </AppText>
+                </View>
               </View>
+              <TouchableOpacity
+                onPress={() => handleResendVerificationEmail()}
+                disabled={isResendingVerification}
+                style={[styles.resendButton, { backgroundColor: bannerColor }]}
+                activeOpacity={0.7}
+              >
+                {isResendingVerification ? (
+                  <AppText variant="body" style={[styles.resendButtonText, { color: buttonTextColor }]}>
+                    Sending...
+                  </AppText>
+                ) : (
+                  <AppText variant="body" style={[styles.resendButtonText, { color: buttonTextColor }]}>
+                    Resend
+                  </AppText>
+                )}
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              onPress={handleResendVerificationEmail}
-              disabled={isResendingVerification}
-              style={[styles.resendButton, { backgroundColor: themeColors.warning }]}
-              activeOpacity={0.7}
-            >
-              {isResendingVerification ? (
-                <AppText variant="body" style={[styles.resendButtonText, { color: themeColors.text }]}>
-                  Sending...
-                </AppText>
-              ) : (
-                <AppText variant="body" style={[styles.resendButtonText, { color: themeColors.text }]}>
-                  Resend
-                </AppText>
-              )}
-            </TouchableOpacity>
-          </View>
-        )}
+          );
+        })()}
 
         {/* Expanded Profile Section */}
         {user && isProfileExpanded && (
@@ -1238,16 +1397,6 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* About */}
-        <View style={styles.section}>
-          <AppText variant="caption" style={[styles.aboutText, { color: themeColors.textTertiary }]}>
-            Livra v1.0.0
-          </AppText>
-          <AppText variant="caption" style={[styles.aboutText, { color: themeColors.textTertiary }]}>
-            Track progress, not pressure
-          </AppText>
-        </View>
-
         {/* Account Section */}
         {user && (
           <View style={styles.section}>
@@ -1292,6 +1441,18 @@ export default function SettingsScreen() {
             </TouchableOpacity>
           </View>
         )}
+
+        {/* About - Moved to bottom */}
+        <View style={[styles.section, styles.aboutSection]}>
+          <TouchableOpacity onPress={handleVersionTap} activeOpacity={1}>
+            <AppText variant="caption" style={[styles.aboutText, { color: themeColors.textTertiary }]}>
+              Livra v{Constants.expoConfig?.version || '1.0.35'}
+            </AppText>
+          </TouchableOpacity>
+          <AppText variant="caption" style={[styles.aboutText, { color: themeColors.textTertiary }]}>
+            Track progress, not pressure
+          </AppText>
+        </View>
       </ScrollView>
       </SafeAreaView>
 
@@ -1375,6 +1536,7 @@ const styles = StyleSheet.create({
   content: {
     padding: spacing.lg,
     paddingBottom: spacing['3xl'],
+    flexGrow: 1,
   },
   screenTitle: {
     marginBottom: spacing.lg,
@@ -1482,21 +1644,30 @@ const styles = StyleSheet.create({
   expandIndicator: {
     marginTop: spacing.xs,
   },
-  refreshButton: {
+  refreshButtonContainer: {
     position: 'absolute',
     right: spacing.lg,
     top: '50%',
-    transform: [{ translateY: -24 }], // Half of minHeight to center vertically
+    transform: [{ translateY: -28 }], // Center the icon, accounting for potential text below
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    minWidth: 48,
+    height: 56, // Fixed height to accommodate icon + text, prevents movement
+  },
+  refreshButton: {
     padding: spacing.md, 
     alignItems: 'center',
     justifyContent: 'center',
     minWidth: 48,
     minHeight: 48,
-    gap: spacing.xs,
   },
   syncStatusText: {
+    position: 'absolute',
+    top: 48, // Position below the button icon
     fontSize: 10,
-    marginTop: spacing.xs / 2,
+    textAlign: 'center',
+    width: 48,
+    left: 0,
   },
   lastSyncedText: {
     fontSize: 11,
@@ -1578,6 +1749,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   proText: {},
+  aboutSection: {
+    marginTop: spacing['3xl'],
+    paddingTop: spacing.xxl,
+    alignItems: 'center',
+    marginBottom: spacing.xl,
+  },
   aboutText: {
     textAlign: 'center',
     marginBottom: spacing.xs,

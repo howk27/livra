@@ -81,35 +81,106 @@ export default function RootLayout() {
 
   const handleDeepLink = (url: string) => {
     try {
+      // Validate URL is a string and not empty
+      if (!url || typeof url !== 'string' || url.trim().length === 0) {
+        logger.warn('[Deep Link] Invalid URL received:', url);
+        return;
+      }
+
       logger.log('[Deep Link] Received URL:', url);
       
-      // Parse the URL
-      const parsed = Linking.parse(url);
+      // Parse the URL with error handling
+      let parsed;
+      try {
+        parsed = Linking.parse(url);
+      } catch (parseError) {
+        logger.error('[Deep Link] Failed to parse URL:', parseError);
+        return;
+      }
+
+      // Check if it's a password reset link - support multiple URL formats
+      const isResetPassword = 
+        parsed.path === 'auth/reset-password' || 
+        parsed.path === '/auth/reset-password' ||
+        url.includes('/auth/reset-password') ||
+        url.includes('auth/reset-password');
       
-      // Check if it's a password reset link
-      if (parsed.path === 'auth/reset-password' || url.includes('auth/reset-password')) {
-        // Extract token and type from URL
-        // Supabase sends URLs like: livra://auth/reset-password#access_token=...&type=recovery
-        // Or: livra://auth/reset-password?token=...&type=recovery
+      // Also check for universal links (https://livralife.com/auth/reset-password or https://www.livralife.com/auth/reset-password)
+      const isUniversalLink = 
+        (url.startsWith('https://livralife.com/auth/reset-password') ||
+         url.startsWith('https://www.livralife.com/auth/reset-password')) &&
+        (url.includes('livralife.com/auth/reset-password'));
+      
+      if (isResetPassword || isUniversalLink) {
+        const isLikelyToken = (value: any) =>
+          typeof value === 'string' &&
+          value.trim().length > 20 &&
+          // Supabase recovery tokens are JWT-like and contain at least one '.'
+          value.includes('.');
+
+        // Extract token and type from URL - handle multiple formats
+        // Supabase sends URLs like:
+        // - livra://auth/reset-password#access_token=...&type=recovery
+        // - livra://auth/reset-password?token=...&type=recovery
+        // - https://livralife.com/auth/reset-password?access_token=...&type=recovery
+        // - https://livralife.com/auth/reset-password#access_token=...&type=recovery
         
-        const hashParams = parsed.queryParams || {};
-        const token = hashParams.access_token || hashParams.token || hashParams['#access_token'];
-        const type = hashParams.type || hashParams['#type'];
+        const queryParams = parsed.queryParams || {};
+        const hashParams: Record<string, any> = {};
         
-        logger.log('[Deep Link] Password reset detected', { hasToken: !!token, type });
+        // Extract hash fragment parameters if present
+        const hashIndex = url.indexOf('#');
+        if (hashIndex !== -1) {
+          const hashFragment = url.substring(hashIndex + 1);
+          try {
+            // Parse hash fragment (format: key=value&key2=value2)
+            hashFragment.split('&').forEach(param => {
+              const [key, value] = param.split('=');
+              if (key && value) {
+                hashParams[key] = decodeURIComponent(value);
+              }
+            });
+          } catch (hashError) {
+            logger.warn('[Deep Link] Failed to parse hash fragment:', hashError);
+          }
+        }
         
-        if (token && type === 'recovery') {
+        // Try multiple token parameter names and locations
+        const token = 
+          queryParams.access_token ||
+          queryParams.token ||
+          hashParams.access_token ||
+          hashParams.token ||
+          queryParams['#access_token'] ||
+          hashParams['#access_token'];
+        
+        // Try multiple type parameter names and locations
+        const type = 
+          queryParams.type ||
+          hashParams.type ||
+          queryParams['#type'] ||
+          hashParams['#type'];
+        
+        logger.log('[Deep Link] Password reset detected', { 
+          hasToken: !!token, 
+          type,
+          urlFormat: isUniversalLink ? 'universal' : 'deep'
+        });
+        
+        // Validate token format (should be a non-empty string)
+        if (token && isLikelyToken(token) && type === 'recovery') {
           // Navigate to reset password complete screen with token
           router.push({
             pathname: '/auth/reset-password-complete',
             params: {
-              token: token as string,
+              token: token.trim(),
               type: 'recovery',
             },
           });
         } else {
           // If no token in URL, Supabase might have set it in the session
           // Check session and navigate anyway - the screen will handle it
+          logger.warn('[Deep Link] No valid token found in URL, navigating to reset screen to check session');
           router.push('/auth/reset-password-complete');
         }
       }
@@ -142,6 +213,17 @@ export default function RootLayout() {
       // Small delay to ensure everything is initialized
       const timer = setTimeout(async () => {
         try {
+          // CRITICAL: Load marks from LOCAL DB FIRST before syncing
+          // This ensures we have the correct local values before Supabase sync might overwrite them
+          // The merge logic will preserve local values if they're higher
+          const { useCountersStore } = await import('../state/countersSlice');
+          const { useEventsStore } = await import('../state/eventsSlice');
+          
+          logger.log('[App] Loading marks from local DB before sync...');
+          await useCountersStore.getState().loadMarks(user.id);
+          useEventsStore.getState().loadEvents(undefined, user.id);
+          logger.log('[App] Local marks loaded, now syncing...');
+          
           // CRITICAL: Run cleanup before sync to remove any duplicates first
           // This ensures duplicates are removed before syncing new data
           const cleanupResult = await cleanupDuplicateCounters(user.id);
@@ -158,8 +240,11 @@ export default function RootLayout() {
           }
           
           // Reload counters and events after sync to show synced data
-          const { useCountersStore } = await import('../state/countersSlice');
-          const { useEventsStore } = await import('../state/eventsSlice');
+          // CRITICAL: Only reload if sync actually completed successfully
+          // The loadMarks function will preserve optimistic updates via recentUpdates tracking
+          // Add a small delay to ensure any pending local writes complete first
+          await new Promise(resolve => setTimeout(resolve, 500)); // 500ms delay
+          logger.log('[App] Reloading marks after sync (merge will preserve local values)...');
           await useCountersStore.getState().loadMarks(user.id);
           useEventsStore.getState().loadEvents(undefined, user.id);
         } catch (error: any) {
@@ -215,6 +300,7 @@ function RootNavigator() {
         <Stack.Screen name="onboarding" options={{ presentation: 'fullScreenModal' }} />
         <Stack.Screen name="paywall" options={{ presentation: 'modal' }} />
         <Stack.Screen name="auth" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="iap-dashboard" options={{ presentation: 'modal' }} />
       </Stack>
       <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
     </>

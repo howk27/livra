@@ -7,7 +7,10 @@ import {
   scheduleSmartNotifications,
   NotificationConfig,
   NotificationAnalysis,
+  reminderNotifications,
+  NotificationCategory,
 } from '../services/notificationService';
+import { logger } from '../lib/utils/logger';
 
 // Configure notification behavior
 Notifications.setNotificationHandler({
@@ -82,34 +85,16 @@ export const useNotifications = () => {
           repeats: true,
         };
 
-        // Get a random funny phrase for manual reminders
-        const reminderPhrases = [
-          "Your marks are calling",
-          "Don't let progress wait",
-          "Time to update your stats",
-          "Your counter needs attention",
-          "Quick check-in time",
-          "Don't forget your wins",
-          "Make it count today",
-          "Progress won't log itself"
-        ];
-        const reminderTitles = [
-          "Just a friendly reminder",
-          "Don't let today slip",
-          "Time for a quick update",
-          "Your progress is waiting",
-          "Check-in reminder",
-          "Don't skip today",
-          "Quick update needed",
-          "Your marks miss you"
-        ];
-        const randomTitle = reminderTitles[Math.floor(Math.random() * reminderTitles.length)];
-        const randomPhrase = reminderPhrases[Math.floor(Math.random() * reminderPhrases.length)];
+        // Get a random notification based on time of day
+        // Use evening category for manual reminders (most common case)
+        const category: NotificationCategory = "evening";
+        const notifications = reminderNotifications[category];
+        const randomBody = notifications[Math.floor(Math.random() * notifications.length)];
 
         const identifier = await Notifications.scheduleNotificationAsync({
           content: {
-            title: randomTitle,
-            body: `${randomPhrase} - Update "${config.counterName}"`,
+            title: "Livra",
+            body: randomBody,
             data: { counterId: config.counterId },
           },
           trigger,
@@ -117,7 +102,7 @@ export const useNotifications = () => {
 
         return identifier;
       } catch (error) {
-        console.error('Error scheduling notification:', error);
+        logger.error('Error scheduling notification:', error);
         return null;
       }
     },

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -6,10 +6,67 @@ import { colors } from '../../../theme/colors';
 import { spacing, borderRadius, fontSize, fontWeight } from '../../../theme/tokens';
 import { useEffectiveTheme } from '../../../state/uiSlice';
 import { useCounters } from '../../../hooks/useCounters';
+import CounterIcon from '@/src/components/icons/CounterIcon';
+import { resolveCounterIconType } from '@/src/components/icons/IconResolver';
+import type { MarkType } from '@/src/types/counters';
+import { logger } from '../../../lib/utils/logger';
 
-const EMOJI_OPTIONS = ['🏋️', '📖', '🧘', '💧', '📚', '🎯', '🏃', '🍎', '💪', '📱', '🎨', '🚀'];
 const COLOR_OPTIONS = ['#3B82F6', '#10B981', '#A855F7', '#F97316', '#EF4444', '#EC4899'];
 const UNIT_OPTIONS = ['sessions', 'days', 'items'];
+
+// Mapping of icon types to emojis for storage compatibility
+const ICON_TYPE_TO_EMOJI: Record<Exclude<MarkType, 'custom'>, string> = {
+  email: '📧',
+  planning: '🗓️',
+  focus: '🎯',
+  tasks: '✅',
+  language: '🗣️',
+  study: '📚',
+  reading: '📖',
+  calories: '🔥',
+  soda_free: '🥤',
+  rest: '🛌',
+  meditation: '🧘',
+  sleep: '🌙',
+  gym: '🏋️',
+  steps: '👣',
+  water: '💧',
+  no_sugar: '🚫',
+  no_beer: '🍺',
+  no_spending: '💰',
+  mood: '😊',
+  no_smoking: '🚭',
+  screen_free: '📱',
+  gratitude: '🙏',
+  journaling: '📝',
+};
+
+// All available icon types (excluding 'custom' as it has no icon)
+const ALL_ICON_TYPES: Exclude<MarkType, 'custom'>[] = [
+  'email',
+  'planning',
+  'focus',
+  'tasks',
+  'language',
+  'study',
+  'reading',
+  'calories',
+  'soda_free',
+  'rest',
+  'meditation',
+  'sleep',
+  'gym',
+  'steps',
+  'water',
+  'no_sugar',
+  'no_beer',
+  'no_spending',
+  'mood',
+  'no_smoking',
+  'screen_free',
+  'gratitude',
+  'journaling',
+];
 
 export default function EditCounterScreen() {
   const theme = useEffectiveTheme();
@@ -21,8 +78,27 @@ export default function EditCounterScreen() {
   const { counters, updateCounter } = useCounters();
   const counter = id ? counters.find((c) => c.id === id) : null;
 
+  // Get current icon type from counter or resolve from emoji/name
+  const currentIconType = useMemo((): Exclude<MarkType, 'custom'> => {
+    if (counter) {
+      const resolved = resolveCounterIconType({ name: counter.name, emoji: counter.emoji });
+      return (resolved || 'gym') as Exclude<MarkType, 'custom'>; // Default to gym if can't resolve
+    }
+    return 'gym';
+  }, [counter]);
+
   const [name, setName] = useState(counter?.name || '');
-  const [emoji, setEmoji] = useState(counter?.emoji || EMOJI_OPTIONS[0]);
+  const [selectedIconType, setSelectedIconType] = useState<Exclude<MarkType, 'custom'>>(currentIconType);
+  
+  // Sync icon type when counter changes
+  useEffect(() => {
+    if (counter) {
+      const resolved = resolveCounterIconType({ name: counter.name, emoji: counter.emoji });
+      if (resolved && resolved !== 'custom') {
+        setSelectedIconType(resolved as Exclude<MarkType, 'custom'>);
+      }
+    }
+  }, [counter]);
   const [color, setColor] = useState(counter?.color || COLOR_OPTIONS[0]);
   const [unit, setUnit] = useState<'sessions' | 'days' | 'items'>(
     (counter?.unit as 'sessions' | 'days' | 'items') || 'sessions'
@@ -48,6 +124,8 @@ export default function EditCounterScreen() {
 
     try {
       setLoading(true);
+      // Convert selected icon type to emoji for storage compatibility
+      const emoji = ICON_TYPE_TO_EMOJI[selectedIconType] || ICON_TYPE_TO_EMOJI.gym;
       await updateCounter(id, {
         name: name.trim(),
         emoji,
@@ -57,7 +135,7 @@ export default function EditCounterScreen() {
       });
       router.back();
     } catch (error) {
-      console.error('Error updating counter:', error);
+      logger.error('Error updating counter:', error);
       Alert.alert('Error', 'Failed to update counter. Please try again.');
     } finally {
       setLoading(false);
@@ -90,25 +168,33 @@ export default function EditCounterScreen() {
           />
         </View>
 
-        {/* Emoji Picker */}
+        {/* Icon Picker */}
         <View style={styles.section}>
-          <Text style={[styles.label, { color: themeColors.text }]}>Emoji</Text>
-          <View style={styles.emojiGrid}>
-            {EMOJI_OPTIONS.map((e) => (
-              <TouchableOpacity
-                key={e}
-                style={[
-                  styles.emojiButton,
-                  {
-                    backgroundColor: e === emoji ? color + '30' : themeColors.surface,
-                    borderColor: e === emoji ? color : themeColors.border,
-                  },
-                ]}
-                onPress={() => setEmoji(e)}
-              >
-                <Text style={styles.emojiText}>{e}</Text>
-              </TouchableOpacity>
-            ))}
+          <Text style={[styles.label, { color: themeColors.text }]}>Icon</Text>
+          <View style={styles.iconGrid}>
+            {ALL_ICON_TYPES.map((iconType) => {
+              const isSelected = iconType === selectedIconType;
+              return (
+                <TouchableOpacity
+                  key={iconType}
+                  style={[
+                    styles.iconButton,
+                    {
+                      backgroundColor: isSelected ? color + '30' : themeColors.surface,
+                      borderColor: isSelected ? color : themeColors.border,
+                    },
+                  ]}
+                  onPress={() => setSelectedIconType(iconType)}
+                >
+                  <CounterIcon
+                    type={iconType as any}
+                    size={28}
+                    color={isSelected ? color : themeColors.textSecondary}
+                    variant="symbol"
+                  />
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
 
@@ -235,21 +321,18 @@ const styles = StyleSheet.create({
     fontSize: fontSize.base,
     borderWidth: 1,
   },
-  emojiGrid: {
+  iconGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
   },
-  emojiButton: {
-    width: 50,
-    height: 50,
+  iconButton: {
+    width: 56,
+    height: 56,
     borderRadius: borderRadius.md,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-  },
-  emojiText: {
-    fontSize: 24,
   },
   colorGrid: {
     flexDirection: 'row',

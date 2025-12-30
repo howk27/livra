@@ -1,7 +1,10 @@
-// Temporary mock database for development
-// TODO: Replace with actual expo-sqlite when package is fixed
+// Database implementation using AsyncStorage
+// Note: This is the current production implementation. The app uses AsyncStorage-backed
+// storage for local data persistence. Migration to expo-sqlite for improved performance
+// and SQL query capabilities is a future enhancement but not required for current release.
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { logger } from '../utils/logger';
 
 interface MockResult {
   insertId?: number;
@@ -28,6 +31,11 @@ const STORAGE_KEYS = {
 // In-memory storage for development (backed by AsyncStorage)
 const storage = new Map<string, any[]>();
 const meta = new Map<string, string>();
+
+// UUID validation to prevent storing placeholder/local data
+const isValidUUID = (str: string): boolean =>
+  typeof str === 'string' &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(str);
 
 // Load data from AsyncStorage on initialization
 const loadFromStorage = async (): Promise<void> => {
@@ -60,7 +68,7 @@ const loadFromStorage = async (): Promise<void> => {
       });
     }
   } catch (error) {
-    console.error('[DB] Error loading from AsyncStorage:', error);
+    logger.error('[DB] Error loading from AsyncStorage:', error);
   }
 };
 
@@ -72,7 +80,7 @@ const saveToStorage = async (key: string, data: any[]): Promise<void> => {
       await AsyncStorage.setItem(storageKey, JSON.stringify(data));
     }
   } catch (error) {
-    console.error(`[DB] Error saving ${key} to AsyncStorage:`, error);
+    logger.error(`[DB] Error saving ${key} to AsyncStorage:`, error);
   }
 };
 
@@ -85,7 +93,7 @@ const saveMetaToStorage = async (): Promise<void> => {
     });
     await AsyncStorage.setItem(STORAGE_KEYS.meta, JSON.stringify(metaData));
   } catch (error) {
-    console.error('[DB] Error saving meta to AsyncStorage:', error);
+    logger.error('[DB] Error saving meta to AsyncStorage:', error);
   }
 };
 
@@ -113,22 +121,87 @@ const createMockDb = (): MockDatabase => ({
   runAsync: async (sql: string, params: any[] = []): Promise<MockResult> => {
     // INSERT INTO lc_counters
     if (sql.includes('INSERT INTO lc_counters')) {
+      // Block inserts with invalid user IDs (e.g., "local-user") to avoid polluting sync
+      if (!isValidUUID(params[1])) {
+        logger.warn('[DB] Skipping counter insert due to invalid user_id', { user_id: params[1], name: params[2] });
+        return { rowsAffected: 0 };
+      }
+
       const counters = storage.get('counters') || [];
-      const newCounter = {
-        id: params[0],
-        user_id: params[1],
-        name: params[2],
-        emoji: params[3],
-        color: params[4],
-        unit: params[5],
-        enable_streak: params[6],
-        sort_index: params[7],
-        total: params[8],
-        created_at: params[9],
-        updated_at: params[10],
-        last_activity_date: null,
-        deleted_at: null,
-      };
+      let newCounter: any;
+      
+      if (params.length === 15) {
+        // Full insert with gating fields (from addMark in countersSlice.ts)
+        // SQL: INSERT INTO lc_counters (id, user_id, name, emoji, color, unit, enable_streak, 
+        //      sort_index, total, created_at, updated_at, gated, gate_type, min_interval_minutes, max_per_day)
+        newCounter = {
+          id: params[0],
+          user_id: params[1],
+          name: params[2],
+          emoji: params[3],
+          color: params[4],
+          unit: params[5],
+          enable_streak: params[6],
+          sort_index: params[7],
+          total: params[8],
+          created_at: params[9],
+          updated_at: params[10],
+          gated: params[11],
+          gate_type: params[12],
+          min_interval_minutes: params[13],
+          max_per_day: params[14],
+          last_activity_date: null,
+          deleted_at: null,
+        };
+        logger.log(`[DB] Inserted counter ${params[0]} (${params[2]}) with gating fields`);
+      } else if (params.length === 13) {
+        // Insert from sync with last_activity_date and deleted_at (from mergeCounter in useSync.ts)
+        // SQL: INSERT INTO lc_counters (id, user_id, name, emoji, color, unit, enable_streak,
+        //      sort_index, total, last_activity_date, deleted_at, created_at, updated_at)
+        newCounter = {
+          id: params[0],
+          user_id: params[1],
+          name: params[2],
+          emoji: params[3],
+          color: params[4],
+          unit: params[5],
+          enable_streak: params[6],
+          sort_index: params[7],
+          total: params[8],
+          last_activity_date: params[9],
+          deleted_at: params[10],
+          created_at: params[11],
+          updated_at: params[12],
+          gated: null,
+          gate_type: null,
+          min_interval_minutes: null,
+          max_per_day: null,
+        };
+        logger.log(`[DB] Inserted counter ${params[0]} (${params[2]}) from sync`);
+      } else {
+        // Legacy insert without gating fields (11 params)
+        newCounter = {
+          id: params[0],
+          user_id: params[1],
+          name: params[2],
+          emoji: params[3],
+          color: params[4],
+          unit: params[5],
+          enable_streak: params[6],
+          sort_index: params[7],
+          total: params[8],
+          created_at: params[9],
+          updated_at: params[10],
+          last_activity_date: null,
+          deleted_at: null,
+          gated: null,
+          gate_type: null,
+          min_interval_minutes: null,
+          max_per_day: null,
+        };
+        logger.log(`[DB] Inserted counter ${params[0]} (${params[2]}) (legacy, ${params.length} params)`);
+      }
+      
       counters.push(newCounter);
       storage.set('counters', counters);
       await saveToStorage('counters', counters);
@@ -156,18 +229,40 @@ const createMockDb = (): MockDatabase => ({
           };
           storage.set('counters', counters);
           await saveToStorage('counters', counters);
-          console.log(`[DB] Soft deleted counter ${id}, deleted_at: ${deletedAt}`);
+          logger.log(`[DB] Soft deleted counter ${id}, deleted_at: ${deletedAt}`);
           return { rowsAffected: 1 };
         }
-        console.error(`[DB] Counter ${id} not found for soft delete`);
+        logger.error(`[DB] Counter ${id} not found for soft delete`);
         return { rowsAffected: 0 };
       } else {
         // Regular update: UPDATE lc_counters SET name = ?, emoji = ?, ... WHERE id = ?
         const index = counters.findIndex(c => c.id === params[params.length - 1]); // WHERE id = ? is last param
         if (index !== -1) {
           // Handle different UPDATE patterns
-          if (params.length === 10) {
-            // Full update with all fields
+          if (params.length === 14) {
+            // CRITICAL: Full update with all fields INCLUDING gating fields
+            // SQL: UPDATE lc_counters SET name = ?, emoji = ?, color = ?, unit = ?, enable_streak = ?,
+            //      sort_index = ?, total = ?, last_activity_date = ?, updated_at = ?,
+            //      gated = ?, gate_type = ?, min_interval_minutes = ?, max_per_day = ? WHERE id = ?
+            counters[index] = {
+              ...counters[index],
+              name: params[0],
+              emoji: params[1],
+              color: params[2],
+              unit: params[3],
+              enable_streak: params[4],
+              sort_index: params[5],
+              total: params[6],
+              last_activity_date: params[7],
+              updated_at: params[8],
+              gated: params[9],
+              gate_type: params[10],
+              min_interval_minutes: params[11],
+              max_per_day: params[12],
+            };
+            logger.log(`[DB] Updated counter ${params[13]} with total: ${params[6]}`);
+          } else if (params.length === 10) {
+            // Legacy update with all fields (no gating)
             counters[index] = {
               ...counters[index],
               name: params[0],
@@ -180,21 +275,40 @@ const createMockDb = (): MockDatabase => ({
               last_activity_date: params[7],
               updated_at: params[8],
             };
-          } else if (params.length === 3 && sql.includes('total') && sql.includes('last_activity_date')) {
-            // Update total and last_activity_date (from increment/decrement)
+            logger.log(`[DB] Updated counter ${params[9]} with total: ${params[6]} (legacy)`);
+          } else if (params.length === 2 && sql.includes('total')) {
+            // Simple total update: UPDATE lc_counters SET total = ? WHERE id = ?
             counters[index] = {
               ...counters[index],
               total: params[0],
-              last_activity_date: params[1],
-              updated_at: params[2],
+              updated_at: new Date().toISOString(),
             };
+            logger.log(`[DB] Updated counter ${params[1]} total to: ${params[0]}`);
           } else {
-            // Generic update - preserve existing values and update what's provided
+            // Generic update - parse the SQL to understand what's being updated
+            // This handles edge cases and ensures we never silently fail
             const existing = counters[index];
-            counters[index] = {
-              ...existing,
-              updated_at: params[params.length - 2] || existing.updated_at, // Usually second to last
-            };
+            const updated = { ...existing };
+            
+            // Try to extract field names from SQL and match with params
+            // SQL format: UPDATE lc_counters SET field1 = ?, field2 = ?, ... WHERE id = ?
+            const setMatch = sql.match(/SET\s+(.+?)\s+WHERE/i);
+            if (setMatch) {
+              const assignments = setMatch[1].split(',').map(s => s.trim());
+              assignments.forEach((assignment, i) => {
+                if (i < params.length - 1) { // Last param is the id
+                  const fieldMatch = assignment.match(/^(\w+)\s*=/);
+                  if (fieldMatch) {
+                    const fieldName = fieldMatch[1];
+                    (updated as any)[fieldName] = params[i];
+                  }
+                }
+              });
+              updated.updated_at = new Date().toISOString();
+            }
+            
+            counters[index] = updated;
+            logger.log(`[DB] Updated counter ${params[params.length - 1]} (generic handler, ${params.length} params)`);
           }
           storage.set('counters', counters);
           await saveToStorage('counters', counters);
@@ -206,6 +320,15 @@ const createMockDb = (): MockDatabase => ({
     
     // INSERT INTO lc_events
     if (sql.includes('INSERT INTO lc_events')) {
+      if (!isValidUUID(params[1])) {
+        logger.warn('[DB] Skipping event insert due to invalid user_id', { user_id: params[1], eventId: params[0] });
+        return { rowsAffected: 0 };
+      }
+      if (!isValidUUID(params[2])) {
+        logger.warn('[DB] Skipping event insert due to invalid counter_id', { counter_id: params[2], eventId: params[0] });
+        return { rowsAffected: 0 };
+      }
+
       const events = storage.get('events') || [];
       const newEvent = {
         id: params[0],
@@ -382,6 +505,22 @@ const createMockDb = (): MockDatabase => ({
         counters = counters.filter(c => c.user_id === userId);
       }
       
+      // Filter by updated_at if in WHERE clause (for sync)
+      if (sql.includes('updated_at > ?')) {
+        // updated_at param is typically after user_id
+        const updatedAtParamIndex = sql.includes('user_id = ?') ? 1 : 0;
+        const timestamp = params[updatedAtParamIndex];
+        if (timestamp) {
+          counters = counters.filter(c => {
+            try {
+              return new Date(c.updated_at).getTime() > new Date(timestamp).getTime();
+            } catch {
+              return true; // Include if we can't parse dates
+            }
+          });
+        }
+      }
+      
       // If querying for deleted_at IS NOT NULL, include deleted counters
       if (sql.includes('deleted_at IS NOT NULL')) {
         counters = counters.filter(c => c.deleted_at);
@@ -412,33 +551,192 @@ const createMockDb = (): MockDatabase => ({
     }
     
     if (sql.includes('FROM lc_events')) {
-      const events = storage.get('events') || [];
+      let events = storage.get('events') || [];
+      // CRITICAL: Add mark_id field to all events for compatibility
+      // Events are stored with counter_id, but sync code expects mark_id
+      // This ensures both field names are available
+      let eventsWithMarkId = events.map(e => ({
+        ...e,
+        mark_id: e.counter_id || e.mark_id, // Ensure mark_id is set from counter_id
+      }));
+      
+      // Filter by id if in WHERE clause (for single event lookup)
+      if (sql.includes('WHERE id = ?')) {
+        const eventId = params[0];
+        eventsWithMarkId = eventsWithMarkId.filter(e => e.id === eventId);
+      }
+      
+      // Filter by user_id if in WHERE clause
+      if (sql.includes('user_id = ?') && params.length > 0) {
+        // user_id position depends on whether id is also in the query
+        const userIdParamIndex = sql.includes('WHERE id = ?') ? 1 : 0;
+        const userId = params[userIdParamIndex];
+        if (userId) {
+          eventsWithMarkId = eventsWithMarkId.filter(e => e.user_id === userId);
+        }
+      }
+      
+      // Filter by counter_id if in WHERE clause
+      if (sql.includes('counter_id = ?')) {
+        // Find the position of counter_id param
+        let counterIdParamIndex = 0;
+        if (sql.includes('WHERE id = ?')) counterIdParamIndex++;
+        if (sql.includes('user_id = ?')) counterIdParamIndex++;
+        if (params[counterIdParamIndex]) {
+          const counterId = params[counterIdParamIndex];
+          eventsWithMarkId = eventsWithMarkId.filter(e => e.counter_id === counterId);
+        }
+      }
+      
+      // Filter by updated_at if in WHERE clause (for sync)
+      if (sql.includes('updated_at > ?')) {
+        // Find updated_at param position
+        let updatedAtParamIndex = 0;
+        if (sql.includes('WHERE id = ?')) updatedAtParamIndex++;
+        if (sql.includes('user_id = ?')) updatedAtParamIndex++;
+        const timestamp = params[updatedAtParamIndex];
+        if (timestamp) {
+          eventsWithMarkId = eventsWithMarkId.filter(e => {
+            try {
+              return new Date(e.updated_at).getTime() > new Date(timestamp).getTime();
+            } catch {
+              return true; // Include if we can't parse dates
+            }
+          });
+        }
+      }
+      
+      // Filter by occurred_local_date if in WHERE clause
+      if (sql.includes('occurred_local_date = ?')) {
+        // Find the occurred_local_date param position
+        let paramIndex = 0;
+        if (sql.includes('WHERE id = ?')) paramIndex++;
+        if (sql.includes('user_id = ?')) paramIndex++;
+        if (sql.includes('counter_id = ?')) paramIndex++;
+        if (params[paramIndex]) {
+          const date = params[paramIndex];
+          eventsWithMarkId = eventsWithMarkId.filter(e => e.occurred_local_date === date);
+        }
+      }
+      
+      // Filter by event_type if in WHERE clause
+      if (sql.includes("event_type = ?") || sql.includes("event_type = 'increment'")) {
+        if (sql.includes("event_type = 'increment'")) {
+          eventsWithMarkId = eventsWithMarkId.filter(e => e.event_type === 'increment');
+        } else {
+          // Find event_type param position
+          let paramIndex = 0;
+          if (sql.includes('WHERE id = ?')) paramIndex++;
+          if (sql.includes('user_id = ?')) paramIndex++;
+          if (sql.includes('counter_id = ?')) paramIndex++;
+          if (params[paramIndex]) {
+            eventsWithMarkId = eventsWithMarkId.filter(e => e.event_type === params[paramIndex]);
+          }
+        }
+      }
+      
       // If querying for deleted_at IS NOT NULL, include deleted events
       if (sql.includes('deleted_at IS NOT NULL')) {
-        return events.filter(e => e.deleted_at) as T[];
+        return eventsWithMarkId.filter(e => e.deleted_at) as T[];
       }
       // Default: filter out deleted events
-      return events.filter(e => !e.deleted_at) as T[];
+      return eventsWithMarkId.filter(e => !e.deleted_at) as T[];
     }
     
     if (sql.includes('FROM lc_streaks')) {
-      const streaks = storage.get('streaks') || [];
+      let streaks = storage.get('streaks') || [];
+      
+      // Add mark_id for compatibility with local types
+      streaks = streaks.map((s: any) => ({
+        ...s,
+        mark_id: s.counter_id || s.mark_id,
+      }));
+      
+      // Filter by user_id if in WHERE clause
+      if (sql.includes('user_id = ?') && params.length > 0) {
+        const userId = params[0];
+        streaks = streaks.filter((s: any) => s.user_id === userId);
+      }
+      
+      // Filter by updated_at if in WHERE clause (for sync)
+      if (sql.includes('updated_at > ?')) {
+        const updatedAtParamIndex = sql.includes('user_id = ?') ? 1 : 0;
+        const timestamp = params[updatedAtParamIndex];
+        if (timestamp) {
+          streaks = streaks.filter((s: any) => {
+            try {
+              return new Date(s.updated_at).getTime() > new Date(timestamp).getTime();
+            } catch {
+              return true;
+            }
+          });
+        }
+      }
+      
+      // Filter by counter_id if in WHERE clause
+      if (sql.includes('counter_id = ?')) {
+        let counterIdParamIndex = 0;
+        if (sql.includes('user_id = ?')) counterIdParamIndex++;
+        if (params[counterIdParamIndex]) {
+          const counterId = params[counterIdParamIndex];
+          streaks = streaks.filter((s: any) => s.counter_id === counterId);
+        }
+      }
+      
       // If querying for deleted_at IS NOT NULL, include deleted streaks
       if (sql.includes('deleted_at IS NOT NULL')) {
-        return streaks.filter(s => s.deleted_at) as T[];
+        return streaks.filter((s: any) => s.deleted_at) as T[];
       }
       // Default: filter out deleted streaks
-      return streaks.filter(s => !s.deleted_at) as T[];
+      return streaks.filter((s: any) => !s.deleted_at) as T[];
     }
 
     if (sql.includes('FROM lc_badges')) {
-      const badges = storage.get('badges') || [];
+      let badges = storage.get('badges') || [];
+      
+      // Add mark_id for compatibility with local types
+      badges = badges.map((b: any) => ({
+        ...b,
+        mark_id: b.counter_id || b.mark_id,
+      }));
+      
+      // Filter by user_id if in WHERE clause
+      if (sql.includes('user_id = ?') && params.length > 0) {
+        const userId = params[0];
+        badges = badges.filter((b: any) => b.user_id === userId);
+      }
+      
+      // Filter by updated_at if in WHERE clause (for sync)
+      if (sql.includes('updated_at > ?')) {
+        const updatedAtParamIndex = sql.includes('user_id = ?') ? 1 : 0;
+        const timestamp = params[updatedAtParamIndex];
+        if (timestamp) {
+          badges = badges.filter((b: any) => {
+            try {
+              return new Date(b.updated_at).getTime() > new Date(timestamp).getTime();
+            } catch {
+              return true;
+            }
+          });
+        }
+      }
+      
+      // Filter by counter_id if in WHERE clause
+      if (sql.includes('counter_id = ?')) {
+        let counterIdParamIndex = 0;
+        if (sql.includes('user_id = ?')) counterIdParamIndex++;
+        if (params[counterIdParamIndex]) {
+          const counterId = params[counterIdParamIndex];
+          badges = badges.filter((b: any) => b.counter_id === counterId);
+        }
+      }
+      
       // If querying for deleted_at IS NOT NULL, include deleted badges
       if (sql.includes('deleted_at IS NOT NULL')) {
-        return badges.filter(b => b.deleted_at) as T[];
+        return badges.filter((b: any) => b.deleted_at) as T[];
       }
       // Default: filter out deleted badges
-      return badges.filter(b => !b.deleted_at) as T[];
+      return badges.filter((b: any) => !b.deleted_at) as T[];
     }
     
     return [];
@@ -478,8 +776,12 @@ const createMockDb = (): MockDatabase => ({
     
     if (sql.includes('FROM lc_events') && sql.includes('WHERE id = ?')) {
       const events = storage.get('events') || [];
-      const result = events.find(e => e.id === params[0] && !e.deleted_at) || null;
-      return result as T | null;
+      const result = events.find(e => e.id === params[0] && !e.deleted_at);
+      if (result) {
+        // CRITICAL: Add mark_id for compatibility with sync code
+        return { ...result, mark_id: result.counter_id || result.mark_id } as T;
+      }
+      return null;
     }
     
     if (sql.includes('FROM lc_streaks') && sql.includes('WHERE counter_id = ?')) {
@@ -664,12 +966,12 @@ export const cleanupInvalidBadges = async (): Promise<number> => {
     if (removedCount > 0) {
       storage.set('badges', validBadges);
       await saveToStorage('badges', validBadges);
-      console.log(`[CLEANUP] Removed ${removedCount} badge(s) with invalid user_id (local-user)`);
+      logger.log(`[CLEANUP] Removed ${removedCount} badge(s) with invalid user_id (local-user)`);
     }
     
     return removedCount;
   } catch (error) {
-    console.error('[CLEANUP] Error cleaning up invalid badges:', error);
+    logger.error('[CLEANUP] Error cleaning up invalid badges:', error);
     return 0;
   }
 };

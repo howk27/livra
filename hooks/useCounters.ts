@@ -1,5 +1,5 @@
 import { useEffect, useCallback } from 'react';
-import { InteractionManager } from 'react-native';
+import { InteractionManager, AppState } from 'react-native';
 import { useMarksStore } from '../state/countersSlice';
 import { useEventsStore } from '../state/eventsSlice';
 import { Mark } from '../types';
@@ -10,22 +10,35 @@ import { useSync } from './useSync';
 import { useBadges } from './useBadges';
 import { useIAP } from './useIAP';
 import { logger } from '../lib/utils/logger';
+import { checkGatingRules } from '../lib/gating';
 
 const FREE_COUNTER_LIMIT = 3;
 
-export const useMarks = () => {
-  const {
-    marks,
-    loading,
-    error,
-    loadMarks,
-    addMark: addMarkAction,
-    updateMark: updateMarkAction,
-    deleteMark: deleteMarkAction,
-    getMark,
-  } = useMarksStore();
+// Helper function to validate UUID
+const isValidUUID = (str: string): boolean => {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(str);
+};
 
-  const { addEvent, loadEvents, events, getEventsByMark } = useEventsStore();
+export const useMarks = () => {
+  // CRITICAL: Use selectors to ensure reactivity - destructuring breaks Zustand's change detection
+  // Each selector creates a separate subscription, ensuring components re-render when that specific value changes
+  const marks = useMarksStore((state) => state.marks);
+  const loading = useMarksStore((state) => state.loading);
+  const error = useMarksStore((state) => state.error);
+  const loadMarks = useMarksStore((state) => state.loadMarks);
+  const addMarkAction = useMarksStore((state) => state.addMark);
+  const updateMarkAction = useMarksStore((state) => state.updateMark);
+  const deleteMarkAction = useMarksStore((state) => state.deleteMark);
+  const getMark = useMarksStore((state) => state.getMark);
+
+  // CRITICAL: Use selectors for events store too to ensure reactivity
+  const addEvent = useEventsStore((state) => state.addEvent);
+  const loadEvents = useEventsStore((state) => state.loadEvents);
+  const events = useEventsStore((state) => state.events);
+  const getEventsByMark = useEventsStore((state) => state.getEventsByMark);
+  const getLastIncrementEvent = useEventsStore((state) => state.getLastIncrementEvent);
+  const getIncrementsToday = useEventsStore((state) => state.getIncrementsToday);
   const { user } = useAuth();
   const { sync } = useSync();
   const { isProUnlocked } = useIAP();
@@ -105,146 +118,387 @@ export const useMarks = () => {
 
   const incrementMark = useCallback(
     async (markId: string, userId: string, amount: number = 1) => {
-      // NO SYNCHRONOUS OPERATIONS - Everything happens asynchronously
-      // The component's optimistic state handles the immediate UI update
+      logger.log('[INCREMENT] ===== START INCREMENT =====', {
+        markId,
+        userId,
+        amount,
+        timestamp: new Date().toISOString(),
+      });
+
+      // CRITICAL: Require valid authenticated user (user_id must be a valid UUID)
+      if (!userId || !isValidUUID(userId)) {
+        logger.error('[INCREMENT] Invalid user ID', { userId });
+        throw new Error('Cannot increment mark: user must be authenticated with a valid user_id');
+      }
+
+      // Get mark first
+      const mark = getMark(markId);
+      if (!mark) {
+        logger.error('[INCREMENT] Mark not found', { markId });
+        throw new Error('Mark not found');
+      }
+
+      logger.log('[INCREMENT] Mark found:', {
+        markId: mark.id,
+        markName: mark.name,
+        currentTotal: mark.total,
+        gated: mark.gated,
+        gateType: mark.gate_type,
+        lastActivityDate: mark.last_activity_date,
+      });
+
+      // CRITICAL: Use device local time for event date (prevents date manipulation)
+      // Server will validate timestamp on sync, but local date should match device timezone
+      const now = new Date();
+      const today = formatDate(now); // Local timezone date string (yyyy-MM-dd)
       
-      // Defer ALL work to avoid blocking the main thread
-      InteractionManager.runAfterInteractions(() => {
-        // Get mark asynchronously (non-blocking)
-        const mark = getMark(markId);
-        if (!mark) return;
+      // Validate date is not in future (prevent manipulation)
+      // Allow small buffer (5 minutes) for clock drift
+      const maxAllowedDate = new Date();
+      maxAllowedDate.setMinutes(maxAllowedDate.getMinutes() + 5);
+      if (now.getTime() > maxAllowedDate.getTime()) {
+        logger.error('[Counters] Event timestamp is in future - possible date manipulation. Rejecting event.', {
+          eventTime: now.toISOString(),
+          maxAllowed: maxAllowedDate.toISOString(),
+        });
+        throw new Error('Event timestamp is in the future');
+      }
+      
+      // Validate date is not too far in the past (more than 1 year)
+      const minAllowedDate = new Date();
+      minAllowedDate.setFullYear(minAllowedDate.getFullYear() - 1);
+      if (now.getTime() < minAllowedDate.getTime()) {
+        logger.error('[Counters] Event timestamp is too far in the past. Rejecting event.', {
+          eventTime: now.toISOString(),
+          minAllowed: minAllowedDate.toISOString(),
+        });
+        throw new Error('Event timestamp is too far in the past');
+      }
 
-        // CRITICAL: Use device local time for event date (prevents date manipulation)
-        // Server will validate timestamp on sync, but local date should match device timezone
-        const now = new Date();
-        const today = formatDate(now); // Local timezone date string (yyyy-MM-dd)
+      // Check gating rules BEFORE proceeding with increment
+      // This must happen synchronously to prevent invalid increments
+      try {
+        // Get events needed for gating check
+        const markEvents = getEventsByMark(markId);
+        logger.log('[INCREMENT] Gating check:', {
+          markId,
+          eventCount: markEvents.length,
+          hasIncrementEvents: markEvents.filter(e => e.event_type === 'increment').length,
+        });
         
-        // Validate date is not in future (prevent manipulation)
-        // Allow small buffer (5 minutes) for clock drift
-        const maxAllowedDate = new Date();
-        maxAllowedDate.setMinutes(maxAllowedDate.getMinutes() + 5);
-        if (now.getTime() > maxAllowedDate.getTime()) {
-          logger.error('[Counters] Event timestamp is in future - possible date manipulation. Rejecting event.', {
-            eventTime: now.toISOString(),
-            maxAllowed: maxAllowedDate.toISOString(),
+        // Check gating rules
+        const gatingResult = checkGatingRules(mark, userId, markEvents, now);
+        logger.log('[INCREMENT] Gating result:', {
+          markId,
+          allowed: gatingResult.allowed,
+          reason: gatingResult.reason,
+          remainingMinutes: gatingResult.remainingMinutes,
+        });
+        
+        if (!gatingResult.allowed) {
+          logger.warn('[INCREMENT] BLOCKED by gating:', {
+            markId,
+            reason: gatingResult.reason,
           });
-          // Reject the event - don't allow future dates
-          return;
+          // Create a custom error with the gating reason
+          const error = new Error(gatingResult.reason || 'Increment not allowed');
+          (error as any).gatingBlocked = true;
+          (error as any).remainingMinutes = gatingResult.remainingMinutes;
+          throw error;
         }
-        
-        // Validate date is not too far in the past (more than 1 year)
-        const minAllowedDate = new Date();
-        minAllowedDate.setFullYear(minAllowedDate.getFullYear() - 1);
-        if (now.getTime() < minAllowedDate.getTime()) {
-          logger.error('[Counters] Event timestamp is too far in the past. Rejecting event.', {
-            eventTime: now.toISOString(),
-            minAllowed: minAllowedDate.toISOString(),
+        logger.log('[INCREMENT] Gating check passed');
+      } catch (error) {
+        // Re-throw gating errors
+        if ((error as any).gatingBlocked) {
+          logger.warn('[INCREMENT] Gating error re-thrown:', {
+            markId,
+            error: error instanceof Error ? error.message : String(error),
           });
-          // Reject the event - don't allow dates more than 1 year old
-          return;
+          throw error;
         }
-        
-        const newTotal = mark.total + amount;
-
-        // Update store (async, non-blocking)
-        const updatedMark = { ...mark, total: newTotal, last_activity_date: today, updated_at: now.toISOString() };
-        useMarksStore.setState((state) => ({
+        // Log other errors but allow increment to proceed (fail open)
+        logger.error('[INCREMENT] Error checking gating rules, allowing increment:', error);
+      }
+      
+      // CRITICAL: Update store SYNCHRONOUSLY so navigation sees the updated value
+      // The component's optimistic state handles the immediate UI update, but the store
+      // must also be updated immediately so that when user navigates, the detail screen
+      // sees the correct value
+      // Ensure total is a valid number (handle undefined/null cases)
+      const currentTotal = typeof mark.total === 'number' ? mark.total : 0;
+      const newTotal = currentTotal + amount;
+      logger.log('[INCREMENT] Updating store:', {
+        markId,
+        currentTotal,
+        amount,
+        newTotal,
+      });
+      
+      const updatedMark = { ...mark, total: newTotal, last_activity_date: today, updated_at: now.toISOString() };
+      
+      // Update store immediately (synchronous)
+      // CRITICAL: Also track this update in recentUpdates to prevent loadMarks from overwriting it
+      useMarksStore.setState((state) => {
+        const newRecentUpdates = new Map(state.recentUpdates || new Map());
+        newRecentUpdates.set(markId, { total: newTotal, timestamp: Date.now() });
+        logger.log('[INCREMENT] Store state updated:', {
+          markId,
+          newTotal,
+          recentUpdatesSize: newRecentUpdates.size,
+        });
+        return {
           marks: state.marks.map((m) => (m.id === markId ? updatedMark : m)),
-        }));
+          recentUpdates: newRecentUpdates,
+        };
+      });
 
-        // Persist to database (don't await - non-blocking)
-        updateMarkAction(markId, {
+      // CRITICAL: Persist to database IMMEDIATELY and AWAIT completion
+      // This ensures the write completes before any navigation or sync can overwrite it
+      // Use updateMarkAction which tracks pending writes and preserves optimistic updates
+      logger.log('[INCREMENT] Starting DB write:', {
+        markId,
+        newTotal,
+        lastActivityDate: today,
+      });
+      
+      try {
+        await updateMarkAction(markId, {
           total: newTotal,
           last_activity_date: today,
-        }).catch((error) => {
-          logger.error('Error persisting mark update:', error);
+        });
+        // Write completed successfully - the optimistic update is now persisted
+        logger.log('[INCREMENT] ✅ DB write completed successfully:', { markId, newTotal });
+        
+        // Verify the write by reading back from DB
+        const { queryFirst } = await import('../lib/db');
+        const verifyMark = await queryFirst<{ total: number }>(
+          'SELECT total FROM lc_counters WHERE id = ?',
+          [markId]
+        );
+        logger.log('[INCREMENT] DB verification read:', {
+          markId,
+          dbTotal: verifyMark?.total,
+          expectedTotal: newTotal,
+          match: verifyMark?.total === newTotal,
+        });
+      } catch (error) {
+        logger.error('[INCREMENT] ❌ DB write FAILED:', {
+          markId,
+          newTotal,
+          error: error instanceof Error ? error.message : String(error),
+          errorStack: error instanceof Error ? error.stack : undefined,
+        });
+        // On error, reload from database but preserve the optimistic update if it's newer
+        // Don't immediately reload as that would overwrite the optimistic update
+        // Instead, let the next sync handle it, or reload after a delay
+        setTimeout(() => {
           loadMarks(userId).catch((err) => {
-            logger.error('Error reloading marks after failed update:', err);
+            logger.error('[INCREMENT] Error reloading marks after failed update:', err);
           });
-        });
+        }, 1000); // Delay to allow database write to complete if it's just slow
+      }
 
-        // Add event (don't await - let it happen in background)
-        // CRITICAL: occurred_local_date must match device local timezone
-        // occurred_at is UTC timestamp for server, occurred_local_date is local date string
-        addEvent({
-          mark_id: markId,
-          user_id: userId,
-          event_type: 'increment',
-          amount,
-          occurred_at: now.toISOString(), // UTC timestamp for server
-          occurred_local_date: today, // Local date string (yyyy-MM-dd) - consistent with streak calculation
-        }).catch((error) => {
-          logger.error('Error adding event after increment:', error);
-        });
+      // CRITICAL: Add event IMMEDIATELY (not deferred) so stats screen can update in real-time
+      // The event store update triggers reactivity in components that depend on events (ring, pie chart)
+      logger.log('[INCREMENT] Adding event immediately:', {
+        markId,
+        eventType: 'increment',
+        amount,
+        occurred_at: now.toISOString(),
+        occurred_local_date: today,
+      });
 
+      // Add event immediately (not in InteractionManager) so UI updates instantly
+      // CRITICAL: occurred_local_date must match device local timezone
+      addEvent({
+        mark_id: markId,
+        user_id: userId,
+        event_type: 'increment',
+        amount,
+        occurred_at: now.toISOString(),
+        occurred_local_date: today,
+      })
+      .then(() => {
+        logger.log('[INCREMENT] ✅ Event added successfully:', { markId });
+      })
+      .catch((error) => {
+        logger.error('[INCREMENT] ❌ Error adding event after increment:', {
+          markId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+
+      // Defer non-critical operations to avoid blocking the main thread
+      InteractionManager.runAfterInteractions(() => {
         // Update streak if enabled (don't await - let it happen in background)
-        // CRITICAL: Streak is calculated optimistically from local events
-        // After sync completes, streak will be recalculated from synced events
         if (mark.enable_streak) {
           setTimeout(() => {
             const markEvents = getEventsByMark(markId);
             const streakData = computeStreak(markEvents);
-            // Store streak locally - it will be authoritative until sync completes
             updateStreakInDB(markId, userId, streakData).catch((error) => {
-              logger.error('Error updating streak after increment:', error);
+              logger.error('[INCREMENT] Error updating streak after increment:', error);
             });
           }, 50);
         }
 
         // Evaluate badges (don't await - let it happen in background)
         evaluateMarkBadges(markId, userId).catch((error) => {
-          logger.error('Error evaluating badges after increment:', error);
+          logger.error('[INCREMENT] Error evaluating badges after increment:', error);
         });
-
-        // DON'T sync on every increment - sync is throttled and will happen automatically
-        // Only sync if explicitly needed (e.g., after batch operations)
+        
+        logger.log('[INCREMENT] ===== END INCREMENT (background tasks started) =====', {
+          markId,
+          finalTotal: newTotal,
+        });
       });
     },
-    [getMark, addEvent, updateMarkAction, getEventsByMark, loadMarks, evaluateMarkBadges]
+    [getMark, addEvent, updateMarkAction, getEventsByMark, loadMarks, evaluateMarkBadges, checkGatingRules]
   );
 
   const decrementMark = useCallback(
     async (markId: string, userId: string, amount: number = 1) => {
-      // NO SYNCHRONOUS OPERATIONS - Everything happens asynchronously
-      // The component's optimistic state handles the immediate UI update
+      logger.log('[DECREMENT] ===== START DECREMENT =====', {
+        markId,
+        userId,
+        amount,
+        timestamp: new Date().toISOString(),
+      });
+
+      // CRITICAL: Require valid authenticated user (user_id must be a valid UUID)
+      if (!userId || !isValidUUID(userId)) {
+        logger.error('[DECREMENT] Invalid user ID', { userId });
+        throw new Error('Cannot decrement mark: user must be authenticated with a valid user_id');
+      }
+
+      const mark = getMark(markId);
+      if (!mark || mark.total < amount) {
+        logger.warn('[DECREMENT] Cannot decrement - mark not found or insufficient total', {
+          markId,
+          markTotal: mark?.total,
+          amount,
+        });
+        return;
+      }
+
+      logger.log('[DECREMENT] Mark found:', {
+        markId: mark.id,
+        markName: mark.name,
+        currentTotal: mark.total,
+      });
+
+      const now = new Date();
+      const today = formatDate(now);
+      const newTotal = Math.max(0, mark.total - amount);
       
-      // Defer ALL work to avoid blocking the main thread
-      InteractionManager.runAfterInteractions(() => {
-        const mark = getMark(markId);
-        if (!mark || mark.total < amount) return;
+      logger.log('[DECREMENT] Calculating new total:', {
+        markId,
+        currentTotal: mark.total,
+        amount,
+        newTotal,
+      });
 
-        const now = new Date();
-        const today = formatDate(now);
-        const newTotal = Math.max(0, mark.total - amount);
-
-        // Update store (async, non-blocking)
-        const updatedMark = { ...mark, total: newTotal, last_activity_date: today, updated_at: now.toISOString() };
-        useMarksStore.setState((state) => ({
+      // CRITICAL: Update store SYNCHRONOUSLY so navigation sees the updated value
+      // The component's optimistic state handles the immediate UI update, but the store
+      // must also be updated immediately so that when user navigates, the detail screen
+      // sees the correct value
+      // CRITICAL: Also track this update in recentUpdates to prevent loadMarks from overwriting it
+      const updatedMark = { ...mark, total: newTotal, last_activity_date: today, updated_at: now.toISOString() };
+      logger.log('[DECREMENT] Updating store:', {
+        markId,
+        currentTotal: mark.total,
+        amount,
+        newTotal,
+      });
+      
+      useMarksStore.setState((state) => {
+        const newRecentUpdates = new Map(state.recentUpdates || new Map());
+        newRecentUpdates.set(markId, { total: newTotal, timestamp: Date.now() });
+        logger.log('[DECREMENT] Store state updated:', {
+          markId,
+          newTotal,
+          recentUpdatesSize: newRecentUpdates.size,
+          storeMarksCount: state.marks.length,
+        });
+        return {
           marks: state.marks.map((m) => (m.id === markId ? updatedMark : m)),
-        }));
+          recentUpdates: newRecentUpdates,
+        };
+      });
 
-        // Persist to database (don't await - non-blocking)
-        updateMarkAction(markId, {
+      // CRITICAL: Persist to database IMMEDIATELY and AWAIT completion
+      // This ensures the write completes before any navigation or sync can overwrite it
+      logger.log('[DECREMENT] Starting DB write:', {
+        markId,
+        newTotal,
+        lastActivityDate: today,
+      });
+      
+      try {
+        await updateMarkAction(markId, {
           total: newTotal,
           last_activity_date: today,
-        }).catch((error) => {
-          logger.error('Error persisting mark update:', error);
+        });
+        // Write completed successfully - the optimistic update is now persisted
+        logger.log('[DECREMENT] ✅ DB write completed successfully:', { markId, newTotal });
+        
+        // Verify the write by reading back from DB
+        const { queryFirst } = await import('../lib/db');
+        const verifyMark = await queryFirst<{ total: number }>(
+          'SELECT total FROM lc_counters WHERE id = ?',
+          [markId]
+        );
+        logger.log('[DECREMENT] DB verification read:', {
+          markId,
+          dbTotal: verifyMark?.total,
+          expectedTotal: newTotal,
+          match: verifyMark?.total === newTotal,
+        });
+      } catch (error) {
+        logger.error('[DECREMENT] ❌ DB write FAILED:', {
+          markId,
+          newTotal,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        // On error, reload from database but preserve the optimistic update if it's newer
+        setTimeout(() => {
           loadMarks(userId).catch((err) => {
-            logger.error('Error reloading marks after failed update:', err);
+            logger.error('[DECREMENT] Error reloading marks after failed update:', err);
           });
-        });
+        }, 1000); // Delay to allow database write to complete if it's just slow
+      }
 
-        // Add event (don't await - let it happen in background)
-        addEvent({
-          mark_id: markId,
-          user_id: userId,
-          event_type: 'decrement',
-          amount,
-          occurred_at: now.toISOString(),
-          occurred_local_date: today,
-        }).catch((error) => {
-          logger.error('Error adding event after decrement:', error);
+      // CRITICAL: Add event IMMEDIATELY (not deferred) so chart/ring update instantly
+      // The event store update triggers reactivity in components
+      logger.log('[DECREMENT] Adding event immediately:', {
+        markId,
+        eventType: 'decrement',
+        amount,
+        occurred_at: now.toISOString(),
+        occurred_local_date: today,
+      });
+
+      // Add event immediately (don't defer) so UI updates instantly
+      // CRITICAL: Decrement events must be added so charts can recalculate
+      addEvent({
+        mark_id: markId,
+        user_id: userId,
+        event_type: 'decrement',
+        amount,
+        occurred_at: now.toISOString(),
+        occurred_local_date: today,
+      })
+      .then(() => {
+        logger.log('[DECREMENT] ✅ Event added successfully:', { markId });
+      })
+      .catch((error) => {
+        logger.error('[DECREMENT] ❌ Error adding event after decrement:', {
+          markId,
+          error: error instanceof Error ? error.message : String(error),
         });
+      });
+
+      // Defer other non-critical operations to avoid blocking the main thread
+      InteractionManager.runAfterInteractions(() => {
 
         evaluateMarkBadges(markId, userId).catch((error) => {
           logger.error('Error evaluating badges after decrement:', error);

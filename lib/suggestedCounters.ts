@@ -16,10 +16,9 @@ export const SUGGESTED_MARKS_BY_CATEGORY: MarkCategory[] = [
     title: 'Fitness',
     emoji: '💪',
     marks: [
-      { name: 'Gym / Workouts', emoji: '🏋️', color: '#3B82F6', unit: 'sessions' },
+      { name: 'Workouts', emoji: '🏋️', color: '#3B82F6', unit: 'sessions' },
       { name: 'Steps', emoji: '👣', color: '#10B981', unit: 'items' },
-      { name: 'Calories Burned', emoji: '🔥', color: '#EF4444', unit: 'items' },
-      { name: 'Water Intake', emoji: '💧', color: '#06B6D4', unit: 'items' },
+      { name: 'Water Bottles', emoji: '💧', color: '#06B6D4', unit: 'items' },
       { name: 'Rest Day', emoji: '🛌', color: '#06B6D4', unit: 'days' },
     ],
   },

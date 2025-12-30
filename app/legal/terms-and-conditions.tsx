@@ -38,7 +38,7 @@ export default function TermsAndConditionsScreen() {
           showsVerticalScrollIndicator={false}
         >
           <AppText variant="caption" style={[styles.lastUpdated, { color: themeColors.textSecondary }]}>
-            Last updated: [Insert Date]
+            Last updated: January 11, 2025
           </AppText>
 
           <AppText variant="body" style={[styles.paragraph, { color: themeColors.text }]}>
@@ -235,7 +235,7 @@ export default function TermsAndConditionsScreen() {
             For questions about these Terms, contact:
           </AppText>
           <AppText variant="body" style={[styles.paragraph, { color: themeColors.text }]}>
-            [Insert Support Email]
+            Livra Support{'\n'}Email: support@livralife.com
           </AppText>
         </ScrollView>
       </SafeAreaView>

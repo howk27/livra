@@ -169,20 +169,20 @@ export default function OnboardingScreen() {
         // Show user-friendly summary after all counters are processed
         if (duplicateCounterNames.length > 0 || errors.length > 0) {
           if (duplicateCounterNames.length > 0) {
-            const duplicateMessage = `${duplicateCounterNames.length > 1 ? 'Some counters' : 'A counter'} you selected already exists (${duplicateCounterNames.join(', ')}). ${duplicateCounterNames.length > 1 ? 'They were' : 'It was'} skipped.`;
+            const duplicateMessage = `${duplicateCounterNames.length > 1 ? 'Some marks' : 'A mark'} you selected already exists (${duplicateCounterNames.join(', ')}). ${duplicateCounterNames.length > 1 ? 'They were' : 'It was'} skipped.`;
             showWarning(duplicateMessage);
           }
           if (errors.length > 0) {
-            const errorMessage = `There was an error creating ${errors.length} counter(s): ${errors.join(', ')}.`;
+            const errorMessage = `There was an error creating ${errors.length} mark(s): ${errors.join(', ')}.`;
             showError(errorMessage);
           }
           if (createdCounters.length > 0) {
-            const successMessage = `Successfully created ${createdCounters.length} counter(s): ${createdCounters.join(', ')}.`;
+            const successMessage = `Successfully created ${createdCounters.length} mark(s): ${createdCounters.join(', ')}.`;
             showSuccess(successMessage);
           }
         } else if (createdCounters.length > 0) {
-          // Show success message if all counters were created successfully
-          const successMessage = `Successfully created ${createdCounters.length} counter(s): ${createdCounters.join(', ')}.`;
+          // Show success message if all marks were created successfully
+          const successMessage = `Successfully created ${createdCounters.length} mark(s): ${createdCounters.join(', ')}.`;
           showSuccess(successMessage);
         }
 
@@ -256,25 +256,6 @@ export default function OnboardingScreen() {
                   style={[
                     styles.yesNoButton,
                     {
-                      backgroundColor: skipSetup === true ? themeColors.primary : themeColors.surface,
-                      borderColor: themeColors.border,
-                    },
-                  ]}
-                  onPress={() => handleSkipSetup(true)}
-                >
-                  <Text
-                    style={[
-                      styles.yesNoButtonText,
-                      { color: skipSetup === true ? '#FFFFFF' : themeColors.text },
-                    ]}
-                  >
-                    Yes, skip for now
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.yesNoButton,
-                    {
                       backgroundColor: skipSetup === false ? themeColors.primary : themeColors.surface,
                       borderColor: themeColors.border,
                     },
@@ -287,7 +268,26 @@ export default function OnboardingScreen() {
                       { color: skipSetup === false ? '#FFFFFF' : themeColors.text },
                     ]}
                   >
-                    No, let's set up
+                    Yes, let's set up
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.yesNoButton,
+                    {
+                      backgroundColor: skipSetup === true ? themeColors.primary : themeColors.surface,
+                      borderColor: themeColors.border,
+                    },
+                  ]}
+                  onPress={() => handleSkipSetup(true)}
+                >
+                  <Text
+                    style={[
+                      styles.yesNoButtonText,
+                      { color: skipSetup === true ? '#FFFFFF' : themeColors.text },
+                    ]}
+                  >
+                    No, skip for now
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -416,17 +416,6 @@ export default function OnboardingScreen() {
   );
 }
 
-const FeatureItem: React.FC<{ icon: string; text: string; themeColors: any }> = ({
-  icon,
-  text,
-  themeColors,
-}) => (
-  <View style={styles.featureItem}>
-    <Text style={[styles.featureIcon, { color: themeColors.primary }]}>{icon}</Text>
-    <Text style={[styles.featureText, { color: themeColors.text }]}>{text}</Text>
-  </View>
-);
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -476,23 +465,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 28,
     marginBottom: spacing.xl,
-  },
-  features: {
-    width: '100%',
-    marginTop: spacing.lg,
-  },
-  featureItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.md,
-  },
-  featureIcon: {
-    fontSize: fontSize['2xl'],
-    marginRight: spacing.md,
-    fontWeight: fontWeight.bold,
-  },
-  featureText: {
-    fontSize: fontSize.lg,
   },
   stepTitle: {
     fontSize: fontSize['2xl'],

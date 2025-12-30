@@ -13,9 +13,52 @@ import { DuplicateCounterError, DuplicateMarkError } from '../../state/countersS
 import { DuplicateCounterModal } from '../../components/DuplicateCounterModal';
 import { useNotification } from '../../contexts/NotificationContext';
 import { logger } from '../../lib/utils/logger';
+import CounterIcon from '@/src/components/icons/CounterIcon';
+import type { MarkType } from '@/src/types/counters';
 
-// Emoji options that map to existing icon types in the app
-const EMOJI_OPTIONS = ['🏋️', '📖', '🧘', '💧', '📚', '🎯', '📧', '✅', '🗣️', '😴', '👣', '🔥'];
+// Mapping of icon types to emojis for storage compatibility
+const ICON_TYPE_TO_EMOJI: Record<Exclude<MarkType, 'custom'>, string> = {
+  email: '📧',
+  planning: '🗓️',
+  focus: '🎯',
+  tasks: '✅',
+  language: '🗣️',
+  study: '📚',
+  reading: '📖',
+  calories: '🔥',
+  soda_free: '🥤',
+  rest: '🛌',
+  meditation: '🧘',
+  sleep: '🌙',
+  gym: '🏋️',
+  steps: '👣',
+  water: '💧',
+  no_sugar: '🚫',
+  no_beer: '🍺',
+  no_spending: '💰',
+  mood: '😊',
+  no_smoking: '🚭',
+  screen_free: '📱',
+  gratitude: '🙏',
+  journaling: '📝',
+};
+
+// Icon types available for selection (excluding 'custom')
+const ICON_OPTIONS: Exclude<MarkType, 'custom'>[] = [
+  'gym',
+  'reading',
+  'meditation',
+  'water',
+  'study',
+  'focus',
+  'email',
+  'tasks',
+  'language',
+  'rest',
+  'steps',
+  'calories',
+];
+
 const COLOR_OPTIONS = ['#3B82F6', '#10B981', '#A855F7', '#F97316', '#EF4444', '#EC4899'];
 const UNIT_OPTIONS = ['sessions', 'days', 'items'];
 
@@ -29,7 +72,7 @@ export default function NewCounterScreen() {
 
   const [mode, setMode] = useState<'suggested' | 'custom'>('suggested');
   const [name, setName] = useState('');
-  const [emoji, setEmoji] = useState(EMOJI_OPTIONS[0]);
+  const [selectedIconType, setSelectedIconType] = useState<Exclude<MarkType, 'custom'>>(ICON_OPTIONS[0]);
   const [color, setColor] = useState(COLOR_OPTIONS[0]);
   const [unit, setUnit] = useState<'sessions' | 'days' | 'items'>('sessions');  
   const [enableStreak, setEnableStreak] = useState(true);
@@ -101,6 +144,8 @@ export default function NewCounterScreen() {
 
     try {
       setLoading(true);
+      // Convert selected icon type to emoji for storage compatibility
+      const emoji = ICON_TYPE_TO_EMOJI[selectedIconType] || ICON_TYPE_TO_EMOJI.gym;
       await createCounter({
         name: name.trim(),
         emoji,
@@ -228,25 +273,33 @@ export default function NewCounterScreen() {
           />
         </View>
 
-        {/* Emoji Picker */}
+        {/* Icon Picker */}
         <View style={styles.section}>
-          <Text style={[styles.label, { color: themeColors.text }]}>Emoji</Text>
-          <View style={styles.emojiGrid}>
-            {EMOJI_OPTIONS.map((e) => (
-              <TouchableOpacity
-                key={e}
-                style={[
-                  styles.emojiButton,
-                  {
-                    backgroundColor: e === emoji ? color + '30' : themeColors.surface,
-                    borderColor: e === emoji ? color : themeColors.border,
-                  },
-                ]}
-                onPress={() => setEmoji(e)}
-              >
-                <Text style={styles.emojiText}>{e}</Text>
-              </TouchableOpacity>
-            ))}
+          <Text style={[styles.label, { color: themeColors.text }]}>Icon</Text>
+          <View style={styles.iconGrid}>
+            {ICON_OPTIONS.map((iconType) => {
+              const isSelected = iconType === selectedIconType;
+              return (
+                <TouchableOpacity
+                  key={iconType}
+                  style={[
+                    styles.iconButton,
+                    {
+                      backgroundColor: isSelected ? color + '30' : themeColors.surface,
+                      borderColor: isSelected ? color : themeColors.border,
+                    },
+                  ]}
+                  onPress={() => setSelectedIconType(iconType)}
+                >
+                  <CounterIcon
+                    type={iconType as any}
+                    size={28}
+                    color={isSelected ? color : themeColors.textSecondary}
+                    variant="symbol"
+                  />
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
 
@@ -421,21 +474,18 @@ const styles = StyleSheet.create({
     fontSize: fontSize.base,
     borderWidth: 1,
   },
-  emojiGrid: {
+  iconGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
   },
-  emojiButton: {
-    width: 50,
-    height: 50,
+  iconButton: {
+    width: 56,
+    height: 56,
     borderRadius: borderRadius.md,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-  },
-  emojiText: {
-    fontSize: 24,
   },
   colorGrid: {
     flexDirection: 'row',

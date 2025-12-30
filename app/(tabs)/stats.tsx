@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Image, InteractionManager } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Image, InteractionManager, Animated, Easing } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle, Path, G, Text as SvgText, Line, Defs, LinearGradient, Stop } from 'react-native-svg';
@@ -25,6 +25,65 @@ import { logger } from '../../lib/utils/logger';
 const APP_BRAND_LOGO_LIGHT = require('../../assets/branding/Logo NoBG.png');
 const APP_BRAND_LOGO_DARK = require('../../assets/branding/Logo NoBG dark.png');
 
+// Animated Refresh Button Component
+const AnimatedRefreshButton: React.FC<{
+  onPress: () => void;
+  isRefreshing: boolean;
+  color: string;
+  disabledColor: string;
+}> = ({ onPress, isRefreshing, color, disabledColor }) => {
+  const spinValue = useRef(new Animated.Value(0)).current;
+  const spinAnimation = useRef<Animated.CompositeAnimation | null>(null);
+  
+  useEffect(() => {
+    if (isRefreshing) {
+      // Start continuous spinning
+      spinValue.setValue(0);
+      spinAnimation.current = Animated.loop(
+        Animated.timing(spinValue, {
+          toValue: 1,
+          duration: 800,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        })
+      );
+      spinAnimation.current.start();
+    } else {
+      // Stop spinning
+      if (spinAnimation.current) {
+        spinAnimation.current.stop();
+      }
+      spinValue.setValue(0);
+    }
+    
+    return () => {
+      if (spinAnimation.current) {
+        spinAnimation.current.stop();
+      }
+    };
+  }, [isRefreshing, spinValue]);
+  
+  const spin = spinValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+  
+  return (
+    <TouchableOpacity 
+      style={[styles.refreshButton, isRefreshing && styles.refreshButtonDisabled]} 
+      onPress={onPress}
+      disabled={isRefreshing}
+    >
+      <Animated.View style={{ transform: [{ rotate: spin }] }}>
+        <Ionicons 
+          name="refresh" 
+          size={18} 
+          color={isRefreshing ? disabledColor : color} 
+        />
+      </Animated.View>
+    </TouchableOpacity>
+  );
+};
 
 // Daily Completion Ring constants
 const RING_RADIUS = 72;
@@ -43,7 +102,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   'Learning & Growth': '#6FA9FF', // soft sky blue
   'Productivity': '#FFAA64', // soft warm orange
   'Habit Breaking': '#FF6B6B', // soft coral red
-  'Uncategorized': '#9CA3AF', // Gray for uncategorized
+  'Custom': '#9CA3AF', // Gray for custom marks
 };
 
 // Pie chart constants - Sized larger for better visibility
@@ -112,14 +171,24 @@ const createPieSlice = (startAngle: number, endAngle: number, radius: number, ce
   // CRITICAL: Use exact same center and radius for ALL slices - no variations
   // This ensures all slices meet at the exact same center point with identical radius
   // Use exact constants - no rounding or formatting that could introduce differences
-  const exactCenter = center; // PIE_CENTER constant (160) - same for ALL slices
-  const exactRadius = radius; // PIE_RADIUS constant (130) - same for ALL slices
+  const exactCenter = center; // PIE_CENTER constant (200) - same for ALL slices
+  const exactRadius = radius; // PIE_RADIUS constant (160) - same for ALL slices
   
   // Calculate angle span - ensure it's positive and within valid range
   let angleSpan = endAngle - startAngle;
   // Normalize angle span to be between 0 and 360
   if (angleSpan < 0) angleSpan += 360;
   if (angleSpan > 360) angleSpan = 360;
+  
+  // Special case: Full circle (360 degrees) - use circle path
+  if (Math.abs(angleSpan - 360) < 0.01) {
+    return [
+      'M', exactCenter, exactCenter - exactRadius,  // Move to top of circle
+      'A', exactRadius, exactRadius, 0, '1', '1', exactCenter, exactCenter + exactRadius,  // Arc to bottom (large arc)
+      'A', exactRadius, exactRadius, 0, '1', '1', exactCenter, exactCenter - exactRadius,  // Arc back to top (large arc)
+      'Z',  // Close path
+    ].join(' ');
+  }
   
   // CRITICAL: Calculate edge points using exact same radius and center for all slices
   // All slices MUST reach the exact same distance from center - ensures identical length
@@ -128,6 +197,18 @@ const createPieSlice = (startAngle: number, endAngle: number, radius: number, ce
   // This ensures the arc is drawn in the correct direction
   const start = polarToCartesian(exactCenter, exactCenter, exactRadius, endAngle);
   const end = polarToCartesian(exactCenter, exactCenter, exactRadius, startAngle);
+  
+  // Validate coordinates are valid numbers
+  if (isNaN(start.x) || isNaN(start.y) || isNaN(end.x) || isNaN(end.y)) {
+    logger.error('[Stats] Invalid polar coordinates calculated:', { startAngle, endAngle, radius, center });
+    // Return a safe fallback - small circle at center
+    return [
+      'M', exactCenter, exactCenter - exactRadius,
+      'A', exactRadius, exactRadius, 0, '1', '1', exactCenter, exactCenter + exactRadius,
+      'A', exactRadius, exactRadius, 0, '1', '1', exactCenter, exactCenter - exactRadius,
+      'Z',
+    ].join(' ');
+  }
   
   // Calculate large arc flag correctly - use angleSpan, not the difference
   // For angles > 180 degrees, we need the large arc
@@ -179,40 +260,92 @@ const safeFormatDateDisplay = (date: Date | string | null | undefined): string =
 // Helper function to match Mark to category
 const getMarkCategory = (mark: Mark): string => {
   try {
-    if (!mark || !mark.name) return 'Uncategorized';
-    const markName = mark.name.toLowerCase().trim();
+    if (!mark || !mark.name) {
+      logger.warn('[Stats] Mark missing name:', mark?.id);
+      return 'Custom';
+    }
     
-    // First, try exact match
+    const markName = mark.name.toLowerCase().trim();
+    if (!markName) {
+      logger.warn('[Stats] Mark name is empty:', mark?.id);
+      return 'Custom';
+    }
+    
+    // First, try exact match (case-insensitive, trimmed)
     for (const category of SUGGESTED_MARKS_BY_CATEGORY) {
       for (const suggestedMark of category.marks) {
-        if (suggestedMark.name.toLowerCase().trim() === markName) {
+        const suggestedName = suggestedMark.name.toLowerCase().trim();
+        // Exact match
+        if (suggestedName === markName) {
+          logger.log('[Stats] Exact match found:', { markName, category: category.title });
+          return category.title;
+        }
+        // Also check if mark name contains the suggested name (for partial matches)
+        if (markName.includes(suggestedName) || suggestedName.includes(markName)) {
+          logger.log('[Stats] Partial match found:', { markName, suggestedName, category: category.title });
           return category.title;
         }
       }
     }
     
     // Then, try keyword matching for better categorization
-    // Define category keywords
+    // Define category keywords (expanded list)
     const categoryKeywords: Record<string, string[]> = {
-      'Fitness': ['workout', 'exercise', 'gym', 'run', 'jog', 'cardio', 'strength', 'yoga', 'pilates', 'swim', 'bike', 'cycling', 'walk', 'fitness', 'training', 'sport', 'sports', 'pushup', 'situp', 'squat', 'lift', 'weight'],
-      'Wellness': ['meditate', 'meditation', 'mindfulness', 'sleep', 'rest', 'relax', 'wellness', 'health', 'self-care', 'therapy', 'journal', 'gratitude', 'breath', 'breathing', 'stretch', 'massage', 'spa', 'bath'],
-      'Learning & Growth': ['read', 'book', 'learn', 'study', 'course', 'class', 'lesson', 'practice', 'skill', 'language', 'coding', 'programming', 'tutorial', 'podcast', 'education', 'knowledge'],
-      'Productivity': ['task', 'todo', 'work', 'project', 'focus', 'pomodoro', 'deep work', 'meeting', 'email', 'code', 'write', 'create', 'build', 'develop', 'complete', 'finish'],
-      'Habit Breaking': ['quit', 'stop', 'no', 'avoid', 'reduce', 'limit', 'break', 'smoking', 'drinking', 'social media', 'screen time', 'procrastinate'],
+      'Fitness': [
+        'workout', 'workouts', 'exercise', 'exercises', 'gym', 'run', 'running', 'jog', 'jogging', 
+        'cardio', 'strength', 'yoga', 'pilates', 'swim', 'swimming', 'bike', 'biking', 'cycling', 
+        'walk', 'walking', 'fitness', 'training', 'sport', 'sports', 'pushup', 'push-ups', 'situp', 
+        'sit-ups', 'squat', 'squats', 'lift', 'lifting', 'weight', 'weights', 'steps', 'calories', 
+        'water', 'hydration', 'rest day', 'rest days'
+      ],
+      'Wellness': [
+        'meditate', 'meditation', 'mindfulness', 'sleep', 'rest', 'relax', 'relaxation', 'wellness', 
+        'health', 'self-care', 'self care', 'therapy', 'journal', 'journaling', 'gratitude', 
+        'breath', 'breathing', 'stretch', 'stretching', 'massage', 'spa', 'bath', 'bathing'
+      ],
+      'Learning & Growth': [
+        'read', 'reading', 'book', 'books', 'learn', 'learning', 'study', 'studying', 'course', 'courses', 
+        'class', 'classes', 'lesson', 'lessons', 'practice', 'practicing', 'skill', 'skills', 
+        'language', 'languages', 'coding', 'programming', 'tutorial', 'tutorials', 'podcast', 
+        'podcasts', 'education', 'knowledge', 'learned', 'studied'
+      ],
+      'Productivity': [
+        'task', 'tasks', 'todo', 'todos', 'work', 'project', 'projects', 'focus', 'focused', 
+        'pomodoro', 'deep work', 'meeting', 'meetings', 'email', 'emails', 'code', 'coding', 
+        'write', 'writing', 'create', 'creating', 'build', 'building', 'develop', 'developing', 
+        'complete', 'completed', 'finish', 'finished', 'planning', 'planned'
+      ],
+      'Habit Breaking': [
+        'quit', 'quitting', 'stop', 'stopped', 'no', 'avoid', 'avoiding', 'reduce', 'reducing', 
+        'limit', 'limiting', 'break', 'breaking', 'smoking', 'drinking', 'social media', 
+        'screen time', 'procrastinate', 'procrastination', 'soda'
+      ],
     };
     
-    // Check for keyword matches
+    // Check for keyword matches (more flexible matching)
     for (const [category, keywords] of Object.entries(categoryKeywords)) {
       for (const keyword of keywords) {
-        if (markName.includes(keyword)) {
+        // Check if mark name contains keyword or keyword contains mark name
+        if (markName.includes(keyword) || keyword.includes(markName)) {
+          logger.log('[Stats] Keyword match found:', { markName, keyword, category });
+          return category;
+        }
+        // Also check word boundaries for better matching
+        const wordBoundaryRegex = new RegExp(`\\b${keyword}\\b`, 'i');
+        if (wordBoundaryRegex.test(markName)) {
+          logger.log('[Stats] Word boundary match found:', { markName, keyword, category });
           return category;
         }
       }
     }
     
-    return 'Uncategorized';
-  } catch {
-    return 'Uncategorized';
+    // This is expected behavior - user-created marks that don't match any category
+    // will be categorized as 'Custom'. Log at info level instead of warning.
+    logger.log('[Stats] Mark categorized as Custom (no category match):', markName);
+    return 'Custom';
+  } catch (error) {
+    logger.error('[Stats] Error in getMarkCategory:', error, mark);
+    return 'Custom';
   }
 };
 
@@ -224,7 +357,7 @@ const shortenCategoryName = (category: string): string => {
     'Learning & Growth': 'Learning',
     'Productivity': 'Productivity',
     'Habit Breaking': 'Habit',
-    'Uncategorized': 'Other',
+    'Custom': 'Custom',
   };
   
   return abbreviations[category] || (category.length > 10 ? category.substring(0, 10) + '...' : category);
@@ -238,14 +371,21 @@ const DailyMarksRing: React.FC<{
   themeColors: typeof colors.light;
   onInfoPress?: () => void;
 }> = React.memo(({ count, activeMarksCount, theme, themeColors, onInfoPress }) => {
+  // Validate inputs
+  const safeCount = typeof count === 'number' && !isNaN(count) && count >= 0 ? count : 0;
+  const safeActiveMarksCount = typeof activeMarksCount === 'number' && !isNaN(activeMarksCount) && activeMarksCount >= 0 ? activeMarksCount : 0;
+  
   // Calculate percentage based on active marks as daily goal
   // Only count marks that are currently active (not deleted)
   // If no active marks, show 0% (avoid division by zero)
   // The count represents unique marks incremented today, so goal is number of active marks
   // IMPORTANT: This count persists even after manual resets - it only resets daily
-  const dailyGoal = activeMarksCount || 1; // Use 1 as fallback to avoid division by zero
-  const percentage = Math.min((count / dailyGoal) * 100, 100);
-  const [animatedProgress, setAnimatedProgress] = useState(percentage / 100);
+  const dailyGoal = safeActiveMarksCount || 1; // Use 1 as fallback to avoid division by zero
+  const percentage = Math.min((safeCount / dailyGoal) * 100, 100);
+  const [animatedProgress, setAnimatedProgress] = useState(() => {
+    const initialProgress = percentage / 100;
+    return isNaN(initialProgress) || !isFinite(initialProgress) ? 0 : Math.max(0, Math.min(1, initialProgress));
+  });
 
   // Update progress when percentage changes
   // Only update if the percentage actually changed to prevent unnecessary resets
@@ -338,7 +478,7 @@ const DailyMarksRing: React.FC<{
           variant="display"
           style={[styles.ringNumber, { color: themeColors.text, fontWeight: fontWeight.bold }]}
         >
-          {count}/{activeMarksCount || 0}
+          {safeCount}/{safeActiveMarksCount || 0}
         </AppText>
         <AppText variant="caption" style={[styles.ringLabel, { color: themeColors.textSecondary }]}>
           MARKS TODAY
@@ -356,38 +496,75 @@ const CategoryBreakdown: React.FC<{
   theme: 'light' | 'dark';
   themeColors: typeof colors.light;
   onInfoPress: () => void;
-}> = React.memo(({ events, marks, theme, themeColors, onInfoPress }) => {
-  // Use ref to store previous data to prevent flickering
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
+}> = React.memo(({ events, marks, theme, themeColors, onInfoPress, onRefresh, isRefreshing }) => {
+  // Use ref to store previous data to prevent flickering and maintain chart stability
   const previousDataRef = useRef<Array<{ category: string; count: number; percentage: number }>>([]);
-  // Track the most recent event ID to detect when new events are added
-  const lastEventIdRef = useRef<string | null>(null);
   
-  // Create a stable dependency key based on recent event IDs and marks
+  // Create a stable dependency key based on mark totals
+  // NEW: The pie chart now shows distribution by MARK TOTALS, not event counts
+  // So the key needs to change when any mark's total changes
+  // CRITICAL: Depend directly on marks array reference - Zustand creates new references when totals update
   const dependencyKey = useMemo(() => {
-    if (!events || !Array.isArray(events) || events.length === 0) {
-      return 'no-events';
+    if (!marks || !Array.isArray(marks) || marks.length === 0) {
+      return 'no-marks';
     }
-    // Use the first 10 most recent event IDs as a dependency key
-    // This ensures recalculation when new events are added, even if total length stays the same
-    const recentEventIds = events
-      .slice(0, 10)
-      .map(e => e?.id)
-      .filter(Boolean)
-      .join(',');
-    const marksKey = marks?.map(m => m?.id).filter(Boolean).join(',') || 'no-marks';
-    return `${recentEventIds}-${marksKey}`;
-  }, [events, marks]);
+    
+    // Build a key from all active marks with their totals (sorted for consistency)
+    const marksInfo: string[] = [];
+    marks.forEach((mark) => {
+      if (mark && mark.id && !mark.deleted_at) {
+        const total = typeof mark.total === 'number' ? mark.total : 0;
+        const category = getMarkCategory(mark);
+        // Include mark ID, category, and TOTAL in the key
+        // This ensures recalculation when totals change (increment or decrement)
+        marksInfo.push(`${mark.id}:${category}:${total}`);
+      }
+    });
+    marksInfo.sort(); // Sort for stable key generation
+    
+    if (marksInfo.length === 0) {
+      return 'no-active-marks';
+    }
+    
+    // Create a stable key based on marks, categories, and TOTALS
+    return marksInfo.join(',');
+    // CRITICAL: Depend on marks array reference directly - Zustand creates new references on updates
+  }, [marks]);
   
   const categoryData = useMemo(() => {
+    // CRITICAL: Recalculate whenever dependencyKey changes (which includes mark totals)
+    // This ensures the pie chart updates when marks are incremented or decremented
+    
     // Prevent calculation if arrays are empty or invalid
-    if (!events || !marks || !Array.isArray(events) || !Array.isArray(marks)) {
+    if (!events || !marks) {
+      logger.warn('[Stats] CategoryBreakdown: Missing events or marks data', {
+        hasEvents: !!events,
+        hasMarks: !!marks,
+      });
+      return [];
+    }
+    
+    if (!Array.isArray(events) || !Array.isArray(marks)) {
+      logger.error('[Stats] CategoryBreakdown: Events or marks is not an array', {
+        eventsType: typeof events,
+        marksType: typeof marks,
+        eventsLength: Array.isArray(events) ? events.length : 'N/A',
+        marksLength: Array.isArray(marks) ? marks.length : 'N/A',
+      });
       return [];
     }
     
     try {
-      // Create stable references
-      const safeEvents = Array.isArray(events) ? events : [];
-      const safeMarks = Array.isArray(marks) ? marks : [];
+      // Create stable references and filter out null/undefined values
+      const safeEvents = Array.isArray(events) ? events.filter(e => e != null) : [];
+      const safeMarks = Array.isArray(marks) ? marks.filter(m => m != null && m.id) : [];
+      
+      logger.log('[Stats] CategoryBreakdown: Starting calculation', {
+        safeEventsCount: safeEvents.length,
+        safeMarksCount: safeMarks.length,
+      });
       
       // Early return if no marks (can't categorize without marks)
       if (safeMarks.length === 0) {
@@ -399,16 +576,26 @@ const CategoryBreakdown: React.FC<{
       const activeMarkIds = new Set<string>();
       
       safeMarks.forEach((mark) => {
-        if (mark && !mark.deleted_at) {
+        if (mark && mark.id && !mark.deleted_at) {
           try {
+            if (!mark.id || typeof mark.id !== 'string') {
+              logger.warn('[Stats] Invalid mark ID:', mark);
+              return;
+            }
             activeMarkIds.add(mark.id);
-            markCategoryMap.set(mark.id, getMarkCategory(mark));
+            const category = getMarkCategory(mark);
+            markCategoryMap.set(mark.id, category || 'Custom');
           } catch (error) {
-            logger.error('Error categorizing mark:', mark.id, error);
-            markCategoryMap.set(mark.id, 'Uncategorized');
+            logger.error('[Stats] Error categorizing mark:', mark?.id, error);
+            markCategoryMap.set(mark.id || 'unknown', 'Custom');
           }
         }
       });
+      
+      // Validate we have some active marks
+      if (activeMarkIds.size === 0) {
+        return [];
+      }
 
       let last30Days: Date;
       try {
@@ -418,14 +605,21 @@ const CategoryBreakdown: React.FC<{
       }
 
       // Filter and sort events by date (most recent first), then filter by last 30 days
+      // CRITICAL: Always include ALL events in the last 30 days, not just recent ones
       const validEvents = safeEvents
         .filter((e) => {
           try {
-            if (!e || e.deleted_at || e.event_type !== 'increment' || !e.occurred_at || !e.mark_id) return false;
+            if (!e || e.deleted_at || e.event_type !== 'increment') return false;
+            if (!e.occurred_at || typeof e.occurred_at !== 'string') return false;
+            if (!e.mark_id || typeof e.mark_id !== 'string') return false;
             if (!activeMarkIds.has(e.mark_id)) return false; // Only include events for active marks
             const eventDate = new Date(e.occurred_at);
-            return !isNaN(eventDate.getTime()) && eventDate >= last30Days;
-          } catch {
+            if (isNaN(eventDate.getTime())) return false;
+            // Include all events from the last 30 days
+            const daysDiff = (Date.now() - eventDate.getTime()) / (1000 * 60 * 60 * 24);
+            return daysDiff >= 0 && daysDiff <= 30; // More explicit date range check
+          } catch (error) {
+            logger.warn('[Stats] Error filtering event:', error);
             return false;
           }
         })
@@ -439,49 +633,72 @@ const CategoryBreakdown: React.FC<{
             return 0;
           }
         });
-
-      // If no recent events, calculate based on counter totals instead
-      if (validEvents.length === 0) {
-        // Fallback: use counter totals for categorization
-        const categoryTotals: Record<string, number> = {};
-        safeMarks.forEach((mark) => {
-          if (mark && !mark.deleted_at && mark.total > 0) {
-            const category = markCategoryMap.get(mark.id) || 'Uncategorized';
-            categoryTotals[category] = (categoryTotals[category] || 0) + mark.total;
-          }
+      
+      // Debug logging to help identify issues
+      if (validEvents.length > 0 && validEvents.length < safeEvents.length) {
+        const uniqueMarkIds = new Set(validEvents.map(e => e.mark_id));
+        logger.log('[Stats] CategoryBreakdown: Filtered events', {
+          totalEvents: safeEvents.length,
+          validEvents: validEvents.length,
+          uniqueMarks: uniqueMarkIds.size,
+          markIds: Array.from(uniqueMarkIds),
         });
-        
-        const total = Object.values(categoryTotals).reduce((sum, count) => sum + count, 0);
-        if (total === 0) {
-          return [];
-        }
-        
-        // Only include categories with data (count > 0)
-        const result = Object.entries(categoryTotals)
-          .filter(([_, count]) => count > 0) // Filter out zero counts
-          .map(([category, count]) => ({
-            category,
-            count,
-            percentage: (count / total) * 100,
-          }))
-          .sort((a, b) => b.percentage - a.percentage);
-        
-        return result;
       }
 
-      // Count events by category using event amounts (not just count)
-      const categoryCounts: Record<string, number> = {};
-      validEvents.forEach((event) => {
-        if (event && event.mark_id) {
-          const category = markCategoryMap.get(event.mark_id) || 'Uncategorized';
-          // Use event.amount instead of counting each event as 1
-          const amount = typeof event.amount === 'number' && event.amount > 0 ? event.amount : 1;
-          categoryCounts[category] = (categoryCounts[category] || 0) + amount;
+      // NEW: Calculate category distribution based on MARK TOTALS, not unique mark counts
+      // This means if Fitness has marks with total 6 (Workouts:2 + Steps:4) and Wellness has Sleep:3,
+      // Fitness will show as ~67% and Wellness as ~33%
+      
+      // Build a map of mark ID to mark data for quick lookup
+      const markDataMap = new Map<string, { total: number; category: string }>();
+      safeMarks.forEach((mark) => {
+        if (mark && mark.id && !mark.deleted_at && activeMarkIds.has(mark.id)) {
+          const total = typeof mark.total === 'number' && mark.total >= 0 ? mark.total : 0;
+          const category = markCategoryMap.get(mark.id) || 'Custom';
+          markDataMap.set(mark.id, { total, category });
+        }
+      });
+      
+      // Track all marks with non-zero totals for pie chart
+      const allMarksWithTotals = new Set<string>();
+      
+      // Sum up totals per category
+      const categoryTotals: Record<string, number> = {};
+      
+      markDataMap.forEach((data, markId) => {
+        try {
+          if (data.total > 0) {
+            allMarksWithTotals.add(markId);
+            
+            if (!categoryTotals[data.category]) {
+              categoryTotals[data.category] = 0;
+            }
+            categoryTotals[data.category] += data.total;
+          }
+        } catch (error) {
+          logger.error('[Stats] CategoryBreakdown: Error processing mark total', error, markId);
         }
       });
 
+      // If no marks have totals, return empty
+      if (allMarksWithTotals.size === 0) {
+        logger.log('[Stats] CategoryBreakdown: No marks with totals > 0', {
+          totalMarks: safeMarks.length,
+          activeMarkIds: activeMarkIds.size,
+        });
+        return [];
+      }
+
+      // Use categoryTotals for the pie chart distribution
+      const categoryCounts: Record<string, number> = categoryTotals;
+
       const total = Object.values(categoryCounts).reduce((sum, count) => sum + count, 0);
       if (total === 0) {
+        logger.warn('[Stats] CategoryBreakdown: Total is 0 after processing mark totals', {
+          marksWithTotals: allMarksWithTotals.size,
+          activeMarkIds: activeMarkIds.size,
+          markCategoryMapSize: markCategoryMap.size,
+        });
         return [];
       }
       
@@ -495,75 +712,183 @@ const CategoryBreakdown: React.FC<{
         }))
         .sort((a, b) => b.percentage - a.percentage);
       
+      logger.log('[Stats] CategoryBreakdown: Calculated result (by mark totals)', {
+        totalCategories: result.length,
+        categories: result.map(r => `${r.category}: ${r.count} (${r.percentage.toFixed(1)}%)`),
+        grandTotal: total,
+      });
+      
+      // Safeguard: If we only have one category with 100%, but there are clearly other active marks,
+      // this might indicate a data loading issue. Preserve previous data if it exists and seems more complete.
+      if (result.length === 1 && result[0].percentage >= 99.9 && activeMarkIds.size > 1) {
+        logger.warn('[Stats] Pie chart showing single category with 100% - checking if other marks have totals', {
+          category: result[0].category,
+          marksWithTotals: allMarksWithTotals.size,
+          totalActiveMarks: activeMarkIds.size,
+          previousCategories: previousDataRef.current.length,
+        });
+        
+        // If we have previous data with multiple categories, preserve it to maintain chart stability
+        // This prevents the chart from showing 100% for a single category when other marks might be loading
+        if (previousDataRef.current.length > 1) {
+          // Check if we're going from multiple categories to one - this might be valid if user reset other marks
+          const wasMultipleCategories = previousDataRef.current.length > 1;
+          const nowOneCategory = result.length === 1;
+          
+          if (wasMultipleCategories && nowOneCategory && allMarksWithTotals.size < 2) {
+            // We're transitioning from multiple categories to one, and only one mark has a total
+            // This could be valid (user reset other marks), so accept the new data
+            logger.log('[Stats] Accepting single category - only one mark has totals');
+          }
+        }
+      }
+      
+      // Update the previous data ref with the new result
+      previousDataRef.current = result;
+      
       return result;
     } catch (error) {
       logger.error('Error calculating category data:', error);
       return [];
     }
-  }, [events, marks]);
+  }, [dependencyKey, events, marks]); // Include events and marks to ensure recalculation when data changes
 
 
-  if (categoryData.length === 0) {
-    return (
-      <View style={[styles.categoryCard, { borderColor: themeColors.border, backgroundColor: themeColors.surface }]}>
-        <View style={styles.categoryHeader}>
-          <AppText variant="subtitle" style={[styles.categoryTitle, { color: themeColors.textSecondary }]}>
-            Category Breakdown
-          </AppText>
-          <TouchableOpacity style={styles.infoButton} onPress={onInfoPress}>
-            <Ionicons name="information-circle-outline" size={18} color={themeColors.textTertiary} />
-          </TouchableOpacity>
-        </View>
-        <AppText variant="body" style={[styles.emptyText, { color: themeColors.textSecondary }]}>
-          No category data available
-        </AppText>
-      </View>
-    );
-  }
-
-  // Calculate angles for pie chart - adjust for gaps between slices
-  // CRITICAL: All slices must start from exact same center point (PIE_CENTER, PIE_CENTER)
-  const totalPercentage = categoryData.reduce((sum, item) => sum + item.percentage, 0);
+  // Check if we have active marks but no events - show instructive message
+  const hasActiveMarks = useMemo(() => {
+    if (!marks || !Array.isArray(marks)) return false;
+    return marks.some((mark) => mark && mark.id && !mark.deleted_at);
+  }, [marks]);
   
-  // Normalize percentages to ensure they sum to exactly 100%
-  const normalizedData = categoryData.map((item) => ({
-    ...item,
-    normalizedPercentage: totalPercentage > 0 ? (item.percentage / totalPercentage) * 100 : 0,
-  }));
-  
-  // Calculate angles for pie chart - no gaps between slices
-  // Start with rotation offset to move slices to the right
-  let currentAngle = ROTATION_OFFSET;
-  
-  const pieData = normalizedData.map((item, index) => {
-    const startAngle = currentAngle;
-    // Calculate angle span from normalized percentage - full 360 degrees available
-    // This ensures slice sizes remain proportional
-    const angleSpan = (item.normalizedPercentage / 100) * 360;
-    const endAngle = startAngle + angleSpan;
-    currentAngle = endAngle; // Update for next slice
-    const midAngle = (startAngle + endAngle) / 2;
+  const hasValidEvents = useMemo(() => {
+    if (!events || !Array.isArray(events)) return false;
     
-    return {
-      ...item,
-      startAngle,
-      endAngle,
-      midAngle,
-      color: CATEGORY_COLORS[item.category] || themeColors.textTertiary,
-      shortName: shortenCategoryName(item.category),
-    };
-  });
-  
-  // CRITICAL: Ensure perfect 360-degree closure - no gaps
-  if (pieData.length > 0) {
-    const lastItem = pieData[pieData.length - 1];
-    // Ensure last slice ends at exactly 360 + rotation offset to close the circle
-    const expectedEnd = ROTATION_OFFSET + 360;
-    if (Math.abs(lastItem.endAngle - expectedEnd) > 0.01) {
-      lastItem.endAngle = expectedEnd;
-      lastItem.midAngle = (lastItem.startAngle + lastItem.endAngle) / 2;
+    let last30Days: Date;
+    try {
+      last30Days = subDays(new Date(), 30);
+    } catch {
+      return false;
     }
-  }
+    
+    return events.some((e) => {
+      try {
+        if (!e || e.deleted_at || e.event_type !== 'increment') return false;
+        if (!e.occurred_at || typeof e.occurred_at !== 'string') return false;
+        const eventDate = new Date(e.occurred_at);
+        if (isNaN(eventDate.getTime())) return false;
+        const daysDiff = (Date.now() - eventDate.getTime()) / (1000 * 60 * 60 * 24);
+        return daysDiff >= 0 && daysDiff <= 30;
+      } catch {
+        return false;
+      }
+    });
+  }, [events]);
+
+  // CRITICAL: All hooks must be called BEFORE any early returns
+  // Calculate all pie chart data even if we'll early return - this ensures consistent hook order
+  const validCategoryData = useMemo(() => {
+    if (!categoryData || !Array.isArray(categoryData) || categoryData.length === 0) {
+      return [];
+    }
+    return categoryData.filter(item => {
+      if (!item || typeof item !== 'object') {
+        logger.warn('[Stats] Invalid category data item (not an object):', item);
+        return false;
+      }
+      if (typeof item.category !== 'string' || typeof item.percentage !== 'number') {
+        logger.warn('[Stats] Invalid category data item (missing properties):', item);
+        return false;
+      }
+      const percentage = item.percentage;
+      return !isNaN(percentage) && isFinite(percentage) && percentage >= 0;
+    });
+  }, [categoryData]);
+
+  // Calculate pie data - always compute, even if empty
+  const pieData = useMemo(() => {
+    if (validCategoryData.length === 0) {
+      return [];
+    }
+
+    const totalPercentage = validCategoryData.reduce((sum, item) => {
+      const percentage = typeof item.percentage === 'number' && !isNaN(item.percentage) ? item.percentage : 0;
+      return sum + Math.max(0, percentage);
+    }, 0);
+
+    // Normalize percentages to ensure they sum to exactly 100%
+    const normalizedData = validCategoryData.map((item) => {
+      const safePercentage = typeof item.percentage === 'number' && !isNaN(item.percentage) ? item.percentage : 0;
+      const normalizedPercentage = totalPercentage > 0 ? (safePercentage / totalPercentage) * 100 : 0;
+      return {
+        ...item,
+        percentage: safePercentage,
+        normalizedPercentage: Math.max(0, Math.min(100, normalizedPercentage)),
+      };
+    });
+
+    // Special handling for single-slice case - render as full circle
+    const isSingleSlice = validCategoryData.length === 1;
+    
+    // Calculate angles for pie chart - no gaps between slices
+    // Start with rotation offset to move slices to the right
+    let currentAngle = ROTATION_OFFSET;
+    
+    const result = normalizedData.map((item, index) => {
+      const categoryName = typeof item.category === 'string' ? item.category : 'Custom';
+      
+      // For single slice, render as full 360-degree circle
+      if (isSingleSlice) {
+        const startAngle = ROTATION_OFFSET;
+        const endAngle = ROTATION_OFFSET + 360;
+        const midAngle = ROTATION_OFFSET + 180; // Center of the circle
+        
+        return {
+          ...item,
+          category: categoryName,
+          startAngle,
+          endAngle,
+          midAngle,
+          color: CATEGORY_COLORS[categoryName] || themeColors.textTertiary,
+          shortName: shortenCategoryName(categoryName),
+        };
+      }
+      
+      // For multiple slices, calculate angles normally
+      const startAngle = currentAngle;
+      // Calculate angle span from normalized percentage - full 360 degrees available
+      // This ensures slice sizes remain proportional
+      const safeNormalizedPercentage = typeof item.normalizedPercentage === 'number' && !isNaN(item.normalizedPercentage) 
+        ? item.normalizedPercentage 
+        : 0;
+      const angleSpan = Math.max(0, Math.min(360, (safeNormalizedPercentage / 100) * 360));
+      const endAngle = startAngle + angleSpan;
+      currentAngle = endAngle; // Update for next slice
+      const midAngle = (startAngle + endAngle) / 2;
+      
+      return {
+        ...item,
+        category: categoryName,
+        startAngle: isNaN(startAngle) ? 0 : startAngle,
+        endAngle: isNaN(endAngle) ? 360 : endAngle,
+        midAngle: isNaN(midAngle) ? 180 : midAngle,
+        color: CATEGORY_COLORS[categoryName] || themeColors.textTertiary,
+        shortName: shortenCategoryName(categoryName),
+      };
+    });
+    
+    // CRITICAL: Ensure perfect 360-degree closure - no gaps
+    if (result.length > 0 && !isSingleSlice) {
+      const lastItem = result[result.length - 1];
+      // Ensure last slice ends at exactly 360 + rotation offset to close the circle
+      const expectedEnd = ROTATION_OFFSET + 360;
+      if (Math.abs(lastItem.endAngle - expectedEnd) > 0.01) {
+        lastItem.endAngle = expectedEnd;
+        lastItem.midAngle = (lastItem.startAngle + lastItem.endAngle) / 2;
+      }
+    }
+
+    return result;
+  }, [validCategoryData, themeColors.textTertiary]);
 
   // Calculate all chart dimensions - TimeTree style: clean, balanced, modern
   const chartDimensions = useMemo(() => {
@@ -588,27 +913,7 @@ const CategoryBreakdown: React.FC<{
 
   // Calculate label positions with straight lines from slice edge
   const labelPositions = useMemo(() => {
-    const {
-      fontSize,
-      labelFontWeight,
-      labelLineGap,
-      lineStrokeWidth,
-      lineOpacity,
-      anchorDotRadius,
-      minPercentageThreshold,
-      minLabelSpacing,
-      minLineLength,
-      maxLineLength,
-      labelBandPadding,
-    } = chartDimensions;
-    
     if (!pieData.length) return [];
-
-    // Base line length - short and consistent
-    const baseLineLength = Math.min(
-      maxLineLength,
-      Math.max(minLineLength, PIE_RADIUS * 0.25)
-    );
 
     type LabelNode = {
       item: (typeof pieData)[number];
@@ -636,7 +941,66 @@ const CategoryBreakdown: React.FC<{
       lineStrokeWidth: number;
       lineOpacity: number;
       anchorDotRadius: number;
+      isSingleSlice?: boolean;
     };
+
+    // Simplified path for single-slice charts to avoid heavy layout work
+    if (pieData.length === 1) {
+      const item = pieData[0];
+      const labelText = `${item.shortName ?? item.category}: ${Math.round(item.percentage)}%`;
+      const { width, height } = estimateLabelBox(labelText, chartDimensions.fontSize);
+
+      const singleNode: LabelNode = {
+        item,
+        index: 0,
+        edgeX: PIE_CENTER,
+        edgeY: PIE_CENTER - PIE_RADIUS,
+        directionX: 0,
+        directionY: -1,
+        lineStartX: PIE_CENTER,
+        lineStartY: PIE_CENTER - PIE_RADIUS,
+        lineLength: 0,
+        minLineLength: 0,
+        maxLineLength: 0,
+        lineEndX: PIE_CENTER,
+        lineEndY: PIE_CENTER - PIE_RADIUS,
+        labelX: PIE_CENTER,
+        labelY: PIE_CENTER,
+        labelWidth: width,
+        labelHeight: height,
+        fontSize: chartDimensions.fontSize,
+        textAnchor: 'middle',
+        labelText,
+        labelFontWeight: chartDimensions.labelFontWeight,
+        labelLineGap: chartDimensions.labelLineGap,
+        lineStrokeWidth: chartDimensions.lineStrokeWidth,
+        lineOpacity: chartDimensions.lineOpacity,
+        anchorDotRadius: chartDimensions.anchorDotRadius,
+        isSingleSlice: true,
+      };
+
+      return [singleNode];
+    }
+    
+    const {
+      fontSize,
+      labelFontWeight,
+      labelLineGap,
+      lineStrokeWidth,
+      lineOpacity,
+      anchorDotRadius,
+      minPercentageThreshold,
+      minLabelSpacing,
+      minLineLength,
+      maxLineLength,
+      labelBandPadding,
+    } = chartDimensions;
+
+    // Base line length - short and consistent
+    const baseLineLength = Math.min(
+      maxLineLength,
+      Math.max(minLineLength, PIE_RADIUS * 0.25)
+    );
 
     const nodes: LabelNode[] = pieData
       .filter((item) => item.percentage >= minPercentageThreshold)
@@ -803,6 +1167,14 @@ const CategoryBreakdown: React.FC<{
     const padding = chartDimensions.viewBoxPadding;
     const maxLabelExtension = chartDimensions.labelBandPadding;
 
+    // Special handling for single slice - ensure adequate space for centered label
+    const isSingleSlice = validCategoryData.length === 1;
+    if (isSingleSlice) {
+      const size = PIE_SIZE + padding * 2 + maxLabelExtension;
+      const start = PIE_CENTER - size / 2;
+      return `${start} ${start} ${size} ${size}`;
+    }
+
     if (!labelPositions.length) {
       // No labels: viewBox centered on PIE_CENTER
       const size = PIE_SIZE + padding * 2;
@@ -810,47 +1182,226 @@ const CategoryBreakdown: React.FC<{
       return `${start} ${start} ${size} ${size}`;
     }
 
-    // Calculate maximum extent from PIE_CENTER in all directions
-    // CRITICAL: All calculations are relative to PIE_CENTER to ensure perfect centering
-    let maxDistanceFromCenter = PIE_RADIUS; // Start with pie radius
+    // Calculate bounding box from label positions
+    let minX = PIE_CENTER - PIE_RADIUS;
+    let maxX = PIE_CENTER + PIE_RADIUS;
+    let minY = PIE_CENTER - PIE_RADIUS;
+    let maxY = PIE_CENTER + PIE_RADIUS;
 
-    labelPositions.forEach((pos) => {
-      // Calculate distance from PIE_CENTER for all label and line points
-      const labelMinX = pos.labelX - pos.labelWidth / 2;
-      const labelMaxX = pos.labelX + pos.labelWidth / 2;
-      const labelMinY = pos.labelY - pos.labelHeight / 2;
-      const labelMaxY = pos.labelY + pos.labelHeight / 2;
-
-      // Find maximum distance from center for this label
-      const distances = [
-        Math.sqrt(Math.pow(labelMinX - PIE_CENTER, 2) + Math.pow(labelMinY - PIE_CENTER, 2)),
-        Math.sqrt(Math.pow(labelMaxX - PIE_CENTER, 2) + Math.pow(labelMinY - PIE_CENTER, 2)),
-        Math.sqrt(Math.pow(labelMinX - PIE_CENTER, 2) + Math.pow(labelMaxY - PIE_CENTER, 2)),
-        Math.sqrt(Math.pow(labelMaxX - PIE_CENTER, 2) + Math.pow(labelMaxY - PIE_CENTER, 2)),
-        Math.sqrt(Math.pow(pos.lineStartX - PIE_CENTER, 2) + Math.pow(pos.lineStartY - PIE_CENTER, 2)),
-        Math.sqrt(Math.pow(pos.lineEndX - PIE_CENTER, 2) + Math.pow(pos.lineEndY - PIE_CENTER, 2)),
-        Math.sqrt(Math.pow(pos.edgeX - PIE_CENTER, 2) + Math.pow(pos.edgeY - PIE_CENTER, 2)),
-      ];
-
-      const maxDist = Math.max(...distances);
-      maxDistanceFromCenter = Math.max(maxDistanceFromCenter, maxDist);
+    labelPositions.forEach((node) => {
+      const labelHalfWidth = node.labelWidth / 2;
+      const labelHalfHeight = node.labelHeight / 2;
+      minX = Math.min(minX, node.labelX - labelHalfWidth);
+      maxX = Math.max(maxX, node.labelX + labelHalfWidth);
+      minY = Math.min(minY, node.labelY - labelHalfHeight);
+      maxY = Math.max(maxY, node.labelY + labelHalfHeight);
     });
 
-    // Clamp to reasonable bounds
-    const maxAllowedDistance = PIE_RADIUS + maxLabelExtension + padding;
-    maxDistanceFromCenter = Math.min(maxDistanceFromCenter, maxAllowedDistance);
+    // Add padding
+    minX -= padding;
+    maxX += padding;
+    minY -= padding;
+    maxY += padding;
 
-    // CRITICAL: ViewBox must be perfectly centered on PIE_CENTER and perfectly square
-    // This ensures all slices appear to meet at the exact same center point with no distortion
-    // Square viewBox prevents any aspect ratio distortion that could make slices appear different lengths
-    const viewBoxSize = maxDistanceFromCenter * 2 + padding * 2;
-    // Ensure viewBox is perfectly centered on PIE_CENTER (160, 160)
-    const viewBoxX = PIE_CENTER - viewBoxSize / 2;
-    const viewBoxY = PIE_CENTER - viewBoxSize / 2;
+    // Ensure viewBox is centered on PIE_CENTER
+    const width = maxX - minX;
+    const height = maxY - minY;
+    const size = Math.max(width, height, PIE_SIZE + padding * 2);
+    const start = PIE_CENTER - size / 2;
+
+    return `${start} ${start} ${size} ${size}`;
+  }, [labelPositions, chartDimensions, validCategoryData.length]);
+
+  // Validate categoryData before proceeding - NOW AFTER ALL HOOKS
+  // CRITICAL: Check if we have valid events first, before checking categoryData
+  // This ensures we show the correct placeholder message
+  const hasAnyValidEvents = useMemo(() => {
+    if (!events || !Array.isArray(events)) return false;
+    return events.some((e) => {
+      try {
+        if (!e || e.deleted_at || e.event_type !== 'increment') return false;
+        if (!e.occurred_at || typeof e.occurred_at !== 'string') return false;
+        const eventDate = new Date(e.occurred_at);
+        if (isNaN(eventDate.getTime())) return false;
+        const daysDiff = (Date.now() - eventDate.getTime()) / (1000 * 60 * 60 * 24);
+        return daysDiff >= 0 && daysDiff <= 30;
+      } catch {
+        return false;
+      }
+    });
+  }, [events]);
+
+  if (!categoryData || !Array.isArray(categoryData) || categoryData.length === 0) {
+    // Show instructive message if we have marks but no events, OR if we have events but no category data
+    // This handles the case where events exist but categoryData calculation failed
+    if (hasActiveMarks && (!hasValidEvents || !hasAnyValidEvents)) {
+      return (
+        <View style={[styles.categoryCard, { borderColor: themeColors.border, backgroundColor: themeColors.surface }]}>
+          <View style={styles.categoryHeader}>
+            <AppText variant="subtitle" style={[styles.categoryTitle, { color: themeColors.textSecondary }]}>
+              Category Breakdown
+            </AppText>
+            <View style={styles.categoryHeaderButtons}>
+              {onRefresh && (
+                <AnimatedRefreshButton
+                  onPress={onRefresh}
+                  isRefreshing={isRefreshing || false}
+                  color={themeColors.primary}
+                  disabledColor={themeColors.textTertiary}
+                />
+              )}
+              <TouchableOpacity style={styles.infoButton} onPress={onInfoPress}>
+                <Ionicons name="information-circle-outline" size={18} color={themeColors.textTertiary} />
+              </TouchableOpacity>
+            </View>
+          </View>
+          <View style={styles.emptyStateContainer}>
+            <Ionicons name="pie-chart-outline" size={48} color={themeColors.textTertiary} style={styles.emptyStateIcon} />
+            <AppText variant="body" style={[styles.emptyStateTitle, { color: themeColors.text }]}>
+              Start Tracking to See Your Breakdown
+            </AppText>
+            <AppText variant="body" style={[styles.emptyStateMessage, { color: themeColors.textSecondary }]}>
+              Add some units to your marks to see how your activity is distributed across different categories.
+            </AppText>
+          </View>
+        </View>
+      );
+    }
     
-    // Return perfectly square viewBox centered on PIE_CENTER
-    return `${viewBoxX} ${viewBoxY} ${viewBoxSize} ${viewBoxSize}`;
-  }, [labelPositions, chartDimensions.viewBoxPadding, chartDimensions.labelBandPadding]);
+    // If we have events but no category data, log for debugging and show friendly message
+    if (hasAnyValidEvents) {
+      logger.warn('[Stats] CategoryBreakdown: Has events but categoryData is empty', {
+        eventsCount: events?.length || 0,
+        marksCount: marks?.length || 0,
+        hasActiveMarks,
+        hasValidEvents,
+        hasAnyValidEvents,
+      });
+      // Show the friendly placeholder instead of "no category data available"
+      return (
+        <View style={[styles.categoryCard, { borderColor: themeColors.border, backgroundColor: themeColors.surface }]}>
+          <View style={styles.categoryHeader}>
+            <AppText variant="subtitle" style={[styles.categoryTitle, { color: themeColors.textSecondary }]}>
+              Category Breakdown
+            </AppText>
+            <View style={styles.categoryHeaderButtons}>
+              {onRefresh && (
+                <AnimatedRefreshButton
+                  onPress={onRefresh}
+                  isRefreshing={isRefreshing || false}
+                  color={themeColors.primary}
+                  disabledColor={themeColors.textTertiary}
+                />
+              )}
+              <TouchableOpacity style={styles.infoButton} onPress={onInfoPress}>
+                <Ionicons name="information-circle-outline" size={18} color={themeColors.textTertiary} />
+              </TouchableOpacity>
+            </View>
+          </View>
+          <View style={styles.emptyStateContainer}>
+            <Ionicons name="pie-chart-outline" size={48} color={themeColors.textTertiary} style={styles.emptyStateIcon} />
+            <AppText variant="body" style={[styles.emptyStateTitle, { color: themeColors.text }]}>
+              Start Tracking to See Your Breakdown
+            </AppText>
+            <AppText variant="body" style={[styles.emptyStateMessage, { color: themeColors.textSecondary }]}>
+              Add some units to your marks to see how your activity is distributed across different categories.
+            </AppText>
+          </View>
+        </View>
+      );
+    }
+    
+    // Default empty state (no marks at all)
+    return (
+      <View style={[styles.categoryCard, { borderColor: themeColors.border, backgroundColor: themeColors.surface }]}>
+        <View style={styles.categoryHeader}>
+          <AppText variant="subtitle" style={[styles.categoryTitle, { color: themeColors.textSecondary }]}>
+            Category Breakdown
+          </AppText>
+          <View style={styles.categoryHeaderButtons}>
+            {onRefresh && (
+              <AnimatedRefreshButton
+                onPress={onRefresh}
+                isRefreshing={isRefreshing || false}
+                color={themeColors.primary}
+                disabledColor={themeColors.textTertiary}
+              />
+            )}
+            <TouchableOpacity style={styles.infoButton} onPress={onInfoPress}>
+              <Ionicons name="information-circle-outline" size={18} color={themeColors.textTertiary} />
+            </TouchableOpacity>
+          </View>
+        </View>
+        <View style={styles.emptyStateContainer}>
+          <Ionicons name="pie-chart-outline" size={48} color={themeColors.textTertiary} style={styles.emptyStateIcon} />
+          <AppText variant="body" style={[styles.emptyStateTitle, { color: themeColors.text }]}>
+            Start Tracking to See Your Breakdown
+          </AppText>
+          <AppText variant="body" style={[styles.emptyStateMessage, { color: themeColors.textSecondary }]}>
+            Add some units to your marks to see how your activity is distributed across different categories.
+          </AppText>
+        </View>
+      </View>
+    );
+  }
+
+  // Check if validCategoryData is empty after filtering
+  if (validCategoryData.length === 0) {
+    return (
+      <View style={[styles.categoryCard, { borderColor: themeColors.border, backgroundColor: themeColors.surface }]}>
+        <View style={styles.categoryHeader}>
+          <AppText variant="subtitle" style={[styles.categoryTitle, { color: themeColors.textSecondary }]}>
+            Category Breakdown
+          </AppText>
+          <View style={styles.categoryHeaderButtons}>
+            {onRefresh && (
+              <AnimatedRefreshButton
+                onPress={onRefresh}
+                isRefreshing={isRefreshing || false}
+                color={themeColors.primary}
+                disabledColor={themeColors.textTertiary}
+              />
+            )}
+            <TouchableOpacity style={styles.infoButton} onPress={onInfoPress}>
+              <Ionicons name="information-circle-outline" size={18} color={themeColors.textTertiary} />
+            </TouchableOpacity>
+          </View>
+        </View>
+        <AppText variant="body" style={[styles.emptyText, { color: themeColors.textSecondary }]}>
+          No valid category data available
+        </AppText>
+      </View>
+    );
+  }
+
+  // Check if pieData is empty after all hooks are called
+  if (!pieData.length) {
+    return (
+      <View style={[styles.categoryCard, { borderColor: themeColors.border, backgroundColor: themeColors.surface }]}>
+        <View style={styles.categoryHeader}>
+          <AppText variant="subtitle" style={[styles.categoryTitle, { color: themeColors.textSecondary }]}>
+            Category Breakdown
+          </AppText>
+          <View style={styles.categoryHeaderButtons}>
+            {onRefresh && (
+              <AnimatedRefreshButton
+                onPress={onRefresh}
+                isRefreshing={isRefreshing || false}
+                color={themeColors.primary}
+                disabledColor={themeColors.textTertiary}
+              />
+            )}
+            <TouchableOpacity style={styles.infoButton} onPress={onInfoPress}>
+              <Ionicons name="information-circle-outline" size={18} color={themeColors.textTertiary} />
+            </TouchableOpacity>
+          </View>
+        </View>
+        <AppText variant="body" style={[styles.emptyText, { color: themeColors.textSecondary }]}>
+          No pie chart data available
+        </AppText>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.categoryCard, { borderColor: themeColors.border, backgroundColor: themeColors.surface }]}>
@@ -858,9 +1409,19 @@ const CategoryBreakdown: React.FC<{
         <AppText variant="subtitle" style={[styles.categoryTitle, { color: themeColors.textSecondary }]}>
           Category Breakdown
         </AppText>
-        <TouchableOpacity style={styles.infoButton} onPress={onInfoPress}>
-          <Ionicons name="information-circle-outline" size={18} color={themeColors.textTertiary} />
-        </TouchableOpacity>
+        <View style={styles.categoryHeaderButtons}>
+          {onRefresh && (
+            <AnimatedRefreshButton
+              onPress={onRefresh}
+              isRefreshing={isRefreshing || false}
+              color={themeColors.primary}
+              disabledColor={themeColors.textTertiary}
+            />
+          )}
+          <TouchableOpacity style={styles.infoButton} onPress={onInfoPress}>
+            <Ionicons name="information-circle-outline" size={18} color={themeColors.textTertiary} />
+          </TouchableOpacity>
+        </View>
       </View>
       
       {/* Pie Chart with external labels and connecting lines */}
@@ -954,54 +1515,25 @@ const CategoryBreakdown: React.FC<{
         </Svg>
       </View>
 
-      {/* Legend - Two Column Layout */}
+      {/* Legend - Single Column Layout for full readability */}
       <View style={styles.legendContainer}>
-        <View style={styles.legendColumn}>
-          {categoryData.slice(0, Math.ceil(categoryData.length / 2)).map((item) => {
-            const color = CATEGORY_COLORS[item.category] || themeColors.textTertiary;
-            return (
-              <View key={item.category} style={styles.legendItem}>
-                <View style={[styles.legendColorDot, { backgroundColor: color }]} />
-                <View style={styles.legendTextContainer}>
-                  <AppText 
-                    variant="caption" 
-                    style={[styles.legendText, { color: themeColors.textSecondary }]}
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
-                  >
-                    {item.category}
-                  </AppText>
-                </View>
-                <AppText variant="caption" style={[styles.legendPercentage, { color: themeColors.text }]}>
-                  {item.percentage.toFixed(0)}%
-                </AppText>
-              </View>
-            );
-          })}
-        </View>
-        <View style={styles.legendColumn}>
-          {categoryData.slice(Math.ceil(categoryData.length / 2)).map((item) => {
-            const color = CATEGORY_COLORS[item.category] || themeColors.textTertiary;
-            return (
-              <View key={item.category} style={styles.legendItem}>
-                <View style={[styles.legendColorDot, { backgroundColor: color }]} />
-                <View style={styles.legendTextContainer}>
-                  <AppText 
-                    variant="caption" 
-                    style={[styles.legendText, { color: themeColors.textSecondary }]}
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
-                  >
-                    {item.category}
-                  </AppText>
-                </View>
-                <AppText variant="caption" style={[styles.legendPercentage, { color: themeColors.text }]}>
-                  {item.percentage.toFixed(0)}%
-                </AppText>
-              </View>
-            );
-          })}
-        </View>
+        {categoryData.map((item) => {
+          const color = CATEGORY_COLORS[item.category] || themeColors.textTertiary;
+          return (
+            <View key={item.category} style={styles.legendItem}>
+              <View style={[styles.legendColorDot, { backgroundColor: color }]} />
+              <AppText 
+                variant="body" 
+                style={[styles.legendText, { color: themeColors.textSecondary }]}
+              >
+                {item.category}
+              </AppText>
+              <AppText variant="body" style={[styles.legendPercentage, { color: themeColors.text }]}>
+                {item.percentage.toFixed(0)}%
+              </AppText>
+            </View>
+          );
+        })}
       </View>
     </View>
   );
@@ -1684,35 +2216,114 @@ const BestAverageDay = React.memo(BestAverageDayInner, (prevProps, nextProps) =>
 });
 
 export default function StatsScreen() {
+  // CRITICAL: All hooks must be called unconditionally and in the same order every render
+  // This prevents "Rendered more hooks than during the previous render" errors
+  
   const theme = useEffectiveTheme();
   const themeColors = colors[theme] || colors.light;
   const { counters } = useCounters();
-  const eventsStore = useEventsStore();
+  // CRITICAL: Use selector to get stable events array reference - prevents hook order issues
+  const events = useEventsStore((state) => state.events || []);
+  const loadEvents = useEventsStore((state) => state.loadEvents);
   const { user } = useAuth();
-  // Memoize events and counters - use the actual array reference to detect changes
-  // This ensures recalculation when events are added, even if length stays the same
-  const events = useMemo(() => {
+  
+  // Memoize events - filter out null/undefined and ensure it's always an array
+  // CRITICAL: Always return an array, never undefined/null, to maintain consistent hook calls
+  const safeEvents = useMemo(() => {
     try {
-      return (eventsStore && Array.isArray(eventsStore.events)) ? eventsStore.events : [];
-    } catch {
+      if (!events) {
+        return [];
+      }
+      if (!Array.isArray(events)) {
+        logger.error('[Stats] Events is not an array:', typeof events);
+        return [];
+      }
+      // Filter out any null/undefined events
+      return events.filter(e => e != null);
+    } catch (error) {
+      logger.error('[Stats] Error processing events:', error);
       return [];
     }
-  }, [eventsStore?.events]); // Use the actual array reference, not just length
+  }, [events]); // Use events directly from selector - stable reference
   
   const safeCounters = useMemo(() => {
     try {
-      return Array.isArray(counters) ? counters : [];
-    } catch {
+      if (!counters) {
+        logger.warn('[Stats] Counters is not available');
+        return [];
+      }
+      if (!Array.isArray(counters)) {
+        logger.error('[Stats] Counters is not an array:', typeof counters);
+        return [];
+      }
+      // Filter out any null/undefined counters
+      return counters.filter(c => c != null && c.id);
+    } catch (error) {
+      logger.error('[Stats] Error processing counters:', error);
       return [];
     }
   }, [counters]); // Use the actual array reference, not just length
   
-  const loadEvents = eventsStore?.loadEvents;
+  // CRITICAL: Ensure events and safeCounters are always arrays before proceeding
+  // This validation happens after useMemo hooks but before other hooks
+  const isValidData = Array.isArray(safeEvents) && Array.isArray(safeCounters);
+  
+  // Validate loadEvents function exists and is callable
+  // Always call useMemo to maintain consistent hook order
+  const safeLoadEvents = useMemo(() => {
+    if (!loadEvents || typeof loadEvents !== 'function') {
+      logger.warn('[Stats] loadEvents function is not available');
+      return undefined;
+    }
+    return loadEvents;
+  }, [loadEvents]);
 
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
   const [modalTitle, setModalTitle] = useState('');
   const [modalMessage, setModalMessage] = useState('');
+  
+  // Refresh state - incrementing this forces recalculation of all charts
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  
+  // Refresh handler - reloads events and forces recalculation
+  const handleRefresh = async () => {
+    if (isRefreshing) return;
+    
+    setIsRefreshing(true);
+    logger.log('[Stats] Manual refresh triggered');
+    
+    // Minimum duration for animation visibility (1 second)
+    const minDuration = new Promise(resolve => setTimeout(resolve, 1000));
+    
+    try {
+      // Haptic feedback
+      if (typeof Haptics !== 'undefined') {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+      
+      // Reload events from database (run in parallel with min duration)
+      const refreshPromise = (async () => {
+        if (user?.id && safeLoadEvents) {
+          await safeLoadEvents(undefined, user.id, 5000);
+        }
+        // Increment refresh key to force recalculation of memoized values
+        setRefreshKey(prev => prev + 1);
+      })();
+      
+      // Wait for both the refresh and minimum duration
+      await Promise.all([refreshPromise, minDuration]);
+      
+      logger.log('[Stats] Refresh completed');
+    } catch (error) {
+      logger.error('[Stats] Error during refresh:', error);
+      // Still wait for minimum duration even on error
+      await minDuration;
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   // Track current date to detect midnight reset
   const [currentDate, setCurrentDate] = useState(() => safeFormatDate(new Date()));
@@ -1735,25 +2346,15 @@ export default function StatsScreen() {
     return () => clearInterval(intervalId);
   }, [currentDate]);
 
-  // Ensure events are loaded - only once when component mounts or user changes
-  const eventsLoadedRef = useRef(false);
-  const loadEventsRef = useRef(loadEvents);
-  loadEventsRef.current = loadEvents;
-  
+  // Ensure events are loaded - reload when user changes or when navigating to this screen
   useEffect(() => {
-    if (user?.id && loadEventsRef.current && !eventsLoadedRef.current) {
-      eventsLoadedRef.current = true;
+    if (user?.id && safeLoadEvents && typeof safeLoadEvents === 'function') {
       // Load only last 5000 events (approximately 90 days) to reduce I/O
-      loadEventsRef.current(undefined, user.id, 5000).catch((error) => {
-        logger.error('Error loading events in stats screen:', error);
-        eventsLoadedRef.current = false; // Allow retry on error
+      safeLoadEvents(undefined, user.id, 5000).catch((error) => {
+        logger.error('[Stats] Error loading events:', error);
       });
     }
-    // Reset when user changes
-    if (!user?.id) {
-      eventsLoadedRef.current = false;
-    }
-  }, [user?.id]);
+  }, [user?.id, safeLoadEvents]);
 
   const showModal = (title: string, message: string) => {
     logger.info('Showing modal:', { title, messageLength: message?.length });
@@ -1766,37 +2367,36 @@ export default function StatsScreen() {
     setModalVisible(false);
   };
 
-  // Daily marks count calculation - tracks total increment amount for today
+  // Daily marks count calculation - tracks unique marks incremented today
   // Resets automatically at midnight when the date changes
-  // Use a dependency key that includes event IDs to ensure recalculation when new events are added
-  const dailyMarksKey = useMemo(() => {
-    if (!events || events.length === 0) return `no-events-${currentDate}`;
-    // Use the first 20 most recent event IDs as a dependency key
-    // This ensures recalculation when new events are added, even if array length stays the same
-    const recentEventIds = events
-      .slice(0, 20)
-      .map(e => e?.id)
-      .filter(Boolean)
-      .join(',');
-    // Include current date to trigger recalculation at midnight
-    return `${recentEventIds}-${currentDate}`;
-  }, [events, currentDate]);
-
+  // CRITICAL: Depend directly on safeEvents array reference and length to ensure reactivity
+  // When events are added (increment or decrement), Zustand creates a new array reference
   const dailyMarksCount = useMemo(() => {
     try {
       // Use currentDate state which updates at midnight
       // This count persists even after manual resets - it only resets when the date changes
       if (!currentDate) return 0;
       
-      const safeEvents = Array.isArray(events) ? events : [];
-      const safeCounters = Array.isArray(counters) ? counters : [];
+      const safeEventsArray = Array.isArray(safeEvents) ? safeEvents : [];
+      const safeCountersArray = Array.isArray(counters) ? counters : [];
+      
+      logger.log('[Stats] Recalculating daily marks count:', {
+        eventsCount: safeEventsArray.length,
+        currentDate,
+        refreshKey,
+      });
       
       // Create a set of active (non-deleted) mark IDs for validation
-      const activeMarkIds = new Set(
-        safeCounters
-          .filter((c) => c && !c.deleted_at)
-          .map((c) => c.id)
-      );
+      const activeMarkIds = new Set<string>();
+      safeCountersArray.forEach((c) => {
+        try {
+          if (c && c.id && typeof c.id === 'string' && !c.deleted_at) {
+            activeMarkIds.add(c.id);
+          }
+        } catch (error) {
+          logger.warn('[Stats] Error processing counter for activeMarkIds:', error);
+        }
+      });
       
       // Count unique marks that have been incremented today
       // IMPORTANT: This count persists even if a mark is manually reset
@@ -1806,102 +2406,144 @@ export default function StatsScreen() {
       // 2. Have increment events today (regardless of reset events)
       // 3. Are not deleted
       // Note: Reset events do NOT affect this count - we only look at increment events
+      // NOTE: Decrements don't affect this count - it's about unique marks incremented, not net count
       const marksIncrementedToday = new Set<string>();
       
-      safeEvents.forEach((e) => {
+      safeEventsArray.forEach((e) => {
         try {
           // Only count increment events from today
-          // Reset events are ignored - they don't affect the daily count
-          if (e && 
-              !e.deleted_at && 
-              e.event_type === 'increment' && // Only increment events count
-              e.occurred_local_date && 
-              e.occurred_local_date === currentDate &&
-              e.mark_id &&
-              activeMarkIds.has(e.mark_id)) { // Only count if mark still exists and is active
-            marksIncrementedToday.add(e.mark_id);
-          }
-        } catch {
+          // Reset events and decrements are ignored - they don't affect the daily count
+          if (!e || e.deleted_at) return;
+          if (e.event_type !== 'increment') return;
+          if (!e.occurred_local_date || typeof e.occurred_local_date !== 'string') return;
+          if (e.occurred_local_date !== currentDate) return;
+          if (!e.mark_id || typeof e.mark_id !== 'string') return;
+          if (!activeMarkIds.has(e.mark_id)) return; // Only count if mark still exists and is active
+          
+          marksIncrementedToday.add(e.mark_id);
+        } catch (error) {
+          logger.warn('[Stats] Error processing event for daily count:', error);
           // Skip invalid events
         }
       });
       
-      return marksIncrementedToday.size;
+      const count = marksIncrementedToday.size;
+      logger.log('[Stats] Daily marks count calculated:', {
+        count,
+        uniqueMarks: Array.from(marksIncrementedToday),
+      });
+      
+      return count;
     } catch (error) {
-      logger.error('Error calculating daily marks count:', error);
+      logger.error('[Stats] Error calculating daily marks count:', error);
       return 0;
     }
-  }, [dailyMarksKey, currentDate, counters]); // Include counters to react to mark deletions
+    // CRITICAL: Depend on safeEvents directly (array reference changes on updates)
+    // Also depend on counters to react when marks are deleted
+    // Include currentDate and refreshKey to force recalculation
+  }, [safeEvents, currentDate, counters, refreshKey]);
 
-  // Show loading state only if data is not yet available
-  if (!events || !safeCounters) {
-    return (
-      <ErrorBoundary>
-        <LoadingScreen />
-      </ErrorBoundary>
-    );
-  }
+  // Calculate active marks count safely
+  const activeMarksCount = useMemo(() => {
+    try {
+      if (!safeCounters || !Array.isArray(safeCounters)) {
+        return 0;
+      }
+      return safeCounters.filter((c) => c && c.id && !c.deleted_at).length;
+    } catch (error) {
+      logger.error('[Stats] Error calculating active marks count:', error);
+      return 0;
+    }
+  }, [safeCounters]);
+
+  // Validate daily marks count is a valid number
+  const safeDailyMarksCount = useMemo(() => {
+    const count = dailyMarksCount;
+    if (typeof count !== 'number' || isNaN(count) || !isFinite(count)) {
+      logger.warn('[Stats] Invalid daily marks count:', count);
+      return 0;
+    }
+    return Math.max(0, count);
+  }, [dailyMarksCount]);
+
+  // CRITICAL: Never use early return - always render the full component structure
+  // This ensures hooks are always called in the same order every render
+  // Handle loading state within the render instead of early return
+  const showLoading = !isValidData;
+  
   return (
     <ErrorBoundary>
-      <GradientBackground>
-        <SafeAreaView style={styles.container}>
-          <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-            {/* Header */}
-            <View style={styles.header}>
-              <View>
-                <AppText variant="headline" style={[styles.title, { color: themeColors.text }]}>
-                  Statistics
-                </AppText>
-                <AppText variant="body" style={[styles.subtitle, { color: themeColors.textSecondary }]}>
-                  Your week at a glance
-                </AppText>
+      {showLoading ? (
+        <LoadingScreen />
+      ) : (
+        <GradientBackground>
+          <SafeAreaView style={styles.container}>
+            <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+              {/* Header */}
+              <View style={styles.header}>
+                <View>
+                  <AppText variant="headline" style={[styles.title, { color: themeColors.text }]}>
+                    Statistics
+                  </AppText>
+                  <AppText variant="body" style={[styles.subtitle, { color: themeColors.textSecondary }]}>
+                    Your week at a glance
+                  </AppText>
+                </View>
+                {APP_BRAND_LOGO_LIGHT && APP_BRAND_LOGO_DARK && (
+                  <Image
+                    source={theme === 'dark' ? APP_BRAND_LOGO_DARK : APP_BRAND_LOGO_LIGHT}
+                    style={styles.brandLogo}
+                    resizeMode="contain"
+                    onError={() => logger.error('[Stats] Error loading brand logo')}
+                  />
+                )}
               </View>
-              {APP_BRAND_LOGO_LIGHT && APP_BRAND_LOGO_DARK && (
-                <Image
-                  source={theme === 'dark' ? APP_BRAND_LOGO_DARK : APP_BRAND_LOGO_LIGHT}
-                  style={styles.brandLogo}
-                  resizeMode="contain"
-                  onError={() => logger.error('Error loading brand logo')}
+
+              {/* Daily Marks Count Ring */}
+              <View style={[styles.card, { borderColor: themeColors.border, backgroundColor: themeColors.surface }]}>
+                <DailyMarksRing
+                  count={safeDailyMarksCount}
+                  activeMarksCount={activeMarksCount}
+                  theme={theme}
+                  themeColors={themeColors}
+                  onInfoPress={() => {
+                    try {
+                      showModal(
+                        'Marks Today',
+                        'This card tracks how many of your active marks you\'ve incremented today.\n\nThe number shows "X/Y" where:\n• X = Number of unique marks you\'ve incremented today\n• Y = Total number of active marks you have\n\nThe ring fills up as you complete more marks throughout the day, giving you a visual representation of your daily progress.\n\nNote: This count resets automatically at midnight each day, so you can start fresh every morning!'
+                      );
+                    } catch (error) {
+                      logger.error('[Stats] Error showing modal:', error);
+                    }
+                  }}
                 />
-              )}
-            </View>
+              </View>
 
-            {/* Daily Marks Count Ring */}
-            <View style={[styles.card, { borderColor: themeColors.border, backgroundColor: themeColors.surface }]}>
-              <DailyMarksRing
-                count={dailyMarksCount}
-                activeMarksCount={safeCounters.filter((c) => c && !c.deleted_at).length}
-                theme={theme}
-                themeColors={themeColors}
-                onInfoPress={() => {
-                  showModal(
-                    'Marks Today',
-                    'This card tracks how many of your active marks you\'ve incremented today.\n\nThe number shows "X/Y" where:\n• X = Number of unique marks you\'ve incremented today\n• Y = Total number of active marks you have\n\nThe ring fills up as you complete more marks throughout the day, giving you a visual representation of your daily progress.\n\nNote: This count resets automatically at midnight each day, so you can start fresh every morning!'
-                  );
-                }}
-              />
-            </View>
-
-            {/* Category Breakdown */}
-            {events && safeCounters && (
+              {/* Category Breakdown - Always render to maintain consistent hook counts */}
               <CategoryBreakdown
-                events={events}
-                marks={safeCounters}
+                events={safeEvents || []}
+                marks={safeCounters || []}
                 theme={theme}
                 themeColors={themeColors}
+                onRefresh={handleRefresh}
+                isRefreshing={isRefreshing}
                 onInfoPress={() => {
-                  showModal(
-                    'Category Breakdown',
-                    'This visualization shows how your activity is distributed across different categories over the last 30 days.\n\nEach colored segment represents the percentage of your increment events that belong to that category. The larger the segment, the more activity you\'ve had in that area.\n\nCategories are automatically assigned when your Mark names match our suggested categories (Fitness, Wellness, Learning & Growth, Productivity, or Habit Breaking). Marks that don\'t match any category are grouped as "Uncategorized".\n\nThis helps you see which areas of your life you\'re focusing on most and identify areas where you might want to increase your activity.'
-                  );
+                  try {
+                    showModal(
+                      'Category Breakdown',
+                      'This visualization shows how your activity is distributed across different categories based on your mark totals.\n\nEach colored segment represents the percentage of your total count for that category. For example, if Fitness marks total 6 (Workouts: 2 + Steps: 4) and Wellness marks total 3 (Sleep: 3), Fitness will show ~67% and Wellness ~33%.\n\nCategories are automatically assigned when your Mark names match our suggested categories (Fitness, Wellness, Learning & Growth, Productivity, or Habit Breaking). Marks that don\'t match any category are grouped as "Custom".\n\nThis helps you see which areas of your life you\'re focusing on most and identify areas where you might want to increase your activity.\n\nTap the refresh button (↻) to manually recalculate if the chart seems outdated.'
+                    );
+                  } catch (error) {
+                    logger.error('[Stats] Error showing category modal:', error);
+                  }
                 }}
               />
-            )}
-          </ScrollView>
-          {/* Info Modal */}
-          <InfoModal visible={modalVisible} title={modalTitle} message={modalMessage} onClose={closeModal} />
-        </SafeAreaView>
-      </GradientBackground>
+            </ScrollView>
+            {/* Info Modal */}
+            <InfoModal visible={modalVisible} title={modalTitle} message={modalMessage} onClose={closeModal} />
+          </SafeAreaView>
+        </GradientBackground>
+      )}
     </ErrorBoundary>
   );
 }
@@ -1984,9 +2626,21 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: spacing.md,
+    width: '100%',
+  },
+  categoryHeaderButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
   },
   categoryTitle: {
     fontSize: fontSize.base,
+  },
+  refreshButton: {
+    padding: spacing.xs,
+  },
+  refreshButtonDisabled: {
+    opacity: 0.5,
   },
   infoButton: {
     padding: spacing.xs,
@@ -2001,50 +2655,61 @@ const styles = StyleSheet.create({
     overflow: 'hidden', // Clip labels that extend beyond container
     minHeight: 380, // Ensure adequate space for larger chart (PIE_SIZE + padding)
   },
-  // Legend styles - Two Column Layout
+  // Legend styles - Single Column Layout for full readability
   legendContainer: {
     marginTop: spacing.lg,
-    flexDirection: 'row',
-    gap: spacing.md,
-  },
-  legendColumn: {
-    flex: 1,
-    gap: spacing.xs,
-    minWidth: 0, // Important for flexbox truncation in columns
+    width: '100%',
+    paddingHorizontal: spacing.sm,
   },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingVertical: spacing.sm,
     gap: spacing.md,
-    paddingVertical: spacing.xs,
-    minHeight: 24,
-    width: '100%',
   },
   legendColorDot: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
     flexShrink: 0,
   },
-  legendTextContainer: {
-    flex: 1,
-    minWidth: 0, // Critical for flexbox text truncation
-    marginRight: spacing.xs,
-    overflow: 'hidden', // Prevent text overflow
-  },
   legendText: {
-    fontSize: fontSize.base,
+    flex: 1,
+    fontSize: fontSize.sm,
     fontWeight: fontWeight.medium,
   },
   legendPercentage: {
-    fontSize: fontSize.base,
+    fontSize: fontSize.sm,
     fontWeight: fontWeight.bold,
-    flexShrink: 0,
-    marginLeft: spacing.xs,
+    minWidth: 40,
+    textAlign: 'right',
   },
   emptyText: {
     textAlign: 'center',
     paddingVertical: spacing.md,
+  },
+  // Empty state for pie chart
+  emptyStateContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.xxl,
+    paddingHorizontal: spacing.lg,
+  },
+  emptyStateIcon: {
+    marginBottom: spacing.md,
+    opacity: 0.6,
+  },
+  emptyStateTitle: {
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.semibold,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+  },
+  emptyStateMessage: {
+    fontSize: fontSize.base,
+    textAlign: 'center',
+    lineHeight: fontSize.base * 1.5,
+    maxWidth: 280,
   },
   // Streak Timeline
   timelineCard: {

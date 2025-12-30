@@ -34,6 +34,7 @@ import { useSync } from '../../hooks/useSync';
 import { useNotifications } from '../../hooks/useNotifications';
 import { AppText } from '../../components/Typography';
 import { logger } from '../../lib/utils/logger';
+import { getAvatarUrl, refreshAvatarUrl } from '../../lib/storage/avatarStorage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../../lib/supabase';
 
@@ -159,37 +160,36 @@ export default function HomeScreen() {
       try {
         if (user?.id) {
           // If user is logged in, try to load from Supabase storage
-          const profileImagePath = `avatars/${user.id}.jpg`;
-          const { data, error } = await supabase.storage
-            .from('profile-pictures')
-            .createSignedUrl(profileImagePath, 3600); // 1 hour expiry
+          const avatarUrl = await getAvatarUrl(user.id, 3600); // 1 hour expiry
           
-          if (!error && data) {
-            setProfileImageUri(data.signedUrl);
+          if (avatarUrl) {
+            setProfileImageUri(avatarUrl);
             // Also store locally as cache
-            await AsyncStorage.setItem('profile_image_uri', data.signedUrl);
+            await AsyncStorage.setItem('profile_image_uri', avatarUrl);
             return;
           }
           
-          // If not found in Supabase (404 is expected if no image), check local storage as fallback
-          if (error && error.message?.includes('not found')) {
-            // No image in Supabase, check local storage
-            const storedUri = await AsyncStorage.getItem('profile_image_uri');
-            if (storedUri && !storedUri.startsWith('http')) {
-              // Only use local URI if it's a file path (not a URL)
-              setProfileImageUri(storedUri);
-            } else if (storedUri && storedUri.startsWith('http')) {
-              // Use cached signed URL
-              setProfileImageUri(storedUri);
+          // If not found in Supabase, check local storage as fallback
+          const storedUri = await AsyncStorage.getItem('profile_image_uri');
+          if (storedUri && !storedUri.startsWith('http')) {
+            // Only use local URI if it's a file path (not a URL)
+            setProfileImageUri(storedUri);
+          } else if (storedUri && storedUri.startsWith('http')) {
+            // Try to refresh expired signed URL
+            const refreshedUrl = await refreshAvatarUrl(user.id, storedUri, 3600);
+            if (refreshedUrl) {
+              setProfileImageUri(refreshedUrl);
+              await AsyncStorage.setItem('profile_image_uri', refreshedUrl);
+            } else {
+              // URL expired and refresh failed, clear it
+              await AsyncStorage.removeItem('profile_image_uri');
+              setProfileImageUri(null);
             }
           }
         } else {
           // If not logged in, use local storage only
           const storedUri = await AsyncStorage.getItem('profile_image_uri');
           if (storedUri && !storedUri.startsWith('http')) {
-            setProfileImageUri(storedUri);
-          } else if (storedUri && storedUri.startsWith('http')) {
-            // Use cached signed URL
             setProfileImageUri(storedUri);
           }
         }
@@ -198,7 +198,7 @@ export default function HomeScreen() {
         // Fallback to local storage
         try {
           const storedUri = await AsyncStorage.getItem('profile_image_uri');
-          if (storedUri) {
+          if (storedUri && !storedUri.startsWith('http')) {
             setProfileImageUri(storedUri);
           }
         } catch (fallbackError) {
@@ -215,9 +215,23 @@ export default function HomeScreen() {
     useCallback(() => {
       const checkProfileImage = async () => {
         try {
-          const storedUri = await AsyncStorage.getItem('profile_image_uri');
-          if (storedUri && storedUri !== profileImageUri) {
-            setProfileImageUri(storedUri);
+          if (user?.id) {
+            // Refresh avatar URL when screen comes into focus
+            const avatarUrl = await getAvatarUrl(user.id, 3600);
+            if (avatarUrl && avatarUrl !== profileImageUri) {
+              setProfileImageUri(avatarUrl);
+              await AsyncStorage.setItem('profile_image_uri', avatarUrl);
+            } else if (!avatarUrl && profileImageUri) {
+              // Avatar was deleted, clear it
+              setProfileImageUri(null);
+              await AsyncStorage.removeItem('profile_image_uri');
+            }
+          } else {
+            // Fallback to local storage check
+            const storedUri = await AsyncStorage.getItem('profile_image_uri');
+            if (storedUri && storedUri !== profileImageUri && !storedUri.startsWith('http')) {
+              setProfileImageUri(storedUri);
+            }
           }
         } catch (error) {
           logger.error('Error checking profile image:', error);
@@ -225,7 +239,7 @@ export default function HomeScreen() {
       };
       
       checkProfileImage();
-    }, [profileImageUri])
+    }, [profileImageUri, user?.id])
   );
 
   const handleCreateCounter = () => {
@@ -236,21 +250,29 @@ export default function HomeScreen() {
     router.push(`/counter/${id}`);
   }, [router]);
 
-  const handleQuickIncrement = useCallback((counterId: string) => {
+  const handleQuickIncrement = useCallback(async (counterId: string) => {
     if (!user?.id) {
       logger.error('[Home] Cannot increment counter - user not authenticated');
       return;
     }
-    // Don't await - incrementCounter now uses optimistic updates for instant UI feedback
-    incrementCounter(counterId, user.id, 1).catch((error) => {
-      logger.error('Error incrementing counter:', error);
-    });
-    // Update notifications after incrementing (in case streak status changed)
-    // Don't await - let it happen in background
-    if (permissionGranted) {
-      updateSmartNotifications(user?.id).catch((error) => {
-        logger.error('Error updating notifications after increment:', error);
-      });
+    // incrementCounter now checks gating rules and throws errors if blocked
+    // The error will be caught and displayed in CounterTile
+    try {
+      await incrementCounter(counterId, user.id, 1);
+      // Update notifications after incrementing (in case streak status changed)
+      // Don't await - let it happen in background
+      if (permissionGranted) {
+        updateSmartNotifications(user?.id).catch((error) => {
+          logger.error('Error updating notifications after increment:', error);
+        });
+      }
+    } catch (error: any) {
+      // Gating errors are handled in CounterTile, but log other errors here
+      if (!error?.gatingBlocked) {
+        logger.error('Error incrementing counter:', error);
+      }
+      // Re-throw so CounterTile can handle it
+      throw error;
     }
   }, [user?.id, incrementCounter, permissionGranted, updateSmartNotifications]);
 
@@ -317,6 +339,39 @@ export default function HomeScreen() {
 
   type GridCounter = Counter & { key: string };
 
+  // Handle delete with confirmation for marks that have a value
+  const handleDeleteCounter = useCallback(
+    (counter: Counter) => {
+      if (counter.total > 0) {
+        // Show confirmation dialog for marks with values
+        Alert.alert(
+          'Delete Mark?',
+          `"${counter.name}" has ${counter.total} ${counter.unit || 'items'}. Are you sure you want to delete it? This action cannot be undone.`,
+          [
+            {
+              text: 'Cancel',
+              style: 'cancel',
+            },
+            {
+              text: 'Delete',
+              style: 'destructive',
+              onPress: () => {
+                deleteCounter(counter.id);
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              },
+            },
+          ],
+          { cancelable: true }
+        );
+      } else {
+        // Delete immediately if no value
+        deleteCounter(counter.id);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    },
+    [deleteCounter]
+  );
+
   const gridData: GridCounter[] = useMemo(() => {
     // Ensure unique keys by deduplicating counters
     const seen = new Set<string>();
@@ -354,7 +409,7 @@ export default function HomeScreen() {
               onPress={() => {}}
               onIncrement={() => {}}
               onDecrement={() => {}}
-              onDelete={user ? () => deleteCounter(item.id) : undefined}
+              onDelete={user ? () => handleDeleteCounter(item) : undefined}
               interactionsEnabled={false}
               iconType={resolveCounterIconType(item)}
             />
@@ -362,7 +417,7 @@ export default function HomeScreen() {
         </View>
       );
     },
-    [streaks, isEditMode, user, deleteCounter]
+    [streaks, isEditMode, user, handleDeleteCounter]
   );
 
   // Auto-scroll during drag

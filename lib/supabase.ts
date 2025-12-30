@@ -54,10 +54,10 @@ const isSupabaseConfigured = supabaseUrl &&
 // Production build validation - fail if Supabase not configured
 const isProduction = process.env.EXPO_PUBLIC_ENV === 'production' || !__DEV__;
 if (isProduction && !isSupabaseConfigured) {
+  // Don't log specific variable names in production to avoid exposing configuration details
   const errorMessage = 
-    '❌ CRITICAL: Supabase is not configured for production build!\n' +
-    'Please set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in your .env file.\n' +
-    'Production builds require valid Supabase credentials.';
+    '❌ CRITICAL: Backend service is not configured for production build!\n' +
+    'Production builds require valid backend configuration.';
   logger.error(errorMessage);
   // In production, throw error to prevent app from running with broken backend
   if (typeof window === 'undefined' || Platform.OS !== 'web') {
@@ -69,16 +69,16 @@ if (isProduction && !isSupabaseConfigured) {
 if (!isSupabaseConfigured) {
   if (!isProduction) {
     logger.warn(
-      '⚠️ Supabase is not configured. Please set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in your .env file.\n' +
+      '⚠️ Backend service is not configured.\n' +
       'The app will work in offline mode, but authentication and cloud sync will not be available.'
     );
   }
 }
 
-// Create Supabase client with placeholder URL if not configured
-// In production, this should be properly configured
-const safeSupabaseUrl = supabaseUrl || 'https://placeholder.supabase.co';
-const safeSupabaseKey = supabaseAnonKey || 'placeholder-anon-key';
+// Create Supabase client with placeholder values if not configured
+// In production, this should be properly configured via environment variables
+const safeSupabaseUrl = supabaseUrl || 'https://placeholder.example.com';
+const safeSupabaseKey = supabaseAnonKey || 'placeholder-key';
 
 // Export configuration status for runtime checks
 export const isSupabaseConfiguredForProduction = isSupabaseConfigured;
@@ -104,6 +104,7 @@ export type Database = {
           pro_unlocked: boolean;
           pro_unlocked_at: string | null;
           onboarding_completed: boolean;
+          avatar_url: string | null;
         };
         Insert: {
           id: string;
@@ -112,6 +113,7 @@ export type Database = {
           pro_unlocked?: boolean;
           pro_unlocked_at?: string | null;
           onboarding_completed?: boolean;
+          avatar_url?: string | null;
         };
         Update: {
           id?: string;
@@ -120,6 +122,7 @@ export type Database = {
           pro_unlocked?: boolean;
           pro_unlocked_at?: string | null;
           onboarding_completed?: boolean;
+          avatar_url?: string | null;
         };
       };
       counters: {
@@ -137,6 +140,10 @@ export type Database = {
           deleted_at: string | null;
           created_at: string;
           updated_at: string;
+          gated: boolean | null;
+          gate_type: string | null;
+          min_interval_minutes: number | null;
+          max_per_day: number | null;
         };
         Insert: {
           id?: string;
@@ -152,6 +159,10 @@ export type Database = {
           deleted_at?: string | null;
           created_at?: string;
           updated_at?: string;
+          gated?: boolean | null;
+          gate_type?: string | null;
+          min_interval_minutes?: number | null;
+          max_per_day?: number | null;
         };
         Update: {
           id?: string;
@@ -167,6 +178,10 @@ export type Database = {
           deleted_at?: string | null;
           created_at?: string;
           updated_at?: string;
+          gated?: boolean | null;
+          gate_type?: string | null;
+          min_interval_minutes?: number | null;
+          max_per_day?: number | null;
         };
       };
       counter_events: {

@@ -38,7 +38,7 @@ export default function PrivacyPolicyScreen() {
           showsVerticalScrollIndicator={false}
         >
           <AppText variant="caption" style={[styles.lastUpdated, { color: themeColors.textSecondary }]}>
-            Last updated: [Insert Date]
+            Last updated: January 11, 2025
           </AppText>
 
           <AppText variant="body" style={[styles.paragraph, { color: themeColors.text }]}>
@@ -238,7 +238,7 @@ export default function PrivacyPolicyScreen() {
             </AppText>
           </View>
           <AppText variant="body" style={[styles.paragraph, { color: themeColors.text }]}>
-            To make a request, email: [Insert Support Email]
+            To make a request, email: support@livralife.com
           </AppText>
 
           <AppText variant="body" style={[styles.subsectionTitle, { color: themeColors.text }]}>
@@ -281,7 +281,7 @@ export default function PrivacyPolicyScreen() {
             Livra does not sell personal information.
           </AppText>
           <AppText variant="body" style={[styles.paragraph, { color: themeColors.text }]}>
-            Requests can be sent to: [Insert Support Email]
+            Requests can be sent to: support@livralife.com
           </AppText>
 
           {/* Section 10 */}
@@ -301,7 +301,7 @@ export default function PrivacyPolicyScreen() {
             For privacy inquiries, contact:
           </AppText>
           <AppText variant="body" style={[styles.paragraph, { color: themeColors.text }]}>
-            Livra Support{'\n'}Email: [Insert Support Email]
+            Livra Support{'\n'}Email: support@livralife.com
           </AppText>
         </ScrollView>
       </SafeAreaView>

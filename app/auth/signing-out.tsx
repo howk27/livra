@@ -9,6 +9,7 @@ import { AppText } from '../../components/Typography';
 import { GradientBackground } from '../../components/GradientBackground';
 import { useAuth } from '../../hooks/useAuth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { logger } from '../../lib/utils/logger';
 
 export default function SigningOutScreen() {
   const theme = useEffectiveTheme();
@@ -31,7 +32,7 @@ export default function SigningOutScreen() {
         // Redirect to sign in screen
         router.replace('/auth/signin');
       } catch (error) {
-        console.error('Error during sign out:', error);
+        logger.error('Error during sign out:', error);
         // Even if there's an error, try to redirect
         router.replace('/auth/signin');
       }
