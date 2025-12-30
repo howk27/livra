@@ -99,11 +99,11 @@
     },
     "extra": {
       "eas": {
-        "projectId": "YOUR_EAS_PROJECT_ID"
+        "projectId": "884f18e6-7169-4296-9f83-83f8a3de5864"
       }
     },
     "updates": {
-      "url": "https://u.expo.dev/YOUR_EAS_PROJECT_ID"
+      "url": "https://u.expo.dev/884f18e6-7169-4296-9f83-83f8a3de5864"
     },
     "runtimeVersion": {
       "policy": "sdkVersion"
