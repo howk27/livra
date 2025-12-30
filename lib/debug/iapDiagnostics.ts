@@ -470,17 +470,32 @@ export function getDiagnosticsAsString(): string {
 }
 
 /**
- * Share diagnostics using Share API
+ * Share diagnostics using Share API (dev-only) or Clipboard
  */
 export async function copyDiagnosticsToClipboard(): Promise<void> {
   const jsonString = getDiagnosticsAsString();
   
-  // Use Share API which works on both iOS and Android
-  // User can copy from the share sheet
-  await Share.share({
-    message: jsonString,
-    title: 'IAP Diagnostics',
-  });
+  // Try Clipboard first (production-safe)
+  try {
+    const Clipboard = require('expo-clipboard').default;
+    if (Clipboard && Clipboard.setStringAsync) {
+      await Clipboard.setStringAsync(jsonString);
+      return;
+    }
+  } catch (e) {
+    // Clipboard not available
+  }
+  
+  // Share API fallback - DEV ONLY (production safety)
+  if (__DEV__) {
+    await Share.share({
+      message: jsonString,
+      title: 'IAP Diagnostics',
+    });
+  } else {
+    // PROD: hard-fail if clipboard unavailable
+    throw new Error('Clipboard unavailable; sharing diagnostics is disabled in production.');
+  }
 }
 
 /**
@@ -575,11 +590,16 @@ export async function exportSupportBundle(): Promise<void> {
         dialogTitle: 'Export IAP Support Bundle',
       });
     } else {
-      // Fallback to Share API if expo-sharing not available
-      await Share.share({
-        message: jsonString,
-        title: 'IAP Support Bundle',
-      });
+      // Fallback to Share API - DEV ONLY (production safety)
+      if (__DEV__) {
+        await Share.share({
+          message: jsonString,
+          title: 'IAP Support Bundle',
+        });
+      } else {
+        // PROD: hard-fail if expo-sharing unavailable
+        throw new Error('File sharing unavailable; export diagnostics is disabled in production.');
+      }
     }
   } catch (error) {
     logger.error('[Diagnostics] Error exporting support bundle:', error);
