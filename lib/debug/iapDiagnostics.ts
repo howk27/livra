@@ -36,6 +36,7 @@ export type DiagnosticEventType =
   | 'restore_cancelled'
   | 'restore_none_found'
   | 'iap_manager_receipt_missing_transient'
+  | 'iap_manager_purchase_token_missing_transient'
   | 'iap_manager_clearTransactionsIOS_executed'
   | 'iap_manager_clearTransactionsIOS_skipped'
   | 'iap_manager_clearTransactionsIOS_error'
@@ -56,6 +57,7 @@ export type DiagnosticEventType =
   | 'iap_manager_buy_error'
   | 'iap_manager_purchaseUpdated'
   | 'iap_manager_purchaseError'
+  | 'iap_manager_finishTransaction_attempted'
   | 'iap_manager_finishTransaction_success'
   | 'iap_manager_finishTransaction_error'
   | 'iap_manager_stuck_transaction_marker_set'
@@ -96,7 +98,10 @@ export type DiagnosticEventType =
   | 'iap_manager_db_unlock_pending_transient'
   | 'iap_manager_prices_missing_terminal'
   | 'diagnostics_opened_hidden_gesture'
-  | 'iap_prices_missing_terminal';
+  | 'iap_prices_missing_terminal'
+  | 'iap_price_from_micros_used'
+  | 'iap_price_from_micros_missing_currency'
+  | 'iap_manager_listeners_unregistered';
 
 export interface DiagnosticEvent {
   timestamp: string;
@@ -361,7 +366,7 @@ export function getDiagSnapshot(): {
  * Redacts only actual sensitive data (receipts, tokens, transaction IDs, purchase objects)
  * Preserves booleans, function type strings, and computed flags
  */
-function redactSensitiveData(obj: any, depth: number = 0): any {
+export function redactSensitiveData(obj: any, depth: number = 0): any {
   if (depth > 10) return '[Max Depth Reached]'; // Prevent infinite recursion
   
   if (obj === null || obj === undefined) {

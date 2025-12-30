@@ -213,6 +213,36 @@ function getProductId(raw: any): string | null {
 }
 
 /**
+ * Format price from micros (Android IAP format)
+ * Converts priceAmountMicros to major units and formats with currency
+ */
+function formatPriceFromMicros(micros: number | string, currencyCode?: string): { price: string; localizedPrice: string } {
+  const numericMicros = typeof micros === 'string' ? parseInt(micros, 10) : micros;
+  if (isNaN(numericMicros) || numericMicros <= 0) {
+    return { price: '', localizedPrice: '' };
+  }
+  
+  const majorUnits = numericMicros / 1_000_000;
+  const price = majorUnits.toFixed(2);
+  
+  let localizedPrice = price;
+  if (currencyCode && currencyCode.trim() !== '') {
+    const code = currencyCode.toUpperCase().trim();
+    if (code === 'USD' || code === 'CAD' || code === 'AUD') {
+      localizedPrice = `$${price}`;
+    } else if (code === 'EUR') {
+      localizedPrice = `€${price}`;
+    } else if (code === 'GBP') {
+      localizedPrice = `£${price}`;
+    } else {
+      localizedPrice = `${code} ${price}`;
+    }
+  }
+  
+  return { price, localizedPrice };
+}
+
+/**
  * Normalize a raw product from Nitro API to IAPProduct shape
  * Extracts productId, localizedPrice, currency, title, description with comprehensive fallback logic
  * Returns null if productId cannot be extracted (product is invalid)
@@ -273,41 +303,7 @@ function normalizeProduct(raw: any): IAPProduct | null {
     return null;
   }
 
-  // Extract localizedPrice - try in prioritized order
-  let localizedPrice = '';
-  const priceCandidates = [
-    source?.localizedPrice,
-    source?.displayPrice,
-    source?.priceString,
-    source?.price,
-    raw?.localizedPrice,
-    raw?.displayPrice,
-    raw?.priceString,
-    raw?.price,
-  ];
-
-  // Also try subscriptionOfferDetails for Nitro API
-  if (!localizedPrice && raw?.subscriptionOfferDetails && Array.isArray(raw.subscriptionOfferDetails) && raw.subscriptionOfferDetails.length > 0) {
-    const offer = raw.subscriptionOfferDetails[0];
-    if (offer?.pricingPhases && Array.isArray(offer.pricingPhases) && offer.pricingPhases.length > 0) {
-      const phase = offer.pricingPhases[0];
-      if (phase?.price) {
-        localizedPrice = String(phase.price);
-      }
-    }
-  }
-
-  // Try priceCandidates if still empty
-  if (!localizedPrice) {
-    for (const candidate of priceCandidates) {
-      if (candidate !== undefined && candidate !== null && candidate !== '') {
-        localizedPrice = String(candidate);
-        break;
-      }
-    }
-  }
-
-  // Extract currency
+  // Extract currency FIRST (needed for micros conversion)
   let currency = '';
   const currencyCandidates = [
     source?.currency,
@@ -320,6 +316,72 @@ function normalizeProduct(raw: any): IAPProduct | null {
     if (candidate && typeof candidate === 'string' && candidate.trim()) {
       currency = candidate.trim();
       break;
+    }
+  }
+
+  // Extract localizedPrice - try in prioritized order
+  let localizedPrice = '';
+  let price = '';
+  const priceCandidates = [
+    source?.localizedPrice,
+    source?.displayPrice,
+    source?.priceString,
+    source?.price,
+    raw?.localizedPrice,
+    raw?.displayPrice,
+    raw?.priceString,
+    raw?.price,
+  ];
+
+  // Also try subscriptionOfferDetails for Nitro API (Android)
+  if (!localizedPrice && raw?.subscriptionOfferDetails && Array.isArray(raw.subscriptionOfferDetails) && raw.subscriptionOfferDetails.length > 0) {
+    const offer = raw.subscriptionOfferDetails[0];
+    let phaseList: any[] | null = null;
+    
+    // Handle both pricingPhases structure types
+    if (offer?.pricingPhases?.pricingPhaseList && Array.isArray(offer.pricingPhases.pricingPhaseList)) {
+      phaseList = offer.pricingPhases.pricingPhaseList;
+    } else if (Array.isArray(offer?.pricingPhases)) {
+      phaseList = offer.pricingPhases;
+    }
+    
+    if (phaseList && phaseList.length > 0) {
+      const firstPhase = phaseList[0];
+      if (firstPhase?.priceAmountMicros !== undefined && firstPhase.priceAmountMicros !== null) {
+        // Use priceAmountMicros (Android format)
+        const currencyCode = currency || source?.currencyCode || raw?.currencyCode || '';
+        const formatted = formatPriceFromMicros(firstPhase.priceAmountMicros, currencyCode);
+        price = formatted.price;
+        localizedPrice = formatted.localizedPrice;
+        
+        // Emit diagnostic event
+        diagEvent('iap_price_from_micros_used', {
+          productId: productId || 'unknown',
+          hadCurrency: !!currencyCode,
+          currencyCode: currencyCode && /^[A-Z]{3}$/.test(currencyCode) ? currencyCode : undefined,
+          priceFieldUsed: 'priceAmountMicros',
+        });
+        
+        if (!currencyCode || currencyCode.trim() === '') {
+          diagEvent('iap_price_from_micros_missing_currency', {
+            productId: productId || 'unknown',
+            priceFieldUsed: 'priceAmountMicros',
+          });
+        }
+      } else if (firstPhase?.price) {
+        // Fallback to price field if priceAmountMicros not available
+        localizedPrice = String(firstPhase.price);
+      }
+    }
+  }
+
+  // Try priceCandidates if still empty
+  if (!localizedPrice) {
+    for (const candidate of priceCandidates) {
+      if (candidate !== undefined && candidate !== null && candidate !== '') {
+        localizedPrice = String(candidate);
+        break;
+      }
     }
   }
 
@@ -356,11 +418,14 @@ function normalizeProduct(raw: any): IAPProduct | null {
   }
 
   // Extract price (numeric string, fallback to localizedPrice)
-  let price = localizedPrice || '';
-  if (!price && source?.price) {
-    price = String(source.price);
-  } else if (!price && raw?.price) {
-    price = String(raw.price);
+  // Note: price may already be set from subscriptionOfferDetails micros conversion above
+  if (!price) {
+    price = localizedPrice || '';
+    if (!price && source?.price) {
+      price = String(source.price);
+    } else if (!price && raw?.price) {
+      price = String(raw.price);
+    }
   }
 
   // STEP 1: Ensure localizedPrice always has a usable value
@@ -913,6 +978,49 @@ class IapManagerClass {
       (purchase as any).identifier ||
       null;
     
+    // Helper function to attempt finishTransaction with idempotency guard
+    const attemptFinishTransaction = async (reason: string) => {
+      if (finishAttempted) {
+        logger.log('[IAP Manager] finishTransaction already attempted, skipping', { reason, transactionId, productId });
+        return;
+      }
+      finishAttempted = true;
+      diagEvent('iap_manager_finishTransaction_attempted', { reason, transactionId, productId });
+
+      try {
+        await IAPAdapter.finishTransaction({ purchase, isConsumable: false });
+        transactionFinished = true;
+        diagEvent('iap_manager_finishTransaction_success', { reason, transactionId, productId });
+        logger.log('[IAP Manager] Transaction finished', {
+          transactionId,
+          productId,
+          reason,
+        });
+      } catch (finishError: any) {
+        transactionFinished = false;
+        logger.error('[IAP Manager] Error finishing transaction', {
+          error: finishError,
+          transactionId,
+          productId,
+          reason,
+        });
+        diagEvent('iap_manager_finishTransaction_error', { reason, transactionId, productId, error: finishError });
+
+        // Set recovery marker ONLY on finishTransaction failure
+        try {
+          await AsyncStorage.setItem('iap_stuck_purchase_marker', 'true');
+          logger.log('[IAP Manager] Set recovery marker for stuck transaction', {
+            transactionId,
+            productId,
+            reason,
+          });
+          diagEvent('iap_manager_stuck_transaction_marker_set', { reason: 'finishTransaction_failed', transactionId, productId });
+        } catch (markerError) {
+          logger.warn('[IAP Manager] Could not set recovery marker:', markerError);
+        }
+      }
+    };
+    
     if (!productId) {
       logger.error('[IAP Manager] Cannot extract productId from purchase', {
         purchaseKeys: Object.keys(purchase || {}),
@@ -923,11 +1031,7 @@ class IapManagerClass {
         purchaseKeys: Object.keys(purchase || {}),
       });
       // Still finish transaction to prevent retry loops
-      try {
-        await IAPAdapter.finishTransaction({ purchase, isConsumable: false });
-      } catch (finishError: any) {
-        logger.error('[IAP Manager] Error finishing transaction with missing productId:', finishError);
-      }
+      await attemptFinishTransaction('missing_productId');
       this.clearPurchaseGuard('updated');
       throw new Error('Purchase received but product ID could not be determined');
     }
@@ -947,8 +1051,12 @@ class IapManagerClass {
       });
 
       // Get receipt
+      // Platform-specific receipt/token extraction
       let receipt: string | undefined;
+      let purchaseToken: string | undefined;
+      
       if (Platform.OS === 'ios') {
+        // iOS: require receipt
         try {
           receipt = await IAPAdapter.getReceiptIOS();
           if (receipt) {
@@ -963,39 +1071,61 @@ class IapManagerClass {
           logger.warn('[IAP Manager] Could not get iOS receipt:', receiptError);
           receipt = purchase.transactionReceipt || undefined;
         }
+        
+        // iOS: receipt is required - if missing, treat as transient
+        if (!receipt) {
+          logger.error('[IAP Manager] iOS receipt not available for validation', {
+            transactionId,
+            productId,
+            hasTransactionReceipt: !!purchase.transactionReceipt,
+          });
+          diagEvent('iap_manager_receipt_missing_transient', {
+            transactionId,
+            productId,
+            platform: 'ios',
+          });
+          shouldFinishTransactionOnError = false;
+          const receiptMissingError: any = new Error('Purchase receipt is being retrieved. Please try again in a moment.');
+          receiptMissingError.code = 'TRANSIENT_RECEIPT_MISSING';
+          throw receiptMissingError;
+        }
       } else {
-        receipt = purchase.purchaseToken || transactionId || undefined;
-      }
-
-      // 4A: iOS receipt missing must be TRANSIENT
-      // TASK 6: Strict strategy - validate receipt BEFORE unlockPro and finishTransaction
-      const receiptToValidate = receipt || transactionId || '';
-      if (!receiptToValidate) {
-        logger.error('[IAP Manager] Receipt not available for validation', {
-          transactionId,
-          productId,
-          hasReceipt: !!receipt,
-          hasTransactionId: !!transactionId,
-        });
-        diagEvent('iap_manager_receipt_missing_transient', {
-          transactionId,
-          productId,
-          hasReceipt: !!receipt,
-          hasTransactionId: !!transactionId,
-        });
-        shouldFinishTransactionOnError = false;
-        const receiptMissingError: any = new Error('Purchase receipt is being retrieved. Please try again in a moment.');
-        receiptMissingError.code = 'TRANSIENT_RECEIPT_MISSING';
-        throw receiptMissingError;
+        // Android: require purchaseToken
+        purchaseToken = purchase.purchaseToken || undefined;
+        
+        // Android: purchaseToken is required - if missing, treat as transient
+        if (!purchaseToken) {
+          logger.error('[IAP Manager] Android purchaseToken not available for validation', {
+            transactionId,
+            productId,
+            hasPurchaseToken: !!purchase.purchaseToken,
+          });
+          diagEvent('iap_manager_purchase_token_missing_transient', {
+            transactionId,
+            productId,
+            platform: 'android',
+          });
+          shouldFinishTransactionOnError = false;
+          const tokenMissingError: any = new Error('Purchase token is being retrieved. Please try again in a moment.');
+          tokenMissingError.code = 'TRANSIENT_PURCHASE_TOKEN_MISSING';
+          throw tokenMissingError;
+        }
       }
 
       // Validate receipt server-side BEFORE unlocking
       logger.log('[IAP Manager] Validating receipt before unlock', {
         transactionId,
         productId,
+        platform: Platform.OS,
       });
       
-      const validation = await validateReceiptWithServer(receiptToValidate, transactionId, productId);
+      const validation = await validateReceiptWithServer({
+        platform: Platform.OS as 'ios' | 'android',
+        receipt,
+        purchaseToken,
+        transactionId,
+        productId,
+      });
 
       if (validation.status === 'valid') {
         // Receipt validated - confirm DB entitlement before finishing transaction
@@ -1058,13 +1188,7 @@ class IapManagerClass {
           reason: validation.reason,
         });
         // Still finish transaction to prevent retry loops, but don't unlock
-        finishAttempted = true;
-        try {
-          await IAPAdapter.finishTransaction({ purchase, isConsumable: false });
-          transactionFinished = true;
-        } catch (finishError: any) {
-          logger.error('[IAP Manager] Error finishing transaction after validation failure:', finishError);
-        }
+        await attemptFinishTransaction('post_validation_invalid');
         
         // Emit outcome event
         diagEvent('iap_manager_purchase_outcome_invalid', {
@@ -1108,50 +1232,7 @@ class IapManagerClass {
       }
 
       // CRITICAL: Finish transaction AFTER validation and unlock (required by Apple)
-      // 4B: finishTransaction failure policy - DO NOT mark as finished if finishTransaction throws
-      // Set recovery marker for clearTransactionIOS on next launch
-      finishAttempted = true;
-      try {
-        await IAPAdapter.finishTransaction({ purchase, isConsumable: false });
-        transactionFinished = true;
-        logger.log('[IAP Manager] Transaction finished', {
-          transactionId,
-          productId,
-        });
-        diagEvent('iap_manager_finishTransaction_success', {
-          transactionId,
-          productId,
-        });
-      } catch (finishError: any) {
-        // DO NOT mark as finished - transaction is still pending and needs recovery
-        transactionFinished = false;
-        logger.error('[IAP Manager] Error finishing transaction after validation', {
-          error: finishError,
-          transactionId,
-          productId,
-        });
-        diagEvent('iap_manager_finishTransaction_error', {
-          error: finishError,
-          transactionId,
-          productId,
-          afterValidation: true,
-        });
-        // Set recovery marker so clearTransactionIOS can run on next launch in production
-        try {
-          await AsyncStorage.setItem('iap_stuck_purchase_marker', 'true');
-          logger.log('[IAP Manager] Set recovery marker for stuck transaction', {
-            transactionId,
-            productId,
-          });
-          diagEvent('iap_manager_stuck_transaction_marker_set', {
-            transactionId,
-            productId,
-            reason: 'finishTransaction_failed',
-          });
-        } catch (markerError) {
-          logger.error('[IAP Manager] Failed to set recovery marker', markerError);
-        }
-      }
+      await attemptFinishTransaction('post_validation_success');
 
       // Emit success outcome event after transaction finished
       diagEvent('iap_manager_purchase_outcome_success', {
@@ -1189,13 +1270,7 @@ class IapManagerClass {
       } else {
         // Non-transient error - try to finish transaction best-effort, emit outcome_error
         if (!transactionFinished && shouldFinishTransactionOnError && !finishAttempted) {
-          finishAttempted = true;
-          try {
-            await IAPAdapter.finishTransaction({ purchase, isConsumable: false });
-            transactionFinished = true;
-          } catch (finishError: any) {
-            logger.error('[IAP Manager] Error finishing transaction in error handler:', finishError);
-          }
+          await attemptFinishTransaction('error_cleanup');
         }
 
         diagEvent('iap_manager_purchase_outcome_error', {
@@ -2179,25 +2254,58 @@ class IapManagerClass {
             return { outcome: 'none_found', foundPurchases: purchases?.length || 0 };
           }
 
-          // Get receipt
+          // Platform-specific receipt/token extraction
           let receipt: string | undefined;
+          let purchaseToken: string | undefined;
+          let hasRequiredReceiptToken = false;
+          
           if (Platform.OS === 'ios') {
+            // iOS: require receipt
             try {
               receipt = await IAPAdapter.getReceiptIOS();
             } catch (receiptError) {
               logger.warn('[IAP Manager] Could not get iOS receipt for restore:', receiptError);
             }
+            
+            hasRequiredReceiptToken = !!receipt;
+            if (!hasRequiredReceiptToken) {
+              logger.warn('[IAP Manager] iOS receipt not available for restore validation', {
+                transactionId,
+                productId,
+              });
+            }
           } else {
-            receipt = proPurchase.purchaseToken || transactionId || undefined;
+            // Android: require purchaseToken
+            purchaseToken = proPurchase.purchaseToken || undefined;
+            hasRequiredReceiptToken = !!purchaseToken;
+            
+            if (!hasRequiredReceiptToken) {
+              logger.warn('[IAP Manager] Android purchaseToken not available for restore validation', {
+                transactionId,
+                productId,
+              });
+            }
+          }
+
+          // Only validate if we have the required receipt/token
+          if (!hasRequiredReceiptToken) {
+            // Cannot validate without required receipt/token - return with none_found
+            logger.warn('[IAP Manager] Cannot restore: receipt/token not available for validation', {
+              platform: Platform.OS,
+              transactionId,
+              productId,
+            });
+            return { outcome: 'none_found', foundPurchases: purchases?.length || 0 };
           }
 
           // Validate receipt
-          const receiptToValidate = receipt || transactionId || '';
-          const validation = await validateReceiptWithServer(
-            receiptToValidate,
+          const validation = await validateReceiptWithServer({
+            platform: Platform.OS as 'ios' | 'android',
+            receipt,
+            purchaseToken,
             transactionId,
-            productId
-          );
+            productId,
+          });
 
           if (validation.status === 'valid') {
             // Use setLocalProCache (non-authoritative) after DB confirmation
@@ -2287,6 +2395,9 @@ class IapManagerClass {
   async tearDown(): Promise<void> {
     try {
       // Remove listeners
+      const hadUpdateSub = !!this.purchaseUpdateSubscription;
+      const hadErrorSub = !!this.purchaseErrorSubscription;
+      
       if (this.purchaseUpdateSubscription) {
         this.purchaseUpdateSubscription.remove();
         this.purchaseUpdateSubscription = null;
@@ -2295,6 +2406,12 @@ class IapManagerClass {
         this.purchaseErrorSubscription.remove();
         this.purchaseErrorSubscription = null;
       }
+      
+      // Emit diagnostic event for listener cleanup
+      diagEvent('iap_manager_listeners_unregistered', {
+        hadUpdateSub,
+        hadErrorSub,
+      });
 
       // End connection
       if (this.state.isInitialized && this.state.connectionStatus === 'connected') {

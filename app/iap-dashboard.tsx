@@ -10,7 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { getDiagSnapshot, getDiagnosticsAsString } from '../lib/debug/iapDiagnostics';
+import { getDiagSnapshot, getDiagnosticsAsString, redactSensitiveData } from '../lib/debug/iapDiagnostics';
 import { IapManager } from '../lib/services/iap/IapManager';
 import { colors } from '../theme/colors';
 import { spacing, borderRadius, fontSize, fontWeight } from '../theme/tokens';
@@ -53,24 +53,28 @@ export default function IapDashboardScreen() {
   const handleCopy = async () => {
     try {
       const diagnosticsString = getDiagnosticsAsString();
-      const managerDiag = managerDiagnostics ? JSON.stringify(managerDiagnostics, null, 2) : '{}';
+      // Redact managerDiagnostics before stringify
+      const redactedManagerDiag = managerDiagnostics ? redactSensitiveData(managerDiagnostics) : null;
       
       const combined = JSON.stringify({
         timestamp: new Date().toISOString(),
         diagnostics: JSON.parse(diagnosticsString),
-        managerDiagnostics: JSON.parse(managerDiag),
+        managerDiagnostics: redactedManagerDiag,
       }, null, 2);
 
       if (Clipboard && Clipboard.setStringAsync) {
         await Clipboard.setStringAsync(combined);
         Alert.alert('Copied', 'IAP diagnostics copied to clipboard');
-      } else {
-        // Fallback to Share API
+      } else if (__DEV__) {
+        // Share API fallback only in development
         const { Share } = await import('react-native');
         await Share.share({
           message: combined,
           title: 'IAP Diagnostics',
         });
+      } else {
+        // Production: require Clipboard - do NOT share
+        Alert.alert('Error', 'Clipboard not available. Please ensure clipboard permissions are granted.');
       }
     } catch (error) {
       logger.error('[IAP Dashboard] Error copying diagnostics:', error);

@@ -175,11 +175,13 @@ export async function checkProStatus(): Promise<boolean> {
 /**
  * Validate receipt with server-side Edge Function
  */
-export async function validateReceiptWithServer(
-  receipt: string,
-  transactionId?: string,
-  productId?: string
-): Promise<ReceiptValidationResult> {
+export async function validateReceiptWithServer(params: {
+  platform: 'ios' | 'android';
+  receipt?: string;
+  purchaseToken?: string;
+  transactionId?: string;
+  productId?: string;
+}): Promise<ReceiptValidationResult> {
   try {
     const { supabase } = await import('../supabase');
     const { logger } = await import('../utils/logger');
@@ -191,15 +193,36 @@ export async function validateReceiptWithServer(
       return { status: 'transient', reason: 'user_not_logged_in' };
     }
 
-    // Invoke Apple receipt validation via Supabase Edge Function.
-    // IMPORTANT: Do not log receipt.
+    // Platform-specific validation: iOS requires receipt, Android requires purchaseToken
+    if (params.platform === 'ios' && !params.receipt) {
+      logger.error('[IAP] iOS receipt validation called without receipt');
+      return { status: 'transient', reason: 'receipt_missing' };
+    }
+
+    if (params.platform === 'android' && !params.purchaseToken) {
+      logger.error('[IAP] Android receipt validation called without purchaseToken');
+      return { status: 'transient', reason: 'purchase_token_missing' };
+    }
+
+    // Build request body based on platform
+    const requestBody: any = {
+      platform: params.platform,
+      userId: user.id,
+      transactionId: params.transactionId,
+      productId: params.productId,
+    };
+
+    if (params.platform === 'ios') {
+      requestBody.receipt = params.receipt;
+    } else {
+      // Android
+      requestBody.purchaseToken = params.purchaseToken;
+    }
+
+    // Invoke receipt validation via Supabase Edge Function.
+    // IMPORTANT: Do not log receipt/token.
     const validationPromise = supabase.functions.invoke('validate-iap-receipt', {
-      body: {
-        receipt,
-        userId: user.id,
-        transactionId,
-        productId,
-      },
+      body: requestBody,
     });
 
     // Timeout promise REJECTS. We MUST catch it below and return transient.
@@ -220,25 +243,29 @@ export async function validateReceiptWithServer(
       logger.error('[IAP] Edge Function error during receipt validation', {
         code: error?.code,
         message: error?.message ?? String(error),
-        transactionId,
-        productId,
+        transactionId: params.transactionId,
+        productId: params.productId,
+        platform: params.platform,
       });
       return { status: 'transient', reason: `edge_error:${error?.code ?? 'UNKNOWN'}` };
     }
 
     if (data?.success === true) {
       logger.log('[IAP] Receipt validated successfully', {
-        transactionId: data.transactionId || transactionId,
+        transactionId: data.transactionId || params.transactionId,
         environment: data.environment,
-        productId,
+        productId: params.productId,
+        platform: params.platform,
+        inputType: params.platform === 'ios' ? 'receipt' : 'purchaseToken',
       });
       return { status: 'valid' };
     }
 
     // Edge function returned a non-success response
     logger.error('[IAP] Receipt validation failed (non-success response)', {
-      transactionId,
-      productId,
+      transactionId: params.transactionId,
+      productId: params.productId,
+      platform: params.platform,
       serverError: data?.error ?? 'Unknown error',
     });
     return { status: 'invalid', reason: String(data?.error ?? 'non_success') };
@@ -250,16 +277,18 @@ export async function validateReceiptWithServer(
 
     if (typeof msg === 'string' && msg.includes('Receipt validation timeout')) {
       logger.error('[IAP] Receipt validation timeout after 30s', {
-        transactionId,
-        productId,
+        transactionId: params.transactionId,
+        productId: params.productId,
+        platform: params.platform,
       });
       return { status: 'transient', reason: 'timeout_30s' };
     }
 
     logger.error('[IAP] Receipt validation unexpected failure', {
       message: msg,
-      transactionId,
-      productId,
+      transactionId: params.transactionId,
+      productId: params.productId,
+      platform: params.platform,
     });
     return { status: 'transient', reason: 'unexpected_failure' };
   }
