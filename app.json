@@ -39,7 +39,7 @@
     },
     "android": {
       "package": "com.livra.app",
-      "versionCode": 2,
+      "versionCode": 36,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
