@@ -26,14 +26,16 @@
     "production": {
       "distribution": "store",
       "ios": {
-        "simulator": false,
-        "podInstallCommand": "bash scripts/eas-pods-repoupdate.sh"
+        "simulator": false
       },
       "android": {
         "buildType": "app-bundle"
       },
       "env": {
         "EXPO_PUBLIC_ENV": "production"
+      },
+      "hooks": {
+        "postInstall": "bash scripts/eas-pods-repoupdate.sh"
       }
     }
   },
@@ -51,4 +53,3 @@
     }
   }
 }
-
