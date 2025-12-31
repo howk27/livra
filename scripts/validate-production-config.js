@@ -11,6 +11,11 @@
 const fs = require('fs');
 const path = require('path');
 
+// Parse command line arguments (ignore all flags - EAS may pass --platform, etc.)
+// We don't need any arguments for this validation script
+const args = process.argv.slice(2);
+// Silently ignore all arguments/flags - they're not needed for validation
+
 // Check if .env file exists
 const envPath = path.join(process.cwd(), '.env');
 const envExamplePath = path.join(process.cwd(), '.env.example');
@@ -32,8 +37,17 @@ if (fs.existsSync(envPath)) {
 }
 
 // Also check process.env (for EAS build secrets)
+// EAS sets these as environment variables during build
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || envVars.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || envVars.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+
+// Debug: Log if we're in EAS build context (but don't log sensitive values)
+const isEasBuild = !!process.env.EAS_BUILD_ID || !!process.env.EAS_BUILD_PROFILE;
+if (isEasBuild) {
+  console.log('Running in EAS build context');
+  console.log(`EXPO_PUBLIC_SUPABASE_URL: ${supabaseUrl ? '✓ Set' : '✗ Missing'}`);
+  console.log(`EXPO_PUBLIC_SUPABASE_ANON_KEY: ${supabaseKey ? '✓ Set' : '✗ Missing'}`);
+}
 
 // Validation
 const errors = [];
@@ -87,7 +101,16 @@ if (errors.length > 0) {
   console.error('\n❌ Production Build Validation Failed:');
   errors.forEach(error => console.error(`   - ${error}`));
   console.error('\nPlease configure the required environment variables before building for production.');
-  console.error('See README.md for setup instructions.\n');
+  if (isEasBuild) {
+    console.error('For EAS builds, set these as secrets in your EAS project:');
+    console.error('  - EXPO_PUBLIC_SUPABASE_URL');
+    console.error('  - EXPO_PUBLIC_SUPABASE_ANON_KEY');
+    console.error('Run: eas secret:create --scope project --name EXPO_PUBLIC_SUPABASE_URL --value <your-url>');
+    console.error('Run: eas secret:create --scope project --name EXPO_PUBLIC_SUPABASE_ANON_KEY --value <your-key>');
+  } else {
+    console.error('See README.md for setup instructions.');
+  }
+  console.error('');
   process.exit(1);
 }
 

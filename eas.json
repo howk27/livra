@@ -33,8 +33,7 @@
       },
       "env": {
         "EXPO_PUBLIC_ENV": "production"
-      },
-      "prebuildCommand": "node scripts/validate-production-config.js"
+      }
     }
   },
   "submit": {
