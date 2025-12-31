@@ -26,7 +26,8 @@
     "production": {
       "distribution": "store",
       "ios": {
-        "simulator": false
+        "simulator": false,
+        "podInstallCommand": "bash scripts/eas-pods-repoupdate.sh"
       },
       "android": {
         "buildType": "app-bundle"
