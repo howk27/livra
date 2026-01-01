@@ -93,7 +93,7 @@ export default function SettingsScreen() {
         threshold: 7, 
         screen: 'iap-dashboard' 
       });
-      router.push('/iap-dashboard');
+      router.push('/diagnostics');
       return;
     }
 
@@ -1041,8 +1041,9 @@ export default function SettingsScreen() {
 
 
   return (
-    <GradientBackground>
-      <SafeAreaView style={styles.container}>
+    <GradientBackground children={
+      <>
+        <SafeAreaView style={styles.container}>
         <ScrollView contentContainerStyle={styles.content}>
         {/* Header */}
         <AppText variant="headline" style={[styles.screenTitle, { color: themeColors.text }]}>
@@ -1055,8 +1056,7 @@ export default function SettingsScreen() {
           style={[styles.profileCard, { backgroundColor: themeColors.surface }]}
         >
           <TouchableOpacity
-            onPress={(e) => {
-              e.stopPropagation();
+            onPress={() => {
               handlePickImage();
             }}
             style={[styles.avatarContainer, { backgroundColor: themeColors.accent.primary + '33' }]}
@@ -1110,8 +1110,7 @@ export default function SettingsScreen() {
           {user && (
             <View style={styles.refreshButtonContainer}>
               <TouchableOpacity
-                onPress={(e) => {
-                  e.stopPropagation();
+                onPress={() => {
                   handleSync();
                 }}
                 disabled={syncState.isSyncing}
@@ -1525,7 +1524,8 @@ export default function SettingsScreen() {
           </View>
         </View>
       </Modal>
-    </GradientBackground>
+      </>
+    } />
   );
 }
 
