@@ -33,9 +33,6 @@
       },
       "env": {
         "EXPO_PUBLIC_ENV": "production"
-      },
-      "hooks": {
-        "postInstall": "bash scripts/eas-pods-repoupdate.sh"
       }
     }
   },
