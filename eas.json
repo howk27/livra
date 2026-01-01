@@ -32,7 +32,9 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_ENV": "production"
+        "EXPO_PUBLIC_ENV": "production",
+        "RCT_USE_RN_DEP": "0",
+        "RCT_USE_PREBUILT_RNCORE": "0"
       }
     }
   },
