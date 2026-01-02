@@ -39,6 +39,7 @@ import { useCountersStore } from '../../state/countersSlice';
 import { logger } from '../../lib/utils/logger';
 import { toUserMessage } from '../../lib/utils/errorMessages';
 import { uploadAvatar, getAvatarUrl, deleteAvatar, refreshAvatarUrl } from '../../lib/storage/avatarStorage';
+import { diagEvent } from '../../lib/debug/iapDiagnostics';
 import Constants from 'expo-constants';
 
 export default function SettingsScreen() {
@@ -88,7 +89,6 @@ export default function SettingsScreen() {
         versionTapTimer.current = null;
       }
       // Log diagnostic event for tracking
-      const { diagEvent } = require('../lib/debug/iapDiagnostics');
       diagEvent('diagnostics_opened_hidden_gesture', { 
         threshold: 7, 
         screen: 'iap-dashboard' 
