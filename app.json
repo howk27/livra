@@ -2,19 +2,21 @@
   "expo": {
     "name": "Livra",
     "slug": "livra",
-    "version": "1.0.36",
+    "version": "1.0.37",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "description": "A minimalist progress tracker. Create simple marks for the things that matter to you - no pressure, no guilt, just progress.",
+
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+
     "icon": "./assets/icon.png",
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+
+    "assetBundlePatterns": ["**/*"],
+
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.livra.app",
@@ -24,9 +26,7 @@
         "applinks:www.livralife.com"
       ],
       "infoPlist": {
-        "UIBackgroundModes": [
-          "remote-notification"
-        ],
+        "UIBackgroundModes": ["remote-notification"],
         "NSUserNotificationsUsageDescription": "Livra needs permission to send you reminders about your marks.",
         "NSFaceIDUsageDescription": "Livra uses Face ID to securely lock your app.",
         "NSPhotoLibraryUsageDescription": "Livra needs access to your photo library to set a profile picture.",
@@ -37,9 +37,10 @@
         "usesNonExemptEncryption": false
       }
     },
+
     "android": {
       "package": "com.livra.app",
-      "versionCode": 36,
+      "versionCode": 37,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -73,6 +74,7 @@
         "android.permission.CAMERA"
       ]
     },
+
     "plugins": [
       "expo-router",
       "expo-secure-store",
@@ -81,26 +83,43 @@
       "expo-sqlite",
       "expo-mail-composer",
       "expo-apple-authentication",
+
       [
         "expo-image-picker",
         {
           "photosPermission": "Livra needs access to your photos to set a profile picture.",
           "cameraPermission": "Livra needs access to your camera to take a profile picture."
         }
+      ],
+
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "cocoapods": {
+              "extraPodsInstallArgs": ["--repo-update"]
+            }
+          }
+        }
       ]
     ],
+
     "scheme": "livra",
+
     "experiments": {
       "typedRoutes": true
     },
+
     "extra": {
       "eas": {
         "projectId": "884f18e6-7169-4296-9f83-83f8a3de5864"
       }
     },
+
     "updates": {
       "url": "https://u.expo.dev/884f18e6-7169-4296-9f83-83f8a3de5864"
     },
+
     "runtimeVersion": {
       "policy": "sdkVersion"
     }
