@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
 import { spacing, borderRadius, fontSize, fontWeight } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
+import { logger } from '../lib/utils/logger';
 
 interface Props {
   children: ReactNode;
@@ -32,16 +33,12 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    // Log error to console (in production, you might want to send this to an error reporting service)
-    console.error('ErrorBoundary caught an error:', error, errorInfo);
-    
+    logger.error('ErrorBoundary caught an error:', error, errorInfo);
+
     this.setState({
       error,
       errorInfo,
     });
-
-    // In production, you could send this to an error reporting service like Sentry
-    // Example: Sentry.captureException(error, { contexts: { react: { componentStack: errorInfo.componentStack } } });
   }
 
   handleReload = () => {

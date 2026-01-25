@@ -15,7 +15,7 @@ import {
   Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as MailComposer from 'expo-mail-composer';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -40,7 +40,9 @@ import { logger } from '../../lib/utils/logger';
 import { toUserMessage } from '../../lib/utils/errorMessages';
 import { uploadAvatar, getAvatarUrl, deleteAvatar, refreshAvatarUrl } from '../../lib/storage/avatarStorage';
 import { diagEvent } from '../../lib/debug/iapDiagnostics';
+import { unlockDashboard } from '../../lib/debug/dashboardUnlock';
 import Constants from 'expo-constants';
+import { checkProStatus } from '../../lib/iap/iap';
 
 export default function SettingsScreen() {
   const theme = useEffectiveTheme();
@@ -48,7 +50,7 @@ export default function SettingsScreen() {
   const router = useRouter();
 
   const { themeMode, setThemeMode } = useUIStore();
-  const { isProUnlocked, restorePurchases } = useIAP();
+  const { isProUnlocked, restorePurchases, purchasing } = useIAP();
   const { sync, syncState } = useSync();
   const { counters } = useCounters();
   const { events } = useEventsStore();
@@ -68,7 +70,9 @@ export default function SettingsScreen() {
   const [csvExportEmail, setCsvExportEmail] = useState('');
   const [showEmailInput, setShowEmailInput] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
-  
+  const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
+  const [restoreMessageType, setRestoreMessageType] = useState<'success' | 'error' | null>(null);
+
   // Hidden gesture for diagnostics (tap version 7 times within 1.5 seconds)
   const versionTapCount = useRef(0);
   const versionTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -93,7 +97,9 @@ export default function SettingsScreen() {
         threshold: 7, 
         screen: 'iap-dashboard' 
       });
-      router.push('/diagnostics');
+      // Unlock dashboard before navigation (production route guard)
+      unlockDashboard();
+      router.push('/iap-dashboard' as Href);
       return;
     }
 
@@ -279,7 +285,7 @@ export default function SettingsScreen() {
     try {
       // Supabase resend verification email
       // Try multiple approaches to ensure email is sent
-      logger.log('[Resend Verification] Attempting to resend verification email to:', user.email);
+      logger.log('[Resend Verification] Attempting to resend verification email to:', '[redacted]');
       
       let { data, error } = await supabase.auth.resend({
         type: 'signup',
@@ -594,6 +600,49 @@ export default function SettingsScreen() {
     const defaultEmail = user?.email || csvExportEmail || '';
     setCsvExportEmail(defaultEmail);
     setShowEmailInput(true);
+  };
+
+  const handleRestore = async () => {
+    setRestoreMessage(null);
+    setRestoreMessageType(null);
+
+    try {
+      await restorePurchases();
+      const isUnlocked = await checkProStatus();
+      if (isUnlocked) {
+        setRestoreMessage('Restored successfully.');
+        setRestoreMessageType('success');
+      } else {
+        setRestoreMessage('No active subscription found for this Apple ID.');
+        setRestoreMessageType('error');
+      }
+      setTimeout(() => {
+        setRestoreMessage(null);
+        setRestoreMessageType(null);
+      }, 5000);
+    } catch (err: any) {
+      logger.error('[Settings] Error in handleRestore:', err);
+      const errorMsg = err?.message || String(err);
+      const errorCode = err?.code || '';
+      let userMessage = 'Restore failed. Please try again.';
+      const isCancelled =
+        errorCode === 'USER_CANCELLED' ||
+        errorCode === 'E_USER_CANCELLED' ||
+        err?.cancelled === true ||
+        errorMsg.toLowerCase().includes('cancel') ||
+        errorMsg.toLowerCase().includes('request canceled');
+      if (errorMsg.includes('network') || errorMsg.includes('connection')) {
+        userMessage = 'Restore failed: Network error. Please check your connection.';
+      } else if (isCancelled) {
+        userMessage = 'Restore was cancelled.';
+      }
+      setRestoreMessage(userMessage);
+      setRestoreMessageType('error');
+      setTimeout(() => {
+        setRestoreMessage(null);
+        setRestoreMessageType(null);
+      }, 5000);
+    }
   };
 
   const performCSVExport = async (recipientEmail?: string) => {
@@ -1345,12 +1394,45 @@ export default function SettingsScreen() {
               
               <TouchableOpacity
                 style={[styles.button, { backgroundColor: themeColors.surface }]}
-                onPress={restorePurchases}
+                onPress={handleRestore}
+                disabled={purchasing}
               >
-                <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+                <AppText variant="button" style={[styles.buttonText, { color: themeColors.text, opacity: purchasing ? 0.5 : 1 }]}>
                   Restore Purchases
                 </AppText>
               </TouchableOpacity>
+              {restoreMessage && (
+                <View
+                  style={[
+                    styles.restoreMessageContainer,
+                    {
+                      backgroundColor:
+                        restoreMessageType === 'success'
+                          ? (themeColors.success || '#4CAF50') + '20'
+                          : (themeColors.error || '#F44336') + '20',
+                      borderColor:
+                        restoreMessageType === 'success'
+                          ? (themeColors.success || '#4CAF50')
+                          : (themeColors.error || '#F44336'),
+                    },
+                  ]}
+                >
+                  <AppText
+                    variant="body"
+                    style={[
+                      styles.restoreMessageText,
+                      {
+                        color:
+                          restoreMessageType === 'success'
+                            ? (themeColors.success || '#4CAF50')
+                            : (themeColors.error || '#F44336'),
+                      },
+                    ]}
+                  >
+                    {restoreMessage}
+                  </AppText>
+                </View>
+              )}
             </>
           )}
         </View>
@@ -1749,6 +1831,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   proText: {},
+  restoreMessageContainer: {
+    padding: spacing.md,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    marginTop: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  restoreMessageText: {
+    fontSize: 12,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
   aboutSection: {
     marginTop: spacing['3xl'],
     paddingTop: spacing.xxl,

@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getDiagSnapshot, getDiagnosticsAsString, redactSensitiveData } from '../lib/debug/iapDiagnostics';
+import { isDashboardUnlocked, resetDashboardUnlock } from '../lib/debug/dashboardUnlock';
 import { IapManager } from '../lib/services/iap/IapManager';
 import { colors } from '../theme/colors';
 import { spacing, borderRadius, fontSize, fontWeight } from '../theme/tokens';
@@ -18,14 +19,7 @@ import { useEffectiveTheme } from '../state/uiSlice';
 import { AppText } from '../components/Typography';
 import { logger } from '../lib/utils/logger';
 import Constants from 'expo-constants';
-
-// Try to import Clipboard, fallback to Share if not available
-let Clipboard: any = null;
-try {
-  Clipboard = require('expo-clipboard').default;
-} catch (e) {
-  // expo-clipboard not installed, will use Share API as fallback
-}
+import * as Clipboard from 'expo-clipboard';
 
 export default function IapDashboardScreen() {
   const theme = useEffectiveTheme();
@@ -33,6 +27,16 @@ export default function IapDashboardScreen() {
   const router = useRouter();
   const [snapshot, setSnapshot] = useState(getDiagSnapshot());
   const [managerDiagnostics, setManagerDiagnostics] = useState<any>(null);
+
+  // Production route guard: require unlock flag or dev mode
+  useEffect(() => {
+    const isProduction = !__DEV__ && Constants.executionEnvironment !== 'storeClient';
+    if (isProduction && !isDashboardUnlocked()) {
+      router.back();
+      return;
+    }
+    resetDashboardUnlock();
+  }, [router]);
 
   useEffect(() => {
     const loadDiagnostics = () => {
@@ -53,29 +57,20 @@ export default function IapDashboardScreen() {
   const handleCopy = async () => {
     try {
       const diagnosticsString = getDiagnosticsAsString();
-      // Redact managerDiagnostics before stringify
       const redactedManagerDiag = managerDiagnostics ? redactSensitiveData(managerDiagnostics) : null;
-      
-      const combined = JSON.stringify({
-        timestamp: new Date().toISOString(),
-        diagnostics: JSON.parse(diagnosticsString),
-        managerDiagnostics: redactedManagerDiag,
-      }, null, 2);
 
-      if (Clipboard && Clipboard.setStringAsync) {
-        await Clipboard.setStringAsync(combined);
-        Alert.alert('Copied', 'IAP diagnostics copied to clipboard');
-      } else if (__DEV__) {
-        // Share API fallback only in development
-        const { Share } = await import('react-native');
-        await Share.share({
-          message: combined,
-          title: 'IAP Diagnostics',
-        });
-      } else {
-        // Production: require Clipboard - do NOT share
-        Alert.alert('Error', 'Clipboard not available. Please ensure clipboard permissions are granted.');
-      }
+      const combined = JSON.stringify(
+        {
+          timestamp: new Date().toISOString(),
+          diagnostics: JSON.parse(diagnosticsString),
+          managerDiagnostics: redactedManagerDiag,
+        },
+        null,
+        2
+      );
+
+      await Clipboard.setStringAsync(combined);
+      Alert.alert('Copied', 'IAP diagnostics copied to clipboard');
     } catch (error) {
       logger.error('[IAP Dashboard] Error copying diagnostics:', error);
       Alert.alert('Error', 'Failed to copy diagnostics. Please try again.');

@@ -1656,10 +1656,17 @@ class IapManagerClass {
         missingSkus.length === 0 &&
         !pricesMissing;
 
+      // Set terminal error if prices missing (user-friendly message)
+      const terminalError = pricesMissing ? {
+        code: 'PRICES_MISSING',
+        message: 'Product prices not available from App Store',
+        userMessage: 'Subscription pricing unavailable. Please try again later.',
+      } : null;
+
       this.setState({
         products: normalizedProducts,
         isLoadingProducts: false,
-        lastError: null,
+        lastError: terminalError,  // Set error if prices missing
         pricesMissing,
       });
 

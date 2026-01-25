@@ -138,9 +138,11 @@ export function getIAPErrorMessage(error: any): IAPError {
 
 /**
  * Check if user has premium status
- * Priority: Supabase database > Local storage
+ * Priority: Supabase database > Local storage (with TTL)
  */
 export async function checkProStatus(): Promise<boolean> {
+  const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+  
   try {
     const { supabase } = await import('../supabase');
     const {
@@ -155,7 +157,12 @@ export async function checkProStatus(): Promise<boolean> {
         .single();
 
       if (data?.pro_unlocked) {
-        await AsyncStorage.setItem('pro_unlocked', 'true');
+        // Store with timestamp
+        const cacheEntry = {
+          value: true,
+          checkedAt: new Date().toISOString(),
+        };
+        await AsyncStorage.setItem('pro_unlocked', JSON.stringify(cacheEntry));
         return true;
       } else {
         // Clear stale local cache if user is not premium in database
@@ -165,11 +172,39 @@ export async function checkProStatus(): Promise<boolean> {
     }
   } catch (error) {
     logger.error('[IAP] Error checking Supabase pro status:', error);
+    // Fall through to cache check with TTL
   }
 
-  // Fallback to local storage for offline mode
-  const localStatus = await AsyncStorage.getItem('pro_unlocked');
-  return localStatus === 'true';
+  // Fallback to local storage with TTL check
+  try {
+    const cached = await AsyncStorage.getItem('pro_unlocked');
+    if (cached) {
+      try {
+        const cacheEntry = JSON.parse(cached);
+        if (cacheEntry.checkedAt) {
+          const checkedAt = new Date(cacheEntry.checkedAt);
+          const age = Date.now() - checkedAt.getTime();
+          if (age < CACHE_TTL_MS && cacheEntry.value === true) {
+            logger.log('[IAP] Using cached pro status (within TTL)', { ageHours: age / (60 * 60 * 1000) });
+            return true;
+          } else {
+            logger.log('[IAP] Cached pro status expired, requiring online verification', { ageHours: age / (60 * 60 * 1000) });
+            await AsyncStorage.removeItem('pro_unlocked');
+            return false;
+          }
+        }
+      } catch (parseError) {
+        // Legacy format (just "true" string) - treat as expired
+        logger.log('[IAP] Legacy cache format detected, clearing');
+        await AsyncStorage.removeItem('pro_unlocked');
+        return false;
+      }
+    }
+  } catch (cacheError) {
+    logger.error('[IAP] Error reading cache:', cacheError);
+  }
+
+  return false;
 }
 
 /**
@@ -319,39 +354,47 @@ export async function unlockPro(): Promise<void> {
  * @returns {Promise<boolean>} true if cache was set successfully, false otherwise
  */
 export async function setLocalProCache(): Promise<boolean> {
-  // Verify DB status BEFORE caching locally
-  // This ensures we only cache if DB has confirmed the unlock
-  try {
-    const isUnlocked = await checkProStatus();
-    if (isUnlocked) {
-      // DB confirms pro_unlocked = true - safe to cache locally
-      await AsyncStorage.setItem('pro_unlocked', 'true');
-      logger.log('[IAP] Local Pro cache set after DB confirmation');
-      return true;
-    } else {
-      // DB does not confirm - do NOT cache locally
-      logger.warn('[IAP] Pro status not confirmed in database - not caching locally. Edge Function may still be processing.');
-      // Wait 1000ms and retry once (max 1 retry) to allow Edge Function propagation
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      const retryUnlocked = await checkProStatus();
-      if (retryUnlocked) {
-        await AsyncStorage.setItem('pro_unlocked', 'true');
-        logger.log('[IAP] Local Pro cache set after retry DB confirmation');
+    // Verify DB status BEFORE caching locally
+    // This ensures we only cache if DB has confirmed the unlock
+    try {
+      const isUnlocked = await checkProStatus();
+      if (isUnlocked) {
+        // DB confirms pro_unlocked = true - safe to cache locally with timestamp
+        const cacheEntry = {
+          value: true,
+          checkedAt: new Date().toISOString(),
+        };
+        await AsyncStorage.setItem('pro_unlocked', JSON.stringify(cacheEntry));
+        logger.log('[IAP] Local Pro cache set after DB confirmation');
         return true;
       } else {
-        // DB still does not confirm after retry
-        logger.error('[IAP] Pro status still not confirmed after retry - Edge Function may have failed');
-        // Remove stale cache if exists
-        await AsyncStorage.removeItem('pro_unlocked');
-        return false;
+        // DB does not confirm - do NOT cache locally
+        logger.warn('[IAP] Pro status not confirmed in database - not caching locally. Edge Function may still be processing.');
+        // Wait 1000ms and retry once (max 1 retry) to allow Edge Function propagation
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        const retryUnlocked = await checkProStatus();
+        if (retryUnlocked) {
+          const cacheEntry = {
+            value: true,
+            checkedAt: new Date().toISOString(),
+          };
+          await AsyncStorage.setItem('pro_unlocked', JSON.stringify(cacheEntry));
+          logger.log('[IAP] Local Pro cache set after retry DB confirmation');
+          return true;
+        } else {
+          // DB still does not confirm after retry
+          logger.error('[IAP] Pro status still not confirmed after retry - Edge Function may have failed');
+          // Remove stale cache if exists
+          await AsyncStorage.removeItem('pro_unlocked');
+          return false;
+        }
       }
+    } catch (error) {
+      logger.error('[IAP] Error setting local Pro cache:', error);
+      // Remove stale cache on error
+      await AsyncStorage.removeItem('pro_unlocked').catch(() => {});
+      return false;
     }
-  } catch (error) {
-    logger.error('[IAP] Error setting local Pro cache:', error);
-    // Remove stale cache on error
-    await AsyncStorage.removeItem('pro_unlocked').catch(() => {});
-    return false;
-  }
 }
 
 /**
