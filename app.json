@@ -2,7 +2,7 @@
   "expo": {
     "name": "Livra",
     "slug": "livra",
-    "version": "1.0.37",
+    "version": "1.0.38",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "description": "A minimalist progress tracker. Create simple marks for the things that matter to you - no pressure, no guilt, just progress.",
@@ -20,7 +20,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.livra.app",
-      "buildNumber": "36",
+      "buildNumber": "2",
       "associatedDomains": [
         "applinks:livralife.com",
         "applinks:www.livralife.com"
@@ -40,7 +40,7 @@
 
     "android": {
       "package": "com.livra.app",
-      "versionCode": 37,
+      "versionCode": 38,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
