@@ -33,7 +33,7 @@ function PaywallScreenContent() {
   
   // STEP 5: Restore message state
   const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
-  const [restoreMessageType, setRestoreMessageType] = useState<'success' | 'error' | null>(null);
+  const [restoreMessageType, setRestoreMessageType] = useState<'success' | 'info' | 'error' | null>(null);
   
   // TASK 7: Preflight health check error state
   const [healthCheckFailed, setHealthCheckFailed] = useState(false);
@@ -94,6 +94,7 @@ function PaywallScreenContent() {
     purchaseSubscription,
     restorePurchases,
     lastError,
+    lastErrorCode,
     isReady,
     isLoadingProducts,
     connectionStatus,
@@ -300,15 +301,26 @@ function PaywallScreenContent() {
     setRestoreMessageType(null);
     
     try {
-      await restorePurchases();
+      const result = await restorePurchases();
       
-      // Check if pro was unlocked after restore
-      const isUnlocked = await checkProStatus();
-      if (isUnlocked) {
-        setRestoreMessage('Restored successfully.');
-        setRestoreMessageType('success');
-      } else {
+      if (result.outcome === 'cancelled') {
+        setRestoreMessage('Restore cancelled.');
+        setRestoreMessageType('info');
+      } else if (result.outcome === 'none_found') {
         setRestoreMessage('No active subscription found for this Apple ID.');
+        setRestoreMessageType('info');
+      } else if (result.outcome === 'success') {
+        if (result.dbConfirmed === false) {
+          setRestoreMessage('Restored. Entitlements syncing—try again in a moment.');
+          setRestoreMessageType('info');
+        } else {
+          // Double-check DB on success for user confidence
+          const isUnlocked = await checkProStatus();
+          setRestoreMessage(isUnlocked ? 'Restored successfully.' : 'Restored. Entitlements syncing—try again in a moment.');
+          setRestoreMessageType(isUnlocked ? 'success' : 'info');
+        }
+      } else {
+        setRestoreMessage('Restore failed. Please try again.');
         setRestoreMessageType('error');
       }
       
@@ -338,13 +350,30 @@ function PaywallScreenContent() {
       }
       
       setRestoreMessage(userMessage);
-      setRestoreMessageType('error');
+      setRestoreMessageType(isCancelled ? 'info' : 'error');
       
       // Clear message after 5 seconds
       setTimeout(() => {
         setRestoreMessage(null);
         setRestoreMessageType(null);
       }, 5000);
+    }
+  };
+
+  const transientErrorCodes = new Set([
+    'TRANSIENT_DB_PENDING',
+    'TRANSIENT_RECEIPT_MISSING',
+    'TRANSIENT_VERIFICATION_PENDING',
+    'TRANSIENT_PURCHASE_TOKEN_MISSING',
+  ]);
+  const hasTransientError = lastErrorCode ? transientErrorCodes.has(lastErrorCode) : false;
+
+  const handleRetryVerification = async () => {
+    try {
+      await IapManager.recoverNow();
+      await checkProStatus();
+    } catch (error) {
+      logger.error('[Paywall] Retry verification failed', error);
     }
   };
 
@@ -755,6 +784,14 @@ function PaywallScreenContent() {
                 Purchase in progress. Please wait...
               </Text>
             )}
+            {hasTransientError && (
+              <TouchableOpacity
+                style={[styles.retryButton, { backgroundColor: themeColors.primary, marginTop: spacing.md }]}
+                onPress={handleRetryVerification}
+              >
+                <Text style={styles.retryButtonText}>Retry Verification</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -782,10 +819,14 @@ function PaywallScreenContent() {
             {
               backgroundColor: restoreMessageType === 'success' 
                 ? (themeColors.success || '#4CAF50') + '20'
-                : (themeColors.error || '#F44336') + '20',
+                : restoreMessageType === 'info'
+                  ? (themeColors.primary || '#007AFF') + '15'
+                  : (themeColors.error || '#F44336') + '20',
               borderColor: restoreMessageType === 'success'
                 ? (themeColors.success || '#4CAF50')
-                : (themeColors.error || '#F44336'),
+                : restoreMessageType === 'info'
+                  ? (themeColors.primary || '#007AFF')
+                  : (themeColors.error || '#F44336'),
             }
           ]}>
             <Text style={[
@@ -793,7 +834,9 @@ function PaywallScreenContent() {
               {
                 color: restoreMessageType === 'success'
                   ? (themeColors.success || '#4CAF50')
-                  : (themeColors.error || '#F44336'),
+                  : restoreMessageType === 'info'
+                    ? (themeColors.primary || '#007AFF')
+                    : (themeColors.error || '#F44336'),
               }
             ]}>
               {restoreMessage}

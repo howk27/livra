@@ -36,6 +36,7 @@ interface UseIapSubscriptionsReturn {
   products: IAPProduct[];
   purchaseInProgress: boolean;
   lastError: string | null;
+  lastErrorCode: string | null;
   connectionStatus: IAPState['connectionStatus'];
   isProUnlocked: boolean;
   productsLoadError: boolean;
@@ -44,7 +45,7 @@ interface UseIapSubscriptionsReturn {
 
   // Actions
   purchaseSubscription: (productId: string) => Promise<void>;
-  restorePurchases: () => Promise<void>;
+  restorePurchases: () => Promise<RestoreOutcome>;
   refreshProStatus: () => Promise<void>;
   retryLoadProducts: () => Promise<void>;
 
@@ -61,6 +62,14 @@ interface UseIapSubscriptionsReturn {
       isIPad: boolean;
     };
 }
+
+type RestoreOutcome = {
+  outcome: 'success' | 'none_found' | 'cancelled' | 'error';
+  foundPurchases: number;
+  dbConfirmed?: boolean;
+  errorCode?: string;
+  message?: string;
+};
 
 export function useIapSubscriptions(): UseIapSubscriptionsReturn {
   const [managerState, setManagerState] = useState<IapManagerState>(IapManager.getState());
@@ -265,16 +274,33 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
   /**
    * Restore purchases
    */
-  const restorePurchases = useCallback(async () => {
+  const restorePurchases = useCallback(async (): Promise<RestoreOutcome> => {
     setPurchaseInProgress(true);
     diagEvent('restore_start', {});
 
     try {
       const result = await IapManager.restore();
+      let outcomeResult: RestoreOutcome = { ...result };
       
-      // Check premium status after restore
-      const isUnlocked = await checkProStatus();
-      setIsProUnlocked(isUnlocked);
+      // Refresh is best-effort: never downgrade a successful restore if refresh fails.
+      // Keep outcome 'success' and surface a non-fatal message instead.
+      // Refresh premium status only after confirmed success
+      if (outcomeResult.outcome === 'success' && outcomeResult.dbConfirmed !== false) {
+        try {
+          const isUnlocked = await checkProStatus();
+          setIsProUnlocked(isUnlocked);
+        } catch (refreshError: any) {
+          diagEvent('restore_refresh_failed', {
+            code: refreshError?.code || 'UNKNOWN',
+            message: refreshError?.message || 'Refresh failed',
+          });
+          outcomeResult = {
+            ...outcomeResult,
+            errorCode: outcomeResult.errorCode || 'POST_RESTORE_REFRESH_FAILED',
+            message: outcomeResult.message || 'Restored. Entitlements syncing—try again in a moment.',
+          };
+        }
+      }
       
       // Emit correct event based on typed outcome
       if (result.outcome === 'success') {
@@ -298,6 +324,7 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
           foundPurchases: result.foundPurchases,
         });
       }
+      return outcomeResult;
     } catch (error: any) {
       // Fallback error handling if restore() throws unexpectedly
       logger.error('[IAP Hook] Restore error:', error);
@@ -307,6 +334,12 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
           message: error?.message || 'Unknown error',
         },
       });
+      return {
+        outcome: 'error',
+        foundPurchases: 0,
+        errorCode: error?.code || 'UNKNOWN',
+        message: error?.message || 'Unknown error',
+      };
     } finally {
       setPurchaseInProgress(false);
     }
@@ -355,6 +388,7 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
   const isLoadingProducts = managerState.isLoadingProducts;
   const productsLoadError = managerState.connectionStatus === 'connected' && managerState.products.length === 0 && managerState.lastError !== null;
   const lastError = managerState.lastError?.userMessage || null;
+  const lastErrorCode = managerState.lastError?.code || null;
   const pricesMissing = managerState.pricesMissing || false;
 
   return {
@@ -363,6 +397,7 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
     products: managerState.products,
     purchaseInProgress,
     lastError,
+    lastErrorCode,
     connectionStatus: managerState.connectionStatus,
     isProUnlocked,
     productsLoadError,

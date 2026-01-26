@@ -35,6 +35,7 @@ export type DiagnosticEventType =
   | 'restore_error'
   | 'restore_cancelled'
   | 'restore_none_found'
+  | 'restore_refresh_failed'
   | 'iap_manager_receipt_missing_transient'
   | 'iap_manager_purchase_token_missing_transient'
   | 'iap_manager_clearTransactionsIOS_executed'
@@ -95,13 +96,23 @@ export type DiagnosticEventType =
   | 'iap_manager_purchase_outcome_transient'
   | 'iap_manager_purchase_outcome_invalid'
   | 'iap_manager_purchase_outcome_error'
+  | 'iap_manager_capability_missing'
   | 'iap_manager_db_unlock_pending_transient'
   | 'iap_manager_prices_missing_terminal'
   | 'diagnostics_opened_hidden_gesture'
   | 'iap_prices_missing_terminal'
   | 'iap_price_from_micros_used'
   | 'iap_price_from_micros_missing_currency'
-  | 'iap_manager_listeners_unregistered';
+  | 'iap_manager_listeners_unregistered'
+  | 'iap_conversion_used'
+  | 'iap_conversion_failed'
+  | 'iap_support_signal'
+  | 'iap_stuck_marker_incremented'
+  | 'iap_stuck_marker_expired'
+  | 'iap_recover_now_attempted'
+  | 'iap_recover_now_no_pending'
+  | 'iap_recover_now_busy'
+  | 'iap_recover_now_error';
 
 export interface DiagnosticEvent {
   timestamp: string;
@@ -119,7 +130,6 @@ interface IAPDiagnosticsState {
   rawProductCount?: number;
   normalizedProductCount?: number;
   normalizedProductIds?: string[];
-  apiMode?: 'nitro' | 'none';
   firstRawKeys?: string[];
   pricesMissing?: boolean;
   lastError: {
@@ -155,6 +165,10 @@ interface IAPDiagnosticsState {
 
 const MAX_EVENTS = 200;
 const events: DiagnosticEvent[] = [];
+const SUPPORT_DIAGNOSTICS_KEY = 'iap_support_diagnostics_enabled';
+let supportDiagnosticsEnabled = false;
+let supportDiagnosticsLoaded = false;
+let lastSupportSignalAt = 0;
 
 let currentState: Partial<IAPDiagnosticsState> = {
   connectionStatus: 'disconnected',
@@ -200,6 +214,50 @@ export function diagEvent(
 
   // Update current state based on event type
   updateStateFromEvent(type, payload);
+}
+
+export async function getSupportDiagnosticsEnabled(): Promise<boolean> {
+  if (!supportDiagnosticsLoaded) {
+    try {
+      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      const raw = await AsyncStorage.getItem(SUPPORT_DIAGNOSTICS_KEY);
+      supportDiagnosticsEnabled = raw === 'true';
+    } catch {
+      supportDiagnosticsEnabled = false;
+    } finally {
+      supportDiagnosticsLoaded = true;
+    }
+  }
+  return supportDiagnosticsEnabled;
+}
+
+export async function setSupportDiagnosticsEnabled(enabled: boolean): Promise<void> {
+  supportDiagnosticsEnabled = enabled;
+  supportDiagnosticsLoaded = true;
+  try {
+    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+    await AsyncStorage.setItem(SUPPORT_DIAGNOSTICS_KEY, enabled ? 'true' : 'false');
+  } catch {
+    // Best effort only
+  }
+}
+
+export function logSupportDiagnosticsSignal(params: {
+  selectedMethods: { productFetch: string; purchase: string; restore: string };
+  missingSkus: string[];
+  lastSuccessfulStep: string;
+  lastErrorCode: string | null;
+}): void {
+  if (!supportDiagnosticsEnabled) return;
+  const now = Date.now();
+  if (now - lastSupportSignalAt < 60000) return;
+  lastSupportSignalAt = now;
+  diagEvent('iap_support_signal', {
+    selectedMethods: params.selectedMethods,
+    missingSkus: params.missingSkus,
+    lastSuccessfulStep: params.lastSuccessfulStep,
+    lastErrorCode: params.lastErrorCode || null,
+  });
 }
 
 /**

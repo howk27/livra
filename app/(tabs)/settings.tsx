@@ -25,7 +25,7 @@ import { colors } from '../../theme/colors';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { useEffectiveTheme, useUIStore } from '../../state/uiSlice';
 import { supabase } from '../../lib/supabase';
-import { useIAP } from '../../hooks/useIAP';
+import { useIapSubscriptions } from '../../hooks/useIapSubscriptions';
 import { useSync } from '../../hooks/useSync';
 import { useAuth } from '../../hooks/useAuth';
 import { generateAllCountersCSV } from '../../lib/csv';
@@ -50,7 +50,7 @@ export default function SettingsScreen() {
   const router = useRouter();
 
   const { themeMode, setThemeMode } = useUIStore();
-  const { isProUnlocked, restorePurchases, purchasing } = useIAP();
+  const { isProUnlocked, restorePurchases, purchaseInProgress } = useIapSubscriptions();
   const { sync, syncState } = useSync();
   const { counters } = useCounters();
   const { events } = useEventsStore();
@@ -71,7 +71,7 @@ export default function SettingsScreen() {
   const [showEmailInput, setShowEmailInput] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
-  const [restoreMessageType, setRestoreMessageType] = useState<'success' | 'error' | null>(null);
+  const [restoreMessageType, setRestoreMessageType] = useState<'success' | 'info' | 'error' | null>(null);
 
   // Hidden gesture for diagnostics (tap version 7 times within 1.5 seconds)
   const versionTapCount = useRef(0);
@@ -607,13 +607,26 @@ export default function SettingsScreen() {
     setRestoreMessageType(null);
 
     try {
-      await restorePurchases();
-      const isUnlocked = await checkProStatus();
-      if (isUnlocked) {
-        setRestoreMessage('Restored successfully.');
-        setRestoreMessageType('success');
-      } else {
+      const result = await restorePurchases();
+
+      if (result.outcome === 'cancelled') {
+        setRestoreMessage('Restore cancelled.');
+        setRestoreMessageType('info');
+      } else if (result.outcome === 'none_found') {
         setRestoreMessage('No active subscription found for this Apple ID.');
+        setRestoreMessageType('info');
+      } else if (result.outcome === 'success') {
+        if (result.dbConfirmed === false) {
+          setRestoreMessage('Restored. Entitlements syncing—try again in a moment.');
+          setRestoreMessageType('info');
+        } else {
+          const isUnlocked = await checkProStatus();
+          setRestoreMessage(isUnlocked ? 'Restored successfully.' : 'Restored. Entitlements syncing—try again in a moment.');
+          setRestoreMessageType(isUnlocked ? 'success' : 'info');
+        }
+      } else {
+        const userMessage = result.message || 'Restore failed. Please try again.';
+        setRestoreMessage(userMessage);
         setRestoreMessageType('error');
       }
       setTimeout(() => {
@@ -622,21 +635,7 @@ export default function SettingsScreen() {
       }, 5000);
     } catch (err: any) {
       logger.error('[Settings] Error in handleRestore:', err);
-      const errorMsg = err?.message || String(err);
-      const errorCode = err?.code || '';
-      let userMessage = 'Restore failed. Please try again.';
-      const isCancelled =
-        errorCode === 'USER_CANCELLED' ||
-        errorCode === 'E_USER_CANCELLED' ||
-        err?.cancelled === true ||
-        errorMsg.toLowerCase().includes('cancel') ||
-        errorMsg.toLowerCase().includes('request canceled');
-      if (errorMsg.includes('network') || errorMsg.includes('connection')) {
-        userMessage = 'Restore failed: Network error. Please check your connection.';
-      } else if (isCancelled) {
-        userMessage = 'Restore was cancelled.';
-      }
-      setRestoreMessage(userMessage);
+      setRestoreMessage('Restore failed. Please try again.');
       setRestoreMessageType('error');
       setTimeout(() => {
         setRestoreMessage(null);
@@ -1395,9 +1394,9 @@ export default function SettingsScreen() {
               <TouchableOpacity
                 style={[styles.button, { backgroundColor: themeColors.surface }]}
                 onPress={handleRestore}
-                disabled={purchasing}
+                disabled={purchaseInProgress}
               >
-                <AppText variant="button" style={[styles.buttonText, { color: themeColors.text, opacity: purchasing ? 0.5 : 1 }]}>
+                <AppText variant="button" style={[styles.buttonText, { color: themeColors.text, opacity: purchaseInProgress ? 0.5 : 1 }]}>
                   Restore Purchases
                 </AppText>
               </TouchableOpacity>
@@ -1409,11 +1408,15 @@ export default function SettingsScreen() {
                       backgroundColor:
                         restoreMessageType === 'success'
                           ? (themeColors.success || '#4CAF50') + '20'
-                          : (themeColors.error || '#F44336') + '20',
+                          : restoreMessageType === 'info'
+                            ? (themeColors.primary || '#007AFF') + '15'
+                            : (themeColors.error || '#F44336') + '20',
                       borderColor:
                         restoreMessageType === 'success'
                           ? (themeColors.success || '#4CAF50')
-                          : (themeColors.error || '#F44336'),
+                          : restoreMessageType === 'info'
+                            ? (themeColors.primary || '#007AFF')
+                            : (themeColors.error || '#F44336'),
                     },
                   ]}
                 >
@@ -1425,7 +1428,9 @@ export default function SettingsScreen() {
                         color:
                           restoreMessageType === 'success'
                             ? (themeColors.success || '#4CAF50')
-                            : (themeColors.error || '#F44336'),
+                            : restoreMessageType === 'info'
+                              ? (themeColors.primary || '#007AFF')
+                              : (themeColors.error || '#F44336'),
                       },
                     ]}
                   >

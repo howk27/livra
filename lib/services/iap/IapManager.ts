@@ -1,7 +1,7 @@
 /**
  * IAP Manager - SINGLE SOURCE OF TRUTH for react-native-iap
  * 
- * This is the ONLY file that directly imports react-native-iap.
+ * Capability-based adapter loads react-native-iap dynamically at runtime.
  * All other files must use IapManager, never import react-native-iap directly.
  * 
  * Responsibilities:
@@ -22,10 +22,8 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-// SINGLE IMPORT POINT for react-native-iap - handles all export shapes
-import * as RNIapModule from 'react-native-iap';
 import { logger } from '../../utils/logger';
-import { diagEvent, updateDiagnosticsState } from '../../debug/iapDiagnostics';
+import { diagEvent, logSupportDiagnosticsSignal, updateDiagnosticsState } from '../../debug/iapDiagnostics';
 import {
   SUBSCRIPTION_PRODUCT_IDS,
   MONTHLY_PRODUCT_ID,
@@ -38,13 +36,14 @@ import {
   unlockPro,
   getIAPErrorMessage,
 } from '../../iap/iap';
+import {
+  getCapabilityDiagnostics,
+  getRniapAdapter,
+  validateIapCapabilities,
+  type CapabilityDiagnostics,
+} from './rniapAdapter';
 
 const isExpoGo = Constants.appOwnership === 'expo';
-const isNative = Platform.OS !== 'web' && !isExpoGo;
-
-// ============================================================================
-// ROBUST MODULE LOADER - Handles all ESM/CJS/NewArch export shapes
-// ============================================================================
 
 /**
  * Detect if running under New Architecture (bridgeless mode)
@@ -58,117 +57,25 @@ function detectNewArchitecture(): boolean {
   );
 }
 
-/**
- * Robust module loader that handles all export shapes:
- * - CommonJS require shape
- * - ESM namespace shape  
- * - default export shape (module.default)
- * - New Architecture compatibility
- * 
- * This function resolves the actual module object regardless of how
- * react-native-iap exports its functions in the current build environment.
- */
-function loadRNIapModule(): any {
-  if (!isNative) {
-    return null;
-  }
-
-  // Try the namespace import first (most common in ESM)
-  let mod = RNIapModule;
-
-  // Check if we need to access via .default (ESM interop)
-  if (mod && (mod as any).default && typeof (mod as any).default === 'object') {
-    // Try default export
-    const defaultMod = (mod as any).default;
-    if (defaultMod && typeof defaultMod.initConnection === 'function') {
-      mod = defaultMod;
-    }
-  }
-
-  return mod;
-}
-
-/**
- * Resolve a function from the module, trying multiple paths
- */
-function resolveFunction(module: any, functionName: string): any {
-  if (!module) return undefined;
-
-  // Try direct access
-  let fn = module[functionName];
-  if (typeof fn === 'function') return fn;
-
-  // Try via default export
-  if ((module as any).default) {
-    fn = (module as any).default[functionName];
-    if (typeof fn === 'function') return fn;
-  }
-
-  // Return undefined if not found or not a function
-  return undefined;
-}
-
-// Load the module once
-const rnIapModule = loadRNIapModule();
 const isNewArch = detectNewArchitecture();
 
-/**
- * Detect if Nitro API is available at runtime (Nitro-only, no legacy fallback)
- */
-function detectApiMode(): 'nitro' | 'none' {
-  if (!isNative || !rnIapModule) {
-    return 'none';
-  }
+// Track if convertNitroProductToProduct was actually used (for diagnostics)
+let conversionUsed = false;
 
-  // Check for Nitro API only
-  const hasNitro = 
-    typeof resolveFunction(rnIapModule, 'fetchProducts') === 'function' &&
-    typeof resolveFunction(rnIapModule, 'requestPurchase') === 'function';
+const PROCESSED_INDEX_KEY = 'iap_processed_index';
+const PROCESSED_MAX = 50;
+const PENDING_TX_KEY = 'iap_pending_tx';
+const STUCK_MARKER_KEY = 'iap_stuck_purchase_marker';
 
-  return hasNitro ? 'nitro' : 'none';
+function isMissingFunctionError(error: any): boolean {
+  const message = String(error?.message || '').toLowerCase();
+  return (
+    message.includes('is not a function') ||
+    message.includes('undefined is not a function') ||
+    message.includes('not available') ||
+    message.includes('not implemented')
+  );
 }
-
-/**
- * Resolve IAP API - Nitro-only implementation
- */
-function resolveIapApi(mode: 'nitro' | 'none') {
-  if (!isNative || !rnIapModule || mode === 'none') {
-    return {
-      initConnection: async () => {},
-      endConnection: async () => {},
-      fetchProducts: async () => [],
-      requestPurchase: async () => null,
-      getAvailablePurchases: async () => [],
-      restorePurchases: async () => {},
-      finishTransaction: async () => {},
-      purchaseUpdatedListener: () => ({ remove: () => {} }),
-      purchaseErrorListener: () => ({ remove: () => {} }),
-      getReceiptIOS: async () => undefined,
-      clearTransactionIOS: async () => {},
-      convertNitroProductToProduct: undefined,
-    };
-  }
-
-  // Resolve Nitro API functions only
-  return {
-    initConnection: resolveFunction(rnIapModule, 'initConnection'),
-    endConnection: resolveFunction(rnIapModule, 'endConnection'),
-    finishTransaction: resolveFunction(rnIapModule, 'finishTransaction'),
-    purchaseUpdatedListener: resolveFunction(rnIapModule, 'purchaseUpdatedListener'),
-    purchaseErrorListener: resolveFunction(rnIapModule, 'purchaseErrorListener'),
-    getAvailablePurchases: resolveFunction(rnIapModule, 'getAvailablePurchases'),
-    restorePurchases: resolveFunction(rnIapModule, 'restorePurchases'),
-    getReceiptIOS: resolveFunction(rnIapModule, 'getReceiptIOS'),
-    clearTransactionIOS: resolveFunction(rnIapModule, 'clearTransactionIOS'),
-    fetchProducts: resolveFunction(rnIapModule, 'fetchProducts'),
-    requestPurchase: resolveFunction(rnIapModule, 'requestPurchase'),
-    convertNitroProductToProduct: resolveFunction(rnIapModule, 'convertNitroProductToProduct'),
-  };
-}
-
-// Detect API mode and create adapter
-const detectedApiMode = detectApiMode();
-const IAPAdapter = resolveIapApi(detectedApiMode);
 
 /**
  * Extract product ID from raw product object (Nitro API)
@@ -179,10 +86,12 @@ function getProductId(raw: any): string | null {
     return null;
   }
 
+  const { functions } = getRniapAdapter();
+
   // Try Nitro conversion helper first (most reliable)
-  if (typeof IAPAdapter.convertNitroProductToProduct === 'function') {
+  if (typeof functions.convertNitroProductToProduct === 'function') {
     try {
-      const converted = IAPAdapter.convertNitroProductToProduct(raw);
+      const converted = functions.convertNitroProductToProduct(raw);
       if (converted && converted.id && typeof converted.id === 'string' && converted.id.trim()) {
         return converted.id.trim();
       }
@@ -228,7 +137,15 @@ function formatPriceFromMicros(micros: number | string, currencyCode?: string): 
   let localizedPrice = price;
   if (currencyCode && currencyCode.trim() !== '') {
     const code = currencyCode.toUpperCase().trim();
-    if (code === 'USD' || code === 'CAD' || code === 'AUD') {
+    const numericPrice = parseFloat(price);
+    const canUseIntl = typeof Intl !== 'undefined' && typeof Intl.NumberFormat === 'function';
+    if (canUseIntl && /^[A-Z]{3}$/.test(code) && !isNaN(numericPrice)) {
+      try {
+        localizedPrice = new Intl.NumberFormat(undefined, { style: 'currency', currency: code }).format(numericPrice);
+      } catch {
+        localizedPrice = `${code} ${price}`;
+      }
+    } else if (code === 'USD' || code === 'CAD' || code === 'AUD') {
       localizedPrice = `$${price}`;
     } else if (code === 'EUR') {
       localizedPrice = `€${price}`;
@@ -252,13 +169,27 @@ function normalizeProduct(raw: any): IAPProduct | null {
     return null;
   }
 
+  const { functions } = getRniapAdapter();
+
   // Try to get converted product for better field access
   let converted: any = null;
-  if (typeof IAPAdapter.convertNitroProductToProduct === 'function') {
+  if (typeof functions.convertNitroProductToProduct === 'function') {
     try {
-      converted = IAPAdapter.convertNitroProductToProduct(raw);
+      converted = functions.convertNitroProductToProduct(raw);
+      // Track conversion usage (one-time diagnostic event)
+      if (!conversionUsed) {
+        conversionUsed = true;
+        diagEvent('iap_conversion_used', {
+          hadConversion: true,
+          conversionSucceeded: !!converted,
+        });
+      }
     } catch (e) {
       // Conversion failed, use raw object
+      diagEvent('iap_conversion_failed', {
+        hadConversion: true,
+        error: String(e).substring(0, 100),
+      });
     }
   }
 
@@ -437,9 +368,18 @@ function normalizeProduct(raw: any): IAPProduct | null {
     // Try to construct from numeric price + currency
     const numericPrice = price ? parseFloat(String(price).replace(/[^0-9.]/g, '')) : null;
     if (numericPrice && !isNaN(numericPrice) && currency && currency.trim() !== '') {
-      // Format based on currency code
+      // Format based on currency code, prefer Intl when available
       const currencyCode = currency.toUpperCase();
-      if (currencyCode === 'USD' || currencyCode === 'CAD' || currencyCode === 'AUD') {
+      const canUseIntl = typeof Intl !== 'undefined' && typeof Intl.NumberFormat === 'function';
+      if (canUseIntl && /^[A-Z]{3}$/.test(currencyCode)) {
+        try {
+          finalLocalizedPrice = new Intl.NumberFormat(undefined, { style: 'currency', currency: currencyCode }).format(numericPrice);
+          priceFieldUsed = 'formatted_from_price_currency_intl';
+        } catch {
+          finalLocalizedPrice = `${currencyCode} ${numericPrice.toFixed(2)}`;
+          priceFieldUsed = 'formatted_from_price_currency';
+        }
+      } else if (currencyCode === 'USD' || currencyCode === 'CAD' || currencyCode === 'AUD') {
         finalLocalizedPrice = `$${numericPrice.toFixed(2)}`;
         priceFieldUsed = 'formatted_from_price_currency';
       } else if (currencyCode === 'EUR') {
@@ -477,177 +417,6 @@ function normalizeProduct(raw: any): IAPProduct | null {
     type: (SUBSCRIPTION_PRODUCT_IDS as readonly string[]).includes(productId) ? 'subscription' : 'iap',
   };
 }
-
-/**
- * Get API diagnostics - Nitro-only
- */
-function getApiDiagnostics(): {
-  apiMode: 'nitro' | 'none';
-  exportTypes: Record<string, string>;
-  moduleKeys: string[];
-  requiredExportsPresent: boolean;
-} {
-  if (!isNative || !rnIapModule) {
-    return {
-      apiMode: 'none',
-      exportTypes: {},
-      moduleKeys: [],
-      requiredExportsPresent: false,
-    };
-  }
-
-  const apiMode = detectedApiMode;
-
-  // Required Nitro functions only
-  const required = [
-    'initConnection',
-    'endConnection',
-    'fetchProducts',
-    'requestPurchase',
-    'finishTransaction',
-    'purchaseUpdatedListener',
-    'purchaseErrorListener',
-  ];
-
-  // Build export types for Nitro API only
-  const exportTypes: Record<string, string> = {
-    initConnection: typeof IAPAdapter.initConnection,
-    endConnection: typeof IAPAdapter.endConnection,
-    finishTransaction: typeof IAPAdapter.finishTransaction,
-    purchaseUpdatedListener: typeof IAPAdapter.purchaseUpdatedListener,
-    purchaseErrorListener: typeof IAPAdapter.purchaseErrorListener,
-    getAvailablePurchases: typeof IAPAdapter.getAvailablePurchases,
-    restorePurchases: typeof IAPAdapter.restorePurchases,
-    getReceiptIOS: typeof IAPAdapter.getReceiptIOS,
-    clearTransactionIOS: typeof IAPAdapter.clearTransactionIOS,
-    fetchProducts: typeof IAPAdapter.fetchProducts,
-    requestPurchase: typeof IAPAdapter.requestPurchase,
-    convertNitroProductToProduct: typeof IAPAdapter.convertNitroProductToProduct,
-  };
-
-  // Check if all required Nitro exports are present
-  const requiredExportsPresent = required.every(
-    key => typeof (IAPAdapter as any)[key] === 'function'
-  );
-
-  const moduleKeys = rnIapModule ? Object.keys(rnIapModule).slice(0, 25) : [];
-
-  return {
-    apiMode,
-    exportTypes,
-    moduleKeys,
-    requiredExportsPresent,
-  };
-}
-
-/**
- * Validate IAP exports - Nitro-only validation
- * @throws Error with code 'IAP_EXPORT_MISMATCH' if validation fails
- */
-function validateIapExports(): void {
-  if (!isNative) {
-    logger.log('[IAP Manager] Skipping export validation (web/Expo Go)');
-    diagEvent('iap_adapter_validated', {
-      apiMode: detectedApiMode,
-      requiredExportsPresent: true,
-      missing: [],
-      invalid: [],
-      isValid: true,
-    });
-    return;
-  }
-
-  const diagnostics = getApiDiagnostics();
-  const { apiMode, exportTypes, requiredExportsPresent } = diagnostics;
-
-  // Required Nitro functions only
-  const required = [
-    'initConnection',
-    'endConnection',
-    'fetchProducts',
-    'requestPurchase',
-    'finishTransaction',
-    'purchaseUpdatedListener',
-    'purchaseErrorListener',
-  ];
-
-  const missing: string[] = [];
-  const invalid: string[] = [];
-
-  // Validate required Nitro functions
-  for (const key of required) {
-    const value = (IAPAdapter as any)[key];
-    const valueType = typeof value;
-    
-    if (value === undefined) {
-      missing.push(key);
-    } else if (valueType !== 'function') {
-      invalid.push(`${key} (type: ${valueType})`);
-    }
-  }
-
-  const isValid = apiMode === 'nitro' && missing.length === 0 && invalid.length === 0;
-
-  // Detect export shape for diagnostics
-  let detectedShape = 'unknown';
-  if (rnIapModule) {
-    if ((rnIapModule as any).default && typeof (rnIapModule as any).default === 'object') {
-      detectedShape = 'default-export';
-    } else if (typeof (rnIapModule as any).initConnection === 'function') {
-      detectedShape = 'namespace';
-    } else {
-      detectedShape = 'unresolved';
-    }
-  }
-
-  // Log detailed diagnostics
-  diagEvent('iap_adapter_validated', {
-    apiMode,
-    detectedShape,
-    missing,
-    invalid,
-    isValid,
-    requiredExportsPresent,
-    exportTypes,
-    isNewArch,
-    moduleKeys: diagnostics.moduleKeys,
-  });
-
-  if (!isValid) {
-    const errorMsg = `IAP_EXPORT_MISMATCH: Missing required functions for Nitro API (fetchProducts/requestPurchase): ${missing.join(', ')}${invalid.length > 0 ? `, invalid types: ${invalid.join(', ')}` : ''}`;
-    
-    logger.error('[IAP Manager] Export validation failed', {
-      apiMode,
-      missing,
-      invalid,
-      exportTypes,
-      isNewArch,
-      detectedShape,
-      moduleKeys: diagnostics.moduleKeys,
-      platform: Platform.OS,
-      bundleId: Constants.expoConfig?.ios?.bundleIdentifier,
-    });
-
-    const error: any = new Error(errorMsg);
-    error.code = 'IAP_EXPORT_MISMATCH';
-    error.apiMode = apiMode;
-    error.missing = missing;
-    error.invalid = invalid;
-    error.exportTypes = exportTypes;
-    error.isNewArch = isNewArch;
-    throw error;
-  }
-
-  logger.log('[IAP Manager] Export validation passed (Nitro API)', {
-    apiMode,
-    exportTypes,
-    detectedShape,
-    isNewArch,
-    platform: Platform.OS,
-    bundleId: Constants.expoConfig?.ios?.bundleIdentifier,
-  });
-}
-
 
 // ============================================================================
 // IAP MANAGER CLASS
@@ -691,6 +460,46 @@ class IapManagerClass {
   private purchaseInProgress = false; // Single-flight guard to prevent repeated purchase attempts
   private pendingPurchase: { sku: string; startedAt: number } | null = null; // Track pending purchase for timeout
   private purchaseTimeoutId: ReturnType<typeof setTimeout> | null = null; // Timeout to clear stuck purchases
+  private lastProductFetchMethod: string | null = null;
+  private lastPurchaseMethod: string | null = null;
+  private lastRestoreMethod: string | null = null;
+  private recoveryInProgress = false;
+  private async loadStuckMarker(): Promise<{ count: number; firstSeen: string; lastSeen: string } | null> {
+    try {
+      const raw = await AsyncStorage.getItem(STUCK_MARKER_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed.count !== 'number' || !parsed.firstSeen || !parsed.lastSeen) {
+        return null;
+      }
+      return parsed;
+    } catch {
+      return null;
+    }
+  }
+
+  private async incrementStuckMarker(reason: string, transactionId?: string, productId?: string): Promise<void> {
+    const now = new Date().toISOString();
+    const existing = await this.loadStuckMarker();
+    const next = {
+      count: (existing?.count || 0) + 1,
+      firstSeen: existing?.firstSeen || now,
+      lastSeen: now,
+    };
+    await AsyncStorage.setItem(STUCK_MARKER_KEY, JSON.stringify(next));
+    diagEvent('iap_stuck_marker_incremented', {
+      reason,
+      count: next.count,
+      firstSeen: next.firstSeen,
+      lastSeen: next.lastSeen,
+      transactionId,
+      productId,
+    });
+  }
+
+  private async clearStuckMarker(): Promise<void> {
+    await AsyncStorage.removeItem(STUCK_MARKER_KEY);
+  }
 
   /**
    * Subscribe to state changes
@@ -724,6 +533,179 @@ class IapManagerClass {
    */
   getState(): IapManagerState {
     return { ...this.state };
+  }
+
+  private getAdapterOrThrow(context: string) {
+    try {
+      validateIapCapabilities();
+      return getRniapAdapter();
+    } catch (error: any) {
+      const normalizedError = {
+        code: error?.code || 'IAP_CAPABILITY_MISSING',
+        message: error?.message || 'IAP capabilities missing',
+        userMessage: 'Purchases unavailable due to a configuration error. Please contact support.',
+      };
+
+      this.setState({
+        connectionStatus: 'error',
+        lastError: normalizedError,
+      });
+
+      updateDiagnosticsState({
+        connectionStatus: 'error',
+        lastError: normalizedError,
+      });
+
+      diagEvent('iap_manager_capability_missing', {
+        context,
+        missing: error?.missing || [],
+        capabilities: error?.capabilities || {},
+        moduleKeys: error?.moduleKeys || [],
+      });
+
+      throw error;
+    }
+  }
+
+  private getTransactionKey(purchase: any): string | null {
+    if (!purchase || typeof purchase !== 'object') return null;
+
+    if (Platform.OS === 'android') {
+      const token = purchase.purchaseToken || purchase.token || null;
+      return token ? `android:${String(token)}` : null;
+    }
+
+    const tx =
+      purchase.transactionId ||
+      purchase.transactionIdentifier ||
+      purchase.originalTransactionIdentifier ||
+      null;
+    return tx ? `ios:${String(tx)}` : null;
+  }
+
+  private async loadProcessedIndex(): Promise<string[]> {
+    try {
+      const raw = await AsyncStorage.getItem(PROCESSED_INDEX_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private async saveProcessedIndex(keys: string[]): Promise<void> {
+    await AsyncStorage.setItem(PROCESSED_INDEX_KEY, JSON.stringify(keys));
+  }
+
+  private async isProcessed(key: string): Promise<boolean> {
+    const keys = await this.loadProcessedIndex();
+    return keys.includes(key);
+  }
+
+  private async markProcessed(key: string): Promise<void> {
+    const keys = await this.loadProcessedIndex();
+    const next = [key, ...keys.filter(k => k !== key)].slice(0, PROCESSED_MAX);
+    await AsyncStorage.setItem(`iap_processed:${key}`, String(Date.now()));
+    await this.saveProcessedIndex(next);
+
+    const removed = keys.filter(k => !next.includes(k));
+    for (const removedKey of removed) {
+      await AsyncStorage.removeItem(`iap_processed:${removedKey}`);
+    }
+  }
+
+  private async clearPendingTransaction(): Promise<void> {
+    await AsyncStorage.removeItem(PENDING_TX_KEY);
+  }
+
+  private async persistPendingTransaction(purchase: any, reason: string): Promise<void> {
+    const key = this.getTransactionKey(purchase);
+    if (!key) return;
+
+    let pending: any = null;
+    try {
+      const raw = await AsyncStorage.getItem(PENDING_TX_KEY);
+      pending = raw ? JSON.parse(raw) : null;
+    } catch {
+      pending = null;
+    }
+
+    const next = {
+      key,
+      platform: Platform.OS,
+      productId: purchase?.productId || purchase?.productIdentifier || purchase?.product_id || purchase?.sku || null,
+      transactionId: purchase?.transactionId || purchase?.transactionIdentifier || purchase?.originalTransactionIdentifier || null,
+      purchaseToken: purchase?.purchaseToken || null,
+      createdAt: pending?.createdAt || Date.now(),
+      retryCount: typeof pending?.retryCount === 'number' ? pending.retryCount + 1 : 0,
+      reason,
+    };
+
+    await AsyncStorage.setItem(PENDING_TX_KEY, JSON.stringify(next));
+  }
+
+  private async recoverPendingTransactionOnce(): Promise<void> {
+    try {
+      const raw = await AsyncStorage.getItem(PENDING_TX_KEY);
+      if (!raw) return;
+      const pending = JSON.parse(raw);
+      if (!pending || !pending.key) return;
+      if (pending.retryCount >= 3) return;
+      if (Date.now() - (pending.createdAt || 0) < 3000) return;
+
+      const { functions } = getRniapAdapter();
+      if (typeof functions.getAvailablePurchases !== 'function') return;
+
+      const purchases: any[] = await functions.getAvailablePurchases();
+      const match = purchases.find((p: any) => {
+        const key = this.getTransactionKey(p);
+        if (pending.key && key === pending.key) return true;
+        if (pending.purchaseToken && p?.purchaseToken === pending.purchaseToken) return true;
+        if (pending.transactionId && (p?.transactionId === pending.transactionId || p?.transactionIdentifier === pending.transactionId)) return true;
+        if (pending.productId && (p?.productId === pending.productId || p?.productIdentifier === pending.productId)) return true;
+        return false;
+      });
+
+      if (!match) {
+        const next = { ...pending, retryCount: pending.retryCount + 1 };
+        await AsyncStorage.setItem(PENDING_TX_KEY, JSON.stringify(next));
+        return;
+      }
+
+      try {
+        await this.handlePurchaseUpdate(match);
+        await this.clearPendingTransaction();
+      } catch (error: any) {
+        const isTransient =
+          error?.code === 'TRANSIENT_DB_PENDING' ||
+          error?.code === 'TRANSIENT_RECEIPT_MISSING' ||
+          error?.code === 'TRANSIENT_VERIFICATION_PENDING' ||
+          error?.code === 'TRANSIENT_PURCHASE_TOKEN_MISSING';
+
+        if (isTransient) {
+          const next = { ...pending, retryCount: pending.retryCount + 1 };
+          await AsyncStorage.setItem(PENDING_TX_KEY, JSON.stringify(next));
+          return;
+        }
+
+        await this.markProcessed(pending.key);
+        await this.clearPendingTransaction();
+      }
+    } catch (error) {
+      logger.warn('[IAP Manager] Pending transaction recovery failed', error);
+    }
+  }
+
+  private async hasPendingTransaction(): Promise<boolean> {
+    try {
+      const raw = await AsyncStorage.getItem(PENDING_TX_KEY);
+      if (!raw) return false;
+      const parsed = JSON.parse(raw);
+      return !!parsed?.key;
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -771,29 +753,64 @@ class IapManagerClass {
   private async _doInitialize(): Promise<void> {
     const initStart = Date.now();
     try {
-      // Step 1: Validate Nitro exports are valid
+      // Step 1: Validate minimum viable IAP capabilities with fallback retry
+      let validationPassed = false;
+      let validationError: any = null;
+      let capabilityDiagnostics: CapabilityDiagnostics | null = null;
+
       try {
-        validateIapExports();
+        capabilityDiagnostics = validateIapCapabilities();
         this.exportMismatchDetected = false;
-      } catch (validationError: any) {
-        // Export mismatch detected - stop initialization and set error state
+        validationPassed = true;
+      } catch (error: any) {
+        validationError = error;
+
+        // Fallback: Retry after short delay to allow module to finish loading
+        if (error?.code === 'IAP_CAPABILITY_MISSING') {
+          logger.warn('[IAP Manager] Capability validation failed - retrying after delay', {
+            missing: error?.missing || [],
+            capabilities: error?.capabilities || {},
+            moduleKeys: error?.moduleKeys || [],
+          });
+
+          await new Promise(resolve => setTimeout(resolve, 100));
+
+          try {
+            capabilityDiagnostics = validateIapCapabilities();
+            this.exportMismatchDetected = false;
+            validationPassed = true;
+            logger.log('[IAP Manager] Capability validation passed on retry');
+          } catch (retryError: any) {
+            validationError = retryError;
+          }
+        }
+      }
+
+      if (!validationPassed) {
+        // Minimum capabilities missing - stop initialization and set error state
         this.exportMismatchDetected = true;
-        const errorMsg = validationError?.message || 'IAP exports validation failed';
+        const errorMsg = validationError?.message || 'IAP capabilities validation failed';
         const normalizedError = {
-          code: validationError?.code || 'IAP_EXPORT_MISMATCH',
+          code: validationError?.code || 'IAP_CAPABILITY_MISSING',
           message: errorMsg,
           userMessage: 'Purchases unavailable due to a configuration error. Please contact support.',
         };
 
-        logger.error('[IAP Manager] Export validation failed - stopping initialization', {
+        logger.error('[IAP Manager] Capability validation failed - stopping initialization', {
           error: validationError,
           code: validationError?.code,
           message: errorMsg,
           missing: validationError?.missing || [],
-          detectedShape: validationError?.detectedShape,
+          capabilities: validationError?.capabilities || {},
+          moduleKeys: validationError?.moduleKeys || [],
         });
 
-        this.terminalError = true; // Mark as terminal error
+        // Only mark as terminal if NO viable product fetch or purchase capability exists
+        const capabilitySnapshot = getCapabilityDiagnostics();
+        if (!capabilitySnapshot.requiredCapabilitiesPresent) {
+          this.terminalError = true;
+        }
+        
         this.setState({
           connectionStatus: 'error',
           isInitialized: true, // Mark as initialized to prevent retry loops
@@ -810,8 +827,10 @@ class IapManagerClass {
           error: normalizedError,
           bundleId: Constants.expoConfig?.ios?.bundleIdentifier,
           isNewArch,
-          terminal: true,
-          apiMode: detectedApiMode,
+          terminal: this.terminalError,
+          missing: validationError?.missing || [],
+          capabilities: validationError?.capabilities || {},
+          moduleKeys: validationError?.moduleKeys || [],
         }, initDuration);
 
         // DO NOT throw - just set error state and return
@@ -825,28 +844,44 @@ class IapManagerClass {
       diagEvent('iap_manager_init_start', {
         bundleId: Constants.expoConfig?.ios?.bundleIdentifier,
         platform: Platform.OS,
-        apiMode: detectedApiMode,
+        capabilities: capabilityDiagnostics?.capabilities || {},
+        selectedMethods: capabilityDiagnostics?.selectedMethods || {},
+        moduleKeys: capabilityDiagnostics?.moduleKeys || [],
       });
 
       // Step 2: Initialize connection
-      await IAPAdapter.initConnection();
+      const { functions } = getRniapAdapter();
+      if (typeof functions.initConnection === 'function') {
+        await functions.initConnection();
+      }
 
       // Small delay to allow StoreKit to sync
       await new Promise(resolve => setTimeout(resolve, 500));
 
       // Step 3: Clear pending transactions on iOS (if function exists and is callable)
       // 4C: Gate clearTransactionIOS - only run in dev or if stuck purchase marker exists
-      const shouldClearTransactions = __DEV__ || await AsyncStorage.getItem('iap_stuck_purchase_marker');
-      if (Platform.OS === 'ios' && shouldClearTransactions && IAPAdapter.clearTransactionIOS && typeof IAPAdapter.clearTransactionIOS === 'function') {
+      const marker = await this.loadStuckMarker();
+      const firstSeenMs = marker?.firstSeen ? new Date(marker.firstSeen).getTime() : 0;
+      const markerAgeMs = firstSeenMs ? Date.now() - firstSeenMs : 0;
+      const markerEligible = !!marker && marker.count <= 3 && markerAgeMs <= 7 * 24 * 60 * 60 * 1000;
+      const shouldClearTransactions = __DEV__ || markerEligible;
+      if (marker && !markerEligible && !__DEV__) {
+        diagEvent('iap_stuck_marker_expired', {
+          count: marker.count,
+          firstSeen: marker.firstSeen,
+          lastSeen: marker.lastSeen,
+        });
+      }
+      if (Platform.OS === 'ios' && shouldClearTransactions && typeof functions.clearTransactionIOS === 'function') {
         try {
-          await IAPAdapter.clearTransactionIOS();
+          await functions.clearTransactionIOS();
           logger.log('[IAP Manager] Cleared pending iOS transactions');
           diagEvent('iap_manager_clearTransactionsIOS_executed', {
             reason: __DEV__ ? 'dev_mode' : 'stuck_purchase_marker',
           });
           // Clear marker after successful clear
           if (!__DEV__) {
-            await AsyncStorage.removeItem('iap_stuck_purchase_marker');
+            await this.clearStuckMarker();
           }
         } catch (clearError: any) {
           logger.warn('[IAP Manager] Could not clear pending transactions (non-critical):', clearError);
@@ -871,7 +906,8 @@ class IapManagerClass {
         bundleId: Constants.expoConfig?.ios?.bundleIdentifier,
         platform: Platform.OS,
         step: 'initConnection_ok',
-        apiMode: detectedApiMode,
+        capabilities: capabilityDiagnostics?.capabilities || {},
+        selectedMethods: capabilityDiagnostics?.selectedMethods || {},
       }, initDuration);
 
       logger.log('[IAP Manager] Initialization successful', {
@@ -882,6 +918,9 @@ class IapManagerClass {
       // Step 4: Register listeners (exactly once)
       this.registerListeners();
       diagEvent('iap_manager_step', { step: 'listeners_ok' });
+
+      // Step 4b: Attempt single recovery pass for pending transactions
+      await this.recoverPendingTransactionOnce();
 
       // Step 5: Check current premium status
       const isUnlocked = await checkProStatus();
@@ -934,23 +973,38 @@ class IapManagerClass {
     }
 
     try {
-      this.purchaseUpdateSubscription = IAPAdapter.purchaseUpdatedListener(
-        async (purchase: any) => {
-          await this.handlePurchaseUpdate(purchase);
-        }
-      );
+      const { functions } = this.getAdapterOrThrow('registerListeners');
+      if (typeof functions.purchaseUpdatedListener === 'function') {
+        this.purchaseUpdateSubscription = functions.purchaseUpdatedListener(
+          async (purchase: any) => {
+            await this.handlePurchaseUpdate(purchase);
+          }
+        );
+      }
 
-      this.purchaseErrorSubscription = IAPAdapter.purchaseErrorListener(
-        (error: any) => {
-          this.handlePurchaseError(error);
-        }
-      );
+      if (typeof functions.purchaseErrorListener === 'function') {
+        this.purchaseErrorSubscription = functions.purchaseErrorListener(
+          (error: any) => {
+            this.handlePurchaseError(error);
+          }
+        );
+      }
 
-      this.setState({ listenersRegistered: true });
-      updateDiagnosticsState({ iapListenersActive: true });
-      diagEvent('iap_manager_listeners_registered', {
-        step: 'listeners_ok',
-      });
+      const listenersRegistered =
+        typeof functions.purchaseUpdatedListener === 'function' &&
+        typeof functions.purchaseErrorListener === 'function';
+
+      this.setState({ listenersRegistered });
+      updateDiagnosticsState({ iapListenersActive: listenersRegistered });
+      if (listenersRegistered) {
+        diagEvent('iap_manager_listeners_registered', {
+          step: 'listeners_ok',
+        });
+      } else {
+        diagEvent('iap_manager_listeners_error', {
+          error: 'Listeners unavailable',
+        });
+      }
 
       logger.log('[IAP Manager] Purchase listeners registered');
     } catch (error: any) {
@@ -967,6 +1021,12 @@ class IapManagerClass {
     let transactionFinished = false;
     let finishAttempted = false;
     const transactionId = (purchase as any).transactionId || (purchase as any).transactionIdentifier;
+    let functions = getRniapAdapter().functions;
+    try {
+      functions = this.getAdapterOrThrow('handlePurchaseUpdate').functions;
+    } catch {
+      // Fall back to best-effort snapshot for cleanup paths.
+    }
     
     // TASK B2: Safely extract productId - do NOT assume purchase.productId exists
     // Try multiple possible fields in order of likelihood
@@ -988,7 +1048,11 @@ class IapManagerClass {
       diagEvent('iap_manager_finishTransaction_attempted', { reason, transactionId, productId });
 
       try {
-        await IAPAdapter.finishTransaction({ purchase, isConsumable: false });
+        if (typeof functions.finishTransaction === 'function') {
+          await functions.finishTransaction({ purchase, isConsumable: false });
+        } else {
+          throw new Error('finishTransaction not available');
+        }
         transactionFinished = true;
         diagEvent('iap_manager_finishTransaction_success', { reason, transactionId, productId });
         logger.log('[IAP Manager] Transaction finished', {
@@ -1008,7 +1072,7 @@ class IapManagerClass {
 
         // Set recovery marker ONLY on finishTransaction failure
         try {
-          await AsyncStorage.setItem('iap_stuck_purchase_marker', 'true');
+          await this.incrementStuckMarker('finishTransaction_failed', transactionId, productId);
           logger.log('[IAP Manager] Set recovery marker for stuck transaction', {
             transactionId,
             productId,
@@ -1020,6 +1084,14 @@ class IapManagerClass {
         }
       }
     };
+
+    const transactionKey = this.getTransactionKey(purchase);
+    if (transactionKey && await this.isProcessed(transactionKey)) {
+      await attemptFinishTransaction('already_processed');
+      await this.clearPendingTransaction();
+      this.clearPurchaseGuard('updated');
+      return;
+    }
     
     if (!productId) {
       logger.error('[IAP Manager] Cannot extract productId from purchase', {
@@ -1058,7 +1130,9 @@ class IapManagerClass {
       if (Platform.OS === 'ios') {
         // iOS: require receipt
         try {
-          receipt = await IAPAdapter.getReceiptIOS();
+          if (typeof functions.getReceiptIOS === 'function') {
+            receipt = await functions.getReceiptIOS();
+          }
           if (receipt) {
             diagEvent('iap_manager_receipt_retrieved', {
               receipt_length: receipt.length,
@@ -1189,6 +1263,10 @@ class IapManagerClass {
         });
         // Still finish transaction to prevent retry loops, but don't unlock
         await attemptFinishTransaction('post_validation_invalid');
+        if (transactionKey) {
+          await this.markProcessed(transactionKey);
+          await this.clearPendingTransaction();
+        }
         
         // Emit outcome event
         diagEvent('iap_manager_purchase_outcome_invalid', {
@@ -1228,11 +1306,16 @@ class IapManagerClass {
         
         const verificationPendingError: any = new Error('Purchase is being verified. Please try again in a moment.');
         verificationPendingError.code = 'TRANSIENT_VERIFICATION_PENDING';
+        await this.persistPendingTransaction(purchase, verificationPendingError.code);
         throw verificationPendingError;
       }
 
       // CRITICAL: Finish transaction AFTER validation and unlock (required by Apple)
       await attemptFinishTransaction('post_validation_success');
+      if (transactionKey) {
+        await this.markProcessed(transactionKey);
+        await this.clearPendingTransaction();
+      }
 
       // Emit success outcome event after transaction finished
       diagEvent('iap_manager_purchase_outcome_success', {
@@ -1253,6 +1336,7 @@ class IapManagerClass {
       const isTransient = 
         error?.code === 'TRANSIENT_DB_PENDING' ||
         error?.code === 'TRANSIENT_RECEIPT_MISSING' ||
+        error?.code === 'TRANSIENT_PURCHASE_TOKEN_MISSING' ||
         error?.code === 'TRANSIENT_VERIFICATION_PENDING' ||
         error?.message?.includes('Purchase is being verified') ||
         error?.message?.includes('Purchase receipt is being retrieved');
@@ -1267,10 +1351,15 @@ class IapManagerClass {
           finishAttempted,
           transactionFinished: false,
         });
+        await this.persistPendingTransaction(purchase, error?.code || 'transient_error');
       } else {
         // Non-transient error - try to finish transaction best-effort, emit outcome_error
         if (!transactionFinished && shouldFinishTransactionOnError && !finishAttempted) {
           await attemptFinishTransaction('error_cleanup');
+        }
+        if (transactionKey) {
+          await this.markProcessed(transactionKey);
+          await this.clearPendingTransaction();
         }
 
         diagEvent('iap_manager_purchase_outcome_error', {
@@ -1408,18 +1497,109 @@ class IapManagerClass {
         bundleId: Constants.expoConfig?.ios?.bundleIdentifier,
       });
 
-      // Load products using Nitro API
-      if (detectedApiMode !== 'nitro') {
-        throw new Error('Nitro API is required but not available');
+      let snap = this.getAdapterOrThrow('loadProducts');
+      let refreshed = false;
+      let { functions, selectedMethods, moduleKeys } = snap;
+      const fetchOrder: Array<'fetchProducts' | 'getSubscriptions' | 'getProducts'> = [
+        'fetchProducts',
+        'getSubscriptions',
+        'getProducts',
+      ];
+      let subscriptionProducts: any[] = [];
+      let productFetchMethod: string | null = null;
+      let lastFetchError: any = null;
+
+      const callLegacyFetch = async (
+        fn: (...args: any[]) => Promise<any>,
+        label: 'getSubscriptions' | 'getProducts'
+      ) => {
+        try {
+          return await fn({ skus: SUBSCRIPTION_PRODUCT_IDS });
+        } catch (error) {
+          if (isMissingFunctionError(error)) {
+            throw error;
+          }
+          try {
+            return await fn(SUBSCRIPTION_PRODUCT_IDS);
+          } catch {
+            throw error;
+          }
+        }
+      };
+
+      for (const method of fetchOrder) {
+        if (method === 'fetchProducts' && typeof functions.fetchProducts === 'function') {
+          try {
+            productFetchMethod = 'fetchProducts';
+            subscriptionProducts = await functions.fetchProducts({
+              skus: SUBSCRIPTION_PRODUCT_IDS,
+              type: 'subs',
+            });
+            break;
+          } catch (error) {
+            lastFetchError = error;
+            if (isMissingFunctionError(error)) {
+              if (!refreshed) {
+                snap = getRniapAdapter();
+                ({ functions, selectedMethods, moduleKeys } = snap);
+                refreshed = true;
+              }
+              continue;
+            }
+            throw error;
+          }
+        }
+
+        if (method === 'getSubscriptions' && typeof functions.getSubscriptions === 'function') {
+          try {
+            productFetchMethod = 'getSubscriptions';
+            subscriptionProducts = await callLegacyFetch(functions.getSubscriptions, 'getSubscriptions');
+            break;
+          } catch (error) {
+            lastFetchError = error;
+            if (isMissingFunctionError(error)) {
+              if (!refreshed) {
+                snap = getRniapAdapter();
+                ({ functions, selectedMethods, moduleKeys } = snap);
+                refreshed = true;
+              }
+              continue;
+            }
+            throw error;
+          }
+        }
+
+        if (method === 'getProducts' && typeof functions.getProducts === 'function') {
+          try {
+            productFetchMethod = 'getProducts';
+            subscriptionProducts = await callLegacyFetch(functions.getProducts, 'getProducts');
+            break;
+          } catch (error) {
+            lastFetchError = error;
+            if (isMissingFunctionError(error)) {
+              if (!refreshed) {
+                snap = getRniapAdapter();
+                ({ functions, selectedMethods, moduleKeys } = snap);
+                refreshed = true;
+              }
+              continue;
+            }
+            throw error;
+          }
+        }
       }
 
-      // Nitro API: fetchProducts with type: 'subs' for subscriptions
-      const subscriptionProducts: any[] = await IAPAdapter.fetchProducts({
-        skus: SUBSCRIPTION_PRODUCT_IDS,
-        type: 'subs',
-      });
+      if (!productFetchMethod) {
+        const error: any = new Error('No product fetch method available');
+        error.code = 'IAP_CAPABILITY_MISSING';
+        error.selectedMethods = selectedMethods;
+        error.moduleKeys = moduleKeys;
+        error.lastFetchError = lastFetchError;
+        throw error;
+      }
 
       const duration = Date.now() - startTime;
+      this.lastProductFetchMethod = productFetchMethod;
 
       const rawProductCount = subscriptionProducts?.length || 0;
 
@@ -1446,7 +1626,7 @@ class IapManagerClass {
                 sanitizedProduct[key] = value;
               }
             }
-            logger.log('[IAP Manager] First product structure (Nitro API):', {
+            logger.log('[IAP Manager] First product structure (raw IAP product):', {
               keys: firstRawKeys,
               sample: JSON.stringify(sanitizedProduct, null, 2).substring(0, 500),
             });
@@ -1514,7 +1694,6 @@ class IapManagerClass {
           lastError: normalizedError,
           rawProductCount,
           normalizedProductCount: 0,
-          apiMode: detectedApiMode,
           firstRawKeys,
         });
 
@@ -1563,7 +1742,7 @@ class IapManagerClass {
           missingPriceSkus,
           receivedSkus: validProductIds,
           firstRawKeys,
-          apiMode: detectedApiMode,
+          productFetchMethod,
         });
       }
 
@@ -1583,7 +1762,7 @@ class IapManagerClass {
         rawProductIds,
         missingSkus,
         step: 'fetchProducts_ok',
-        apiMode: detectedApiMode,
+        productFetchMethod,
         rawProductCount,
         normalizedProductCount: normalizedProducts.length,
         normalizedProductIds: validProductIds,
@@ -1619,7 +1798,6 @@ class IapManagerClass {
           rawProductCount,
           normalizedProductCount: normalizedProducts.length,
           normalizedProductIds: validProductIds,
-          apiMode: detectedApiMode,
           firstRawKeys,
           pricesMissing: false,
         });
@@ -1679,7 +1857,6 @@ class IapManagerClass {
         rawProductCount,
         normalizedProductCount: normalizedProducts.length,
         normalizedProductIds: validProductIds,
-        apiMode: detectedApiMode,
         firstRawKeys,
         pricesMissing,
       });
@@ -1693,19 +1870,20 @@ class IapManagerClass {
     } catch (error: any) {
       const duration = Date.now() - startTime;
       
-      // Check if this is an export mismatch error - stop retries immediately
-      if (error?.code === 'IAP_EXPORT_MISMATCH' || error?.message?.includes('IAP_EXPORT_MISMATCH')) {
+      // Check if this is a capability mismatch error - stop retries immediately
+      if (error?.code === 'IAP_CAPABILITY_MISSING' || error?.message?.includes('IAP_CAPABILITY_MISSING')) {
         this.exportMismatchDetected = true;
         const normalizedError = {
-          code: 'IAP_EXPORT_MISMATCH',
-          message: error.message || 'IAP exports validation failed',
+          code: 'IAP_CAPABILITY_MISSING',
+          message: error.message || 'IAP capability validation failed',
           userMessage: 'Purchases unavailable due to a configuration error. Please contact support.',
         };
 
-        logger.error('[IAP Manager] Export mismatch detected during product load - stopping retries', {
+        logger.error('[IAP Manager] Capability mismatch detected during product load - stopping retries', {
           error,
           missing: error?.missing || [],
-          detectedShape: error?.detectedShape,
+          capabilities: error?.capabilities || {},
+          moduleKeys: error?.moduleKeys || [],
         });
 
         this.setState({
@@ -1722,7 +1900,7 @@ class IapManagerClass {
         diagEvent('iap_manager_loadProducts_error', {
           error: normalizedError,
           attempts: this.loadProductsAttempts,
-          exportMismatch: true,
+          capabilityMismatch: true,
         }, duration);
 
         return; // Stop - no retries
@@ -1768,7 +1946,6 @@ class IapManagerClass {
         rawProductCount: 0,
         normalizedProductCount: 0,
         normalizedProductIds: [],
-        apiMode: detectedApiMode,
         pricesMissing: false,
       });
 
@@ -1783,7 +1960,10 @@ class IapManagerClass {
    * Multi-signature requestPurchase with full observability
    * Tries signatures in order, stops at first success
    */
-  private async requestSubscriptionNitroSafe(sku: string): Promise<string> {
+  private async requestSubscriptionNitroSafe(
+    sku: string,
+    requestPurchaseFn: (...args: any[]) => Promise<any>
+  ): Promise<string> {
     // Define signatures in exact order
     // Doc-correct signature with request.apple/request.google must be tried early (top 3)
     const signatures = [
@@ -1852,7 +2032,7 @@ class IapManagerClass {
           paramsKeys,
         });
 
-        await IAPAdapter.requestPurchase(signature.params);
+        await requestPurchaseFn(signature.params);
 
         diagEvent('iap_requestPurchase_signature_success', {
           sku,
@@ -2030,7 +2210,7 @@ class IapManagerClass {
     diagEvent('iap_manager_buy_start', {
       productId,
       sku,
-      apiMode: detectedApiMode,
+      selectedPurchaseMethod: getRniapAdapter().selectedMethods.purchase,
       requestSignatureUsed: 'will_determine_in_requestSubscriptionNitroSafe',
     });
     
@@ -2045,15 +2225,20 @@ class IapManagerClass {
         bundleId: Constants.expoConfig?.ios?.bundleIdentifier,
       });
 
-      // Purchase using Nitro API
-      if (detectedApiMode !== 'nitro') {
-        throw new Error('Nitro API is required but not available');
+      let snap = this.getAdapterOrThrow('buy');
+      let { functions, selectedMethods, moduleKeys } = snap;
+      if (selectedMethods.purchase === 'none') {
+        const error: any = new Error('No purchase method available');
+        error.code = 'IAP_CAPABILITY_MISSING';
+        error.selectedMethods = selectedMethods;
+        error.moduleKeys = moduleKeys;
+        throw error;
       }
 
-      // Nitro API: requestPurchase with safe wrapper and fallback
+      // Request purchase using best available method
       // Enhanced logging for iPad debugging
       const isIPad = Platform.OS === 'ios' && Platform.isPad;
-      logger.log('[IAP Manager] Requesting purchase (Nitro API)', {
+      logger.log('[IAP Manager] Requesting purchase (capability-based)', {
         productId,
         sku,
         isIPad,
@@ -2061,11 +2246,11 @@ class IapManagerClass {
         iosVersion: Platform.Version,
       });
 
-      // Emit telemetry before calling requestSubscriptionNitroSafe
+      // Emit telemetry before calling purchase handler
       diagEvent('iap_buy_about_to_call_requestSubscriptionNitroSafe', {
         sku,
         productId,
-        detectedApiMode,
+        selectedPurchaseMethod: selectedMethods.purchase,
         isNewArch,
         connectionStatus: this.state.connectionStatus,
         listenersRegistered: this.state.listenersRegistered,
@@ -2073,8 +2258,40 @@ class IapManagerClass {
         pendingPurchaseSku: this.pendingPurchase?.sku || null,
       });
 
-      // Multi-signature requestPurchase call
-      const signatureName = await this.requestSubscriptionNitroSafe(sku);
+      let signatureName = 'unknown';
+      if (selectedMethods.purchase === 'requestPurchase') {
+        if (typeof functions.requestPurchase !== 'function') {
+          throw new Error('requestPurchase not available');
+        }
+        signatureName = await this.requestSubscriptionNitroSafe(sku, functions.requestPurchase);
+        this.lastPurchaseMethod = 'requestPurchase';
+      } else if (selectedMethods.purchase === 'requestSubscription') {
+        if (typeof functions.requestSubscription !== 'function') {
+          throw new Error('requestSubscription not available');
+        }
+        try {
+          await functions.requestSubscription({ sku });
+          signatureName = 'requestSubscription({sku})';
+        } catch (error: any) {
+          if (isMissingFunctionError(error)) {
+            snap = getRniapAdapter();
+            ({ functions, selectedMethods, moduleKeys } = snap);
+            if (typeof functions.requestPurchase === 'function') {
+              signatureName = await this.requestSubscriptionNitroSafe(sku, functions.requestPurchase);
+              this.lastPurchaseMethod = 'requestPurchase';
+              // Continue with success path
+            } else {
+              throw error;
+            }
+          }
+          if (typeof functions.requestSubscription !== 'function') {
+            throw new Error('requestSubscription not available');
+          }
+          await functions.requestSubscription({ sku, quantity: 1 });
+          signatureName = 'requestSubscription({sku,quantity})';
+        }
+        this.lastPurchaseMethod = 'requestSubscription';
+      }
 
       const duration = Date.now() - startTime;
       logger.log('[IAP Manager] Purchase request submitted', {
@@ -2086,7 +2303,7 @@ class IapManagerClass {
       diagEvent('iap_manager_buy_success', {
         productId,
         sku,
-        apiMode: detectedApiMode,
+        selectedPurchaseMethod: selectedMethods.purchase,
         signatureName,
       }, duration);
 
@@ -2110,7 +2327,7 @@ class IapManagerClass {
         },
         productId,
         sku,
-        apiMode: detectedApiMode,
+        selectedPurchaseMethod: getRniapAdapter().selectedMethods.purchase,
         attemptResults: error?.attemptResults || undefined,
         signaturesTried: error?.signaturesTried || undefined,
         lastErrorCode: error?.lastErrorCode || undefined,
@@ -2226,16 +2443,61 @@ class IapManagerClass {
     try {
       logger.log('[IAP Manager] Restoring purchases...');
 
-      // Restore using Nitro API
-      if (detectedApiMode !== 'nitro') {
-        throw new Error('Nitro API is required but not available');
+      let snap;
+      try {
+        snap = this.getAdapterOrThrow('restore');
+      } catch {
+        snap = getRniapAdapter();
+      }
+      const { functions, selectedMethods } = snap;
+      const restoreOrder = ['restorePurchases', 'getAvailablePurchases'] as const;
+      let purchases: any[] = [];
+      let restoreMethod: (typeof restoreOrder)[number] | null = null;
+      let lastError: any = null;
+
+      for (const method of restoreOrder) {
+        if (method === 'restorePurchases' && typeof functions.restorePurchases === 'function') {
+          try {
+            restoreMethod = 'restorePurchases';
+            await functions.restorePurchases();
+            if (typeof functions.getAvailablePurchases === 'function') {
+              purchases = await functions.getAvailablePurchases();
+            } else {
+              purchases = [];
+            }
+            break;
+          } catch (error) {
+            lastError = error;
+            if (isMissingFunctionError(error)) {
+              continue;
+            }
+            throw error;
+          }
+        }
+
+        if (method === 'getAvailablePurchases' && typeof functions.getAvailablePurchases === 'function') {
+          try {
+            restoreMethod = 'getAvailablePurchases';
+            purchases = await functions.getAvailablePurchases();
+            break;
+          } catch (error) {
+            lastError = error;
+            if (isMissingFunctionError(error)) {
+              continue;
+            }
+            throw error;
+          }
+        }
       }
 
-      // Nitro API: restorePurchases triggers purchaseUpdatedListener, then get available purchases
-      if (typeof IAPAdapter.restorePurchases === 'function') {
-        await IAPAdapter.restorePurchases();
+      if (!restoreMethod) {
+        // No restore API - fall back to DB check without throwing
+        const isUnlocked = await checkProStatus();
+        this.lastRestoreMethod = 'none';
+        return { outcome: isUnlocked ? 'success' : 'none_found', foundPurchases: 0 };
       }
-      const purchases: any[] = await IAPAdapter.getAvailablePurchases();
+
+      this.lastRestoreMethod = restoreMethod;
 
       logger.log('[IAP Manager] Available purchases retrieved', {
         count: purchases?.length || 0,
@@ -2269,7 +2531,9 @@ class IapManagerClass {
           if (Platform.OS === 'ios') {
             // iOS: require receipt
             try {
-              receipt = await IAPAdapter.getReceiptIOS();
+              if (typeof functions.getReceiptIOS === 'function') {
+                receipt = await functions.getReceiptIOS();
+              }
             } catch (receiptError) {
               logger.warn('[IAP Manager] Could not get iOS receipt for restore:', receiptError);
             }
@@ -2396,6 +2660,40 @@ class IapManagerClass {
     await this.loadProducts();
   }
 
+  async recoverNow(): Promise<{ outcome: 'attempted' | 'no_pending' | 'busy' | 'error' }> {
+    if (this.recoveryInProgress) {
+      diagEvent('iap_recover_now_busy', {});
+      return { outcome: 'busy' };
+    }
+    this.recoveryInProgress = true;
+    try {
+      const hasPending = await this.hasPendingTransaction();
+      if (!hasPending) {
+        diagEvent('iap_recover_now_no_pending', {});
+        return { outcome: 'no_pending' };
+      }
+      diagEvent('iap_recover_now_attempted', {});
+      await this.recoverPendingTransactionOnce();
+      return { outcome: 'attempted' };
+    } catch (error: any) {
+      diagEvent('iap_recover_now_error', { error: error?.message || String(error) });
+      return { outcome: 'error' };
+    } finally {
+      this.recoveryInProgress = false;
+    }
+  }
+
+  async retryInit(): Promise<void> {
+    if (this.initPromise) {
+      return;
+    }
+    this.exportMismatchDetected = false;
+    this.terminalError = false;
+    this.setState({ lastError: null });
+    diagEvent('iap_manager_step', { step: 'retry_init_requested' });
+    await this.initialize();
+  }
+
   /**
    * Tear down IAP connection
    */
@@ -2422,7 +2720,10 @@ class IapManagerClass {
 
       // End connection
       if (this.state.isInitialized && this.state.connectionStatus === 'connected') {
-        await IAPAdapter.endConnection();
+        const { functions } = getRniapAdapter();
+        if (typeof functions.endConnection === 'function') {
+          await functions.endConnection();
+        }
       }
 
       this.setState({
@@ -2452,14 +2753,30 @@ class IapManagerClass {
 
   /**
    * Get diagnostic information - actionable for TestFlight debugging
+   * Includes self-check verification of capability selection and function usage
    */
   getDiagnostics(): {
     state: IapManagerState;
       exportDiagnostics: {
-        apiMode: 'nitro' | 'none';
         requiredExportsPresent: boolean;
-        exportTypes: Record<string, string>;
-        moduleKeys: string[];
+        missing: string[];
+        capabilities: CapabilityDiagnostics['capabilities'];
+        selectedProductFetchMethod: string;
+        selectedPurchaseMethod: string;
+        selectedRestoreMethod: string;
+        lastProductFetchMethod: string | null;
+        lastPurchaseMethod: string | null;
+        lastRestoreMethod: string | null;
+        isNewArch: boolean;
+        executionEnvironment: string;
+        nativeModuleKeys: string[];
+        nativeModuleKeysCount: number;
+        selfCheck: {
+          productFetchFunction: string;
+          purchaseFunction: string;
+          conversionPresent: boolean;
+          conversionUsed: boolean;
+        };
       };
     bundleId: string;
     isTestFlight: boolean;
@@ -2474,7 +2791,16 @@ class IapManagerClass {
     missingSkus: string[];
   } {
     const state = this.getState();
-    const diagnostics = getApiDiagnostics();
+    const capabilityDiagnostics = getCapabilityDiagnostics();
+    const { functions } = getRniapAdapter();
+
+    // Self-check: Verify selected methods and conversion availability
+    const selfCheck = {
+      productFetchFunction: capabilityDiagnostics.selectedMethods.productFetch,
+      purchaseFunction: capabilityDiagnostics.selectedMethods.purchase,
+      conversionPresent: typeof functions.convertNitroProductToProduct === 'function',
+      conversionUsed: conversionUsed, // Tracked during product normalization
+    };
     
     // Calculate missing SKUs
     const skusReceived = state.products.map(p => p.productId).filter((id): id is string => !!id);
@@ -2492,13 +2818,23 @@ class IapManagerClass {
         }
     }
 
-    return {
+    const diagnostics = {
       state,
       exportDiagnostics: {
-        apiMode: diagnostics.apiMode,
-        requiredExportsPresent: diagnostics.requiredExportsPresent,
-        exportTypes: diagnostics.exportTypes,
-        moduleKeys: diagnostics.moduleKeys,
+        requiredExportsPresent: capabilityDiagnostics.requiredCapabilitiesPresent,
+        missing: capabilityDiagnostics.missingRequired,
+        capabilities: capabilityDiagnostics.capabilities,
+        selectedProductFetchMethod: capabilityDiagnostics.selectedMethods.productFetch,
+        selectedPurchaseMethod: capabilityDiagnostics.selectedMethods.purchase,
+        selectedRestoreMethod: capabilityDiagnostics.selectedMethods.restore,
+        lastProductFetchMethod: this.lastProductFetchMethod,
+        lastPurchaseMethod: this.lastPurchaseMethod,
+        lastRestoreMethod: this.lastRestoreMethod,
+        isNewArch,
+        executionEnvironment: Constants.executionEnvironment || 'unknown',
+        nativeModuleKeys: capabilityDiagnostics.moduleKeys,
+        nativeModuleKeysCount: capabilityDiagnostics.moduleKeys.length,
+        selfCheck,
       },
       bundleId: Constants.expoConfig?.ios?.bundleIdentifier || 'unknown',
       isTestFlight: (Constants.appOwnership as string) === 'standalone' && !__DEV__,
@@ -2512,6 +2848,13 @@ class IapManagerClass {
       skusReceived,
       missingSkus,
     };
+    logSupportDiagnosticsSignal({
+      selectedMethods: capabilityDiagnostics.selectedMethods,
+      missingSkus,
+      lastSuccessfulStep,
+      lastErrorCode: state.lastError?.code || null,
+    });
+    return diagnostics;
   }
 }
 

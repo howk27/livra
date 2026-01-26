@@ -10,7 +10,13 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { getDiagSnapshot, getDiagnosticsAsString, redactSensitiveData } from '../lib/debug/iapDiagnostics';
+import {
+  getDiagSnapshot,
+  getDiagnosticsAsString,
+  getSupportDiagnosticsEnabled,
+  redactSensitiveData,
+  setSupportDiagnosticsEnabled,
+} from '../lib/debug/iapDiagnostics';
 import { isDashboardUnlocked, resetDashboardUnlock } from '../lib/debug/dashboardUnlock';
 import { IapManager } from '../lib/services/iap/IapManager';
 import { colors } from '../theme/colors';
@@ -27,6 +33,7 @@ export default function IapDashboardScreen() {
   const router = useRouter();
   const [snapshot, setSnapshot] = useState(getDiagSnapshot());
   const [managerDiagnostics, setManagerDiagnostics] = useState<any>(null);
+  const [supportDiagnosticsEnabled, setSupportDiagnosticsEnabledState] = useState(false);
 
   // Production route guard: require unlock flag or dev mode
   useEffect(() => {
@@ -54,6 +61,14 @@ export default function IapDashboardScreen() {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    const loadSupportToggle = async () => {
+      const enabled = await getSupportDiagnosticsEnabled();
+      setSupportDiagnosticsEnabledState(enabled);
+    };
+    loadSupportToggle();
+  }, []);
+
   const handleCopy = async () => {
     try {
       const diagnosticsString = getDiagnosticsAsString();
@@ -75,6 +90,26 @@ export default function IapDashboardScreen() {
       logger.error('[IAP Dashboard] Error copying diagnostics:', error);
       Alert.alert('Error', 'Failed to copy diagnostics. Please try again.');
     }
+  };
+
+  const handleRetryIapSetup = async () => {
+    try {
+      await IapManager.retryInit();
+      Alert.alert('Retry started', 'IAP setup retry started. Check diagnostics for progress.');
+    } catch (error) {
+      logger.error('[IAP Dashboard] Retry init error:', error);
+      Alert.alert('Retry failed', 'Unable to retry IAP setup. Please try again.');
+    }
+  };
+
+  const handleToggleSupportDiagnostics = async () => {
+    const next = !supportDiagnosticsEnabled;
+    await setSupportDiagnosticsEnabled(next);
+    setSupportDiagnosticsEnabledState(next);
+    Alert.alert(
+      'Support Diagnostics',
+      next ? 'Support diagnostics enabled.' : 'Support diagnostics disabled.'
+    );
   };
 
   const renderSection = (title: string, content: React.ReactNode) => (
@@ -145,6 +180,40 @@ export default function IapDashboardScreen() {
             {snapshot.state.lastPurchaseAttempt && renderKeyValue('Last Purchase Attempt', snapshot.state.lastPurchaseAttempt)}
             {snapshot.state.lastPurchaseError && renderKeyValue('Last Purchase Error', snapshot.state.lastPurchaseError)}
             {renderKeyValue('IAP Listeners Active', snapshot.state.iapListenersActive)}
+          </View>
+        )}
+
+        {/* Support Diagnostics */}
+        {renderSection(
+          'Support Diagnostics',
+          <View style={styles.content}>
+            {renderKeyValue('Support Diagnostics Enabled', supportDiagnosticsEnabled)}
+            <TouchableOpacity
+              style={[styles.copyButton, { backgroundColor: themeColors.primary, marginTop: spacing.sm }]}
+              onPress={handleToggleSupportDiagnostics}
+            >
+              <Ionicons name="pulse-outline" size={20} color="#FFFFFF" />
+              <AppText variant="button" style={styles.copyButtonText}>
+                {supportDiagnosticsEnabled ? 'Disable' : 'Enable'}
+              </AppText>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Retry IAP Setup */}
+        {renderSection(
+          'IAP Recovery',
+          <View style={styles.content}>
+            <TouchableOpacity
+              style={[styles.copyButton, { backgroundColor: themeColors.primary }]}
+              onPress={handleRetryIapSetup}
+            >
+              <Ionicons name="refresh-outline" size={20} color="#FFFFFF" />
+              <AppText variant="button" style={styles.copyButtonText}>
+                Retry IAP Setup
+              </AppText>
+            </TouchableOpacity>
+            {managerDiagnostics?.lastError && renderKeyValue('Last Error', managerDiagnostics.lastError)}
           </View>
         )}
 

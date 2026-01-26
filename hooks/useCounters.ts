@@ -8,7 +8,7 @@ import { computeStreak, updateStreakInDB } from './useStreaks';
 import { useAuth } from './useAuth';
 import { useSync } from './useSync';
 import { useBadges } from './useBadges';
-import { useIAP } from './useIAP';
+import { useIapSubscriptions } from './useIapSubscriptions';
 import { logger } from '../lib/utils/logger';
 import { checkGatingRules } from '../lib/gating';
 
@@ -41,7 +41,7 @@ export const useMarks = () => {
   const getIncrementsToday = useEventsStore((state) => state.getIncrementsToday);
   const { user } = useAuth();
   const { sync } = useSync();
-  const { isProUnlocked } = useIAP();
+  const { isProUnlocked } = useIapSubscriptions();
   const {
     recordDailyLogin,
     lastLoginDate,
