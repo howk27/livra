@@ -225,8 +225,6 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
         // Purchase completion is handled by IapManager's purchaseUpdatedListener
         // Emit submitted event, not success - true success is after validation/unlock
         diagEvent('requestPurchase_submitted', { productId });
-        // Note: setPurchaseInProgress(false) is handled by purchaseUpdatedListener
-        // when purchase completes or fails. No fallback timeout needed.
       } catch (error: any) {
         // Check if this is a user cancellation - handle gracefully
         const isUserCancellation = 
@@ -235,7 +233,7 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
           error?.message?.toLowerCase().includes('cancel');
 
         if (isUserCancellation) {
-          // User cancelled - don't log as error, just reset state
+          // User cancelled - don't log as error
           logger.log('[IAP Hook] Purchase cancelled by user');
           diagEvent('requestPurchase_error', {
             error: {
@@ -244,7 +242,6 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
             },
             productId,
           });
-          setPurchaseInProgress(false);
           // Don't throw - cancellation is expected behavior
           return;
         }
@@ -263,9 +260,9 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
           },
           productId,
         });
-        // Reset purchase state immediately on error so user can retry
-        setPurchaseInProgress(false);
         throw error;
+      } finally {
+        setPurchaseInProgress(false);
       }
     },
     [managerState]
@@ -282,7 +279,7 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
       const result = await IapManager.restore();
       let outcomeResult: RestoreOutcome = { ...result };
       
-      // Refresh is best-effort: never downgrade a successful restore if refresh fails.
+      // never downgrade a successful restore if refresh fails.
       // Keep outcome 'success' and surface a non-fatal message instead.
       // Refresh premium status only after confirmed success
       if (outcomeResult.outcome === 'success' && outcomeResult.dbConfirmed !== false) {

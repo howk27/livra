@@ -976,8 +976,31 @@ class IapManagerClass {
       const { functions } = this.getAdapterOrThrow('registerListeners');
       if (typeof functions.purchaseUpdatedListener === 'function') {
         this.purchaseUpdateSubscription = functions.purchaseUpdatedListener(
-          async (purchase: any) => {
-            await this.handlePurchaseUpdate(purchase);
+          (purchase: any) => {
+            this.handlePurchaseUpdate(purchase).catch((error: any) => {
+              logger.error('[IAP Manager] Unhandled purchase update error', error);
+              diagEvent('iap_manager_purchaseUpdated_unhandled', {
+                error: {
+                  code: error?.code || 'UNKNOWN',
+                  message: error?.message || String(error),
+                },
+              });
+              const iapError = getIAPErrorMessage(error);
+              this.setState({
+                lastError: {
+                  code: iapError.code,
+                  message: iapError.message,
+                  userMessage: iapError.userMessage,
+                },
+              });
+              updateDiagnosticsState({
+                lastError: {
+                  code: iapError.code,
+                  message: iapError.message,
+                },
+              });
+              this.clearPurchaseGuard('error');
+            });
           }
         );
       }
@@ -1352,6 +1375,20 @@ class IapManagerClass {
           transactionFinished: false,
         });
         await this.persistPendingTransaction(purchase, error?.code || 'transient_error');
+        const transientUserMessage = 'We couldn’t verify your purchase yet. Please try again.';
+        this.setState({
+          lastError: {
+            code: error?.code || 'TRANSIENT_VERIFICATION',
+            message: error?.message || 'Verification pending',
+            userMessage: transientUserMessage,
+          },
+        });
+        updateDiagnosticsState({
+          lastError: {
+            code: error?.code || 'TRANSIENT_VERIFICATION',
+            message: error?.message || 'Verification pending',
+          },
+        });
       } else {
         // Non-transient error - try to finish transaction best-effort, emit outcome_error
         if (!transactionFinished && shouldFinishTransactionOnError && !finishAttempted) {
@@ -2692,6 +2729,26 @@ class IapManagerClass {
     this.setState({ lastError: null });
     diagEvent('iap_manager_step', { step: 'retry_init_requested' });
     await this.initialize();
+  }
+
+  async openManageSubscriptions(): Promise<boolean> {
+    try {
+      const { functions } = getRniapAdapter();
+      if (typeof functions.deepLinkToSubscriptions === 'function') {
+        diagEvent('iap_manager_manage_subscriptions_called', { method: 'deepLinkToSubscriptions' });
+        await functions.deepLinkToSubscriptions();
+        return true;
+      }
+    } catch (error: any) {
+      diagEvent('iap_manager_manage_subscriptions_failed', {
+        error: {
+          code: error?.code || 'UNKNOWN',
+          message: error?.message || String(error),
+        },
+      });
+      logger.warn('[IAP Manager] Manage subscriptions handler failed', error);
+    }
+    return false;
   }
 
   /**

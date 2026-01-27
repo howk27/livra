@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Linking, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Linking, Alert, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import Constants from 'expo-constants';
@@ -34,6 +34,19 @@ function PaywallScreenContent() {
   // STEP 5: Restore message state
   const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
   const [restoreMessageType, setRestoreMessageType] = useState<'success' | 'info' | 'error' | null>(null);
+
+  type OperationState =
+    | 'idle'
+    | 'loading_products'
+    | 'buying'
+    | 'restoring'
+    | 'verifying'
+    | 'transient_error'
+    | 'error'
+    | 'success';
+  const [operationState, setOperationState] = useState<OperationState>('idle');
+  const [operationMessage, setOperationMessage] = useState<string | null>(null);
+  const operationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   // TASK 7: Preflight health check error state
   const [healthCheckFailed, setHealthCheckFailed] = useState(false);
@@ -105,6 +118,9 @@ function PaywallScreenContent() {
     retryLoadProducts,
   } = useIapSubscriptions();
 
+  const isSubscribed = isProUnlocked === true;
+  const androidPackage = Constants.expoConfig?.android?.package || 'com.livra.app';
+
   // Diagnostics telemetry only (not used for gating)
   useEffect(() => {
     if (__DEV__) {
@@ -116,6 +132,38 @@ function PaywallScreenContent() {
       }
     }
   }, [products, connectionStatus]);
+
+  useEffect(() => {
+    if (isLoadingProducts) {
+      setOperationState('loading_products');
+      setOperationMessage('Loading subscription options...');
+    } else if (operationState === 'loading_products') {
+      setOperationState('idle');
+      setOperationMessage(null);
+    }
+  }, [isLoadingProducts, operationState]);
+
+  const handleManageSubscription = async () => {
+    const handled = await IapManager.openManageSubscriptions();
+    if (handled) return;
+
+    const url = Platform.OS === 'ios'
+      ? 'https://apps.apple.com/account/subscriptions'
+      : `https://play.google.com/store/account/subscriptions?package=${androidPackage}`;
+
+    try {
+      await Linking.openURL(url);
+    } catch (error) {
+      Alert.alert(
+        'Unable to Open Subscriptions',
+        'We could not open your subscription settings. Please try again.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Try Again', onPress: () => handleManageSubscription() },
+        ]
+      );
+    }
+  };
 
   // STEP 2: Deterministic product mapping - use normalized productId from IapManager
   // IapManager normalizes products to always have productId field
@@ -168,11 +216,11 @@ function PaywallScreenContent() {
     : 0;
 
   // Single source of truth: isReady includes listenersRegistered, so this is sufficient
-  const canAttemptPurchase = isReady && !purchaseInProgress;
+  const canAttemptPurchase = isReady && !purchaseInProgress && !isSubscribed;
 
   // Terminal gate: Block purchase if selected product has no price
   const hasValidPrice = selectedPrice && selectedPrice.trim() !== '';
-  const buttonDisabled = !canAttemptPurchase || purchaseInProgress || !hasValidPrice;
+  const buttonDisabled = !canAttemptPurchase || !hasValidPrice;
 
   // STEP 3: Remove double-authority purchase gating
   // Paywall guard is ONLY for UI spam prevention (1 second tap guard)
@@ -191,9 +239,21 @@ function PaywallScreenContent() {
     }, 1000);
 
     // Additional validation before purchase
+    if (isSubscribed) {
+      setOperationState('success');
+      setOperationMessage('You are already subscribed.');
+      Alert.alert('Subscribed', 'You already have an active subscription.');
+      purchaseInProgressRef.current = false;
+      return;
+    }
+
+    setOperationState('buying');
+    setOperationMessage('Processing purchase...');
     if (!selectedProduct) {
       logger.error('[Paywall] Purchase attempted without selected product');
       purchaseInProgressRef.current = false;
+      setOperationState('error');
+      setOperationMessage('Please select a plan to continue.');
       return;
     }
 
@@ -219,6 +279,8 @@ function PaywallScreenContent() {
         [{ text: 'OK' }]
       );
       purchaseInProgressRef.current = false;
+      setOperationState('error');
+      setOperationMessage('Subscription pricing is not available.');
       return;
     }
 
@@ -268,6 +330,8 @@ function PaywallScreenContent() {
     // IapManager will handle its own purchaseInProgress guard and throw if already in progress
     try {
       await purchaseSubscription(productId);
+      setOperationState('verifying');
+      setOperationMessage('Verifying your purchase...');
     } catch (err: any) {
       // Normalize error via getIAPErrorMessage
       const { getIAPErrorMessage } = await import('../lib/iap/iap');
@@ -281,6 +345,8 @@ function PaywallScreenContent() {
         `${userMessage}\n\nSupport code: ${supportCode}`,
         [{ text: 'OK' }]
       );
+      setOperationState('error');
+      setOperationMessage(userMessage);
       // Reset tap guard on error so user can retry after error is cleared
       purchaseInProgressRef.current = false;
     }
@@ -299,6 +365,8 @@ function PaywallScreenContent() {
   const handleRestore = async () => {
     setRestoreMessage(null);
     setRestoreMessageType(null);
+    setOperationState('restoring');
+    setOperationMessage('Restoring purchases...');
     
     try {
       const result = await restorePurchases();
@@ -306,22 +374,30 @@ function PaywallScreenContent() {
       if (result.outcome === 'cancelled') {
         setRestoreMessage('Restore cancelled.');
         setRestoreMessageType('info');
+        setOperationState('idle');
       } else if (result.outcome === 'none_found') {
         setRestoreMessage('No active subscription found for this Apple ID.');
         setRestoreMessageType('info');
+        setOperationState('idle');
       } else if (result.outcome === 'success') {
         if (result.dbConfirmed === false) {
           setRestoreMessage('Restored. Entitlements syncing—try again in a moment.');
           setRestoreMessageType('info');
+          setOperationState('verifying');
+          setOperationMessage('Verifying your entitlement…');
         } else {
           // Double-check DB on success for user confidence
           const isUnlocked = await checkProStatus();
           setRestoreMessage(isUnlocked ? 'Restored successfully.' : 'Restored. Entitlements syncing—try again in a moment.');
           setRestoreMessageType(isUnlocked ? 'success' : 'info');
+          setOperationState(isUnlocked ? 'success' : 'verifying');
+          setOperationMessage(isUnlocked ? 'Subscribed.' : 'Verifying your entitlement…');
         }
       } else {
         setRestoreMessage('Restore failed. Please try again.');
         setRestoreMessageType('error');
+        setOperationState('error');
+        setOperationMessage('Restore failed. Please try again.');
       }
       
       // Clear message after 5 seconds
@@ -351,6 +427,8 @@ function PaywallScreenContent() {
       
       setRestoreMessage(userMessage);
       setRestoreMessageType(isCancelled ? 'info' : 'error');
+      setOperationState(isCancelled ? 'idle' : 'error');
+      setOperationMessage(isCancelled ? null : userMessage);
       
       // Clear message after 5 seconds
       setTimeout(() => {
@@ -370,12 +448,77 @@ function PaywallScreenContent() {
 
   const handleRetryVerification = async () => {
     try {
+      setOperationState('verifying');
+      setOperationMessage('Verifying your purchase...');
       await IapManager.recoverNow();
       await checkProStatus();
     } catch (error) {
       logger.error('[Paywall] Retry verification failed', error);
+      setOperationState('error');
+      setOperationMessage('Verification failed. Please try again.');
     }
   };
+
+  const handleRetryInit = async () => {
+    try {
+      setOperationState('loading_products');
+      setOperationMessage('Retrying IAP setup...');
+      await IapManager.retryInit();
+    } catch (error) {
+      logger.error('[Paywall] Retry IAP setup failed', error);
+      setOperationState('error');
+      setOperationMessage('Unable to retry IAP setup. Please try again.');
+    }
+  };
+
+  useEffect(() => {
+    if (isSubscribed) {
+      setOperationState('success');
+      setOperationMessage('Subscribed.');
+    }
+  }, [isSubscribed]);
+
+  useEffect(() => {
+    if (isSubscribed) return;
+    if (connectionStatus === 'error' || connectionStatus === 'disconnected') {
+      setOperationState('error');
+      setOperationMessage('Store connection is not available. Please try again.');
+    }
+  }, [connectionStatus, isSubscribed]);
+
+  useEffect(() => {
+    if (!lastError) return;
+    if (hasTransientError) {
+      setOperationState('transient_error');
+      setOperationMessage('We couldn’t verify your purchase yet.');
+    } else {
+      setOperationState('error');
+      setOperationMessage(lastError);
+    }
+  }, [lastError, hasTransientError]);
+
+  useEffect(() => {
+    const shouldWatchdog = operationState === 'buying' || operationState === 'restoring' || operationState === 'verifying';
+    if (shouldWatchdog) {
+      if (operationTimerRef.current) {
+        clearTimeout(operationTimerRef.current);
+      }
+      operationTimerRef.current = setTimeout(() => {
+        setOperationState('error');
+        setOperationMessage('This is taking longer than expected. Please try again.');
+      }, 45000);
+    } else if (operationTimerRef.current) {
+      clearTimeout(operationTimerRef.current);
+      operationTimerRef.current = null;
+    }
+
+    return () => {
+      if (operationTimerRef.current) {
+        clearTimeout(operationTimerRef.current);
+        operationTimerRef.current = null;
+      }
+    };
+  }, [operationState]);
 
   const handleRetryLoadProducts = async () => {
     try {
@@ -527,7 +670,7 @@ function PaywallScreenContent() {
   );
 
   // Early return for loading state
-  if (isLoadingProducts || connectionStatus !== 'connected') {
+  if (isLoadingProducts || connectionStatus === 'connecting') {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
         <ScrollView contentContainerStyle={styles.content}>
@@ -618,9 +761,11 @@ function PaywallScreenContent() {
                   borderWidth: selectedPlan === 'monthly' ? 2 : 1,
                 },
                 selectedPlan === 'monthly' && shadow.md,
+                isSubscribed && styles.disabledPlan,
               ]}
               onPress={() => setSelectedPlan('monthly')}
-              activeOpacity={0.7}
+              activeOpacity={isSubscribed ? 1 : 0.7}
+              disabled={isSubscribed}
             >
               <View style={styles.planHeader}>
                 <Text style={[styles.planLabel, { color: themeColors.text }]}>Monthly</Text>
@@ -655,9 +800,11 @@ function PaywallScreenContent() {
                   borderWidth: selectedPlan === 'yearly' ? 2 : 1,
                 },
                 selectedPlan === 'yearly' && shadow.md,
+                isSubscribed && styles.disabledPlan,
               ]}
               onPress={() => setSelectedPlan('yearly')}
-              activeOpacity={0.7}
+              activeOpacity={isSubscribed ? 1 : 0.7}
+              disabled={isSubscribed}
             >
               <View style={styles.planHeader}>
                 <View style={styles.planHeaderLeft}>
@@ -692,6 +839,20 @@ function PaywallScreenContent() {
                   — <Text style={styles.planPeriod}>/ year</Text>
                 </Text>
               )}
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {isSubscribed && (
+          <View style={[styles.subscribedContainer, { backgroundColor: themeColors.surface, borderColor: themeColors.primary }]}>
+            <Text style={[styles.subscribedText, { color: themeColors.primary }]}>
+              Subscribed
+            </Text>
+            <TouchableOpacity
+              style={[styles.manageSubscriptionButton, { backgroundColor: themeColors.primary }]}
+              onPress={handleManageSubscription}
+            >
+              <Text style={styles.manageSubscriptionText}>Manage Subscription</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -751,6 +912,8 @@ function PaywallScreenContent() {
           >
             {purchaseInProgress ? (
               <ActivityIndicator color="#FFFFFF" />
+            ) : isSubscribed ? (
+              <Text style={styles.purchaseButtonText}>Subscribed</Text>
             ) : !isReady ? (
               <Text style={styles.purchaseButtonText}>Initializing...</Text>
             ) : connectionStatus !== 'connected' ? (
@@ -768,13 +931,39 @@ function PaywallScreenContent() {
           </TouchableOpacity>
         )}
 
-        {/* General Error Display - Prominently shown for purchase errors */}
-        {lastError && !productsLoadError && (
-          <View style={[styles.errorContainer, { backgroundColor: themeColors.surface, borderColor: themeColors.error }]}>
-            <Text style={[styles.errorText, { color: themeColors.error, fontWeight: fontWeight.semibold }]}>
-              {lastError}
+        {/* Operation Status / Error Display */}
+        {(operationMessage || lastError) && !productsLoadError && (
+          <View
+            style={[
+              styles.errorContainer,
+              {
+                backgroundColor: themeColors.surface,
+                borderColor:
+                  operationState === 'success'
+                    ? (themeColors.success || '#4CAF50')
+                    : operationState === 'transient_error'
+                      ? (themeColors.primary || '#007AFF')
+                      : themeColors.error,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.errorText,
+                {
+                  color:
+                    operationState === 'success'
+                      ? (themeColors.success || '#4CAF50')
+                      : operationState === 'transient_error'
+                        ? (themeColors.primary || '#007AFF')
+                        : themeColors.error,
+                  fontWeight: fontWeight.semibold,
+                },
+              ]}
+            >
+              {operationMessage || lastError}
             </Text>
-            {connectionStatus !== 'connected' && connectionStatus !== 'connecting' && (
+            {connectionStatus !== 'connected' && (
               <Text style={[styles.errorHint, { color: themeColors.textSecondary, marginTop: spacing.xs }]}>
                 Please check your internet connection and try again.
               </Text>
@@ -784,12 +973,20 @@ function PaywallScreenContent() {
                 Purchase in progress. Please wait...
               </Text>
             )}
-            {hasTransientError && (
+            {operationState === 'transient_error' && (
               <TouchableOpacity
                 style={[styles.retryButton, { backgroundColor: themeColors.primary, marginTop: spacing.md }]}
                 onPress={handleRetryVerification}
               >
                 <Text style={styles.retryButtonText}>Retry Verification</Text>
+              </TouchableOpacity>
+            )}
+            {(operationState === 'error' || operationState === 'transient_error') && (
+              <TouchableOpacity
+                style={[styles.retryButton, { backgroundColor: themeColors.primary, marginTop: spacing.sm }]}
+                onPress={handleRetryInit}
+              >
+                <Text style={styles.retryButtonText}>Retry IAP Setup</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -845,20 +1042,16 @@ function PaywallScreenContent() {
         )}
 
         {/* Manage Subscriptions Link */}
-        <TouchableOpacity
-          style={styles.manageSubscriptionsButton}
-          onPress={() => {
-            // Open App Store subscription management
-            const url = 'https://apps.apple.com/account/subscriptions';
-            Linking.openURL(url).catch((err: any) => {
-              logger.error('[Paywall] Error opening subscription management:', err);
-            });
-          }}
-        >
-          <Text style={[styles.manageSubscriptionsText, { color: themeColors.textSecondary }]}>
-            Manage Subscriptions
-          </Text>
-        </TouchableOpacity>
+        {isSubscribed && (
+          <TouchableOpacity
+            style={styles.manageSubscriptionsButton}
+            onPress={handleManageSubscription}
+          >
+            <Text style={[styles.manageSubscriptionsText, { color: themeColors.textSecondary }]}>
+              Manage Subscriptions
+            </Text>
+          </TouchableOpacity>
+        )}
 
         {/* FAQ */}
         <View style={styles.faq}>
@@ -1109,10 +1302,35 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
     gap: spacing.md,
   },
+  subscribedContainer: {
+    borderWidth: 1,
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  subscribedText: {
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.semibold,
+  },
+  manageSubscriptionButton: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.md,
+  },
+  manageSubscriptionText: {
+    color: '#FFFFFF',
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.semibold,
+  },
   planOption: {
     padding: spacing.lg,
     borderRadius: borderRadius.xl,
     marginBottom: spacing.sm,
+  },
+  disabledPlan: {
+    opacity: 0.6,
   },
   planHeader: {
     flexDirection: 'row',

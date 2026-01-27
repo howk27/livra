@@ -42,7 +42,6 @@ import { uploadAvatar, getAvatarUrl, deleteAvatar, refreshAvatarUrl } from '../.
 import { diagEvent } from '../../lib/debug/iapDiagnostics';
 import { unlockDashboard } from '../../lib/debug/dashboardUnlock';
 import Constants from 'expo-constants';
-import { checkProStatus } from '../../lib/iap/iap';
 
 export default function SettingsScreen() {
   const theme = useEffectiveTheme();
@@ -50,7 +49,7 @@ export default function SettingsScreen() {
   const router = useRouter();
 
   const { themeMode, setThemeMode } = useUIStore();
-  const { isProUnlocked, restorePurchases, purchaseInProgress } = useIapSubscriptions();
+  const { isProUnlocked } = useIapSubscriptions();
   const { sync, syncState } = useSync();
   const { counters } = useCounters();
   const { events } = useEventsStore();
@@ -70,8 +69,6 @@ export default function SettingsScreen() {
   const [csvExportEmail, setCsvExportEmail] = useState('');
   const [showEmailInput, setShowEmailInput] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
-  const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
-  const [restoreMessageType, setRestoreMessageType] = useState<'success' | 'info' | 'error' | null>(null);
 
   // Hidden gesture for diagnostics (tap version 7 times within 1.5 seconds)
   const versionTapCount = useRef(0);
@@ -602,47 +599,6 @@ export default function SettingsScreen() {
     setShowEmailInput(true);
   };
 
-  const handleRestore = async () => {
-    setRestoreMessage(null);
-    setRestoreMessageType(null);
-
-    try {
-      const result = await restorePurchases();
-
-      if (result.outcome === 'cancelled') {
-        setRestoreMessage('Restore cancelled.');
-        setRestoreMessageType('info');
-      } else if (result.outcome === 'none_found') {
-        setRestoreMessage('No active subscription found for this Apple ID.');
-        setRestoreMessageType('info');
-      } else if (result.outcome === 'success') {
-        if (result.dbConfirmed === false) {
-          setRestoreMessage('Restored. Entitlements syncing—try again in a moment.');
-          setRestoreMessageType('info');
-        } else {
-          const isUnlocked = await checkProStatus();
-          setRestoreMessage(isUnlocked ? 'Restored successfully.' : 'Restored. Entitlements syncing—try again in a moment.');
-          setRestoreMessageType(isUnlocked ? 'success' : 'info');
-        }
-      } else {
-        const userMessage = result.message || 'Restore failed. Please try again.';
-        setRestoreMessage(userMessage);
-        setRestoreMessageType('error');
-      }
-      setTimeout(() => {
-        setRestoreMessage(null);
-        setRestoreMessageType(null);
-      }, 5000);
-    } catch (err: any) {
-      logger.error('[Settings] Error in handleRestore:', err);
-      setRestoreMessage('Restore failed. Please try again.');
-      setRestoreMessageType('error');
-      setTimeout(() => {
-        setRestoreMessage(null);
-        setRestoreMessageType(null);
-      }, 5000);
-    }
-  };
 
   const performCSVExport = async (recipientEmail?: string) => {
     try {
@@ -1390,54 +1346,6 @@ export default function SettingsScreen() {
                   Livra+
                 </AppText>
               </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[styles.button, { backgroundColor: themeColors.surface }]}
-                onPress={handleRestore}
-                disabled={purchaseInProgress}
-              >
-                <AppText variant="button" style={[styles.buttonText, { color: themeColors.text, opacity: purchaseInProgress ? 0.5 : 1 }]}>
-                  Restore Purchases
-                </AppText>
-              </TouchableOpacity>
-              {restoreMessage && (
-                <View
-                  style={[
-                    styles.restoreMessageContainer,
-                    {
-                      backgroundColor:
-                        restoreMessageType === 'success'
-                          ? (themeColors.success || '#4CAF50') + '20'
-                          : restoreMessageType === 'info'
-                            ? (themeColors.primary || '#007AFF') + '15'
-                            : (themeColors.error || '#F44336') + '20',
-                      borderColor:
-                        restoreMessageType === 'success'
-                          ? (themeColors.success || '#4CAF50')
-                          : restoreMessageType === 'info'
-                            ? (themeColors.primary || '#007AFF')
-                            : (themeColors.error || '#F44336'),
-                    },
-                  ]}
-                >
-                  <AppText
-                    variant="body"
-                    style={[
-                      styles.restoreMessageText,
-                      {
-                        color:
-                          restoreMessageType === 'success'
-                            ? (themeColors.success || '#4CAF50')
-                            : restoreMessageType === 'info'
-                              ? (themeColors.primary || '#007AFF')
-                              : (themeColors.error || '#F44336'),
-                      },
-                    ]}
-                  >
-                    {restoreMessage}
-                  </AppText>
-                </View>
-              )}
             </>
           )}
         </View>
@@ -1532,7 +1440,7 @@ export default function SettingsScreen() {
         <View style={[styles.section, styles.aboutSection]}>
           <TouchableOpacity onPress={handleVersionTap} activeOpacity={1}>
             <AppText variant="caption" style={[styles.aboutText, { color: themeColors.textTertiary }]}>
-              Livra v{Constants.expoConfig?.version || '1.0.38'}
+              Livra v{Constants.expoConfig?.version || '1.0.39'}
             </AppText>
           </TouchableOpacity>
           <AppText variant="caption" style={[styles.aboutText, { color: themeColors.textTertiary }]}>

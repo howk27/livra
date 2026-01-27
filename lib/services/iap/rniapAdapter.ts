@@ -40,6 +40,7 @@ export type AdapterFunctions = {
   getReceiptIOS?: (...args: any[]) => Promise<any>;
   clearTransactionIOS?: (...args: any[]) => Promise<any>;
   convertNitroProductToProduct?: (...args: any[]) => any;
+  deepLinkToSubscriptions?: (...args: any[]) => Promise<any>;
 };
 
 export type AdapterSnapshot = {
@@ -171,6 +172,7 @@ export function getRniapAdapter(): AdapterSnapshot {
     getReceiptIOS: resolveFunction(module, 'getReceiptIOS'),
     clearTransactionIOS: resolveFunction(module, 'clearTransactionIOS'),
     convertNitroProductToProduct: resolveFunction(module, 'convertNitroProductToProduct'),
+    deepLinkToSubscriptions: resolveFunction(module, 'deepLinkToSubscriptions'),
   };
 
   return {
