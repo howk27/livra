@@ -41,7 +41,7 @@ export const useMarks = () => {
   const getIncrementsToday = useEventsStore((state) => state.getIncrementsToday);
   const { user } = useAuth();
   const { sync } = useSync();
-  const { isProUnlocked } = useIapSubscriptions();
+  const { isProUnlocked, proStatus } = useIapSubscriptions();
   const {
     recordDailyLogin,
     lastLoginDate,
@@ -79,7 +79,10 @@ export const useMarks = () => {
       skipSync?: boolean; // Optional flag to skip sync (useful for batch operations)
     }) => {
       // Check counter limit for free users (skip check if skipSync is true - used for onboarding)
-      if (!data.skipSync && !isProUnlocked) {
+      if (!data.skipSync && (proStatus.status === 'unknown' || !isProUnlocked)) {
+        if (proStatus.status === 'unknown') {
+          throw new Error('PRO_STATUS_UNKNOWN: Unable to verify subscription. Please try again.');
+        }
         // Count only active (non-deleted) counters
         const activeCounters = marks.filter((m) => !m.deleted_at);
         if (activeCounters.length >= FREE_COUNTER_LIMIT) {
@@ -113,7 +116,7 @@ export const useMarks = () => {
 
       return mark;
     },
-    [addMarkAction, marks, marks.length, user, sync, evaluateMarkBadges, isProUnlocked]
+    [addMarkAction, marks, marks.length, user, sync, evaluateMarkBadges, isProUnlocked, proStatus.status]
   );
 
   const incrementMark = useCallback(

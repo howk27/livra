@@ -30,6 +30,14 @@ interface SyncState {
   realtimeConnected: boolean;
 }
 
+const isProLimitError = (error: any): boolean => {
+  const message = error?.message || String(error || '');
+  return (
+    error?.code === 'P0001' ||
+    (typeof message === 'string' && message.includes('FREE_COUNTER_LIMIT_REACHED'))
+  );
+};
+
 export const useSync = () => {
   const [syncState, setSyncState] = useState<SyncState>({
     isSyncing: false,
@@ -874,6 +882,7 @@ export const useSync = () => {
         const BATCH_SIZE = 100;
         const counterBatches = batchArray(countersToPush, BATCH_SIZE);
         
+        let limitBlocked = false;
         for (let i = 0; i < counterBatches.length; i++) {
           const batch = counterBatches[i];
           logger.log(`[SYNC] Upserting batch ${i + 1}/${counterBatches.length} (${batch.length} counter(s))...`);
@@ -883,6 +892,16 @@ export const useSync = () => {
             .upsert(batch, { onConflict: 'id' });
 
           if (countersError) {
+            if (isProLimitError(countersError)) {
+              logger.warn('[SYNC] Free counter limit enforced by server', countersError);
+              setSyncState((prev) => ({
+                ...prev,
+                error:
+                  'Sync blocked: upgrade to Livra+ to keep more than 3 active marks in cloud. Your extra marks remain on this device.',
+              }));
+              limitBlocked = true;
+              break;
+            }
             const parsed = parseError(countersError);
             if (parsed.isNetworkError || parsed.shouldRetry) {
               logger.warn(`[SYNC] Network/timeout error pushing counters batch ${i + 1}:`, parsed.message);
@@ -898,10 +917,12 @@ export const useSync = () => {
           }
         }
 
-        if (deletedInAllCounters.length > 0) {
-          logger.log(`[SYNC] ✅ Successfully pushed ${deletedInAllCounters.length} deleted counter(s) to Supabase`);
-        } else {
-          logger.log(`[SYNC] ✅ Successfully pushed ${countersToPush.length} counter(s) to Supabase`);
+        if (!limitBlocked) {
+          if (deletedInAllCounters.length > 0) {
+            logger.log(`[SYNC] ✅ Successfully pushed ${deletedInAllCounters.length} deleted counter(s) to Supabase`);
+          } else {
+            logger.log(`[SYNC] ✅ Successfully pushed ${countersToPush.length} counter(s) to Supabase`);
+          }
         }
       }
 

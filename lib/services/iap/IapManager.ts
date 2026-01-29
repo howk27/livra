@@ -708,6 +708,10 @@ class IapManagerClass {
     }
   }
 
+  async hasPendingVerification(): Promise<boolean> {
+    return this.hasPendingTransaction();
+  }
+
   /**
    * Initialize IAP connection (idempotent - only runs once)
    */
@@ -719,7 +723,7 @@ class IapManagerClass {
         connectionStatus: 'disconnected',
         isInitialized: true,
       });
-      const isUnlocked = await checkProStatus();
+      await checkProStatus();
       return;
     }
 
@@ -923,7 +927,7 @@ class IapManagerClass {
       await this.recoverPendingTransactionOnce();
 
       // Step 5: Check current premium status
-      const isUnlocked = await checkProStatus();
+      await checkProStatus();
 
       // Step 6: Load products (with capped retry)
       await this.loadProducts();
@@ -2428,8 +2432,8 @@ class IapManagerClass {
     for (let i = 0; i < delays.length; i++) {
       attempts++;
       try {
-        const isUnlocked = await checkProStatus();
-        if (isUnlocked) {
+        const proStatus = await checkProStatus();
+        if (proStatus.status === 'unlocked') {
           logger.log('[IAP Manager] DB entitlement confirmed', {
             attempts,
             delay: delays[i - 1] || 0,
@@ -2465,13 +2469,13 @@ class IapManagerClass {
     dbConfirmed?: boolean;
   }> {
     if (Platform.OS === 'web' || isExpoGo) {
-      const isUnlocked = await checkProStatus();
-      return { outcome: isUnlocked ? 'success' : 'none_found', foundPurchases: 0 };
+      const proStatus = await checkProStatus();
+      return { outcome: proStatus.status === 'unlocked' ? 'success' : 'none_found', foundPurchases: 0 };
     }
 
     if (this.state.connectionStatus !== 'connected') {
-      const isUnlocked = await checkProStatus();
-      return { outcome: isUnlocked ? 'success' : 'none_found', foundPurchases: 0 };
+      const proStatus = await checkProStatus();
+      return { outcome: proStatus.status === 'unlocked' ? 'success' : 'none_found', foundPurchases: 0 };
     }
 
     const startTime = Date.now();
@@ -2529,9 +2533,9 @@ class IapManagerClass {
 
       if (!restoreMethod) {
         // No restore API - fall back to DB check without throwing
-        const isUnlocked = await checkProStatus();
+        const proStatus = await checkProStatus();
         this.lastRestoreMethod = 'none';
-        return { outcome: isUnlocked ? 'success' : 'none_found', foundPurchases: 0 };
+        return { outcome: proStatus.status === 'unlocked' ? 'success' : 'none_found', foundPurchases: 0 };
       }
 
       this.lastRestoreMethod = restoreMethod;
@@ -2641,19 +2645,19 @@ class IapManagerClass {
       }
 
       // Fallback to database check
-      const isUnlocked = await checkProStatus();
+      const proStatus = await checkProStatus();
 
       logger.log('[IAP Manager] Restore completed', {
         foundPurchases: purchases?.length || 0,
-        isUnlocked,
+        isUnlocked: proStatus.status === 'unlocked',
       });
 
       diagEvent('iap_manager_restore_success', {
         foundPurchases: purchases?.length || 0,
-        isUnlocked,
+        isUnlocked: proStatus.status === 'unlocked',
       }, Date.now() - startTime);
       
-      return { outcome: isUnlocked ? 'success' : 'none_found', foundPurchases: purchases?.length || 0 };
+      return { outcome: proStatus.status === 'unlocked' ? 'success' : 'none_found', foundPurchases: purchases?.length || 0 };
     } catch (error: any) {
       const duration = Date.now() - startTime;
       const iapError = getIAPErrorMessage(error);

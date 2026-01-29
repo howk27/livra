@@ -49,12 +49,13 @@ export default function SettingsScreen() {
   const router = useRouter();
 
   const { themeMode, setThemeMode } = useUIStore();
-  const { isProUnlocked } = useIapSubscriptions();
+  const { isProUnlocked, proStatus, refreshProStatus } = useIapSubscriptions();
   const { sync, syncState } = useSync();
   const { counters } = useCounters();
   const { events } = useEventsStore();
   const { user, signOut: authSignOut } = useAuth();
   const { showSuccess, showError } = useNotification();
+  const lastSyncErrorRef = useRef<string | null>(null);
   const [profileImageUri, setProfileImageUri] = useState<string | null>(null);
   const refreshRotation = useRef(new Animated.Value(0)).current;
   const [isProfileExpanded, setIsProfileExpanded] = useState(false);
@@ -581,6 +582,27 @@ export default function SettingsScreen() {
 
   const handleExportCSV = async () => {
     // Check if user has premium
+    if (proStatus.status === 'unknown') {
+      Alert.alert(
+        'Unable to Verify Subscription',
+        'We could not verify your subscription status right now. Please check your connection and try again.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Retry',
+            onPress: async () => {
+              try {
+                await refreshProStatus();
+              } catch (error) {
+                logger.error('[Settings] Error refreshing pro status:', error);
+                showError('Unable to refresh subscription status. Please try again.');
+              }
+            },
+          },
+        ]
+      );
+      return;
+    }
     if (!isProUnlocked) {
       Alert.alert(
         'Premium Feature',
@@ -696,6 +718,16 @@ export default function SettingsScreen() {
       refreshRotation.setValue(0);
     }
   };
+
+  useEffect(() => {
+    if (!syncState.error) {
+      lastSyncErrorRef.current = null;
+      return;
+    }
+    if (lastSyncErrorRef.current === syncState.error) return;
+    lastSyncErrorRef.current = syncState.error;
+    showError(syncState.error);
+  }, [syncState.error, showError]);
 
   const handleProfileCardPress = () => {
     if (user) {
@@ -1330,24 +1362,21 @@ export default function SettingsScreen() {
             Livra+
           </AppText>
           
-          {isProUnlocked ? (
+          {isProUnlocked && (
             <View style={[styles.proCard, { backgroundColor: themeColors.accent.primary + '2E' }]}>
               <AppText variant="subtitle" style={[styles.proText, { color: themeColors.accent.primary }]}>
                 ✓ Livra+ Unlocked
               </AppText>
             </View>
-          ) : (
-            <>
-              <TouchableOpacity
-                style={[styles.button, { backgroundColor: themeColors.primary }]}
-                onPress={() => router.push('/paywall')}
-              >
-                <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
-                  Livra+
-                </AppText>
-              </TouchableOpacity>
-            </>
           )}
+          <TouchableOpacity
+            style={[styles.button, { backgroundColor: themeColors.primary }]}
+            onPress={() => router.push('/paywall')}
+          >
+            <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+              {isProUnlocked ? 'Manage Livra+' : 'Livra+'}
+            </AppText>
+          </TouchableOpacity>
         </View>
 
         {/* Data Section */}

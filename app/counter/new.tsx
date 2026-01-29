@@ -117,6 +117,9 @@ export default function NewCounterScreen() {
         setDuplicateCounterName(errorName);
         setExistingCounterId(existingCounter?.id || null);
         setShowDuplicateModal(true);
+      } else if (error instanceof Error && error.message.includes('PRO_STATUS_UNKNOWN')) {
+        logger.warn('[Counter] Subscription status unknown');
+        showError('Unable to verify your subscription. Please check your connection and try again.');
       } else if (error instanceof Error && error.message.includes('FREE_COUNTER_LIMIT_REACHED')) {
         // Handle counter limit error
         logger.warn('[Counter] Counter limit reached for free user');
@@ -174,6 +177,9 @@ export default function NewCounterScreen() {
         setDuplicateCounterName(errorName);
         setExistingCounterId(null);
         setShowDuplicateModal(true);
+      } else if (error instanceof Error && error.message.includes('PRO_STATUS_UNKNOWN')) {
+        logger.warn('[Counter] Subscription status unknown');
+        showError('Unable to verify your subscription. Please check your connection and try again.');
       } else if (error instanceof Error && error.message.includes('FREE_COUNTER_LIMIT_REACHED')) {
         // Handle counter limit error
         logger.warn('[Counter] Counter limit reached for free user');

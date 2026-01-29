@@ -29,6 +29,12 @@ export type ReceiptValidationResult =
   | { status: 'invalid'; reason: string }
   | { status: 'transient'; reason: string };
 
+export type ProStatusResult = {
+  status: 'unlocked' | 'locked' | 'unknown';
+  source: 'db' | 'cache' | 'none';
+  reason?: string;
+};
+
 // Check if running in Expo Go
 const isExpoGo = Constants.appOwnership === 'expo';
 
@@ -140,7 +146,7 @@ export function getIAPErrorMessage(error: any): IAPError {
  * Check if user has premium status
  * Priority: Supabase database > Local storage (with TTL)
  */
-export async function checkProStatus(): Promise<boolean> {
+export async function checkProStatus(): Promise<ProStatusResult> {
   const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
   
   try {
@@ -163,11 +169,11 @@ export async function checkProStatus(): Promise<boolean> {
           checkedAt: new Date().toISOString(),
         };
         await AsyncStorage.setItem('pro_unlocked', JSON.stringify(cacheEntry));
-        return true;
+        return { status: 'unlocked', source: 'db' };
       } else {
         // Clear stale local cache if user is not premium in database
         await AsyncStorage.removeItem('pro_unlocked');
-        return false;
+        return { status: 'locked', source: 'db' };
       }
     }
   } catch (error) {
@@ -185,26 +191,26 @@ export async function checkProStatus(): Promise<boolean> {
           const checkedAt = new Date(cacheEntry.checkedAt);
           const age = Date.now() - checkedAt.getTime();
           if (age < CACHE_TTL_MS && cacheEntry.value === true) {
-            logger.log('[IAP] Using cached pro status (within TTL)', { ageHours: age / (60 * 60 * 1000) });
-            return true;
+            logger.log('[IAP] Cached pro status available (non-authoritative)', { ageHours: age / (60 * 60 * 1000) });
+            return { status: 'unknown', source: 'cache', reason: 'db_unavailable' };
           } else {
             logger.log('[IAP] Cached pro status expired, requiring online verification', { ageHours: age / (60 * 60 * 1000) });
             await AsyncStorage.removeItem('pro_unlocked');
-            return false;
+            return { status: 'unknown', source: 'none', reason: 'cache_expired' };
           }
         }
       } catch (parseError) {
         // Legacy format (just "true" string) - treat as expired
         logger.log('[IAP] Legacy cache format detected, clearing');
         await AsyncStorage.removeItem('pro_unlocked');
-        return false;
+        return { status: 'unknown', source: 'none', reason: 'legacy_cache' };
       }
     }
   } catch (cacheError) {
     logger.error('[IAP] Error reading cache:', cacheError);
   }
 
-  return false;
+  return { status: 'unknown', source: 'none', reason: 'db_unavailable' };
 }
 
 /**
@@ -285,6 +291,16 @@ export async function validateReceiptWithServer(params: {
       return { status: 'transient', reason: `edge_error:${error?.code ?? 'UNKNOWN'}` };
     }
 
+    if (data && typeof data !== 'object') {
+      logger.error('[IAP] Receipt validation failed (unexpected response shape)', {
+        transactionId: params.transactionId,
+        productId: params.productId,
+        platform: params.platform,
+        responseType: typeof data,
+      });
+      return { status: 'transient', reason: 'invalid_response_shape' };
+    }
+
     if (data?.success === true) {
       logger.log('[IAP] Receipt validated successfully', {
         transactionId: data.transactionId || params.transactionId,
@@ -303,7 +319,12 @@ export async function validateReceiptWithServer(params: {
       platform: params.platform,
       serverError: data?.error ?? 'Unknown error',
     });
-    return { status: 'invalid', reason: String(data?.error ?? 'non_success') };
+    const serverReason = String(data?.error ?? data?.reason ?? 'non_success');
+    const invalidSignals = ['invalid', 'expired', 'revoked', 'not_purchased', 'mismatched'];
+    const isInvalid = invalidSignals.some((signal) => serverReason.toLowerCase().includes(signal));
+    return isInvalid
+      ? { status: 'invalid', reason: serverReason }
+      : { status: 'transient', reason: serverReason };
   } catch (err: any) {
     // This catches BOTH timeout rejection and unexpected failures.
     const msg = err?.message ?? String(err);
@@ -357,8 +378,8 @@ export async function setLocalProCache(): Promise<boolean> {
     // Verify DB status BEFORE caching locally
     // This ensures we only cache if DB has confirmed the unlock
     try {
-      const isUnlocked = await checkProStatus();
-      if (isUnlocked) {
+      const proStatus = await checkProStatus();
+      if (proStatus.status === 'unlocked') {
         // DB confirms pro_unlocked = true - safe to cache locally with timestamp
         const cacheEntry = {
           value: true,
@@ -372,8 +393,8 @@ export async function setLocalProCache(): Promise<boolean> {
         logger.warn('[IAP] Pro status not confirmed in database - not caching locally. Edge Function may still be processing.');
         // Wait 1000ms and retry once (max 1 retry) to allow Edge Function propagation
         await new Promise(resolve => setTimeout(resolve, 1000));
-        const retryUnlocked = await checkProStatus();
-        if (retryUnlocked) {
+        const retryStatus = await checkProStatus();
+        if (retryStatus.status === 'unlocked') {
           const cacheEntry = {
             value: true,
             checkedAt: new Date().toISOString(),

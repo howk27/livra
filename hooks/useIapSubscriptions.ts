@@ -24,10 +24,22 @@ import {
   updateDiagnosticsState,
 } from '../lib/debug/iapDiagnostics';
 import { IapManager, type IapManagerState } from '../lib/services/iap/IapManager';
-import { checkProStatus } from '../lib/iap/iap';
+import { checkProStatus, type ProStatusResult } from '../lib/iap/iap';
 import { MONTHLY_SKU, YEARLY_SKU } from '../lib/iap/skus';
 
 const isExpoGo = Constants.appOwnership === 'expo';
+
+const normalizeProStatus = (status: ProStatusResult | null | undefined): ProStatusResult => {
+  if (!status || typeof status !== 'object') {
+    return { status: 'unknown', source: 'none', reason: 'invalid_status' };
+  }
+  const validStatuses = new Set(['unlocked', 'locked', 'unknown']);
+  const validSources = new Set(['db', 'cache', 'none']);
+  if (!validStatuses.has(status.status) || !validSources.has(status.source)) {
+    return { status: 'unknown', source: 'none', reason: 'invalid_status' };
+  }
+  return status;
+};
 
 interface UseIapSubscriptionsReturn {
   // State
@@ -39,12 +51,14 @@ interface UseIapSubscriptionsReturn {
   lastErrorCode: string | null;
   connectionStatus: IAPState['connectionStatus'];
   isProUnlocked: boolean;
+  proStatus: ProStatusResult;
+  hasPendingVerification: boolean;
   productsLoadError: boolean;
   pricesMissing: boolean;
   listenersRegistered: boolean;
 
   // Actions
-  purchaseSubscription: (productId: string) => Promise<void>;
+  purchaseSubscription: (productId: string) => Promise<PurchaseOutcome>;
   restorePurchases: () => Promise<RestoreOutcome>;
   refreshProStatus: () => Promise<void>;
   retryLoadProducts: () => Promise<void>;
@@ -71,10 +85,22 @@ type RestoreOutcome = {
   message?: string;
 };
 
+type PurchaseOutcome = {
+  outcome: 'submitted' | 'cancelled' | 'error';
+  code?: string;
+  message?: string;
+};
+
 export function useIapSubscriptions(): UseIapSubscriptionsReturn {
   const [managerState, setManagerState] = useState<IapManagerState>(IapManager.getState());
   const [purchaseInProgress, setPurchaseInProgress] = useState(false);
   const [isProUnlocked, setIsProUnlocked] = useState(false);
+  const [proStatus, setProStatus] = useState<ProStatusResult>({
+    status: 'unknown',
+    source: 'none',
+    reason: 'not_checked',
+  });
+  const [hasPendingVerification, setHasPendingVerification] = useState(false);
   
   const [debugInfo, setDebugInfo] = useState({
     bundleId: Constants.expoConfig?.ios?.bundleIdentifier || 'unknown',
@@ -155,8 +181,9 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
         await IapManager.initialize();
         
         // Check premium status
-        const isUnlocked = await checkProStatus();
-        setIsProUnlocked(isUnlocked);
+        const status = normalizeProStatus(await checkProStatus());
+        setProStatus(status);
+        setIsProUnlocked(status.status === 'unlocked');
       } catch (error: any) {
         logger.error('[IAP Hook] Initialization error:', error);
       }
@@ -172,17 +199,49 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
   // Update premium status when manager state changes
   useEffect(() => {
     const checkStatus = async () => {
-      const isUnlocked = await checkProStatus();
-      setIsProUnlocked(isUnlocked);
+      const status = normalizeProStatus(await checkProStatus());
+      setProStatus(status);
+      setIsProUnlocked(status.status === 'unlocked');
     };
     checkStatus();
   }, [managerState.products.length]);
+
+  // Track pending verification state to prevent double-charge risk
+  useEffect(() => {
+    let mounted = true;
+    const loadPending = async () => {
+      try {
+        const pending = await IapManager.hasPendingVerification();
+        if (mounted) {
+          const transientCodes = new Set([
+            'TRANSIENT_DB_PENDING',
+            'TRANSIENT_RECEIPT_MISSING',
+            'TRANSIENT_VERIFICATION_PENDING',
+            'TRANSIENT_PURCHASE_TOKEN_MISSING',
+            'TRANSIENT_VERIFICATION',
+          ]);
+          const isTransient = managerState.lastError?.code
+            ? transientCodes.has(managerState.lastError.code)
+            : false;
+          setHasPendingVerification(pending || isTransient);
+        }
+      } catch {
+        if (mounted) {
+          setHasPendingVerification(false);
+        }
+      }
+    };
+    loadPending();
+    return () => {
+      mounted = false;
+    };
+  }, [managerState.lastError?.code]);
 
   /**
    * Request subscription purchase
    */
   const purchaseSubscription = useCallback(
-    async (productId: string) => {
+    async (productId: string): Promise<PurchaseOutcome> => {
       // Validate state
       if (managerState.connectionStatus !== 'connected') {
         const errorMsg = 'Store connection is not available. Please check your internet connection.';
@@ -225,6 +284,7 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
         // Purchase completion is handled by IapManager's purchaseUpdatedListener
         // Emit submitted event, not success - true success is after validation/unlock
         diagEvent('requestPurchase_submitted', { productId });
+        return { outcome: 'submitted' };
       } catch (error: any) {
         // Check if this is a user cancellation - handle gracefully
         const isUserCancellation = 
@@ -243,7 +303,7 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
             productId,
           });
           // Don't throw - cancellation is expected behavior
-          return;
+          return { outcome: 'cancelled', code: 'USER_CANCELLED', message: 'Purchase cancelled by user' };
         }
 
         // Actual error - log and throw
@@ -260,7 +320,11 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
           },
           productId,
         });
-        throw error;
+        return {
+          outcome: 'error',
+          code: error?.code || 'UNKNOWN',
+          message: error?.message || 'Unknown error',
+        };
       } finally {
         setPurchaseInProgress(false);
       }
@@ -284,8 +348,9 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
       // Refresh premium status only after confirmed success
       if (outcomeResult.outcome === 'success' && outcomeResult.dbConfirmed !== false) {
         try {
-          const isUnlocked = await checkProStatus();
-          setIsProUnlocked(isUnlocked);
+          const status = normalizeProStatus(await checkProStatus());
+          setProStatus(status);
+          setIsProUnlocked(status.status === 'unlocked');
         } catch (refreshError: any) {
           diagEvent('restore_refresh_failed', {
             code: refreshError?.code || 'UNKNOWN',
@@ -346,8 +411,9 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
    * Refresh premium status from database
    */
   const refreshProStatus = useCallback(async () => {
-    const isUnlocked = await checkProStatus();
-    setIsProUnlocked(isUnlocked);
+    const status = normalizeProStatus(await checkProStatus());
+    setProStatus(status);
+    setIsProUnlocked(status.status === 'unlocked');
   }, []);
 
   /**
@@ -397,6 +463,8 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
     lastErrorCode,
     connectionStatus: managerState.connectionStatus,
     isProUnlocked,
+    proStatus,
+    hasPendingVerification,
     productsLoadError,
     pricesMissing,
     listenersRegistered: managerState.listenersRegistered,
