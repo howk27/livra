@@ -1469,7 +1469,7 @@ export default function SettingsScreen() {
         <View style={[styles.section, styles.aboutSection]}>
           <TouchableOpacity onPress={handleVersionTap} activeOpacity={1}>
             <AppText variant="caption" style={[styles.aboutText, { color: themeColors.textTertiary }]}>
-              Livra v{Constants.expoConfig?.version || '1.0.39'}
+              Livra v{Constants.expoConfig?.version || '1.0.40'}
             </AppText>
           </TouchableOpacity>
           <AppText variant="caption" style={[styles.aboutText, { color: themeColors.textTertiary }]}>
