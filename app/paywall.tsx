@@ -55,6 +55,7 @@ function PaywallScreenContent() {
   // CRITICAL: Synchronous ref guard to prevent double-tap race condition
   // This must be defined before useIapSubscriptions hook to prevent crash
   const purchaseInProgressRef = useRef(false);
+  const userInitiatedCloseRef = useRef(false);
 
   // Hidden gesture for diagnostics (tap title 7 times within 3 seconds)
   const titleTapCount = useRef(0);
@@ -251,6 +252,8 @@ function PaywallScreenContent() {
       return;
     }
 
+    userInitiatedCloseRef.current = false;
+
     // Set tap guard for 1 second to prevent UI spam
     purchaseInProgressRef.current = true;
     setTimeout(() => {
@@ -360,6 +363,7 @@ function PaywallScreenContent() {
 
     // Always call IapManager.buy via hook - it is the authoritative source
     // IapManager will handle its own purchaseInProgress guard and throw if already in progress
+    userInitiatedCloseRef.current = true;
     const purchaseResult = await purchaseSubscription(productId);
     if (purchaseResult.outcome === 'submitted') {
       setOperationState('verifying');
@@ -367,11 +371,13 @@ function PaywallScreenContent() {
       return;
     }
     if (purchaseResult.outcome === 'cancelled') {
+      userInitiatedCloseRef.current = false;
       setOperationState('info');
       setOperationMessage('Purchase cancelled.');
       return;
     }
     // outcome === 'error'
+    userInitiatedCloseRef.current = false;
     const { getIAPErrorMessage } = await import('../lib/iap/iap');
     const iapError = getIAPErrorMessage({
       code: purchaseResult.code,
@@ -380,6 +386,7 @@ function PaywallScreenContent() {
     const userMessage = iapError.userMessage || 'Unable to start purchase. Please try again.';
     const supportCode = iapError.code || 'UNKNOWN';
     if (iapError.code === 'ALREADY_OWNED') {
+      userInitiatedCloseRef.current = false;
       setOperationState('subscribed');
       setOperationMessage('You’re already subscribed.');
       Alert.alert('Subscribed', 'You already have an active subscription.');
@@ -414,16 +421,19 @@ function PaywallScreenContent() {
     setRestoreMessageType(null);
     setOperationState('restoring');
     setOperationMessage('Restoring purchases...');
+    userInitiatedCloseRef.current = true;
     
     try {
       const result = await restorePurchases();
       
       if (result.outcome === 'cancelled') {
+        userInitiatedCloseRef.current = false;
         setRestoreMessage('Restore cancelled.');
         setRestoreMessageType('info');
         setOperationState('idle');
         setOperationMessage(null);
       } else if (result.outcome === 'none_found') {
+        userInitiatedCloseRef.current = false;
         setRestoreMessage('No active subscription found for this Apple ID.');
         setRestoreMessageType('info');
         setOperationState('idle');
@@ -444,6 +454,7 @@ function PaywallScreenContent() {
           setOperationMessage(isUnlocked ? 'Subscribed.' : 'Verifying your entitlement…');
         }
       } else {
+        userInitiatedCloseRef.current = false;
         setRestoreMessage('Restore failed. Please try again.');
         setRestoreMessageType('error');
         setOperationState('error');
@@ -457,6 +468,7 @@ function PaywallScreenContent() {
       }, 5000);
     } catch (err: any) {
       logger.error('[Paywall] Error in handleRestore:', err);
+      userInitiatedCloseRef.current = false;
       // Show user-friendly error message
       const errorMsg = err?.message || String(err);
       const errorCode = err?.code || '';
@@ -524,7 +536,7 @@ function PaywallScreenContent() {
   useEffect(() => {
     if (isSubscribed) {
       setOperationState('subscribed');
-      setOperationMessage('Subscribed.');
+      setOperationMessage(null);
     }
   }, [isSubscribed]);
 
@@ -596,7 +608,8 @@ function PaywallScreenContent() {
   // CRITICAL: Delay must be sufficient to ensure Apple Pay sheet has fully dismissed
   // before navigation occurs. Apple Pay dismissal animation can take up to 2-3 seconds.
   useEffect(() => {
-    if (isProUnlocked && !purchaseInProgress) {
+    if (isProUnlocked && !purchaseInProgress && userInitiatedCloseRef.current) {
+      userInitiatedCloseRef.current = false;
       // Extended delay to ensure Apple Pay sheet has fully dismissed
       // and purchase flow is completely finished before navigation
       const timer = setTimeout(() => {
@@ -908,17 +921,15 @@ function PaywallScreenContent() {
         )}
 
         {isSubscribed && (
-          <View style={[styles.subscribedContainer, { backgroundColor: themeColors.surface, borderColor: themeColors.primary }]}>
+          <TouchableOpacity
+            style={[styles.subscribedContainer, { backgroundColor: themeColors.surface, borderColor: themeColors.primary }]}
+            onPress={handleManageSubscription}
+            activeOpacity={0.8}
+          >
             <Text style={[styles.subscribedText, { color: themeColors.primary }]}>
               Subscribed
             </Text>
-            <TouchableOpacity
-              style={[styles.manageSubscriptionButton, { backgroundColor: themeColors.primary }]}
-              onPress={handleManageSubscription}
-            >
-              <Text style={styles.manageSubscriptionText}>Manage Subscription</Text>
-            </TouchableOpacity>
-          </View>
+          </TouchableOpacity>
         )}
 
         {/* Loading State */}
@@ -962,7 +973,7 @@ function PaywallScreenContent() {
         )}
 
         {/* Purchase Button - Only show when products are loaded and connection is ready */}
-        {connectionStatus === 'connected' && !isLoadingProducts && products && Array.isArray(products) && products.length > 0 && (
+        {connectionStatus === 'connected' && !isLoadingProducts && products && Array.isArray(products) && products.length > 0 && !isSubscribed && (
           <TouchableOpacity
             style={[
               styles.purchaseButton,
@@ -1057,21 +1068,23 @@ function PaywallScreenContent() {
         )}
 
         {/* Restore Button */}
-        <TouchableOpacity
-          style={styles.restoreButton}
-          onPress={handleRestore}
-          disabled={purchaseInProgress || isLoadingProducts}
-        >
-          <Text style={[
-            styles.restoreButtonText, 
-            { 
-              color: themeColors.textSecondary,
-              opacity: (purchaseInProgress || isLoadingProducts) ? 0.5 : 1,
-            }
-          ]}>
-            Restore Purchases
-          </Text>
-        </TouchableOpacity>
+        {!isSubscribed && (
+          <TouchableOpacity
+            style={styles.restoreButton}
+            onPress={handleRestore}
+            disabled={purchaseInProgress || isLoadingProducts}
+          >
+            <Text style={[
+              styles.restoreButtonText, 
+              { 
+                color: themeColors.textSecondary,
+                opacity: (purchaseInProgress || isLoadingProducts) ? 0.5 : 1,
+              }
+            ]}>
+              Restore Purchases
+            </Text>
+          </TouchableOpacity>
+        )}
         
         {/* STEP 5: Restore message display */}
         {restoreMessage && (
