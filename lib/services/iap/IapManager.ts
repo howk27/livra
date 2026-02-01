@@ -432,6 +432,8 @@ export interface IapManagerState {
     message: string;
     userMessage: string;
   } | null;
+  lastPurchaseUpdatedAt: string | null;
+  lastPurchaseTransactionId: string | null;
   isInitialized: boolean;
   listenersRegistered: boolean;
   pricesMissing: boolean;
@@ -445,6 +447,8 @@ class IapManagerClass {
     products: [],
     isLoadingProducts: false,
     lastError: null,
+    lastPurchaseUpdatedAt: null,
+    lastPurchaseTransactionId: null,
     isInitialized: false,
     listenersRegistered: false,
     pricesMissing: false,
@@ -1065,6 +1069,11 @@ class IapManagerClass {
       (purchase as any).sku ||
       (purchase as any).identifier ||
       null;
+
+    this.setState({
+      lastPurchaseUpdatedAt: new Date().toISOString(),
+      lastPurchaseTransactionId: transactionId || null,
+    });
     
     // Helper function to attempt finishTransaction with idempotency guard
     const attemptFinishTransaction = async (reason: string) => {
@@ -2216,8 +2225,12 @@ class IapManagerClass {
     // TASK B1: Set guard and pendingPurchase BEFORE requestPurchase
     this.purchaseInProgress = true;
     this.pendingPurchase = { sku, startedAt: Date.now() };
-    // P1: Clear previous error when starting new purchase attempt
-    this.setState({ lastError: null });
+    // P1: Clear previous error and purchase update markers
+    this.setState({
+      lastError: null,
+      lastPurchaseUpdatedAt: null,
+      lastPurchaseTransactionId: null,
+    });
     const startTime = Date.now();
     
     // TASK B1: Start 90s timeout failsafe

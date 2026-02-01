@@ -133,6 +133,8 @@ function PaywallScreenContent() {
     isProUnlocked,
     proStatus,
     hasPendingVerification,
+    lastPurchaseUpdatedAt,
+    lastPurchaseTransactionId,
     productsLoadError,
     pricesMissing,
     listenersRegistered,
@@ -218,7 +220,7 @@ function PaywallScreenContent() {
   };
 
   const verificationPendingMessage =
-    'We couldn’t verify your subscription yet. Try Restore Purchases or check again in a moment.';
+    'We couldn’t verify your purchase yet. Try again in a moment.';
 
   useEffect(() => {
     return () => {
@@ -251,6 +253,8 @@ function PaywallScreenContent() {
       return 'error';
     }
   }, []);
+
+  const lastPurchaseUpdatedRef = useRef<string | null>(null);
 
   // STEP 2: Deterministic product mapping - use normalized productId from IapManager
   // IapManager normalizes products to always have productId field
@@ -334,10 +338,8 @@ function PaywallScreenContent() {
       // Additional validation before purchase
       if (isSubscribed) {
         setOperationState('subscribed');
-        setOperationMessage('You are already subscribed.');
+        setOperationMessage(null);
         Alert.alert('Subscribed', 'You already have an active subscription.');
-        IapManager.recoverNow().catch(() => {});
-        checkProStatus().catch(() => {});
         purchaseInProgressRef.current = false;
         return;
       }
@@ -451,7 +453,7 @@ function PaywallScreenContent() {
           setOperationMessage(verificationPendingMessage);
         } else {
           setOperationState('error');
-          setOperationMessage('Unable to verify your subscription right now. Please try again.');
+          setOperationMessage('Purchase failed. Please try again.');
         }
         return;
       }
@@ -470,13 +472,11 @@ function PaywallScreenContent() {
       if (normalized.kind === 'already_owned') {
         setOperationState('info');
         setOperationMessage(normalized.message);
-        IapManager.recoverNow().catch(() => {});
-        checkProStatus().catch(() => {});
         purchaseInProgressRef.current = false;
         return;
       }
       setOperationState('error');
-      setOperationMessage(normalized.message);
+      setOperationMessage('Purchase failed. Please try again.');
       // Reset tap guard on error so user can retry after error is cleared
       purchaseInProgressRef.current = false;
       // Note: Tap guard auto-resets after 1 second, or on error above
@@ -541,7 +541,7 @@ function PaywallScreenContent() {
           setRestoreMessage('Restore completed, but we could not verify yet.');
           setRestoreMessageType('info');
           setOperationState('error');
-          setOperationMessage('Unable to verify your subscription right now. Please try again.');
+          setOperationMessage('Purchase failed. Please try again.');
         }
       } else {
         setRestoreMessage('Restore failed. Please try again.');
@@ -603,6 +603,21 @@ function PaywallScreenContent() {
     'TRANSIENT_PURCHASE_TOKEN_MISSING',
   ]);
   const hasTransientError = lastErrorCode ? transientErrorCodes.has(lastErrorCode) : false;
+  const isTransientState = hasTransientError || hasPendingVerification || operationState === 'transient_error';
+  const normalizedKind = currentNormalizedError?.kind;
+  const isAlreadyOwned = normalizedKind === 'already_owned';
+  const isCancelled = normalizedKind === 'cancelled';
+  const isDeferred = currentNormalizedError?.message?.toLowerCase().includes('deferred') || false;
+  const hasPurchaseUpdated = !!lastPurchaseUpdatedAt;
+  const hasPurchaseTransactionId = !!lastPurchaseTransactionId;
+  const isStrictFailure =
+    !!currentNormalizedError &&
+    !isCancelled &&
+    !isAlreadyOwned &&
+    !isDeferred &&
+    !isTransientState &&
+    !hasPurchaseUpdated &&
+    !hasPurchaseTransactionId;
 
   const handleRetryVerification = async () => {
     try {
@@ -621,35 +636,15 @@ function PaywallScreenContent() {
         setOperationMessage(verificationPendingMessage);
       } else {
         setOperationState('error');
-        setOperationMessage('Unable to verify your subscription right now. Please try again.');
+        setOperationMessage('Purchase failed. Please try again.');
       }
     } catch (error) {
       logger.error('[Paywall] Retry verification failed', error);
       setOperationState('error');
-      setOperationMessage('Verification failed. Please try again.');
+      setOperationMessage('Purchase failed. Please try again.');
     } finally {
       setOperationState((current) => {
         if (current === 'verifying') {
-          setOperationMessage(null);
-          return 'idle';
-        }
-        return current;
-      });
-    }
-  };
-
-  const handleRetryInit = async () => {
-    try {
-      setOperationState('loadingProducts');
-      setOperationMessage('Retrying IAP setup...');
-      await IapManager.retryInit();
-    } catch (error) {
-      logger.error('[Paywall] Retry IAP setup failed', error);
-      setOperationState('error');
-      setOperationMessage('Unable to retry IAP setup. Please try again.');
-    } finally {
-      setOperationState((current) => {
-        if (current === 'loadingProducts') {
           setOperationMessage(null);
           return 'idle';
         }
@@ -701,9 +696,47 @@ function PaywallScreenContent() {
       setOperationMessage('We couldn’t verify your purchase yet.');
     } else {
       setOperationState('error');
-      setOperationMessage(lastError);
+      setOperationMessage('Purchase failed. Please try again.');
     }
   }, [lastError, hasTransientError]);
+
+  useEffect(() => {
+    if (!lastPurchaseUpdatedAt) return;
+    if (lastPurchaseUpdatedRef.current === lastPurchaseUpdatedAt) return;
+    lastPurchaseUpdatedRef.current = lastPurchaseUpdatedAt;
+    if (isSubscribed) return;
+    setOperationState('verifying');
+    setOperationMessage('Verifying your purchase...');
+    setNormalizedError(null);
+    refreshEntitlementWithBackoff({ maxMs: 90000 })
+      .then((verificationResult) => {
+        if (verificationResult === 'aborted') {
+          return;
+        }
+        if (verificationResult === 'unlocked') {
+          setOperationState('subscribed');
+          setOperationMessage(null);
+        } else if (verificationResult === 'still_locked') {
+          setOperationState('info');
+          setOperationMessage(verificationPendingMessage);
+        } else {
+          setOperationState('error');
+          setOperationMessage('Purchase failed. Please try again.');
+        }
+      })
+      .catch(() => {
+        setOperationState('error');
+        setOperationMessage('Purchase failed. Please try again.');
+      });
+  }, [isSubscribed, lastPurchaseUpdatedAt, refreshEntitlementWithBackoff, verificationPendingMessage]);
+
+  useEffect(() => {
+    if (!isStrictFailure) return;
+    if (operationState !== 'error' || operationMessage !== 'Purchase failed. Please try again.') {
+      setOperationState('error');
+      setOperationMessage('Purchase failed. Please try again.');
+    }
+  }, [isStrictFailure, operationMessage, operationState]);
 
   useEffect(() => {
     const shouldWatchdog = operationState === 'purchasing' || operationState === 'restoring' || operationState === 'verifying';
@@ -1048,6 +1081,9 @@ function PaywallScreenContent() {
             <Text style={[styles.subscribedText, { color: themeColors.primary }]}>
               Subscribed
             </Text>
+            <Text style={[styles.subscribedHint, { color: themeColors.textSecondary }]}>
+              Tap to manage
+            </Text>
           </TouchableOpacity>
         )}
 
@@ -1061,7 +1097,7 @@ function PaywallScreenContent() {
           </View>
         )}
 
-        {/* TASK 7: Preflight health check error - show user-facing error + retry */}
+        {/* TASK 7: Preflight health check error - show user-facing error */}
         {healthCheckFailed && !isLoadingProducts && (
           <View style={[styles.errorContainer, { backgroundColor: themeColors.surface, borderColor: themeColors.error }]}>
             <Text style={[styles.errorText, { color: themeColors.error, fontWeight: fontWeight.semibold }]}>
@@ -1072,17 +1108,11 @@ function PaywallScreenContent() {
                 ? healthCheckReasons[0] // Show first reason as user message
                 : 'Please check your connection and try again.'}
             </Text>
-            <TouchableOpacity
-              style={[styles.retryButton, { backgroundColor: themeColors.primary, marginTop: spacing.md }]}
-              onPress={handleRetryLoadProducts}
-            >
-              <Text style={styles.retryButtonText}>Retry</Text>
-            </TouchableOpacity>
           </View>
         )}
 
         {/* Error State - Products failed to load */}
-        {productsLoadError && !isLoadingProducts && !healthCheckFailed && (
+        {productsLoadError && !isLoadingProducts && !healthCheckFailed && supportModeEnabled && (
           <ErrorDetails
             error={lastError}
             connectionStatus={connectionStatus}
@@ -1127,7 +1157,12 @@ function PaywallScreenContent() {
         )}
 
         {/* Operation Status / Error Display */}
-        {(operationMessage || lastError) && !productsLoadError && (
+        {isStrictFailure && operationState === 'error' && (
+          <Text style={[styles.errorText, { color: themeColors.error, textAlign: 'center', marginTop: spacing.sm }]}>
+            {operationMessage || 'Purchase failed. Please try again.'}
+          </Text>
+        )}
+        {(operationMessage || lastError) && !productsLoadError && !isStrictFailure && (
           <View
             style={[
               styles.errorContainer,
@@ -1163,12 +1198,7 @@ function PaywallScreenContent() {
                 Please check your internet connection and try again.
               </Text>
             )}
-            {purchaseInProgress && (
-              <Text style={[styles.errorHint, { color: themeColors.textSecondary, marginTop: spacing.xs }]}>
-                Purchase in progress. Please wait...
-              </Text>
-            )}
-            {operationState === 'transient_error' && (
+            {isTransientState && !isAlreadyOwned && (
               <TouchableOpacity
                 style={[styles.retryButton, { backgroundColor: themeColors.primary, marginTop: spacing.md }]}
                 onPress={handleRetryVerification}
@@ -1176,16 +1206,7 @@ function PaywallScreenContent() {
                 <Text style={styles.retryButtonText}>Retry Verification</Text>
               </TouchableOpacity>
             )}
-            {hasPendingVerification && operationState !== 'transient_error' && (
-              <TouchableOpacity
-                style={[styles.retryButton, { backgroundColor: themeColors.primary, marginTop: spacing.md }]}
-                onPress={handleRetryVerification}
-                disabled={purchaseInProgress}
-              >
-                <Text style={styles.retryButtonText}>Retry Verification</Text>
-              </TouchableOpacity>
-            )}
-            {currentNormalizedError?.showManage && !isSubscribed && (
+            {isAlreadyOwned && !isSubscribed && (
               <TouchableOpacity
                 style={[styles.retryButton, { backgroundColor: themeColors.primary, marginTop: spacing.sm }]}
                 onPress={handleManageSubscription}
@@ -1194,41 +1215,11 @@ function PaywallScreenContent() {
                 <Text style={styles.retryButtonText}>Manage Subscription</Text>
               </TouchableOpacity>
             )}
-            {currentNormalizedError?.showRestore && !isSubscribed && (
-              <TouchableOpacity
-                style={[styles.retryButton, { backgroundColor: themeColors.primary, marginTop: spacing.sm }]}
-                onPress={handleRestore}
-                disabled={purchaseInProgress}
-              >
-                <Text style={styles.retryButtonText}>Restore Purchases</Text>
-              </TouchableOpacity>
-            )}
-            {currentNormalizedError?.canRetry &&
-              !hasPendingVerification &&
-              !purchaseInProgress &&
-              !isSubscribed &&
-              operationState !== 'verifying' &&
-              operationState !== 'transient_error' && (
-                <TouchableOpacity
-                  style={[styles.retryButton, { backgroundColor: themeColors.primary, marginTop: spacing.sm }]}
-                  onPress={handlePurchase}
-                >
-                  <Text style={styles.retryButtonText}>Retry Purchase</Text>
-                </TouchableOpacity>
-              )}
-            {supportModeEnabled && (operationState === 'error' || operationState === 'transient_error') && (
-              <TouchableOpacity
-                style={[styles.retryButton, { backgroundColor: themeColors.primary, marginTop: spacing.sm }]}
-                onPress={handleRetryInit}
-              >
-                <Text style={styles.retryButtonText}>Retry IAP Setup</Text>
-              </TouchableOpacity>
-            )}
           </View>
         )}
 
         {/* Restore Button */}
-        {!isSubscribed && (
+        {!isSubscribed && !operationMessage && !lastError && !isStrictFailure && (
           <TouchableOpacity
             style={styles.restoreButton}
             onPress={handleRestore}
@@ -1544,6 +1535,9 @@ const styles = StyleSheet.create({
   subscribedText: {
     fontSize: fontSize.lg,
     fontWeight: fontWeight.semibold,
+  },
+  subscribedHint: {
+    fontSize: fontSize.sm,
   },
   manageSubscriptionButton: {
     paddingHorizontal: spacing.md,

@@ -50,6 +50,8 @@ interface UseIapSubscriptionsReturn {
   lastErrorCode: string | null;
   lastErrorRawMessage: string | null;
   connectionStatus: IAPState['connectionStatus'];
+  lastPurchaseUpdatedAt: string | null;
+  lastPurchaseTransactionId: string | null;
   isProUnlocked: boolean;
   proStatus: ProStatusResult;
   hasPendingVerification: boolean;
@@ -462,6 +464,8 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
     lastErrorCode,
     lastErrorRawMessage,
     connectionStatus: managerState.connectionStatus,
+    lastPurchaseUpdatedAt: managerState.lastPurchaseUpdatedAt ?? null,
+    lastPurchaseTransactionId: managerState.lastPurchaseTransactionId ?? null,
     isProUnlocked,
     proStatus,
     hasPendingVerification,

@@ -69,6 +69,13 @@ export default function IapDashboardScreen() {
     loadSupportToggle();
   }, []);
 
+  useEffect(() => {
+    if (__DEV__) return;
+    if (!supportDiagnosticsEnabled) {
+      router.back();
+    }
+  }, [router, supportDiagnosticsEnabled]);
+
   const handleCopy = async () => {
     try {
       const diagnosticsString = getDiagnosticsAsString();
@@ -131,6 +138,10 @@ export default function IapDashboardScreen() {
       </AppText>
     </View>
   );
+
+  if (!__DEV__ && !supportDiagnosticsEnabled) {
+    return null;
+  }
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
@@ -201,7 +212,7 @@ export default function IapDashboardScreen() {
         )}
 
         {/* Retry IAP Setup */}
-        {renderSection(
+        {supportDiagnosticsEnabled && renderSection(
           'IAP Recovery',
           <View style={styles.content}>
             <TouchableOpacity
