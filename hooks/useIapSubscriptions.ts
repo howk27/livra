@@ -11,7 +11,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
-import * as Device from 'expo-device';
 import {
   SUBSCRIPTION_PRODUCT_IDS,
   ALL_PRODUCT_IDS,
@@ -49,6 +48,7 @@ interface UseIapSubscriptionsReturn {
   purchaseInProgress: boolean;
   lastError: string | null;
   lastErrorCode: string | null;
+  lastErrorRawMessage: string | null;
   connectionStatus: IAPState['connectionStatus'];
   isProUnlocked: boolean;
   proStatus: ProStatusResult;
@@ -73,7 +73,6 @@ interface UseIapSubscriptionsReturn {
       lastError: string | null;
       isExpoGo: boolean;
       platform: string;
-      isIPad: boolean;
     };
 }
 
@@ -111,7 +110,6 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
     lastError: null as string | null,
     isExpoGo,
     platform: Platform.OS,
-    isIPad: Platform.OS === 'ios' && Device.deviceType === Device.DeviceType.TABLET,
   });
 
   const initRef = useRef(false);
@@ -452,6 +450,7 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
   const productsLoadError = managerState.connectionStatus === 'connected' && managerState.products.length === 0 && managerState.lastError !== null;
   const lastError = managerState.lastError?.userMessage || null;
   const lastErrorCode = managerState.lastError?.code || null;
+  const lastErrorRawMessage = managerState.lastError?.message || null;
   const pricesMissing = managerState.pricesMissing || false;
 
   return {
@@ -461,6 +460,7 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
     purchaseInProgress,
     lastError,
     lastErrorCode,
+    lastErrorRawMessage,
     connectionStatus: managerState.connectionStatus,
     isProUnlocked,
     proStatus,

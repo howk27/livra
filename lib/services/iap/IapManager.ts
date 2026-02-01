@@ -35,6 +35,7 @@ import {
   validateReceiptWithServer,
   unlockPro,
   getIAPErrorMessage,
+  normalizeIapError,
 } from '../../iap/iap';
 import {
   getCapabilityDiagnostics,
@@ -989,18 +990,18 @@ class IapManagerClass {
                   message: error?.message || String(error),
                 },
               });
-              const iapError = getIAPErrorMessage(error);
+              const normalized = normalizeIapError(error);
               this.setState({
                 lastError: {
-                  code: iapError.code,
-                  message: iapError.message,
-                  userMessage: iapError.userMessage,
+                  code: error?.code || 'UNKNOWN',
+                  message: error?.message || normalized.message,
+                  userMessage: normalized.message,
                 },
               });
               updateDiagnosticsState({
                 lastError: {
-                  code: iapError.code,
-                  message: iapError.message,
+                  code: error?.code || 'UNKNOWN',
+                  message: error?.message || normalized.message,
                 },
               });
               this.clearPurchaseGuard('error');
@@ -1413,11 +1414,11 @@ class IapManagerClass {
         });
 
         // Update diagnostics state with user-safe error message
-        const iapError = getIAPErrorMessage(error);
+        const normalized = normalizeIapError(error);
         updateDiagnosticsState({
           lastError: {
-            code: iapError.code,
-            message: iapError.message,
+            code: error?.code || 'UNKNOWN',
+            message: error?.message || normalized.message,
           },
         });
 
@@ -1425,9 +1426,9 @@ class IapManagerClass {
         // Only set for non-transient errors (transient errors are handled above)
         this.setState({
           lastError: {
-            code: iapError.code,
-            message: iapError.message,
-            userMessage: iapError.userMessage,
+            code: error?.code || 'UNKNOWN',
+            message: error?.message || normalized.message,
+            userMessage: normalized.message,
           },
         });
       }
@@ -1441,7 +1442,6 @@ class IapManagerClass {
    * Handle purchase error
    */
   private handlePurchaseError(error: any): void {
-    const isIPad = Platform.OS === 'ios' && Platform.isPad;
     logger.error('[IAP Manager] Purchase error', {
       error,
       code: error?.code,
@@ -1449,7 +1449,6 @@ class IapManagerClass {
       message: error?.message,
       responseCode: error?.responseCode,
       platform: Platform.OS,
-      isIPad,
       deviceModel: Device.modelName || Device.deviceName || 'Unknown',
       iosVersion: Platform.Version,
       bundleId: Constants.expoConfig?.ios?.bundleIdentifier,
@@ -1460,7 +1459,6 @@ class IapManagerClass {
         code: error?.code || 'UNKNOWN',
         message: error?.message || 'Unknown error',
       },
-      isIPad,
       platform: Platform.OS,
     });
 
@@ -1472,15 +1470,15 @@ class IapManagerClass {
     });
 
     // P1: Update IapManager state for non-cancellation errors so paywall UI can display them
-    const iapError = getIAPErrorMessage(error);
-    const isCancelled = iapError.code === 'USER_CANCELLED';
+    const normalized = normalizeIapError(error);
+    const isCancelled = normalized.kind === 'cancelled';
     
     if (!isCancelled) {
       this.setState({
         lastError: {
-          code: iapError.code,
-          message: iapError.message,
-          userMessage: iapError.userMessage,
+          code: error?.code || 'UNKNOWN',
+          message: error?.message || normalized.message,
+          userMessage: normalized.message,
         },
       });
     }
@@ -2277,12 +2275,9 @@ class IapManagerClass {
       }
 
       // Request purchase using best available method
-      // Enhanced logging for iPad debugging
-      const isIPad = Platform.OS === 'ios' && Platform.isPad;
       logger.log('[IAP Manager] Requesting purchase (capability-based)', {
         productId,
         sku,
-        isIPad,
         deviceModel: Device.modelName || Device.deviceName || 'Unknown',
         iosVersion: Platform.Version,
       });

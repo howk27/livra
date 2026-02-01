@@ -32,6 +32,7 @@ import { spacing, borderRadius, fontSize, fontWeight, shadow } from '../../theme
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { supabase } from '../../lib/supabase';
 import { useSync } from '../../hooks/useSync';
+import { useAuth } from '../../hooks/useAuth';
 import { useNotifications } from '../../hooks/useNotifications';
 import { logger } from '../../lib/utils/logger';
 import * as Notifications from 'expo-notifications';
@@ -42,6 +43,7 @@ export default function SignInScreen() {
   const theme = useEffectiveTheme();
   const themeColors = colors[theme];
   const router = useRouter();
+  const { user, initialized } = useAuth();
   const { sync } = useSync();
   const { requestPermissions, permissionGranted } = useNotifications();
 
@@ -55,6 +57,7 @@ export default function SignInScreen() {
   const [passwordError, setPasswordError] = useState(false);
   const [emailError, setEmailError] = useState(false);
   const [sessionExpiredMessage, setSessionExpiredMessage] = useState<string | null>(null);
+  const [pendingEmailConfirmation, setPendingEmailConfirmation] = useState(false);
   const [isAppleAvailable, setIsAppleAvailable] = useState(false);
   const [isAppleLoading, setIsAppleLoading] = useState(false);
 
@@ -69,6 +72,12 @@ export default function SignInScreen() {
   useEffect(() => {
     slideOffset.value = mode === 'signup' ? 1 : 0;
   }, [mode]);
+
+  useEffect(() => {
+    if (initialized && user) {
+      router.replace('/');
+    }
+  }, [initialized, user, router]);
 
   // Handle keyboard show/hide events
   useEffect(() => {
@@ -150,6 +159,7 @@ export default function SignInScreen() {
 
   const handleSubmit = async () => {
     setError(null);
+    setPendingEmailConfirmation(false);
 
     // Validation
     if (!email.trim()) {
@@ -409,9 +419,8 @@ export default function SignInScreen() {
             // Don't block login if profile check fails
           }
           
-          // Successfully signed in - redirect to index which will handle onboarding check
-          // Index will check if user is onboarded and redirect accordingly
-          router.replace('/');
+          // Successfully signed in - auth listener will route
+          return;
         }
       } else {
         // Sign up
@@ -510,8 +519,8 @@ export default function SignInScreen() {
                   logger.error('[Auth] Error checking/creating profile:', profileCheckError);
                 }
                 
-                // Redirect to home
-                router.replace('/');
+                // Auth listener will route
+                return;
               }
             } catch (autoSignInError: any) {
               logger.error('[Auth] Error during auto sign-in:', autoSignInError);
@@ -575,56 +584,15 @@ export default function SignInScreen() {
             }
           }
           
-          // Show alert
           // Check if email confirmation is required
           const requiresEmailConfirmation = !data.user.email_confirmed_at;
-          
-          Alert.alert(
-            'Account Created Successfully',
-            requiresEmailConfirmation
-              ? `We've sent a verification email to ${email.trim()}. Please check your inbox (and spam folder) and click the verification link before signing in.`
-              : `Your account has been created! You can now sign in.`,
-            [
-              {
-                text: requiresEmailConfirmation ? 'Resend Email' : 'OK',
-                onPress: async () => {
-                  if (requiresEmailConfirmation) {
-                    // Resend verification email
-                    try {
-                      const { error: resendError } = await supabase.auth.resend({
-                        type: 'signup',
-                        email: email.trim(),
-                      });
-                      
-                      if (resendError) {
-                        Alert.alert('Error', resendError.message || 'Failed to resend verification email.');
-                      } else {
-                        Alert.alert('Email Sent', 'A new verification email has been sent. Please check your inbox and spam folder.');
-                      }
-                    } catch (error) {
-                      logger.error('Error resending verification email:', error);
-                    }
-                  }
-                  setMode('login');
-                  setPassword('');
-                  setConfirmPassword('');
-                  setFullName('');
-                  setEmail(''); // Clear email so user can enter it again for login
-                },
-              },
-              {
-                text: 'OK',
-                style: 'cancel',
-                onPress: () => {
-                  setMode('login');
-                  setPassword('');
-                  setConfirmPassword('');
-                  setFullName('');
-                  setEmail('');
-                },
-              },
-            ]
-          );
+          if (requiresEmailConfirmation) {
+            setPendingEmailConfirmation(true);
+            setMode('login');
+            setPassword('');
+            setConfirmPassword('');
+            setFullName('');
+          }
         }
       }
     } catch (err: any) {
@@ -643,6 +611,7 @@ export default function SignInScreen() {
     setError(null);
     setPasswordError(false);
     setEmailError(false);
+    setPendingEmailConfirmation(false);
     setPassword('');
     setConfirmPassword('');
     setFullName('');
@@ -776,7 +745,7 @@ export default function SignInScreen() {
           // Don't block the user if sync fails
         }
         
-        router.replace('/');
+        return;
       }
     } catch (error: any) {
       // Handle user cancellation gracefully - don't log as error
@@ -1038,6 +1007,17 @@ export default function SignInScreen() {
               >
                 <Text style={[styles.messageText, { color: themeColors.error }]}>
                   {sessionExpiredMessage}
+                </Text>
+              </Animated.View>
+            )}
+
+            {pendingEmailConfirmation && (
+              <Animated.View
+                entering={FadeIn.duration(200)}
+                style={[styles.messageContainer, { backgroundColor: themeColors.primary + '20' }]}
+              >
+                <Text style={[styles.messageText, { color: themeColors.primary }]}>
+                  Check your email to verify your account, then sign in to continue.
                 </Text>
               </Animated.View>
             )}

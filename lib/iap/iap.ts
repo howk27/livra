@@ -63,6 +63,130 @@ export interface IAPError {
   userMessage: string;
 }
 
+export type NormalizedIapError = {
+  kind:
+    | 'cancelled'
+    | 'payment_declined'
+    | 'billing_unavailable'
+    | 'network'
+    | 'already_owned'
+    | 'unknown';
+  title: string;
+  message: string;
+  canRetry: boolean;
+  showManage: boolean;
+  showRestore: boolean;
+};
+
+export function normalizeIapError(error: any): NormalizedIapError {
+  const rawMessage = String(error?.message || error || '');
+  const message = rawMessage.toLowerCase();
+  const code = String(error?.code || error?.errorCode || '').toUpperCase();
+
+  const isCancelled =
+    code === 'USER_CANCELLED' ||
+    code === 'E_USER_CANCELLED' ||
+    message.includes('cancel');
+
+  if (isCancelled) {
+    return {
+      kind: 'cancelled',
+      title: 'Purchase cancelled',
+      message: 'Purchase cancelled.',
+      canRetry: true,
+      showManage: false,
+      showRestore: false,
+    };
+  }
+
+  const isAlreadyOwned =
+    code === 'ALREADY_OWNED' ||
+    code === 'E_ALREADY_OWNED' ||
+    message.includes('already') ||
+    message.includes('owned');
+
+  if (isAlreadyOwned) {
+    return {
+      kind: 'already_owned',
+      title: 'Already subscribed',
+      message: 'You’re already subscribed.',
+      canRetry: false,
+      showManage: true,
+      showRestore: true,
+    };
+  }
+
+  const isNetwork =
+    code === 'E_NETWORK_ERROR' ||
+    code === 'NETWORK_ERROR' ||
+    message.includes('network') ||
+    message.includes('connection') ||
+    message.includes('timeout');
+
+  if (isNetwork) {
+    return {
+      kind: 'network',
+      title: 'Connection issue',
+      message: 'We couldn’t verify your purchase due to a connection issue. Please try again.',
+      canRetry: true,
+      showManage: false,
+      showRestore: true,
+    };
+  }
+
+  const isPaymentDeclined =
+    code === 'E_PAYMENT_INVALID' ||
+    message.includes('declined') ||
+    message.includes('insufficient') ||
+    message.includes('payment method') ||
+    message.includes('card') ||
+    message.includes('funds');
+
+  if (isPaymentDeclined) {
+    return {
+      kind: 'payment_declined',
+      title: 'Payment declined',
+      message: 'Payment method was declined. Please check your payment method and try again.',
+      canRetry: true,
+      showManage: true,
+      showRestore: false,
+    };
+  }
+
+  const isBillingUnavailable =
+    code === 'E_BILLING_UNAVAILABLE' ||
+    code === 'E_PAYMENT_NOT_ALLOWED' ||
+    code === 'E_SERVICE_UNAVAILABLE' ||
+    code === 'E_SERVICE_ERROR' ||
+    code === 'E_STORE_NOT_CONNECTED' ||
+    code === 'E_ITEM_UNAVAILABLE' ||
+    message.includes('not available') ||
+    message.includes('not allowed') ||
+    message.includes('billing') ||
+    message.includes('store not connected') ||
+    message.includes('capability');
+
+  if (isBillingUnavailable) {
+    return {
+      kind: 'billing_unavailable',
+      title: 'Purchases unavailable',
+      message: 'Purchases aren’t available on this device/account right now.',
+      canRetry: false,
+      showManage: true,
+      showRestore: false,
+    };
+  }
+
+  return {
+    kind: 'unknown',
+    title: 'Purchase failed',
+    message: 'Purchase failed. Please try again.',
+    canRetry: true,
+    showManage: false,
+    showRestore: false,
+  };
+}
+
 /**
  * Get user-friendly error message from IAP error
  */

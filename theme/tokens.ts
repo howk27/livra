@@ -6,7 +6,7 @@ export const spacing = {
   md: 12, // Between related items
   lg: 16, // Page padding (phones)
   xl: 20, // Page padding (large phones), between sections
-  xxl: 24, // Page padding (tablet)
+  xxl: 24, // Page padding (large screens)
   '3xl': 32,
   '4xl': 40,
   '5xl': 48,
