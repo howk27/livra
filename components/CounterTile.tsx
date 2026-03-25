@@ -12,8 +12,21 @@ import MarkIcon from '@/src/components/icons/CounterIcon';
 import type { MarkType, MarkIconAnimation } from '@/src/types/counters';
 import { ICON_ANIMATION_TIMING, ICON_BACKGROUND_ALPHA } from '@/src/components/icons/IconTokens';
 import { applyOpacity } from '@/src/components/icons/color';
+import { GoalProgressBar } from './GoalProgressBar';
+import { useEventsStore } from '../state/eventsSlice';
 
 const TILE_HEIGHT = 260;
+
+// Small wrapper that subscribes to events for goal progress
+const GoalProgressBarOnTile: React.FC<{ markId: string; mark: Mark; color: string }> = ({ markId, mark, color }) => {
+  const events = useEventsStore(s => s.events.filter(e => e.mark_id === markId && !e.deleted_at));
+  if (!mark.goal_value) return null;
+  return (
+    <View style={{ marginTop: 4 }}>
+      <GoalProgressBar mark={mark} events={events} color={color} variant="compact" />
+    </View>
+  );
+};
 
 interface MarkTileProps {
   mark: Mark;
@@ -335,6 +348,8 @@ export const MarkTile: React.FC<MarkTileProps> = ({
         <AppText variant="label" style={[styles.unit, { color: themeColors.textSecondary }]}>
           {String(mark.unit ?? '')}
         </AppText>
+        {/* Goal progress bar – only shown when goal set */}
+        <GoalProgressBarOnTile markId={mark.id} mark={mark} color={markColor} />
       </View>
 
       <View style={styles.footerRow}>
@@ -470,6 +485,8 @@ export const MarkTile: React.FC<MarkTileProps> = ({
         <AppText variant="label" style={[styles.unit, { color: themeColors.textSecondary }]}>
           {String(mark.unit ?? '')}
         </AppText>
+        {/* Goal progress bar – only shown when goal set */}
+        <GoalProgressBarOnTile markId={mark.id} mark={mark} color={markColor} />
       </View>
 
       <View style={styles.footerRow}>

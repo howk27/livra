@@ -83,7 +83,6 @@ A minimalist, habit-free progress tracker built with React Native and Expo.
 │   ├── supabase.ts       # Supabase client
 │   ├── date.ts           # Date utilities
 │   ├── csv.ts            # CSV export
-│   └── pdf.ts            # PDF export
 ├── state/                 # Zustand stores
 ├── theme/                 # Colors and design tokens
 └── types/                 # TypeScript definitions

@@ -12,6 +12,7 @@ import { colors } from '../theme/colors';
 import { spacing, borderRadius, fontSize } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { AppText } from './Typography';
+import { logger } from '../lib/utils/logger';
 
 interface InfoModalProps {
   visible: boolean;
@@ -27,7 +28,12 @@ export const InfoModal: React.FC<InfoModalProps> = ({ visible, title, message, o
   // Debug logging
   React.useEffect(() => {
     if (visible) {
-      console.log('InfoModal rendering:', { visible, title, messageLength: message?.length, hasMessage: !!message });
+      logger.debug('[InfoModal] Rendering', {
+        visible,
+        title,
+        messageLength: message?.length,
+        hasMessage: !!message,
+      });
     }
   }, [visible, title, message]);
 

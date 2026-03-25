@@ -22,9 +22,10 @@ import {
   diagEvent,
   updateDiagnosticsState,
 } from '../lib/debug/iapDiagnostics';
-import { IapManager, type IapManagerState } from '../lib/services/iap/IapManager';
+import { getIapService, type IapService } from '../lib/services/iap/getIapService';
 import { checkProStatus, type ProStatusResult } from '../lib/iap/iap';
 import { MONTHLY_SKU, YEARLY_SKU } from '../lib/iap/skus';
+import { env } from '../lib/env';
 
 const isExpoGo = Constants.appOwnership === 'expo';
 
@@ -93,7 +94,10 @@ type PurchaseOutcome = {
 };
 
 export function useIapSubscriptions(): UseIapSubscriptionsReturn {
-  const [managerState, setManagerState] = useState<IapManagerState>(IapManager.getState());
+  const iapService = getIapService();
+  const [managerState, setManagerState] = useState<ReturnType<IapService['getState']>>(
+    iapService.getState()
+  );
   const [purchaseInProgress, setPurchaseInProgress] = useState(false);
   const [isProUnlocked, setIsProUnlocked] = useState(false);
   const [proStatus, setProStatus] = useState<ProStatusResult>({
@@ -105,7 +109,7 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
   
   const [debugInfo, setDebugInfo] = useState({
     bundleId: Constants.expoConfig?.ios?.bundleIdentifier || 'unknown',
-    environment: __DEV__ ? 'development' : 'production',
+    environment: env.isDev ? 'development' : 'production',
     skusRequested: ALL_PRODUCT_IDS,
     productsReturned: 0,
     connectionStatus: 'disconnected',
@@ -118,7 +122,7 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
 
   // Subscribe to manager state changes
   useEffect(() => {
-    const unsubscribe = IapManager.subscribe((state) => {
+    const unsubscribe = iapService.subscribe((state) => {
       setManagerState(state);
       
       // Update diagnostics with same isReady logic as hook return value
@@ -178,7 +182,7 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
 
     const initialize = async () => {
       try {
-        await IapManager.initialize();
+        await iapService.initialize();
         
         // Check premium status
         const status = normalizeProStatus(await checkProStatus());
@@ -193,7 +197,7 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
 
     // NOTE: Do NOT tear down on hook unmount - this causes issues when navigating
     // between screens. Tear down should only happen on app exit.
-    // If you need to tear down, call IapManager.tearDown() explicitly from app-level cleanup.
+    // If you need to tear down, call iapService.tearDown() explicitly from app-level cleanup.
   }, []);
 
   // Update premium status when manager state changes
@@ -211,7 +215,7 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
     let mounted = true;
     const loadPending = async () => {
       try {
-        const pending = await IapManager.hasPendingVerification();
+        const pending = await iapService.hasPendingVerification();
         if (mounted) {
           const transientCodes = new Set([
             'TRANSIENT_DB_PENDING',
@@ -280,7 +284,7 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
       diagEvent('requestPurchase_start', { productId });
 
       try {
-        await IapManager.buy(productId);
+        await iapService.buy(productId);
         // Purchase completion is handled by IapManager's purchaseUpdatedListener
         // Emit submitted event, not success - true success is after validation/unlock
         diagEvent('requestPurchase_submitted', { productId });
@@ -340,7 +344,7 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
     diagEvent('restore_start', {});
 
     try {
-      const result = await IapManager.restore();
+      const result = await iapService.restore();
       let outcomeResult: RestoreOutcome = { ...result };
       
       // never downgrade a successful restore if refresh fails.
@@ -421,7 +425,7 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
    */
   const retryLoadProducts = useCallback(async () => {
     logger.log('[IAP Hook] Manual retry of product loading requested');
-    await IapManager.retryLoadProducts();
+    await iapService.retryLoadProducts();
   }, []);
 
   // TASK D1: Derive UI state - isReady means:

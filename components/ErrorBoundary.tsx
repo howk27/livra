@@ -2,6 +2,7 @@ import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../theme/colors';
+import { env } from '../lib/env';
 import { spacing, borderRadius, fontSize, fontWeight } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { logger } from '../lib/utils/logger';
@@ -91,7 +92,7 @@ function ErrorFallback({ error, onReload }: ErrorFallbackProps) {
           We're sorry, but something unexpected happened. Don't worry, your data is safe.
         </Text>
 
-        {__DEV__ && error && (
+        {env.isDev && error && (
           <View style={[styles.errorContainer, { backgroundColor: themeColors.surface }]}>
             <Text style={[styles.errorTitle, { color: themeColors.error }]}>
               Error Details (Development Only)

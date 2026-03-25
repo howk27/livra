@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { ThemeMode, AccentColor, SortOption } from '../types';
 import { useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { supabase } from '../lib/supabase';
+import { getSupabaseClient } from '../lib/supabase';
 import { logger } from '../lib/utils/logger';
 
 interface UIState {
@@ -51,6 +51,7 @@ export const useUIStore = create<UIState>((set, get) => ({
 
   completeOnboarding: async (userId?: string) => {
     set({ isOnboarded: true });
+    const supabase = getSupabaseClient();
     
     // Save to AsyncStorage for offline support
     await AsyncStorage.setItem('is_onboarded', 'true');
@@ -68,13 +69,14 @@ export const useUIStore = create<UIState>((set, get) => ({
           // Don't throw - AsyncStorage is already updated, so local state is fine
         }
       } catch (error) {
-        console.error('Error updating onboarding status in database:', error);
+        logger.error('Error updating onboarding status in database:', error);
         // Don't throw - AsyncStorage is already updated, so local state is fine
       }
     }
   },
 
   loadUIState: async (userId?: string) => {
+    const supabase = getSupabaseClient();
     const [themeMode, accentColor, localOnboarded] = await Promise.all([
       AsyncStorage.getItem('theme_mode'),
       AsyncStorage.getItem('accent_color'),

@@ -16,10 +16,11 @@ import Animated, { FadeIn, SlideInDown } from 'react-native-reanimated';
 import { colors } from '../../theme/colors';
 import { spacing, borderRadius, fontSize, fontWeight, shadow } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
-import { supabase } from '../../lib/supabase';
+import { getSupabaseClient } from '../../lib/supabase';
 import { logger } from '../../lib/utils/logger';
 
 export default function ResetPasswordCompleteScreen() {
+  const supabase = getSupabaseClient();
   const theme = useEffectiveTheme();
   const themeColors = colors[theme];
   const router = useRouter();

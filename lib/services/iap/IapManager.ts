@@ -20,6 +20,7 @@
 
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
+import { env } from '../../env';
 import * as Device from 'expo-device';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { logger } from '../../utils/logger';
@@ -873,8 +874,8 @@ class IapManagerClass {
       const firstSeenMs = marker?.firstSeen ? new Date(marker.firstSeen).getTime() : 0;
       const markerAgeMs = firstSeenMs ? Date.now() - firstSeenMs : 0;
       const markerEligible = !!marker && marker.count <= 3 && markerAgeMs <= 7 * 24 * 60 * 60 * 1000;
-      const shouldClearTransactions = __DEV__ || markerEligible;
-      if (marker && !markerEligible && !__DEV__) {
+      const shouldClearTransactions = env.isDev || markerEligible;
+      if (marker && !markerEligible && !env.isDev) {
         diagEvent('iap_stuck_marker_expired', {
           count: marker.count,
           firstSeen: marker.firstSeen,
@@ -886,10 +887,10 @@ class IapManagerClass {
           await functions.clearTransactionIOS();
           logger.log('[IAP Manager] Cleared pending iOS transactions');
           diagEvent('iap_manager_clearTransactionsIOS_executed', {
-            reason: __DEV__ ? 'dev_mode' : 'stuck_purchase_marker',
+            reason: env.isDev ? 'dev_mode' : 'stuck_purchase_marker',
           });
           // Clear marker after successful clear
-          if (!__DEV__) {
+          if (!env.isDev) {
             await this.clearStuckMarker();
           }
         } catch (clearError: any) {
@@ -1652,7 +1653,7 @@ class IapManagerClass {
       const rawProductCount = subscriptionProducts?.length || 0;
 
       // Capture diagnostic info about first product structure (one-time, non-sensitive)
-      // Runtime inspection: log first product structure for debugging (guarded by __DEV__)
+      // Runtime inspection: log first product structure for debugging (guarded by env.isDev)
       let firstProductDiagnostics: any = null;
       let firstRawKeys: string[] = [];
       if (subscriptionProducts && subscriptionProducts.length > 0) {
@@ -1661,8 +1662,8 @@ class IapManagerClass {
           firstRawKeys = Object.keys(firstProduct);
           const keys = firstRawKeys.slice(0, 15); // Limit to first 15 keys for diagnostics
           
-          // One-time debug log (guarded by __DEV__) - redact sensitive data
-          if (__DEV__) {
+          // One-time debug log (guarded by env.isDev) - redact sensitive data
+          if (env.isDev) {
             const sanitizedProduct: any = {};
             for (const key of firstRawKeys.slice(0, 20)) {
               const value = firstProduct[key];
@@ -2906,7 +2907,7 @@ class IapManagerClass {
         selfCheck,
       },
       bundleId: Constants.expoConfig?.ios?.bundleIdentifier || 'unknown',
-      isTestFlight: (Constants.appOwnership as string) === 'standalone' && !__DEV__,
+      isTestFlight: (Constants.appOwnership as string) === 'standalone' && !env.isDev,
       productIdsConfigured: SUBSCRIPTION_PRODUCT_IDS,
       exportMismatchDetected: this.exportMismatchDetected,
       lastSuccessfulStep,

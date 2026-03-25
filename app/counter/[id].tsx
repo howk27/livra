@@ -19,6 +19,9 @@ import { query } from '../../lib/db';
 import { CounterStreak } from '../../types';
 import { useAuth } from '../../hooks/useAuth';
 import { logger } from '../../lib/utils/logger';
+import { StreakMilestoneBanner, SkipTokenRow } from '../../components/StreakFeatures';
+import { NoteEditor } from '../../components/NoteEditor';
+import { GoalProgressBar } from '../../components/GoalProgressBar';
 import CounterIcon from '@/src/components/icons/CounterIcon';
 import { resolveCounterIconType } from '@/src/components/icons/IconResolver';
 import { applyOpacity } from '@/src/components/icons/color';
@@ -525,6 +528,20 @@ export default function CounterDetailScreen() {
             </TouchableOpacity>
           </View>
 
+          {/* Milestone Banner */}
+          {streak && counter.enable_streak && (
+            <StreakMilestoneBanner
+              streak={streak.current_streak}
+              color={counter.color || themeColors.primary}
+            />
+          )}
+          {/* Goal Progress (full variant) */}
+          <GoalProgressBar
+            mark={counter}
+            events={events}
+            color={counter.color || themeColors.primary}
+            variant="full"
+          />
           {/* Streak Module with Brand/Primary Tint (12% opacity) - Moved down */}
           {streak && counter.enable_streak && (
             <LinearGradient
@@ -560,6 +577,23 @@ export default function CounterDetailScreen() {
                 </Text>
               </View>
             </LinearGradient>
+          )}
+
+          {/* Skip Tokens (Feature 3) */}
+          {counter.enable_streak && user?.id && (
+            <View style={{ marginBottom: spacing.lg }}>
+              <SkipTokenRow
+                markId={counter.id}
+                userId={user.id}
+                color={counter.color || themeColors.primary}
+              />
+            </View>
+          )}
+          {/* Daily Note (Feature 4) */}
+          {user?.id && (
+            <View style={{ marginBottom: spacing.lg }}>
+              <NoteEditor markId={counter.id} userId={user.id} />
+            </View>
           )}
 
           {/* Footer Actions - Show in Action Sheet (bottom sheet) */}

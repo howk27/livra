@@ -11,6 +11,7 @@ import * as Device from 'expo-device';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { ALL_SUBS_SKUS } from '../iap/skus';
+import { env } from '../env';
 
 export type DiagnosticEventType =
   | 'initConnection_start'
@@ -548,7 +549,7 @@ export async function copyDiagnosticsToClipboard(): Promise<void> {
   }
   
   // Share API fallback - DEV ONLY (production safety)
-  if (__DEV__) {
+  if (env.isDev) {
     await Share.share({
       message: jsonString,
       title: 'IAP Diagnostics',
@@ -565,8 +566,8 @@ export async function copyDiagnosticsToClipboard(): Promise<void> {
  */
 export async function exportSupportBundle(): Promise<void> {
   const snapshot = getDiagSnapshot();
-  const { IapManager } = await import('../services/iap/IapManager');
-  const managerDiagnostics = IapManager.getDiagnostics();
+  const { getIapService } = await import('../services/iap/getIapService');
+  const managerDiagnostics = getIapService().getDiagnostics();
   const { logger } = await import('../utils/logger');
   
   // Detect New Architecture
@@ -652,7 +653,7 @@ export async function exportSupportBundle(): Promise<void> {
       });
     } else {
       // Fallback to Share API - DEV ONLY (production safety)
-      if (__DEV__) {
+      if (env.isDev) {
         await Share.share({
           message: jsonString,
           title: 'IAP Support Bundle',

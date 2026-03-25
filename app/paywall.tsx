@@ -9,10 +9,11 @@ import { useEffectiveTheme } from '../state/uiSlice';
 import { useIapSubscriptions } from '../hooks/useIapSubscriptions';
 import { MONTHLY_PRODUCT_ID, YEARLY_PRODUCT_ID } from '../lib/iap/iap';
 import { logger } from '../lib/utils/logger';
-import { IapManager } from '../lib/services/iap/IapManager';
+import { getIapService } from '../lib/services/iap/getIapService';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { diagEvent, exportSupportBundle, getSupportDiagnosticsEnabled } from '../lib/debug/iapDiagnostics';
 import { checkProStatus, normalizeIapError, type NormalizedIapError } from '../lib/iap/iap';
+import { env } from '../lib/env';
 
 const PRO_FEATURES = [
   { icon: '∞', title: 'Unlimited Marks', description: 'Create as many marks as you need' },
@@ -24,6 +25,7 @@ const SHIPPED_PREMIUM_FEATURE_TITLES = ['Unlimited Marks', 'CSV Export'];
 type PlanType = 'monthly' | 'yearly';
 
 function PaywallScreenContent() {
+  const iapService = getIapService();
   const theme = useEffectiveTheme();
   const themeColors = colors[theme];
   const router = useRouter();
@@ -90,7 +92,7 @@ function PaywallScreenContent() {
     const enableSupportBundle = Constants.expoConfig?.extra?.enableSupportBundle === true;
 
     // If 7 taps reached:
-    // - In __DEV__: open diagnostics screen
+    // - In env.isDev: open diagnostics screen
     // - In TestFlight (if enableSupportBundle): export support bundle
     if (titleTapCount.current >= 7) {
       titleTapCount.current = 0;
@@ -157,9 +159,9 @@ function PaywallScreenContent() {
 
   // Diagnostics telemetry only (not used for gating)
   useEffect(() => {
-    if (__DEV__) {
+    if (env.isDev) {
       try {
-        const diag = IapManager.getDiagnostics();
+        const diag = getIapService().getDiagnostics();
         // Diagnostics tracked but not used to gate purchases
       } catch (e) {
         // Silently fail - diagnostics are telemetry only
@@ -168,7 +170,7 @@ function PaywallScreenContent() {
   }, [products, connectionStatus]);
 
   useEffect(() => {
-    if (!__DEV__) return;
+    if (!env.isDev) return;
     const mismatched = PRO_FEATURES.filter(
       (feature) => !SHIPPED_PREMIUM_FEATURE_TITLES.includes(feature.title)
     );
@@ -190,7 +192,7 @@ function PaywallScreenContent() {
   }, [isLoadingProducts, operationState]);
 
   const handleManageSubscription = async () => {
-    const handled = await IapManager.openManageSubscriptions();
+    const handled = await iapService.openManageSubscriptions();
     if (handled) return;
 
     const url = Platform.OS === 'ios'
@@ -623,7 +625,7 @@ function PaywallScreenContent() {
     try {
       setOperationState('verifying');
       setOperationMessage('Verifying your purchase...');
-      await IapManager.recoverNow();
+      await iapService.recoverNow();
       const verificationResult = await refreshEntitlementWithBackoff({ maxMs: 90000 });
       if (verificationResult === 'aborted') {
         return;
@@ -1343,7 +1345,7 @@ function ErrorDetails({
     if (!showDiagnostics) return;
     const loadDiagnostics = async () => {
       try {
-        const managerDiag = IapManager.getDiagnostics();
+        const managerDiag = iapService.getDiagnostics();
         setDiagnostics({
           manager: managerDiag,
           exports: managerDiag.exportDiagnostics,
@@ -1803,10 +1805,10 @@ export default function PaywallScreen() {
   // TASK 2: Remove duplicate hook call - PaywallScreenContent already uses it
   // Pass retryLoadProducts to ErrorBoundary fallback via closure
   const handleRetry = useCallback(() => {
-    // ErrorBoundary fallback will call IapManager.retryLoadProducts directly
+    // ErrorBoundary fallback will call IAP service retry directly
     // since we can't access the hook here without duplicating it
     try {
-      IapManager.retryLoadProducts();
+      getIapService().retryLoadProducts();
     } catch (err) {
       logger.error('[Paywall] Error in ErrorBoundary retry:', err);
     }

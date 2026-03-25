@@ -24,7 +24,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../theme/colors';
 import { spacing, borderRadius } from '../../theme/tokens';
 import { useEffectiveTheme, useUIStore } from '../../state/uiSlice';
-import { supabase } from '../../lib/supabase';
+import { getSupabaseClient } from '../../lib/supabase';
 import { useIapSubscriptions } from '../../hooks/useIapSubscriptions';
 import { useSync } from '../../hooks/useSync';
 import { useAuth } from '../../hooks/useAuth';
@@ -37,10 +37,11 @@ import { AppText } from '../../components/Typography';
 import { useNotification } from '../../contexts/NotificationContext';
 import { useCountersStore } from '../../state/countersSlice';
 import { logger } from '../../lib/utils/logger';
+import { BackupRestoreSection } from '../../components/BackupRestoreSection';
 import { toUserMessage } from '../../lib/utils/errorMessages';
 import { uploadAvatar, getAvatarUrl, deleteAvatar, refreshAvatarUrl } from '../../lib/storage/avatarStorage';
 import { diagEvent } from '../../lib/debug/iapDiagnostics';
-import { unlockDashboard } from '../../lib/debug/dashboardUnlock';
+import { setDiagnosticsUnlockedPersisted } from '../../lib/dev/diagnosticsUnlock';
 import Constants from 'expo-constants';
 
 export default function SettingsScreen() {
@@ -54,6 +55,7 @@ export default function SettingsScreen() {
   const { counters } = useCounters();
   const { events } = useEventsStore();
   const { user, signOut: authSignOut } = useAuth();
+  const supabase = getSupabaseClient();
   const { showSuccess, showError } = useNotification();
   const lastSyncErrorRef = useRef<string | null>(null);
   const [profileImageUri, setProfileImageUri] = useState<string | null>(null);
@@ -83,7 +85,7 @@ export default function SettingsScreen() {
       clearTimeout(versionTapTimer.current);
     }
 
-    // If 7 taps reached, open IAP Dashboard (production-safe hidden gesture)
+    // If 7 taps reached, unlock diagnostics (production-safe hidden gesture)
     if (versionTapCount.current >= 7) {
       versionTapCount.current = 0;
       if (versionTapTimer.current) {
@@ -93,11 +95,11 @@ export default function SettingsScreen() {
       // Log diagnostic event for tracking
       diagEvent('diagnostics_opened_hidden_gesture', { 
         threshold: 7, 
-        screen: 'iap-dashboard' 
+        screen: 'diagnostics' 
       });
-      // Unlock dashboard before navigation (production route guard)
-      unlockDashboard();
-      router.push('/iap-dashboard' as Href);
+      // Persist unlock for diagnostics access
+      void setDiagnosticsUnlockedPersisted(true);
+      router.push('/diagnostics' as Href);
       return;
     }
 
@@ -1393,6 +1395,8 @@ export default function SettingsScreen() {
               Export CSV
             </AppText>
           </TouchableOpacity>
+          {/* Backup & Restore (Feature 5) */}
+          <BackupRestoreSection />
         </View>
 
         {/* Legal Section */}

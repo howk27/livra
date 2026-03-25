@@ -36,7 +36,6 @@ import { AppText } from '../../components/Typography';
 import { logger } from '../../lib/utils/logger';
 import { getAvatarUrl, refreshAvatarUrl } from '../../lib/storage/avatarStorage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { supabase } from '../../lib/supabase';
 
 const APP_BRAND_LOGO_LIGHT = require('../../assets/branding/Logo NoBG.png');
 const APP_BRAND_LOGO_DARK = require('../../assets/branding/Logo NoBG dark.png');

@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
-import { supabase } from '../lib/supabase';
+import { getSupabaseClient } from '../lib/supabase';
+import { env } from '../lib/env';
 import { Counter, MarkBadge, CounterEvent, CounterStreak } from '../types';
 import { query, execute, queryFirst } from '../lib/db';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -39,6 +40,7 @@ const isProLimitError = (error: any): boolean => {
 };
 
 export const useSync = () => {
+  const supabase = getSupabaseClient();
   const [syncState, setSyncState] = useState<SyncState>({
     isSyncing: false,
     lastSyncedAt: null,
@@ -149,7 +151,7 @@ export const useSync = () => {
           )
           .subscribe((status: string) => {
             if (status === 'SUBSCRIBED') {
-              if (__DEV__) {
+              if (env.isDev) {
                 logger.log('[REALTIME] Successfully subscribed to real-time updates');
               }
               setSyncState((prev) => ({ ...prev, realtimeConnected: true }));
@@ -324,7 +326,7 @@ export const useSync = () => {
               lastUpdatedAt = batch[batch.length - 1]?.updated_at || null;
               hasMore = batch.length === BATCH_SIZE;
               
-              if (__DEV__) {
+              if (env.isDev) {
                 logger.log(`[SYNC] Loaded ${allEvents.length} events so far...`);
               }
             } else {

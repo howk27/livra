@@ -30,7 +30,7 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import { colors } from '../../theme/colors';
 import { spacing, borderRadius, fontSize, fontWeight, shadow } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
-import { supabase } from '../../lib/supabase';
+import { getSupabaseClient } from '../../lib/supabase';
 import { useSync } from '../../hooks/useSync';
 import { useAuth } from '../../hooks/useAuth';
 import { useNotifications } from '../../hooks/useNotifications';
@@ -45,6 +45,7 @@ export default function SignInScreen() {
   const router = useRouter();
   const { user, initialized } = useAuth();
   const { sync } = useSync();
+  const supabase = getSupabaseClient();
   const { requestPermissions, permissionGranted } = useNotifications();
 
   const [mode, setMode] = useState<AuthMode>('login');

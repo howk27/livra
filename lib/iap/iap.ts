@@ -16,6 +16,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { logger } from '../utils/logger';
 import { MONTHLY_SKU, YEARLY_SKU, ALL_SUBS_SKUS } from './skus';
+import { env } from '../env';
 
 // Subscription product IDs - Imported from single source of truth (lib/iap/skus.ts)
 export const MONTHLY_PRODUCT_ID = MONTHLY_SKU;
@@ -274,7 +275,8 @@ export async function checkProStatus(): Promise<ProStatusResult> {
   const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
   
   try {
-    const { supabase } = await import('../supabase');
+    const { getSupabaseClient } = await import('../supabase');
+    const supabase = getSupabaseClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -348,7 +350,8 @@ export async function validateReceiptWithServer(params: {
   productId?: string;
 }): Promise<ReceiptValidationResult> {
   try {
-    const { supabase } = await import('../supabase');
+    const { getSupabaseClient } = await import('../supabase');
+    const supabase = getSupabaseClient();
     const { logger } = await import('../utils/logger');
 
     const { data: { user } } = await supabase.auth.getUser();
@@ -556,7 +559,7 @@ export async function getIAPDebugInfo(): Promise<{
   platform: string;
 }> {
   const bundleId = Constants.expoConfig?.ios?.bundleIdentifier || 'unknown';
-  const environment = __DEV__ ? 'development' : 'production';
+  const environment = env.isDev ? 'development' : 'production';
   
   return {
     bundleId,

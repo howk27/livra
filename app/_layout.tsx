@@ -17,6 +17,9 @@ import { cleanupDuplicateCounters } from '../lib/db/cleanup';
 import { parseError } from '../hooks/useSync';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { logger } from '../lib/utils/logger';
+import { DevToolsProvider } from '../providers/DevToolsProvider';
+import { ExperimentsProvider } from '../providers/ExperimentsProvider';
+import { useFeaturesStore } from '../state/featuresSlice';
 
 const queryClient = new QueryClient();
 
@@ -48,6 +51,8 @@ export default function RootLayout() {
     // Initialize database first, then cleanup invalid badges
     const init = async () => {
       await initDatabase();
+      // Load feature data (notes + skip tokens)
+      await useFeaturesStore.getState().loadFeatures();
       // Cleanup badges with invalid user_id (like "local-user")
       const removedCount = await cleanupInvalidBadges();
       if (removedCount > 0) {
@@ -275,9 +280,13 @@ export default function RootLayout() {
     <ErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <QueryClientProvider client={queryClient}>
-          <NotificationProvider>
-            <RootNavigator />
-          </NotificationProvider>
+          <DevToolsProvider>
+            <ExperimentsProvider>
+              <NotificationProvider>
+                <RootNavigator />
+              </NotificationProvider>
+            </ExperimentsProvider>
+          </DevToolsProvider>
         </QueryClientProvider>
       </GestureHandlerRootView>
     </ErrorBoundary>

@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import { logger } from './utils/logger';
+import { env } from './env';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -52,7 +53,7 @@ const isSupabaseConfigured = supabaseUrl &&
   supabaseUrl.startsWith('https://');
 
 // Production build validation - fail if Supabase not configured
-const isProduction = process.env.EXPO_PUBLIC_ENV === 'production' || !__DEV__;
+const isProduction = env.isProduction;
 if (isProduction && !isSupabaseConfigured) {
   // Don't log specific variable names in production to avoid exposing configuration details
   const errorMessage = 
@@ -91,6 +92,15 @@ export const supabase = createClient(safeSupabaseUrl, safeSupabaseKey, {
     detectSessionInUrl: false,
   },
 });
+
+type SupabaseClientType = typeof supabase;
+let supabaseOverride: SupabaseClientType | null = null;
+
+export const getSupabaseClient = (): SupabaseClientType => supabaseOverride || supabase;
+
+export const setSupabaseClientOverride = (client: SupabaseClientType | null): void => {
+  supabaseOverride = client;
+};
 
 // Database types
 export type Database = {

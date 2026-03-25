@@ -5,7 +5,7 @@
  * in Supabase Storage with the structure: profile-pictures/{user_id}/avatar.png
  */
 
-import { supabase } from '../supabase';
+import { getSupabaseClient } from '../supabase';
 import * as FileSystem from 'expo-file-system/legacy';
 import { logger } from '../utils/logger';
 
@@ -31,6 +31,7 @@ export async function uploadAvatar(
   imageUri: string
 ): Promise<string | null> {
   try {
+    const supabase = getSupabaseClient();
     // Verify file exists
     const fileInfo = await FileSystem.getInfoAsync(imageUri);
     if (!fileInfo.exists) {
@@ -97,6 +98,7 @@ export async function getAvatarUrl(
   expiresIn: number = 3600
 ): Promise<string | null> {
   try {
+    const supabase = getSupabaseClient();
     const avatarPath = getAvatarPath(userId);
 
     // Try to create a signed URL (works for both public and private buckets)
@@ -134,6 +136,7 @@ export async function getAvatarUrl(
  */
 export async function deleteAvatar(userId: string): Promise<boolean> {
   try {
+    const supabase = getSupabaseClient();
     const avatarPath = getAvatarPath(userId);
 
     const { error } = await supabase.storage
@@ -166,6 +169,7 @@ async function updateProfileAvatarUrl(
   avatarUrl: string | null
 ): Promise<void> {
   try {
+    const supabase = getSupabaseClient();
     const { error } = await supabase
       .from('profiles')
       .update({ avatar_url: avatarUrl })

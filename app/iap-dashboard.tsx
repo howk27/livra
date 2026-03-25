@@ -18,7 +18,7 @@ import {
   setSupportDiagnosticsEnabled,
 } from '../lib/debug/iapDiagnostics';
 import { isDashboardUnlocked, resetDashboardUnlock } from '../lib/debug/dashboardUnlock';
-import { IapManager } from '../lib/services/iap/IapManager';
+import { getIapService } from '../lib/services/iap/getIapService';
 import { colors } from '../theme/colors';
 import { spacing, borderRadius, fontSize, fontWeight } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
@@ -26,18 +26,20 @@ import { AppText } from '../components/Typography';
 import { logger } from '../lib/utils/logger';
 import Constants from 'expo-constants';
 import * as Clipboard from 'expo-clipboard';
+import { env } from '../lib/env';
 
 export default function IapDashboardScreen() {
   const theme = useEffectiveTheme();
   const themeColors = colors[theme];
   const router = useRouter();
+  const iapService = getIapService();
   const [snapshot, setSnapshot] = useState(getDiagSnapshot());
   const [managerDiagnostics, setManagerDiagnostics] = useState<any>(null);
   const [supportDiagnosticsEnabled, setSupportDiagnosticsEnabledState] = useState(false);
 
   // Production route guard: require unlock flag or dev mode
   useEffect(() => {
-    const isProduction = !__DEV__ && Constants.executionEnvironment !== 'storeClient';
+    const isProduction = env.isProduction && Constants.executionEnvironment !== 'storeClient';
     if (isProduction && !isDashboardUnlocked()) {
       router.back();
       return;
@@ -48,7 +50,7 @@ export default function IapDashboardScreen() {
   useEffect(() => {
     const loadDiagnostics = () => {
       try {
-        const diag = IapManager.getDiagnostics();
+        const diag = iapService.getDiagnostics();
         setManagerDiagnostics(diag);
         setSnapshot(getDiagSnapshot());
       } catch (error) {
@@ -70,7 +72,7 @@ export default function IapDashboardScreen() {
   }, []);
 
   useEffect(() => {
-    if (__DEV__) return;
+    if (env.isDev) return;
     if (!supportDiagnosticsEnabled) {
       router.back();
     }
@@ -101,7 +103,7 @@ export default function IapDashboardScreen() {
 
   const handleRetryIapSetup = async () => {
     try {
-      await IapManager.retryInit();
+      await iapService.retryInit();
       Alert.alert('Retry started', 'IAP setup retry started. Check diagnostics for progress.');
     } catch (error) {
       logger.error('[IAP Dashboard] Retry init error:', error);
@@ -139,7 +141,7 @@ export default function IapDashboardScreen() {
     </View>
   );
 
-  if (!__DEV__ && !supportDiagnosticsEnabled) {
+  if (!env.isDev && !supportDiagnosticsEnabled) {
     return null;
   }
 

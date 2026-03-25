@@ -21,6 +21,10 @@ import { SUGGESTED_MARKS_BY_CATEGORY } from '../../lib/suggestedCounters';
 import { computeStreak } from '../../hooks/useStreaks';
 import { ErrorBoundary } from '../../components/ErrorBoundary';
 import { logger } from '../../lib/utils/logger';
+import { useFeatureFlag } from '../../hooks/useFeatureFlag';
+import { useRouter } from 'expo-router';
+import { useWeeklyReview } from '../../hooks/useWeeklyReview';
+import { WeeklyReviewPreviewCard } from '../../components/stats/WeeklyReviewPreviewCard';
 
 const APP_BRAND_LOGO_LIGHT = require('../../assets/branding/Logo NoBG.png');
 const APP_BRAND_LOGO_DARK = require('../../assets/branding/Logo NoBG dark.png');
@@ -2226,6 +2230,10 @@ export default function StatsScreen() {
   const events = useEventsStore((state) => state.events || []);
   const loadEvents = useEventsStore((state) => state.loadEvents);
   const { user } = useAuth();
+  const router = useRouter();
+  const [weeklyReviewEnabled] = useFeatureFlag('weeklyReview');
+  const reviewReferenceDate = useMemo(() => new Date(), []);
+  const { data: weeklyReviewSummary } = useWeeklyReview(reviewReferenceDate, user?.id);
   
   // Memoize events - filter out null/undefined and ensure it's always an array
   // CRITICAL: Always return an array, never undefined/null, to maintain consistent hook calls
@@ -2499,8 +2507,15 @@ export default function StatsScreen() {
                 )}
               </View>
 
+              {weeklyReviewEnabled && weeklyReviewSummary && (
+                <WeeklyReviewPreviewCard
+                  summary={weeklyReviewSummary}
+                  onPress={() => router.push('/weekly-review')}
+                />
+              )}
+
               {/* Daily Marks Count Ring */}
-              <View style={[styles.card, { borderColor: themeColors.border, backgroundColor: themeColors.surface }]}>
+              <View style={[styles.card, { borderColor: themeColors.border, backgroundColor: themeColors.surface, marginTop: spacing.md }]}>
                 <DailyMarksRing
                   count={safeDailyMarksCount}
                   activeMarksCount={activeMarksCount}

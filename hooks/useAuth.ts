@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { supabase } from '../lib/supabase';
+import { getSupabaseClient } from '../lib/supabase';
 import { Session, User } from '@supabase/supabase-js';
 import { logger } from '../lib/utils/logger';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -12,6 +12,7 @@ interface AuthState {
 }
 
 export const useAuth = () => {
+  const supabase = getSupabaseClient();
   const [authState, setAuthState] = useState<AuthState>({
     user: null,
     session: null,

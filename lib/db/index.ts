@@ -329,20 +329,37 @@ const createMockDb = (): MockDatabase => ({
         return { rowsAffected: 0 };
       }
 
+      // Two call patterns: 10 params (event_type in params) or 9 params (event_type literal 'increment' in SQL)
+      const isLiteralEventType = params.length === 9;
+      const newEvent = isLiteralEventType
+        ? {
+            id: params[0],
+            user_id: params[1],
+            counter_id: params[2],
+            event_type: 'increment' as const,
+            amount: params[3],
+            occurred_at: params[4],
+            occurred_local_date: params[5],
+            meta: params[6],
+            created_at: params[7],
+            updated_at: params[8],
+            deleted_at: null,
+          }
+        : {
+            id: params[0],
+            user_id: params[1],
+            counter_id: params[2],
+            event_type: params[3],
+            amount: params[4],
+            occurred_at: params[5],
+            occurred_local_date: params[6],
+            meta: params[7],
+            created_at: params[8],
+            updated_at: params[9],
+            deleted_at: null,
+          };
+
       const events = storage.get('events') || [];
-      const newEvent = {
-        id: params[0],
-        user_id: params[1],
-        counter_id: params[2],
-        event_type: params[3],
-        amount: params[4],
-        occurred_at: params[5],
-        occurred_local_date: params[6],
-        meta: params[7],
-        created_at: params[8],
-        updated_at: params[9],
-        deleted_at: null,
-      };
       events.push(newEvent);
       storage.set('events', events);
       await saveToStorage('events', events);
@@ -568,8 +585,13 @@ const createMockDb = (): MockDatabase => ({
       
       // Filter by user_id if in WHERE clause
       if (sql.includes('user_id = ?') && params.length > 0) {
-        // user_id position depends on whether id is also in the query
-        const userIdParamIndex = sql.includes('WHERE id = ?') ? 1 : 0;
+        // user_id position: 2 when date range (>= ? AND <= ?) is present, else 1 if WHERE id = ?, else 0
+        let userIdParamIndex = 0;
+        if (sql.includes('occurred_local_date >= ?') && sql.includes('occurred_local_date <= ?')) {
+          userIdParamIndex = 2; // params: [weekStart, weekEnd, userId]
+        } else if (sql.includes('WHERE id = ?')) {
+          userIdParamIndex = 1;
+        }
         const userId = params[userIdParamIndex];
         if (userId) {
           eventsWithMarkId = eventsWithMarkId.filter(e => e.user_id === userId);
@@ -619,6 +641,18 @@ const createMockDb = (): MockDatabase => ({
         }
       }
       
+      // Filter by occurred_local_date range (>= ? AND <= ?) - e.g. weekly review window
+      if (sql.includes('occurred_local_date >= ?') && sql.includes('occurred_local_date <= ?')) {
+        // Params order in seed query: weekStart, weekEnd, userId (or weekStart, weekEnd for diagnostics)
+        const weekStart = params[0];
+        const weekEnd = params[1];
+        if (weekStart != null && weekEnd != null) {
+          eventsWithMarkId = eventsWithMarkId.filter(
+            e => e.occurred_local_date >= weekStart && e.occurred_local_date <= weekEnd
+          );
+        }
+      }
+      
       // Filter by event_type if in WHERE clause
       if (sql.includes("event_type = ?") || sql.includes("event_type = 'increment'")) {
         if (sql.includes("event_type = 'increment'")) {
@@ -637,10 +671,18 @@ const createMockDb = (): MockDatabase => ({
       
       // If querying for deleted_at IS NOT NULL, include deleted events
       if (sql.includes('deleted_at IS NOT NULL')) {
-        return eventsWithMarkId.filter(e => e.deleted_at) as T[];
+        const filtered = eventsWithMarkId.filter(e => e.deleted_at);
+        if (sql.includes('COUNT(*)')) {
+          return [{ count: filtered.length }] as T[];
+        }
+        return filtered as T[];
       }
       // Default: filter out deleted events
-      return eventsWithMarkId.filter(e => !e.deleted_at) as T[];
+      const finalEvents = eventsWithMarkId.filter(e => !e.deleted_at);
+      if (sql.includes('COUNT(*)')) {
+        return [{ count: finalEvents.length }] as T[];
+      }
+      return finalEvents as T[];
     }
     
     if (sql.includes('FROM lc_streaks')) {
@@ -818,6 +860,17 @@ const createMockDb = (): MockDatabase => ({
 
 let db: MockDatabase | null = null;
 
+export const resetDatabaseState = async (): Promise<void> => {
+  storage.clear();
+  meta.clear();
+  db = null;
+  try {
+    await AsyncStorage.multiRemove(Object.values(STORAGE_KEYS));
+  } catch (error) {
+    logger.warn('[DB] Failed to clear AsyncStorage during reset:', error);
+  }
+};
+
 export const initDatabase = async (): Promise<MockDatabase> => {
   if (db) return db;
   
@@ -944,6 +997,95 @@ export const transaction = async <T>(
 ): Promise<T> => {
   const database = getDatabase();
   return await database.withTransactionAsync(callback);
+};
+
+/** JSON backup format for local export / restore (AsyncStorage-backed DB). */
+export type LivraLocalBackupV1 = {
+  version: 1;
+  exported_at: string;
+  user_id: string;
+  counters: any[];
+  events: any[];
+  streaks: any[];
+  badges: any[];
+};
+
+/** Build a full local snapshot for one user (marks, events, streaks, badges). */
+export const buildLocalBackupForUser = async (userId: string): Promise<LivraLocalBackupV1> => {
+  await initDatabase();
+  const [counters, events, streaks, badges] = await Promise.all([
+    query<any>('SELECT * FROM lc_counters WHERE user_id = ? AND deleted_at IS NULL', [userId]),
+    query<any>('SELECT * FROM lc_events WHERE user_id = ? AND deleted_at IS NULL', [userId]),
+    query<any>('SELECT * FROM lc_streaks WHERE user_id = ? AND deleted_at IS NULL', [userId]),
+    query<any>('SELECT * FROM lc_badges WHERE user_id = ? AND deleted_at IS NULL', [userId]),
+  ]);
+  return {
+    version: 1,
+    exported_at: new Date().toISOString(),
+    user_id: userId,
+    counters,
+    events,
+    streaks,
+    badges,
+  };
+};
+
+/**
+ * Replace all local rows for `targetUserId` with payload contents (remaps user_id on each row).
+ * Other users on the same device are left untouched.
+ */
+export const applyLocalBackupForUser = async (
+  targetUserId: string,
+  payload: LivraLocalBackupV1
+): Promise<void> => {
+  await initDatabase();
+
+  const filterOutUser = <T extends { user_id?: string | null }>(rows: T[]) =>
+    (rows || []).filter((r) => r.user_id !== targetUserId);
+
+  const countersAll = filterOutUser(storage.get('counters') || []);
+  const eventsAll = filterOutUser(storage.get('events') || []);
+  const streaksAll = filterOutUser(storage.get('streaks') || []);
+  const badgesAll = filterOutUser(storage.get('badges') || []);
+
+  const counters = (payload.counters || []).map((c) => ({
+    ...c,
+    user_id: targetUserId,
+  }));
+  const events = (payload.events || []).map((e) => {
+    const row = { ...e, user_id: targetUserId };
+    if (row.mark_id && !row.counter_id) {
+      row.counter_id = row.mark_id;
+    }
+    delete row.mark_id;
+    return row;
+  });
+  const streaks = (payload.streaks || []).map((s) => {
+    const row = { ...s, user_id: targetUserId };
+    if (row.mark_id && !row.counter_id) {
+      row.counter_id = row.mark_id;
+    }
+    delete row.mark_id;
+    return row;
+  });
+  const badges = (payload.badges || []).map((b) => {
+    const row = { ...b, user_id: targetUserId };
+    if (row.mark_id && !row.counter_id) {
+      row.counter_id = row.mark_id;
+    }
+    delete row.mark_id;
+    return row;
+  });
+
+  storage.set('counters', [...countersAll, ...counters]);
+  storage.set('events', [...eventsAll, ...events]);
+  storage.set('streaks', [...streaksAll, ...streaks]);
+  storage.set('badges', [...badgesAll, ...badges]);
+
+  await saveToStorage('counters', storage.get('counters')!);
+  await saveToStorage('events', storage.get('events')!);
+  await saveToStorage('streaks', storage.get('streaks')!);
+  await saveToStorage('badges', storage.get('badges')!);
 };
 
 // Cleanup function to remove badges with invalid user_id (like "local-user")

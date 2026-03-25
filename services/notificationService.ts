@@ -378,7 +378,7 @@ export const updateNotifications = async (
     // Check permissions
     const { status } = await Notifications.getPermissionsAsync();
     if (status !== 'granted') {
-      console.log('Notification permissions not granted');
+      logger.warn('[NotificationService] Notification permissions not granted');
       return;
     }
 
@@ -391,7 +391,7 @@ export const updateNotifications = async (
     // Schedule notifications
     await scheduleSmartNotifications(analysis, finalConfig);
   } catch (error) {
-    console.error('Error updating notifications:', error);
+    logger.error('[NotificationService] Error updating notifications:', error);
   }
 };
 

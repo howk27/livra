@@ -6,6 +6,10 @@ import { colors } from '../../../theme/colors';
 import { spacing, borderRadius, fontSize, fontWeight } from '../../../theme/tokens';
 import { useEffectiveTheme } from '../../../state/uiSlice';
 import { useCounters } from '../../../hooks/useCounters';
+import { GoalSection } from '../../../components/GoalSection';
+import { SchedulePicker } from '../../../components/SchedulePicker';
+import type { GoalPeriod, ScheduleType, DayOfWeek } from '../../../types';
+import { parseScheduleDays } from '../../../lib/features';
 import CounterIcon from '@/src/components/icons/CounterIcon';
 import { resolveCounterIconType } from '@/src/components/icons/IconResolver';
 import type { MarkType } from '@/src/types/counters';
@@ -104,6 +108,10 @@ export default function EditCounterScreen() {
     (counter?.unit as 'sessions' | 'days' | 'items') || 'sessions'
   );
   const [enableStreak, setEnableStreak] = useState(counter?.enable_streak ?? true);
+  const [goalValue, setGoalValue] = useState<number | null>(counter?.goal_value ?? null);
+  const [goalPeriod, setGoalPeriod] = useState<GoalPeriod>((counter?.goal_period as GoalPeriod) ?? 'day');
+  const [scheduleType, setScheduleType] = useState<ScheduleType>((counter?.schedule_type as ScheduleType) ?? 'daily');
+  const [scheduleDays, setScheduleDays] = useState<DayOfWeek[]>(counter ? parseScheduleDays(counter) : []);
   const [loading, setLoading] = useState(false);
 
   if (!counter || !id) {
@@ -132,7 +140,11 @@ export default function EditCounterScreen() {
         color,
         unit,
         enable_streak: enableStreak,
-      });
+        goal_value: goalValue,
+        goal_period: goalPeriod,
+        schedule_type: scheduleType,
+        schedule_days: scheduleType === 'custom' ? JSON.stringify(scheduleDays) : undefined,
+      } as any);
       router.back();
     } catch (error) {
       logger.error('Error updating counter:', error);
@@ -245,6 +257,27 @@ export default function EditCounterScreen() {
           </View>
         </View>
 
+        {/* Goal */}
+        <View style={styles.section}>
+          <Text style={[styles.label, { color: themeColors.text }]}>Goal (optional)</Text>
+          <GoalSection
+            goalValue={goalValue}
+            goalPeriod={goalPeriod}
+            unit={unit}
+            color={color}
+            onChange={(v, p) => { setGoalValue(v); setGoalPeriod(p); }}
+          />
+        </View>
+        {/* Schedule */}
+        <View style={styles.section}>
+          <Text style={[styles.label, { color: themeColors.text }]}>Schedule</Text>
+          <SchedulePicker
+            scheduleType={scheduleType}
+            scheduleDays={scheduleDays}
+            color={color}
+            onChange={(t, d) => { setScheduleType(t); setScheduleDays(d); }}
+          />
+        </View>
         {/* Enable Streak Toggle */}
         <View style={styles.section}>
           <TouchableOpacity

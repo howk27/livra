@@ -10,6 +10,9 @@ import { SuggestedCountersList } from '../../components/SuggestedCountersList';
 import { SuggestedCounter } from '../../lib/suggestedCounters';
 import { useAuth } from '../../hooks/useAuth';
 import { DuplicateCounterError, DuplicateMarkError } from '../../state/countersSlice';
+import { GoalSection } from '../../components/GoalSection';
+import { SchedulePicker } from '../../components/SchedulePicker';
+import type { GoalPeriod, ScheduleType, DayOfWeek } from '../../types';
 import { DuplicateCounterModal } from '../../components/DuplicateCounterModal';
 import { useNotification } from '../../contexts/NotificationContext';
 import { logger } from '../../lib/utils/logger';
@@ -76,6 +79,10 @@ export default function NewCounterScreen() {
   const [color, setColor] = useState(COLOR_OPTIONS[0]);
   const [unit, setUnit] = useState<'sessions' | 'days' | 'items'>('sessions');  
   const [enableStreak, setEnableStreak] = useState(true);
+  const [goalValue, setGoalValue] = useState<number | null>(null);
+  const [goalPeriod, setGoalPeriod] = useState<GoalPeriod>('day');
+  const [scheduleType, setScheduleType] = useState<ScheduleType>('daily');
+  const [scheduleDays, setScheduleDays] = useState<DayOfWeek[]>([]);
   const [loading, setLoading] = useState(false);
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
   const [duplicateCounterName, setDuplicateCounterName] = useState('');
@@ -156,7 +163,11 @@ export default function NewCounterScreen() {
         unit,
         enable_streak: enableStreak,
         user_id: user?.id!,
-      });
+        goal_value: goalValue,
+        goal_period: goalPeriod,
+        schedule_type: scheduleType,
+        schedule_days: scheduleType === 'custom' ? JSON.stringify(scheduleDays) : undefined,
+      } as any);
       // Show success notification
       showSuccess('Counter created successfully');
       // Small delay to allow sync to complete
@@ -356,6 +367,27 @@ export default function NewCounterScreen() {
           </View>
         </View>
 
+        {/* Goal */}
+        <View style={styles.section}>
+          <Text style={[styles.label, { color: themeColors.text }]}>Goal (optional)</Text>
+          <GoalSection
+            goalValue={goalValue}
+            goalPeriod={goalPeriod}
+            unit={unit}
+            color={color}
+            onChange={(v, p) => { setGoalValue(v); setGoalPeriod(p); }}
+          />
+        </View>
+        {/* Schedule */}
+        <View style={styles.section}>
+          <Text style={[styles.label, { color: themeColors.text }]}>Schedule</Text>
+          <SchedulePicker
+            scheduleType={scheduleType}
+            scheduleDays={scheduleDays}
+            color={color}
+            onChange={(t, d) => { setScheduleType(t); setScheduleDays(d); }}
+          />
+        </View>
         {/* Enable Streak Toggle */}
         <View style={styles.section}>
           <TouchableOpacity
