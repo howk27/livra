@@ -10,7 +10,8 @@ import { useSync } from './useSync';
 import { useBadges } from './useBadges';
 import { useIapSubscriptions } from './useIapSubscriptions';
 import { logger } from '../lib/utils/logger';
-import { checkGatingRules } from '../lib/gating';
+import { getAppDate, getAppDateTime, isDebugAppDateActive } from '../lib/appDate';
+import { useAppDateStore } from '../state/appDateSlice';
 
 const FREE_COUNTER_LIMIT = 3;
 
@@ -47,6 +48,7 @@ export const useMarks = () => {
     lastLoginDate,
     evaluateMarkBadges,
   } = useBadges(user?.id);
+  const appDateKey = useAppDateStore((s) => s.debugDateOverride ?? '');
 
   useEffect(() => {
     if (user?.id) {
@@ -60,13 +62,13 @@ export const useMarks = () => {
 
   useEffect(() => {
     if (!user?.id) return;
-    const today = formatDate(new Date());
+    const today = formatDate(getAppDate());
     if (lastLoginDate === today) return;
 
     recordDailyLogin(user.id).catch((error) => {
       logger.error('Error recording daily login:', error);
     });
-  }, [user?.id, lastLoginDate, recordDailyLogin]);
+  }, [user?.id, lastLoginDate, recordDailyLogin, appDateKey]);
 
   const createMark = useCallback(
     async (data: {
@@ -76,6 +78,11 @@ export const useMarks = () => {
       unit?: 'sessions' | 'days' | 'items';
       enable_streak?: boolean;
       user_id: string;
+      dailyTarget?: number | null;
+      schedule_type?: string;
+      schedule_days?: string;
+      goal_value?: number | null;
+      goal_period?: string | null;
       skipSync?: boolean; // Optional flag to skip sync (useful for batch operations)
     }) => {
       // Check counter limit for free users (skip check if skipSync is true - used for onboarding)
@@ -99,6 +106,11 @@ export const useMarks = () => {
         sort_index: marks.length,
         user_id: data.user_id,
         total: 0,
+        dailyTarget: data.dailyTarget ?? 1,
+        schedule_type: (data.schedule_type as any) ?? 'daily',
+        schedule_days: data.schedule_days,
+        goal_value: data.goal_value,
+        goal_period: data.goal_period as any,
       });
 
       // Sync to Supabase after creating mark
@@ -145,84 +157,41 @@ export const useMarks = () => {
         markId: mark.id,
         markName: mark.name,
         currentTotal: mark.total,
-        gated: mark.gated,
-        gateType: mark.gate_type,
         lastActivityDate: mark.last_activity_date,
       });
 
       // CRITICAL: Use device local time for event date (prevents date manipulation)
       // Server will validate timestamp on sync, but local date should match device timezone
-      const now = new Date();
+      const now = getAppDateTime();
       const today = formatDate(now); // Local timezone date string (yyyy-MM-dd)
       
-      // Validate date is not in future (prevent manipulation)
-      // Allow small buffer (5 minutes) for clock drift
-      const maxAllowedDate = new Date();
-      maxAllowedDate.setMinutes(maxAllowedDate.getMinutes() + 5);
-      if (now.getTime() > maxAllowedDate.getTime()) {
-        logger.error('[Counters] Event timestamp is in future - possible date manipulation. Rejecting event.', {
-          eventTime: now.toISOString(),
-          maxAllowed: maxAllowedDate.toISOString(),
-        });
-        throw new Error('Event timestamp is in the future');
-      }
-      
-      // Validate date is not too far in the past (more than 1 year)
-      const minAllowedDate = new Date();
-      minAllowedDate.setFullYear(minAllowedDate.getFullYear() - 1);
-      if (now.getTime() < minAllowedDate.getTime()) {
-        logger.error('[Counters] Event timestamp is too far in the past. Rejecting event.', {
-          eventTime: now.toISOString(),
-          minAllowed: minAllowedDate.toISOString(),
-        });
-        throw new Error('Event timestamp is too far in the past');
+      if (!isDebugAppDateActive()) {
+        // Validate date is not in future (prevent manipulation)
+        // Allow small buffer (5 minutes) for clock drift
+        const maxAllowedDate = new Date();
+        maxAllowedDate.setMinutes(maxAllowedDate.getMinutes() + 5);
+        if (now.getTime() > maxAllowedDate.getTime()) {
+          logger.error('[Counters] Event timestamp is in future - possible date manipulation. Rejecting event.', {
+            eventTime: now.toISOString(),
+            maxAllowed: maxAllowedDate.toISOString(),
+          });
+          throw new Error('Event timestamp is in the future');
+        }
+
+        // Validate date is not too far in the past (more than 1 year)
+        const minAllowedDate = new Date();
+        minAllowedDate.setFullYear(minAllowedDate.getFullYear() - 1);
+        if (now.getTime() < minAllowedDate.getTime()) {
+          logger.error('[Counters] Event timestamp is too far in the past. Rejecting event.', {
+            eventTime: now.toISOString(),
+            minAllowed: minAllowedDate.toISOString(),
+          });
+          throw new Error('Event timestamp is too far in the past');
+        }
       }
 
-      // Check gating rules BEFORE proceeding with increment
-      // This must happen synchronously to prevent invalid increments
-      try {
-        // Get events needed for gating check
-        const markEvents = getEventsByMark(markId);
-        logger.log('[INCREMENT] Gating check:', {
-          markId,
-          eventCount: markEvents.length,
-          hasIncrementEvents: markEvents.filter(e => e.event_type === 'increment').length,
-        });
-        
-        // Check gating rules
-        const gatingResult = checkGatingRules(mark, userId, markEvents, now);
-        logger.log('[INCREMENT] Gating result:', {
-          markId,
-          allowed: gatingResult.allowed,
-          reason: gatingResult.reason,
-          remainingMinutes: gatingResult.remainingMinutes,
-        });
-        
-        if (!gatingResult.allowed) {
-          logger.warn('[INCREMENT] BLOCKED by gating:', {
-            markId,
-            reason: gatingResult.reason,
-          });
-          // Create a custom error with the gating reason
-          const error = new Error(gatingResult.reason || 'Increment not allowed');
-          (error as any).gatingBlocked = true;
-          (error as any).remainingMinutes = gatingResult.remainingMinutes;
-          throw error;
-        }
-        logger.log('[INCREMENT] Gating check passed');
-      } catch (error) {
-        // Re-throw gating errors
-        if ((error as any).gatingBlocked) {
-          logger.warn('[INCREMENT] Gating error re-thrown:', {
-            markId,
-            error: error instanceof Error ? error.message : String(error),
-          });
-          throw error;
-        }
-        // Log other errors but allow increment to proceed (fail open)
-        logger.error('[INCREMENT] Error checking gating rules, allowing increment:', error);
-      }
-      
+      // Livra 2.0: no increment gating — schedule/daily target are planning metadata only.
+
       // CRITICAL: Update store SYNCHRONOUSLY so navigation sees the updated value
       // The component's optimistic state handles the immediate UI update, but the store
       // must also be updated immediately so that when user navigates, the detail screen
@@ -337,7 +306,7 @@ export const useMarks = () => {
         if (mark.enable_streak) {
           setTimeout(() => {
             const markEvents = getEventsByMark(markId);
-            const streakData = computeStreak(markEvents);
+            const streakData = computeStreak(markEvents, getAppDate());
             updateStreakInDB(markId, userId, streakData).catch((error) => {
               logger.error('[INCREMENT] Error updating streak after increment:', error);
             });
@@ -355,7 +324,7 @@ export const useMarks = () => {
         });
       });
     },
-    [getMark, addEvent, updateMarkAction, getEventsByMark, loadMarks, evaluateMarkBadges, checkGatingRules]
+    [getMark, addEvent, updateMarkAction, getEventsByMark, loadMarks, evaluateMarkBadges]
   );
 
   const decrementMark = useCallback(
@@ -389,7 +358,7 @@ export const useMarks = () => {
         currentTotal: mark.total,
       });
 
-      const now = new Date();
+      const now = getAppDateTime();
       const today = formatDate(now);
       const newTotal = Math.max(0, mark.total - amount);
       
@@ -518,7 +487,7 @@ export const useMarks = () => {
       const mark = getMark(markId);
       if (!mark) return;
 
-      const now = new Date();
+      const now = getAppDateTime();
       const today = formatDate(now);
 
       // Add reset event
@@ -568,6 +537,11 @@ export const useMarks = () => {
         color?: string;
         unit?: 'sessions' | 'days' | 'items';
         enable_streak?: boolean;
+        dailyTarget?: number | null;
+        schedule_type?: string;
+        schedule_days?: string;
+        goal_value?: number | null;
+        goal_period?: string | null;
       }
     ) => {
       await updateMarkAction(markId, updates);

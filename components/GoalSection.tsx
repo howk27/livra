@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { colors } from '../theme/colors';
+import { foregroundForHexBackground } from '@/src/components/icons/color';
 import type { GoalPeriod } from '../types';
 
 const PERIOD_OPTIONS: { key: GoalPeriod; label: string }[] = [
@@ -102,7 +103,16 @@ export const GoalSection: React.FC<GoalSectionProps> = ({
                   onPress={() => onChange(goalValue, opt.key)}
                   activeOpacity={0.75}
                 >
-                  <Text style={[styles.periodText, { color: active ? '#fff' : themeColors.textSecondary }]}>
+                  <Text
+                    style={[
+                      styles.periodText,
+                      {
+                        color: active
+                          ? foregroundForHexBackground(color, theme === 'dark')
+                          : themeColors.textSecondary,
+                      },
+                    ]}
+                  >
                     {opt.label}
                   </Text>
                 </TouchableOpacity>
@@ -135,7 +145,7 @@ const styles = StyleSheet.create({
   toggleLabel: { fontSize: 15, fontWeight: '500', marginBottom: 2 },
   toggleDesc: { fontSize: 13 },
   toggleSwitch: { width: 44, height: 24, borderRadius: 12, justifyContent: 'center', padding: 2 },
-  toggleThumb: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#fff' },
+  toggleThumb: { width: 20, height: 20, borderRadius: 10 },
   configBox: { padding: 16, borderRadius: 12, gap: 12 },
   valueRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   valueInput: {

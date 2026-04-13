@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Switch, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Switch, TextInput, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppText } from '../components/Typography';
@@ -26,6 +26,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { initDatabase, query } from '../lib/db';
 import { getWeekRange, getWeeklyReview } from '../lib/review/weeklyReview';
 import { logger } from '../lib/utils/logger';
+import { getAppDate } from '../lib/appDate';
+import { formatDate } from '../lib/date';
+import { useAppDateStore } from '../state/appDateSlice';
 
 export default function DiagnosticsScreen() {
   const theme = useEffectiveTheme();
@@ -44,10 +47,15 @@ export default function DiagnosticsScreen() {
   } | null>(null);
   const { user } = useAuth();
   const [resetBeforeWeeklySeed, setResetBeforeWeeklySeed] = useState(false);
+  const debugDateOverride = useAppDateStore((s) => s.debugDateOverride);
+  const setDebugDateOverride = useAppDateStore((s) => s.setDebugDateOverride);
+  const shiftDebugDateByDays = useAppDateStore((s) => s.shiftDebugDateByDays);
+  const useRealDate = useAppDateStore((s) => s.useRealDate);
+  const [manualSimDate, setManualSimDate] = useState('');
 
   const loadDevStatus = async () => {
     await initDatabase();
-    const now = new Date();
+    const now = getAppDate();
     const localDate = now.toISOString().split('T')[0];
     const { weekStart, weekEnd } = getWeekRange(now);
     const params: any[] = [weekStart, weekEnd];
@@ -114,7 +122,7 @@ export default function DiagnosticsScreen() {
       await AsyncStorage.setItem('livra_last_seed_action', 'seedDemoData');
       await queryClient.invalidateQueries({ queryKey: ['weeklyReview'] });
       await queryClient.refetchQueries({ queryKey: ['weeklyReview'] });
-      const review = await getWeeklyReview(new Date(), user?.id);
+      const review = await getWeeklyReview(getAppDate(), user?.id);
       logger.log('[Diagnostics] Weekly review summary after seedDemoData', {
         totalActivity: review.totalActivity,
         weekStart: review.weekStart,
@@ -134,7 +142,7 @@ export default function DiagnosticsScreen() {
       await AsyncStorage.setItem('livra_last_seed_action', 'seedHighUsage');
       await queryClient.invalidateQueries({ queryKey: ['weeklyReview'] });
       await queryClient.refetchQueries({ queryKey: ['weeklyReview'] });
-      const review = await getWeeklyReview(new Date(), user?.id);
+      const review = await getWeeklyReview(getAppDate(), user?.id);
       logger.log('[Diagnostics] Weekly review summary after seedHighUsage', {
         totalActivity: review.totalActivity,
         weekStart: review.weekStart,
@@ -154,7 +162,7 @@ export default function DiagnosticsScreen() {
       await AsyncStorage.setItem('livra_last_seed_action', 'seedBrokenStreak');
       await queryClient.invalidateQueries({ queryKey: ['weeklyReview'] });
       await queryClient.refetchQueries({ queryKey: ['weeklyReview'] });
-      const review = await getWeeklyReview(new Date(), user?.id);
+      const review = await getWeeklyReview(getAppDate(), user?.id);
       logger.log('[Diagnostics] Weekly review summary after seedBrokenStreak', {
         totalActivity: review.totalActivity,
         weekStart: review.weekStart,
@@ -174,7 +182,7 @@ export default function DiagnosticsScreen() {
       await AsyncStorage.setItem('livra_last_seed_action', 'seedPerfectWeek');
       await queryClient.invalidateQueries({ queryKey: ['weeklyReview'] });
       await queryClient.refetchQueries({ queryKey: ['weeklyReview'] });
-      const review = await getWeeklyReview(new Date(), user?.id);
+      const review = await getWeeklyReview(getAppDate(), user?.id);
       logger.log('[Diagnostics] Weekly review summary after seedPerfectWeek', {
         totalActivity: review.totalActivity,
         weekStart: review.weekStart,
@@ -216,7 +224,7 @@ export default function DiagnosticsScreen() {
       await AsyncStorage.setItem('livra_last_seed_action', `weeklyReview:${scenario}`);
       await queryClient.invalidateQueries({ queryKey: ['weeklyReview'] });
       await queryClient.refetchQueries({ queryKey: ['weeklyReview'] });
-      const review = await getWeeklyReview(new Date(), user?.id);
+      const review = await getWeeklyReview(getAppDate(), user?.id);
       logger.log('[Diagnostics] Weekly review summary after demo seed', {
         totalActivity: review.totalActivity,
         weekStart: review.weekStart,
@@ -228,7 +236,7 @@ export default function DiagnosticsScreen() {
       } else {
         Alert.alert('Seeded', `Weekly Review demo seeded: ${scenario}`);
       }
-      router.push('/weekly-review');
+      router.push('/(tabs)/tracking');
     } catch (error: any) {
       Alert.alert('Seed Failed', error?.message || 'Unable to seed Weekly Review demo.');
     }
@@ -299,6 +307,90 @@ export default function DiagnosticsScreen() {
             )}
           </View>
         </View>
+
+        {__DEV__ && (
+          <View style={styles.section}>
+            <AppText variant="caption" style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>
+              Simulated app date
+            </AppText>
+            <View style={[styles.card, { backgroundColor: themeColors.surface }]}>
+              <AppText variant="body" style={[styles.cardText, { color: themeColors.text }]}>
+                Effective “today”: {formatDate(getAppDate())}
+              </AppText>
+              <AppText variant="caption" style={[styles.cardText, { color: themeColors.textSecondary }]}>
+                Override: {debugDateOverride ?? 'none (system clock)'}
+              </AppText>
+            </View>
+            <View style={styles.rowButtons}>
+              <TouchableOpacity
+                style={[styles.button, styles.buttonFlex, { backgroundColor: themeColors.surface }]}
+                onPress={() => useRealDate()}
+              >
+                <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+                  Use real date
+                </AppText>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, styles.buttonFlex, { backgroundColor: themeColors.surface }]}
+                onPress={() => shiftDebugDateByDays(1)}
+              >
+                <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+                  +1 day
+                </AppText>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.rowButtons}>
+              <TouchableOpacity
+                style={[styles.button, styles.buttonFlex, { backgroundColor: themeColors.surface }]}
+                onPress={() => shiftDebugDateByDays(3)}
+              >
+                <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+                  +3 days
+                </AppText>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, styles.buttonFlex, { backgroundColor: themeColors.surface }]}
+                onPress={() => shiftDebugDateByDays(7)}
+              >
+                <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+                  +7 days
+                </AppText>
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              value={manualSimDate}
+              onChangeText={setManualSimDate}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor={themeColors.textTertiary}
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={[
+                styles.manualDateInput,
+                {
+                  color: themeColors.text,
+                  borderColor: themeColors.border,
+                  backgroundColor: themeColors.background,
+                },
+              ]}
+            />
+            <TouchableOpacity
+              style={[styles.button, { backgroundColor: themeColors.surface }]}
+              onPress={() => {
+                const t = manualSimDate.trim();
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(t)) {
+                  Alert.alert('Invalid date', 'Use YYYY-MM-DD.');
+                  return;
+                }
+                setDebugDateOverride(t).catch(() => {});
+                setManualSimDate('');
+              }}
+            >
+              <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+                Set manual date
+              </AppText>
+            </TouchableOpacity>
+          </View>
+        )}
 
         <View style={styles.section}>
           <AppText variant="caption" style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>
@@ -431,10 +523,10 @@ export default function DiagnosticsScreen() {
           {weeklyReview && (
             <TouchableOpacity
               style={[styles.button, { backgroundColor: themeColors.surface }]}
-              onPress={() => router.push('/weekly-review')}
+              onPress={() => router.push('/(tabs)/tracking')}
             >
               <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
-                Go to Weekly Review
+                Open Tracking (weekly snapshot)
               </AppText>
             </TouchableOpacity>
           )}
@@ -500,6 +592,7 @@ const styles = StyleSheet.create({
   },
   settingLabel: {
     marginBottom: spacing.xs,
+    fontSize: fontSize.sm,
   },
   settingMeta: {
     opacity: 0.85,
@@ -513,18 +606,24 @@ const styles = StyleSheet.create({
   buttonText: {
     fontWeight: '600',
   },
+  rowButtons: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  buttonFlex: {
+    flex: 1,
+    marginBottom: 0,
+  },
+  manualDateInput: {
+    borderWidth: 1,
+    borderRadius: borderRadius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.sm,
+    fontSize: fontSize.md,
+  },
   warningText: {
     marginBottom: spacing.sm,
-  },
-  settingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: spacing.md,
-    borderRadius: borderRadius.md,
-    marginBottom: spacing.sm,
-  },
-  settingLabel: {
-    fontSize: fontSize.sm,
   },
 });

@@ -1,9 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { format } from 'date-fns';
+import { getAppDate } from '../appDate';
 
 const LAST_OPENED_KEY = 'livra_weekly_review_opened_at';
 const LAST_DISMISSED_KEY = 'livra_weekly_review_prompt_dismissed_at';
 
-const toLocalDay = (date: Date): string => date.toISOString().split('T')[0];
+const toLocalDay = (date: Date): string => format(date, 'yyyy-MM-dd');
 
 export type ReviewReadyState = {
   shouldPrompt: boolean;
@@ -22,7 +24,7 @@ export const getReviewReadyState = (params: {
     return { shouldPrompt: false, reason: 'none' };
   }
 
-  const today = toLocalDay(new Date());
+  const today = toLocalDay(getAppDate());
   if (lastDismissedAt && toLocalDay(new Date(lastDismissedAt)) === today) {
     return { shouldPrompt: false, reason: 'none' };
   }

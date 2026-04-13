@@ -3,12 +3,20 @@ import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } fr
 import { Ionicons } from '@expo/vector-icons';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { colors } from '../theme/colors';
+import { spacing, borderRadius, fontSize, fontWeight } from '../theme/tokens';
 import { exportBackup, importBackup } from '../lib/backup';
 import { useMarksStore } from '../state/countersSlice';
+import { useDailyTrackingStore } from '../state/dailyTrackingSlice';
 import { useAuth } from '../hooks/useAuth';
 import { logger } from '../lib/utils/logger';
+import { applyOpacity } from '@/src/components/icons/color';
 
-export const BackupRestoreSection: React.FC = () => {
+export interface BackupRestoreSectionProps {
+  /** Single card with dividers (Profile / Data & Privacy layout) */
+  embedded?: boolean;
+}
+
+export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({ embedded = false }) => {
   const theme = useEffectiveTheme();
   const themeColors = colors[theme];
   const { user } = useAuth();
@@ -50,6 +58,7 @@ export const BackupRestoreSection: React.FC = () => {
       setImporting(false);
       if (result.success) {
         await loadMarks(user?.id);
+        await useDailyTrackingStore.getState().loadDailyTracking();
         Alert.alert('Restore complete', result.message);
       } else {
         Alert.alert('Restore failed', result.message);
@@ -65,57 +74,93 @@ export const BackupRestoreSection: React.FC = () => {
     {
       icon: 'cloud-upload-outline' as const,
       label: 'Export backup',
-      sub: 'Save all marks & history as a JSON file',
+      sub: 'Create a portable data snapshot',
       onPress: handleExport,
       loading: exporting,
     },
     {
       icon: 'cloud-download-outline' as const,
       label: 'Restore backup',
-      sub: 'Import a previously exported backup file',
+      sub: 'Upload a previously saved state',
       onPress: handleImport,
       loading: importing,
     },
   ];
 
-  return (
-    <>
-      {rows.map(row => (
-        <TouchableOpacity
-          key={row.label}
-          style={[styles.row, { backgroundColor: themeColors.surface }]}
-          onPress={row.onPress}
-          disabled={row.loading}
-          activeOpacity={0.7}
-        >
-          <View style={[styles.iconWrap, { backgroundColor: themeColors.background }]}>
-            {row.loading ? (
-              <ActivityIndicator size="small" color={themeColors.primary} />
-            ) : (
-              <Ionicons name={row.icon} size={20} color={themeColors.primary} />
-            )}
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={[styles.rowLabel, { color: themeColors.text }]}>{row.label}</Text>
-            <Text style={[styles.rowSub, { color: themeColors.textSecondary }]}>{row.sub}</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={16} color={themeColors.textSecondary} />
-        </TouchableOpacity>
-      ))}
-    </>
+  const rowInner = (row: (typeof rows)[0], index: number, isLast: boolean) => (
+    <TouchableOpacity
+      key={row.label}
+      style={[
+        embedded ? styles.rowEmbedded : styles.row,
+        embedded && !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: themeColors.border },
+        !embedded && { backgroundColor: themeColors.surface },
+      ]}
+      onPress={row.onPress}
+      disabled={row.loading}
+      activeOpacity={0.7}
+    >
+      <View style={[styles.iconWrap, { backgroundColor: applyOpacity(themeColors.accent.primary, theme === 'dark' ? 0.16 : 0.12) }]}>
+        {row.loading ? (
+          <ActivityIndicator size="small" color={themeColors.accent.primary} />
+        ) : (
+          <Ionicons name={row.icon} size={20} color={themeColors.textSecondary} />
+        )}
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={[styles.rowLabel, { color: themeColors.text }]}>{row.label}</Text>
+        <Text style={[styles.rowSub, { color: themeColors.textSecondary }]}>{row.sub}</Text>
+      </View>
+      <Ionicons name="chevron-forward-outline" size={18} color={themeColors.textTertiary} />
+    </TouchableOpacity>
   );
+
+  if (embedded) {
+    return (
+      <View
+        style={[
+          styles.embeddedCard,
+          {
+            backgroundColor: themeColors.surface,
+            borderColor: themeColors.border,
+          },
+        ]}
+      >
+        {rows.map((row, i) => rowInner(row, i, i === rows.length - 1))}
+      </View>
+    );
+  }
+
+  return <>{rows.map((row, i) => rowInner(row, i, i === rows.length - 1))}</>;
 };
 
 const styles = StyleSheet.create({
+  embeddedCard: {
+    borderRadius: borderRadius.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 8,
-    gap: 12,
+    padding: spacing.md,
+    borderRadius: borderRadius.lg,
+    marginBottom: spacing.sm,
+    gap: spacing.md,
   },
-  iconWrap: { width: 36, height: 36, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  rowLabel: { fontSize: 15, fontWeight: '500', marginBottom: 2 },
-  rowSub: { fontSize: 12 },
+  rowEmbedded: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    gap: spacing.md,
+  },
+  iconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rowLabel: { fontSize: fontSize.md, fontWeight: fontWeight.semibold, marginBottom: 2 },
+  rowSub: { fontSize: fontSize.sm },
 });

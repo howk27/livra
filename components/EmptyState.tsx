@@ -9,6 +9,7 @@ interface EmptyStateProps {
   title: string;
   message: string;
   icon?: string;
+  iconElement?: React.ReactNode;
   actionLabel?: string;
   onAction?: () => void;
 }
@@ -17,6 +18,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   title,
   message,
   icon = '📊',
+  iconElement,
   actionLabel,
   onAction,
 }) => {
@@ -25,9 +27,13 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
 
   return (
     <View style={styles.container}>
-      <AppText variant="display" style={[styles.icon, { color: themeColors.text }]}>
-        {icon}
-      </AppText>
+      {iconElement ? (
+        <View style={styles.iconSlot}>{iconElement}</View>
+      ) : (
+        <AppText variant="display" style={[styles.icon, { color: themeColors.text }]}>
+          {icon}
+        </AppText>
+      )}
       <AppText variant="headline" style={[styles.title, { color: themeColors.text }]}>
         {title}
       </AppText>
@@ -56,6 +62,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: spacing.xl,
+  },
+  iconSlot: {
+    marginBottom: spacing.lg,
+    minHeight: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   icon: {
     fontSize: 60,

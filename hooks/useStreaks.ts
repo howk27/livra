@@ -1,6 +1,14 @@
+/**
+ * Streak source of truth (Livra 2.0):
+ * - **Canonical:** `computeStreak(increment events, getAppDate())` — all UI that shows a streak must use this.
+ * - **lc_streaks / Supabase streak rows:** denormalized cache for sync and legacy queries; updated after increments
+ *   and after sync. Never treat them as authoritative when events are available.
+ */
 import { useMemo } from 'react';
-import { CounterEvent, CounterStreak } from '../types';
+import type { CounterEvent, MarkEvent, CounterStreak } from '../types';
 import { formatDate, addDays } from '../lib/date';
+import { getAppDate } from '../lib/appDate';
+import { useAppDateStore } from '../state/appDateSlice';
 
 export interface StreakData {
   current: number;
@@ -11,7 +19,7 @@ export interface StreakData {
 export const computeStreak = (events: CounterEvent[], today?: Date): StreakData => {
   // CRITICAL: Use device local time consistently
   // formatDate uses local timezone (date-fns format uses local time by default)
-  const now = today || new Date();
+  const now = today || getAppDate();
   const todayStr = formatDate(now);
   
   // Get unique dates with activity (increment events only)
@@ -114,14 +122,28 @@ export const computeStreak = (events: CounterEvent[], today?: Date): StreakData 
   };
 };
 
+/** Canonical streak for a mark from live event history (same “today” as the rest of the app). */
+export function deriveStreakForMark(
+  markId: string,
+  events: readonly MarkEvent[],
+  enableStreak: boolean,
+): StreakData | null {
+  if (!enableStreak) return null;
+  const ev = events.filter(
+    (e) => e.mark_id === markId && !e.deleted_at && e.event_type === 'increment',
+  );
+  return computeStreak(ev as CounterEvent[], getAppDate());
+}
+
 export const useStreakCalculation = (
   events: CounterEvent[],
   enableStreak: boolean
 ): StreakData | null => {
+  const appDateKey = useAppDateStore((s) => s.debugDateOverride ?? '');
   return useMemo(() => {
     if (!enableStreak) return null;
-    return computeStreak(events);
-  }, [events, enableStreak]);
+    return computeStreak(events, getAppDate());
+  }, [events, enableStreak, appDateKey]);
 };
 
 export const isStreakActive = (streak: StreakData | null): boolean => {
@@ -138,7 +160,7 @@ export const getStreakStatus = (
   return 'none';
 };
 
-// Save/update streak in database
+/** Persist derived streak to DB — cache / sync projection only, not a second definition. */
 export const updateStreakInDB = async (
   counterId: string,
   userId: string,

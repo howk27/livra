@@ -19,7 +19,7 @@ export const WeeklyReviewPreviewCard = ({ summary, onPress }: Props) => {
   const summaryLine =
     summary.totalActivity > 0
       ? `${summary.totalActivity} marks this week • ${summary.daysActive} of 7 days active • Best day: ${summary.bestDay.label}`
-      : 'Your weekly review starts with your first mark.';
+      : 'Your weekly snapshot starts with your first mark.';
 
   return (
     <View style={styles.container}>
@@ -35,13 +35,13 @@ export const WeeklyReviewPreviewCard = ({ summary, onPress }: Props) => {
         activeOpacity={0.85}
       >
         <AppText variant="headline" style={[styles.title, { color: themeColors.text }]}>
-          Weekly Review
+          Weekly snapshot
         </AppText>
         <AppText variant="body" style={[styles.summary, { color: themeColors.textSecondary }]}>
           {summaryLine}
         </AppText>
         <AppText variant="caption" style={[styles.cta, { color: themeColors.text }]}>
-          View full review
+          View in Tracking
         </AppText>
       </TouchableOpacity>
     </View>

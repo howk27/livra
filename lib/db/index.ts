@@ -130,7 +130,30 @@ const createMockDb = (): MockDatabase => ({
       const counters = storage.get('counters') || [];
       let newCounter: any;
       
-      if (params.length === 15) {
+      if (params.length === 14) {
+        // Sync insert with dailyTarget (last column)
+        newCounter = {
+          id: params[0],
+          user_id: params[1],
+          name: params[2],
+          emoji: params[3],
+          color: params[4],
+          unit: params[5],
+          enable_streak: params[6],
+          sort_index: params[7],
+          total: params[8],
+          last_activity_date: params[9],
+          deleted_at: params[10],
+          created_at: params[11],
+          updated_at: params[12],
+          dailyTarget: params[13],
+          gated: null,
+          gate_type: null,
+          min_interval_minutes: null,
+          max_per_day: null,
+        };
+        logger.log(`[DB] Inserted counter ${params[0]} (${params[2]}) from sync (with dailyTarget)`);
+      } else if (params.length === 15) {
         // Full insert with gating fields (from addMark in countersSlice.ts)
         // SQL: INSERT INTO lc_counters (id, user_id, name, emoji, color, unit, enable_streak, 
         //      sort_index, total, created_at, updated_at, gated, gate_type, min_interval_minutes, max_per_day)
@@ -261,8 +284,43 @@ const createMockDb = (): MockDatabase => ({
               max_per_day: params[12],
             };
             logger.log(`[DB] Updated counter ${params[13]} with total: ${params[6]}`);
+          } else if (
+            params.length === 12 &&
+            sql.includes('dailyTarget') &&
+            sql.includes('deleted_at')
+          ) {
+            counters[index] = {
+              ...counters[index],
+              name: params[0],
+              emoji: params[1],
+              color: params[2],
+              unit: params[3],
+              enable_streak: params[4],
+              sort_index: params[5],
+              total: params[6],
+              last_activity_date: params[7],
+              deleted_at: params[8],
+              dailyTarget: params[9],
+              updated_at: params[10],
+            };
+            logger.log(`[DB] Updated counter ${params[11]} (sync merge + dailyTarget)`);
+          } else if (params.length === 11 && sql.includes('dailyTarget')) {
+            counters[index] = {
+              ...counters[index],
+              name: params[0],
+              emoji: params[1],
+              color: params[2],
+              unit: params[3],
+              enable_streak: params[4],
+              sort_index: params[5],
+              total: params[6],
+              last_activity_date: params[7],
+              dailyTarget: params[8],
+              updated_at: params[9],
+            };
+            logger.log(`[DB] Updated counter ${params[10]} with total: ${params[6]} (+ dailyTarget)`);
           } else if (params.length === 10) {
-            // Legacy update with all fields (no gating)
+            // Legacy update with all fields (no gating, no dailyTarget)
             counters[index] = {
               ...counters[index],
               name: params[0],
@@ -894,7 +952,8 @@ export const initDatabase = async (): Promise<MockDatabase> => {
       last_activity_date TEXT,
       deleted_at TEXT,
       created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
+      updated_at TEXT NOT NULL,
+      dailyTarget INTEGER
     );
   `);
   

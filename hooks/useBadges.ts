@@ -4,7 +4,9 @@ import { MarkBadge, BadgeCode } from '../types';
 import { query, execute } from '../lib/db';
 import { getMetaValue, setMetaValue } from '../lib/db/meta';
 import { formatDate, daysBetween } from '../lib/date';
+import { getAppDate, getAppDateTime } from '../lib/appDate';
 import { useEventsStore } from '../state/eventsSlice';
+import { useAppDateStore } from '../state/appDateSlice';
 import { computeStreak } from './useStreaks';
 
 type BadgeDefinition = {
@@ -147,6 +149,7 @@ export const badgeTestUtils = {
 };
 
 export const useBadges = (userId?: string) => {
+  const appDateKey = useAppDateStore((s) => s.debugDateOverride ?? '');
   const { getEventsByMark } = useEventsStore();
   const [badgesByCounter, setBadgesByCounter] = useState<BadgeMap>(new Map());
   const [loading, setLoading] = useState(false);
@@ -221,7 +224,7 @@ export const useBadges = (userId?: string) => {
     ): Promise<MarkBadge> => {
       const perCounter = badgesByCounter.get(markId);
       const existing = perCounter?.get(definition.code) ?? null;
-      const nowIso = new Date().toISOString();
+      const nowIso = getAppDateTime().toISOString();
       const lastProgressIso = lastProgressDate ? `${lastProgressDate}T00:00:00.000Z` : null;
 
       if (!existing) {
@@ -320,8 +323,8 @@ export const useBadges = (userId?: string) => {
         events.map((event) => event.occurred_local_date)
       );
 
-      const streak = computeStreak(events);
-      const todayStr = formatDate(new Date());
+      const streak = computeStreak(events, getAppDate());
+      const todayStr = formatDate(getAppDate());
 
       const results: BadgeProgress[] = [];
       const updatedPerCounter = new Map(badgesByCounter.get(markId) ?? new Map());
@@ -377,11 +380,11 @@ export const useBadges = (userId?: string) => {
 
       return results;
     },
-    [badgesByCounter, getEventsByMark, loginHistorySet, updateBadgeRecord]
+    [badgesByCounter, getEventsByMark, loginHistorySet, updateBadgeRecord, appDateKey]
   );
 
   const recordDailyLogin = useCallback(
-    async (uid: string, date: Date = new Date()) => {
+    async (uid: string, date: Date = getAppDate()) => {
       const dateStr = formatDate(date);
       const history = uniqueSortedDates([...loginHistory, dateStr]).filter((d) => {
         const diff = Math.abs(daysBetween(parseDateString(dateStr), parseDateString(d)));

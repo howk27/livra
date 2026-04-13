@@ -23,6 +23,7 @@ import { cleanupDuplicateCounters, cleanupOrphanedStreaksAndBadges, cleanupOrpha
 import { mapStreaksToSupabase, mapBadgesToSupabase, mapEventsToSupabase } from '../lib/sync/mappers';
 import { logger } from '../lib/utils/logger';
 import { formatDate } from '../lib/date';
+import { normalizeDailyTargetInput, resolveDailyTarget } from '../lib/markDailyTarget';
 
 interface SyncState {
   isSyncing: boolean;
@@ -772,9 +773,11 @@ export const useSync = () => {
         });
       } catch (queryError) {
         const parsed = parseError(queryError);
-        logger.error('[SYNC] Error querying events:', parsed.message);
-        // Don't throw - continue with empty array, events will be synced on next attempt
-        events = [];
+        logger.error(
+          '[SYNC] Error querying local events for push — aborting push so last_synced_at is not advanced while events may be unsent',
+          parsed.message,
+        );
+        throw queryError;
       }
 
       let streaks: CounterStreak[] = [];
@@ -866,6 +869,7 @@ export const useSync = () => {
             created_at: c.created_at,
             updated_at: c.updated_at,
             deleted_at: isDeleted ? (c.deleted_at || new Date().toISOString()) : null,
+            dailyTarget: normalizeDailyTargetInput((c as Counter & { dailyTarget?: number | null }).dailyTarget),
           };
         });
         
@@ -885,13 +889,30 @@ export const useSync = () => {
         const counterBatches = batchArray(countersToPush, BATCH_SIZE);
         
         let limitBlocked = false;
+        let supportsRemoteDailyTarget = true;
         for (let i = 0; i < counterBatches.length; i++) {
           const batch = counterBatches[i];
           logger.log(`[SYNC] Upserting batch ${i + 1}/${counterBatches.length} (${batch.length} counter(s))...`);
-          
-          const { error: countersError } = await supabase
+
+          const batchPayload = supportsRemoteDailyTarget
+            ? batch
+            : batch.map(({ dailyTarget: _dailyTarget, ...rest }) => rest);
+
+          let { error: countersError } = await supabase
             .from('counters')
-            .upsert(batch, { onConflict: 'id' });
+            .upsert(batchPayload, { onConflict: 'id' });
+
+          if (
+            countersError?.code === 'PGRST204' &&
+            typeof countersError.message === 'string' &&
+            countersError.message.includes('dailyTarget')
+          ) {
+            logger.warn('[SYNC] Remote counters table missing dailyTarget column; retrying without it');
+            supportsRemoteDailyTarget = false;
+            const legacyBatch = batch.map(({ dailyTarget: _dailyTarget, ...rest }) => rest);
+            const retryResult = await supabase.from('counters').upsert(legacyBatch, { onConflict: 'id' });
+            countersError = retryResult.error;
+          }
 
           if (countersError) {
             if (isProLimitError(countersError)) {
@@ -906,14 +927,15 @@ export const useSync = () => {
             }
             const parsed = parseError(countersError);
             if (parsed.isNetworkError || parsed.shouldRetry) {
-              logger.warn(`[SYNC] Network/timeout error pushing counters batch ${i + 1}:`, parsed.message);
-              // For network/timeout errors, log and continue with next batch
-              // Failed batches will be pushed on next sync
-            } else {
-              logger.error(`[SYNC] Error pushing counters batch ${i + 1} to Supabase:`, countersError);
-              logger.error(`[SYNC] Failed counters in batch:`, batch.map((c) => ({ id: c.id, name: c.name, deleted_at: c.deleted_at })));
+              logger.error(
+                `[SYNC] Counters batch ${i + 1}/${counterBatches.length} failed (network/timeout) — aborting push so last_synced_at is not advanced past unsent rows`,
+                parsed.message,
+              );
               throw countersError;
             }
+            logger.error(`[SYNC] Error pushing counters batch ${i + 1} to Supabase:`, countersError);
+            logger.error(`[SYNC] Failed counters in batch:`, batch.map((c) => ({ id: c.id, name: c.name, deleted_at: c.deleted_at })));
+            throw countersError;
           } else {
             logger.log(`[SYNC] ✅ Successfully pushed batch ${i + 1}/${counterBatches.length}`);
           }
@@ -969,16 +991,60 @@ export const useSync = () => {
                   })),
                 });
               }
+
+              // Match streaks/badges: only push events whose counter exists on Supabase with deleted_at null.
+              // Otherwise RLS on counter_events rejects the upsert (42501) when the parent mark is deleted or absent.
+              let eventsToPush = validEvents;
+              const eventMarkIds = [...new Set(validEvents.map((e) => e.mark_id).filter(Boolean) as string[])];
+              if (eventMarkIds.length > 0) {
+                try {
+                  const { data: existingCounters, error: counterCheckError } = await supabase
+                    .from('counters')
+                    .select('id')
+                    .in('id', eventMarkIds)
+                    .is('deleted_at', null);
+
+                  if (counterCheckError) {
+                    logger.error(
+                      '[SYNC] Cannot validate counters for event push — aborting sync to avoid advancing last_synced_at while events are unsent',
+                      counterCheckError,
+                    );
+                    throw counterCheckError;
+                  } else {
+                    const existingCounterIds = new Set((existingCounters || []).map((c) => c.id));
+                    const before = validEvents.length;
+                    eventsToPush = validEvents.filter((e) => e.mark_id && existingCounterIds.has(e.mark_id));
+                    if (eventsToPush.length !== before) {
+                      logger.log(
+                        `[SYNC] Filtered events: ${before} -> ${eventsToPush.length} (skipped events for missing or deleted counters)`,
+                      );
+                    }
+                    for (const id of eventMarkIds) {
+                      if (!existingCounterIds.has(id)) {
+                        logger.warn(
+                          `[SYNC] Skipping event(s) for counter ${id} - counter doesn't exist in Supabase or is deleted`,
+                        );
+                      }
+                    }
+                  }
+                } catch (checkError) {
+                  logger.error(
+                    '[SYNC] Event pre-push counter validation threw — aborting sync so unsent events are not skipped past cursor',
+                    checkError,
+                  );
+                  throw checkError;
+                }
+              }
               
-              if (validEvents.length === 0) {
-                logger.log('[SYNC] No valid events to push (all filtered out due to invalid mark_id)');
+              if (eventsToPush.length === 0) {
+                logger.log('[SYNC] No valid events to push (all filtered out due to invalid mark_id or missing counter on server)');
                 return;
               }
               
               // Log events being pushed
               logger.log('[SYNC] Pushing events to Supabase:', {
-                count: validEvents.length,
-                sample: validEvents.slice(0, 3).map(e => ({
+                count: eventsToPush.length,
+                sample: eventsToPush.slice(0, 3).map(e => ({
                   id: e.id,
                   mark_id: e.mark_id,
                   event_type: e.event_type,
@@ -987,7 +1053,7 @@ export const useSync = () => {
               });
               
               // Map mark_id to counter_id for Supabase using type-safe mapper
-              const eventsForSupabase = mapEventsToSupabase(validEvents.map((e) => ({ ...e, meta: e.meta || {} })));
+              const eventsForSupabase = mapEventsToSupabase(eventsToPush.map((e) => ({ ...e, meta: e.meta || {} })));
               const eventBatches = batchArray(eventsForSupabase, BATCH_SIZE);
               
               for (let i = 0; i < eventBatches.length; i++) {
@@ -1005,9 +1071,10 @@ export const useSync = () => {
                     details: error.details,
                   });
                   if (parsed.isNetworkError || parsed.shouldRetry) {
-                    // For timeout/network errors, log warning but continue with next batch
-                    logger.warn(`[SYNC] Error pushing events batch ${i + 1}/${eventBatches.length} (timeout/network):`, parsed.message);
-                    continue;
+                    logger.error(
+                      `[SYNC] Events batch ${i + 1}/${eventBatches.length} failed (network/timeout) — aborting push; last_synced_at will not advance until all batches succeed`,
+                      parsed.message,
+                    );
                   }
                   throw error;
                 }
@@ -1019,12 +1086,14 @@ export const useSync = () => {
                 });
               }
               
-              logger.log(`[SYNC] ✅ All ${validEvents.length} events pushed to Supabase successfully`);
+              logger.log(`[SYNC] ✅ All ${eventsToPush.length} events pushed to Supabase successfully`);
             } catch (error) {
               const parsed = parseError(error);
               if (parsed.isNetworkError || parsed.shouldRetry) {
-                logger.warn('[SYNC] Error pushing events (timeout/network):', parsed.message);
-                return; // Don't throw - let other operations continue
+                logger.error(
+                  '[SYNC] Event push failed (network/timeout) — failing sync so cursor is not advanced past unsent events',
+                  parsed.message,
+                );
               }
               throw error;
             }
@@ -1166,8 +1235,10 @@ export const useSync = () => {
                           if (retryError) {
                             const parsed = parseError(retryError);
                             if (parsed.isNetworkError || parsed.shouldRetry) {
-                              logger.warn(`[SYNC] Error pushing streaks batch ${i + 1}/${streakBatches.length} (timeout/network):`, parsed.message);
-                              continue;
+                              logger.error(
+                                `[SYNC] Streaks batch ${i + 1}/${streakBatches.length} failed (network/timeout) — aborting push to keep cursor safe`,
+                                parsed.message,
+                              );
                             }
                             throw retryError;
                           }
@@ -1180,16 +1251,20 @@ export const useSync = () => {
                       // Check for timeout errors
                       const parsed = parseError(error);
                       if (parsed.isNetworkError || parsed.shouldRetry) {
-                        logger.warn(`[SYNC] Error pushing streaks batch ${i + 1}/${streakBatches.length} (timeout/network):`, parsed.message);
-                        continue;
+                        logger.error(
+                          `[SYNC] Streaks batch ${i + 1}/${streakBatches.length} failed (network/timeout) — aborting push`,
+                          parsed.message,
+                        );
                       }
                       throw error;
                     }
                   } catch (batchError) {
                     const parsed = parseError(batchError);
                     if (parsed.isNetworkError || parsed.shouldRetry) {
-                      logger.warn(`[SYNC] Error pushing streaks batch ${i + 1}/${streakBatches.length} (timeout/network):`, parsed.message);
-                      continue;
+                      logger.error(
+                        `[SYNC] Streaks batch ${i + 1}/${streakBatches.length} failed (network/timeout) — aborting push`,
+                        parsed.message,
+                      );
                     }
                     // If it's a foreign key error, log and continue
                     if (batchError && typeof batchError === 'object' && 'code' in batchError && batchError.code === '23503') {
@@ -1202,8 +1277,11 @@ export const useSync = () => {
               } catch (error) {
                 const parsed = parseError(error);
                 if (parsed.isNetworkError || parsed.shouldRetry) {
-                  logger.warn('[SYNC] Error pushing streaks (timeout/network):', parsed.message);
-                  return; // Don't throw - let other operations continue
+                  logger.error(
+                    '[SYNC] Streak push failed (network/timeout) — failing sync so last_synced_at is not advanced',
+                    parsed.message,
+                  );
+                  throw error;
                 }
                 // If it's a foreign key error, log and return (don't throw)
                 if (error && typeof error === 'object' && 'code' in error && error.code === '23503') {
@@ -1361,8 +1439,10 @@ export const useSync = () => {
                   // Check for timeout errors
                   const parsed = parseError(error);
                   if (parsed.isNetworkError || parsed.shouldRetry) {
-                    logger.warn(`[SYNC] Error pushing badges batch ${i + 1}/${badgeBatches.length} (timeout/network):`, parsed.message);
-                    continue;
+                    logger.error(
+                      `[SYNC] Badges batch ${i + 1}/${badgeBatches.length} failed (network/timeout) — aborting push`,
+                      parsed.message,
+                    );
                   }
                   throw error;
                 }
@@ -1380,8 +1460,10 @@ export const useSync = () => {
                 return; // Don't throw - let other operations continue
               }
               if (parsed.isNetworkError || parsed.shouldRetry) {
-                logger.warn('[SYNC] Error pushing badges (timeout/network):', parsed.message);
-                return; // Don't throw - let other operations continue
+                logger.error(
+                  '[SYNC] Badge push failed (network/timeout) — failing sync so last_synced_at is not advanced',
+                  parsed.message,
+                );
               }
               throw error;
             }
@@ -1394,59 +1476,48 @@ export const useSync = () => {
 
       // Wait for remaining pushes to complete
       if (pushPromises.length > 0) {
-        try {
-          await Promise.all(pushPromises);
-        } catch (error) {
-          const parsed = parseError(error);
-          if (parsed.isNetworkError || parsed.shouldRetry) {
-            // For timeout/network errors, log but don't throw
-            // Individual operations may have succeeded partially
-            logger.warn('[SYNC] Some push operations failed due to timeout/network error:', parsed.message);
-            // Continue - partial sync is better than no sync
-          } else {
-            // For other errors, throw to be handled by outer catch
-            throw error;
-          }
-        }
+        await Promise.all(pushPromises);
       }
     } catch (error) {
       const parsed = parseError(error || 'Unknown error occurred during push');
       if (parsed.isNetworkError || parsed.shouldRetry) {
-        // For timeout/network errors, log warning but don't throw
-        // The sync can continue or retry later
-        logger.warn('[SYNC] Push operation failed due to timeout/network error:', parsed.message);
-        // Don't throw - allow sync to continue or fail gracefully
+        logger.error(
+          '[SYNC] Push failed (network/timeout) — sync will not advance last_synced_at; retry on next connection',
+          parsed.message,
+        );
       } else {
-        // Extract error message properly
         let errorMsg = 'Unknown error';
         let errorDetails = '';
-        
+
         if (error instanceof Error) {
           errorMsg = error.message || 'Unknown error';
           errorDetails = error.stack || '';
         } else if (typeof error === 'string') {
           errorMsg = error;
         } else if (error && typeof error === 'object') {
-          // Try to extract message from error object
           errorMsg = (error as any).message || (error as any).error?.message || JSON.stringify(error);
           if ((error as any).error) {
             errorDetails = JSON.stringify((error as any).error);
           }
         }
-        
-        // Log with proper serialization
+
         if (errorDetails) {
           logger.error(`[SYNC] Push error: ${errorMsg}`, errorDetails);
         } else {
           logger.error(`[SYNC] Push error: ${errorMsg}`);
         }
-        
-        // Create a proper Error object to throw
-        const errorToThrow = error instanceof Error 
-          ? error 
-          : new Error(errorMsg || 'Unknown push error');
-        throw errorToThrow;
       }
+
+      let errorMsg = 'Unknown push error';
+      if (error instanceof Error) {
+        errorMsg = error.message || errorMsg;
+      } else if (typeof error === 'string') {
+        errorMsg = error;
+      } else if (error && typeof error === 'object') {
+        errorMsg =
+          (error as any).message || (error as any).error?.message || JSON.stringify(error) || errorMsg;
+      }
+      throw error instanceof Error ? error : new Error(errorMsg);
     }
   }, []);
 
@@ -1537,14 +1608,15 @@ export const useSync = () => {
           const { useCountersStore } = await import('../state/countersSlice');
           const { useEventsStore } = await import('../state/eventsSlice');
           const { computeStreak, updateStreakInDB } = await import('./useStreaks');
-          
+          const { getAppDate } = await import('../lib/appDate');
+
           const counters = useCountersStore.getState().marks.filter(m => !m.deleted_at && m.enable_streak);
           const allEvents = useEventsStore.getState().events.filter(e => !e.deleted_at);
-          
-          // Recalculate streaks for all counters with streaks enabled
+
+          // Recalculate streaks for all counters with streaks enabled (same “today” as UI)
           const streakUpdates = counters.map(async (counter) => {
             const counterEvents = allEvents.filter(e => e.mark_id === counter.id);
-            const streakData = computeStreak(counterEvents);
+            const streakData = computeStreak(counterEvents, getAppDate());
             await updateStreakInDB(counter.id, user.id, streakData);
           });
           
@@ -1770,15 +1842,13 @@ const mergeCounter = async (counter: Counter, existingCountersMap?: Map<string, 
     return false;
   }
 
-  // CRITICAL: Conflict resolution - compare updated_at timestamps
-  // If local version is newer, keep local version and push it on next sync
-  // If server version is newer, update local version
+  // Merge uses updated_at: remote row is applied to local only when remoteTime > localTime
+  // (see branch below); pending writes and totals have additional guards.
   if (existing && existing.updated_at && counter.updated_at) {
     try {
       const localUpdated = new Date(existing.updated_at).getTime();
       const serverUpdated = new Date(counter.updated_at).getTime();
-      
-      // If local is newer (within 1 second tolerance for clock drift), log potential conflict
+
       if (localUpdated > serverUpdated + 1000) {
         logger.warn('[SYNC] Potential conflict detected - local version is newer', {
           counterId: counter.id,
@@ -1787,12 +1857,9 @@ const mergeCounter = async (counter: Counter, existingCountersMap?: Map<string, 
           serverUpdated: counter.updated_at,
           difference: localUpdated - serverUpdated,
         });
-        // For now, use last-write-wins (server version) but log the conflict
-        // Future: Could implement field-level merging or user choice
       }
     } catch (dateError) {
       logger.error('[SYNC] Error comparing timestamps for conflict detection:', dateError);
-      // Continue with merge if timestamp comparison fails
     }
   }
 
@@ -1834,10 +1901,14 @@ const mergeCounter = async (counter: Counter, existingCountersMap?: Map<string, 
       
       if (incomingTime > existingTime) {
         logger.log(`[SYNC] mergeCounter: Updating existing counter ${duplicateByName.id} with newer data from ${counter.id}`);
+        const mergedDupDaily =
+          typeof (counter as any).dailyTarget === 'number' && (counter as any).dailyTarget > 0
+            ? normalizeDailyTargetInput((counter as any).dailyTarget)
+            : resolveDailyTarget(duplicateByName as Counter);
         await execute(
           `UPDATE lc_counters SET 
             emoji = ?, color = ?, unit = ?, enable_streak = ?,
-            sort_index = ?, total = ?, last_activity_date = ?, updated_at = ?
+            sort_index = ?, total = ?, last_activity_date = ?, dailyTarget = ?, updated_at = ?
           WHERE id = ?`,
           [
             counter.emoji,
@@ -1847,6 +1918,7 @@ const mergeCounter = async (counter: Counter, existingCountersMap?: Map<string, 
             counter.sort_index,
             counter.total,
             counter.last_activity_date,
+            mergedDupDaily,
             counter.updated_at,
             duplicateByName.id,
           ]
@@ -1861,8 +1933,8 @@ const mergeCounter = async (counter: Counter, existingCountersMap?: Map<string, 
     await execute(
       `INSERT INTO lc_counters (
         id, user_id, name, emoji, color, unit, enable_streak,
-        sort_index, total, last_activity_date, deleted_at, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        sort_index, total, last_activity_date, deleted_at, created_at, updated_at, dailyTarget
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         counter.id,
         counter.user_id,
@@ -1877,6 +1949,7 @@ const mergeCounter = async (counter: Counter, existingCountersMap?: Map<string, 
         counter.deleted_at,
         counter.created_at,
         counter.updated_at,
+        normalizeDailyTargetInput((counter as any).dailyTarget),
       ]
     );
     return true; // Counter was inserted
@@ -1973,10 +2046,15 @@ const mergeCounter = async (counter: Counter, existingCountersMap?: Map<string, 
         });
       }
       
+      const preservedDaily =
+        typeof (counter as any).dailyTarget === 'number' && (counter as any).dailyTarget > 0
+          ? normalizeDailyTargetInput((counter as any).dailyTarget)
+          : resolveDailyTarget(existing as Counter);
+
       await execute(
         `UPDATE lc_counters SET 
           name = ?, emoji = ?, color = ?, unit = ?, enable_streak = ?,
-          sort_index = ?, total = ?, last_activity_date = ?, deleted_at = ?, updated_at = ?
+          sort_index = ?, total = ?, last_activity_date = ?, deleted_at = ?, dailyTarget = ?, updated_at = ?
         WHERE id = ?`,
         [
           counter.name,
@@ -1988,6 +2066,7 @@ const mergeCounter = async (counter: Counter, existingCountersMap?: Map<string, 
           preservedTotal, // Use preserved total instead of remote total
           counter.last_activity_date,
           counter.deleted_at,
+          preservedDaily,
           counter.updated_at,
           counter.id,
         ]

@@ -24,6 +24,8 @@ import { logger } from '../../lib/utils/logger';
 import { useFeatureFlag } from '../../hooks/useFeatureFlag';
 import { useRouter } from 'expo-router';
 import { useWeeklyReview } from '../../hooks/useWeeklyReview';
+import { getAppDate, getAppDateTime } from '../../lib/appDate';
+import { useAppDateStore } from '../../state/appDateSlice';
 import { WeeklyReviewPreviewCard } from '../../components/stats/WeeklyReviewPreviewCard';
 
 const APP_BRAND_LOGO_LIGHT = require('../../assets/branding/Logo NoBG.png');
@@ -101,12 +103,14 @@ const RING_UNFILLED_COLOR = '#2C4C47'; // low-contrast dark teal
 
 // Category color mapping - soft muted palette
 const CATEGORY_COLORS: Record<string, string> = {
-  'Fitness': '#53C9A5', // soft mint green
-  'Wellness': '#B689FF', // soft violet
-  'Learning & Growth': '#6FA9FF', // soft sky blue
-  'Productivity': '#FFAA64', // soft warm orange
-  'Habit Breaking': '#FF6B6B', // soft coral red
-  'Custom': '#9CA3AF', // Gray for custom marks
+  'Fitness': '#F97316',
+  'Wellness': '#10B981',
+  'Learning & Growth': '#A855F7',
+  'Learning': '#A855F7',
+  'Productivity': '#3B82F6',
+  'Habit Breaking': '#9CA3AF',
+  'Lifestyle': '#9CA3AF',
+  'Custom': '#9CA3AF',
 };
 
 // Pie chart constants - Sized larger for better visibility
@@ -603,7 +607,7 @@ const CategoryBreakdown: React.FC<{
 
       let last30Days: Date;
       try {
-        last30Days = subDays(new Date(), 30);
+        last30Days = subDays(getAppDate(), 30);
       } catch {
         return [];
       }
@@ -620,7 +624,7 @@ const CategoryBreakdown: React.FC<{
             const eventDate = new Date(e.occurred_at);
             if (isNaN(eventDate.getTime())) return false;
             // Include all events from the last 30 days
-            const daysDiff = (Date.now() - eventDate.getTime()) / (1000 * 60 * 60 * 24);
+            const daysDiff = (getAppDateTime().getTime() - eventDate.getTime()) / (1000 * 60 * 60 * 24);
             return daysDiff >= 0 && daysDiff <= 30; // More explicit date range check
           } catch (error) {
             logger.warn('[Stats] Error filtering event:', error);
@@ -769,7 +773,7 @@ const CategoryBreakdown: React.FC<{
     
     let last30Days: Date;
     try {
-      last30Days = subDays(new Date(), 30);
+      last30Days = subDays(getAppDate(), 30);
     } catch {
       return false;
     }
@@ -780,7 +784,7 @@ const CategoryBreakdown: React.FC<{
         if (!e.occurred_at || typeof e.occurred_at !== 'string') return false;
         const eventDate = new Date(e.occurred_at);
         if (isNaN(eventDate.getTime())) return false;
-        const daysDiff = (Date.now() - eventDate.getTime()) / (1000 * 60 * 60 * 24);
+        const daysDiff = (getAppDateTime().getTime() - eventDate.getTime()) / (1000 * 60 * 60 * 24);
         return daysDiff >= 0 && daysDiff <= 30;
       } catch {
         return false;
@@ -1227,7 +1231,7 @@ const CategoryBreakdown: React.FC<{
         if (!e.occurred_at || typeof e.occurred_at !== 'string') return false;
         const eventDate = new Date(e.occurred_at);
         if (isNaN(eventDate.getTime())) return false;
-        const daysDiff = (Date.now() - eventDate.getTime()) / (1000 * 60 * 60 * 24);
+        const daysDiff = (getAppDateTime().getTime() - eventDate.getTime()) / (1000 * 60 * 60 * 24);
         return daysDiff >= 0 && daysDiff <= 30;
       } catch {
         return false;
@@ -1570,7 +1574,7 @@ const StreakTimelineInner: React.FC<{
     
     try {
       const days = [];
-      const today = new Date();
+      const today = getAppDate();
       const safeMarks = marks;
       const safeEvents = Array.isArray(events) ? events : [];
       
@@ -1841,7 +1845,7 @@ const MomentumScoreInner: React.FC<{
           }
           // CRITICAL: Very strict limit for mobile - only 50 events per mark
           const limitedEvents = markEvents.slice(0, 50);
-          const streakData = computeStreak(limitedEvents as any);
+          const streakData = computeStreak(limitedEvents as any, getAppDate());
           streaks.push(streakData?.current || 0);
         } catch (error) {
           logger.error('Error calculating streak for mark:', m.id, error);
@@ -1855,7 +1859,7 @@ const MomentumScoreInner: React.FC<{
       // Calculate daily completion % (35% weight)
       let last7Days: Date;
       try {
-        last7Days = subDays(new Date(), 7);
+        last7Days = subDays(getAppDate(), 7);
       } catch {
         return 0;
       }
@@ -1873,7 +1877,7 @@ const MomentumScoreInner: React.FC<{
         }
       );
       const dailyCompletions: number[] = [];
-      const today = new Date();
+      const today = getAppDate();
       
       // Pre-calculate date strings to avoid repeated subDays calls
       const dateStrings: string[] = [];
@@ -2138,7 +2142,7 @@ const BestAverageDayInner: React.FC<{
       );
 
       // Calculate average for last 7 days
-      const last7Days = subDays(new Date(), 7);
+      const last7Days = subDays(getAppDate(), 7);
       const recentDays = dayCountsArray.filter((d) => {
         try {
           return d.date && new Date(d.date) >= last7Days;
@@ -2232,7 +2236,8 @@ export default function StatsScreen() {
   const { user } = useAuth();
   const router = useRouter();
   const [weeklyReviewEnabled] = useFeatureFlag('weeklyReview');
-  const reviewReferenceDate = useMemo(() => new Date(), []);
+  const appDateKey = useAppDateStore((s) => s.debugDateOverride ?? '');
+  const reviewReferenceDate = useMemo(() => getAppDate(), [appDateKey]);
   const { data: weeklyReviewSummary } = useWeeklyReview(reviewReferenceDate, user?.id);
   
   // Memoize events - filter out null/undefined and ensure it's always an array
@@ -2334,12 +2339,12 @@ export default function StatsScreen() {
   };
 
   // Track current date to detect midnight reset
-  const [currentDate, setCurrentDate] = useState(() => safeFormatDate(new Date()));
+  const [currentDate, setCurrentDate] = useState(() => safeFormatDate(getAppDate()));
 
   // Update date when it changes (midnight reset)
   useEffect(() => {
     const checkDateChange = () => {
-      const today = safeFormatDate(new Date());
+      const today = safeFormatDate(getAppDate());
       if (today && today !== currentDate) {
         setCurrentDate(today);
       }
@@ -2510,7 +2515,7 @@ export default function StatsScreen() {
               {weeklyReviewEnabled && weeklyReviewSummary && (
                 <WeeklyReviewPreviewCard
                   summary={weeklyReviewSummary}
-                  onPress={() => router.push('/weekly-review')}
+                  onPress={() => router.push('/(tabs)/tracking')}
                 />
               )}
 

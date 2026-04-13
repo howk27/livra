@@ -1,4 +1,5 @@
 import { format, parseISO, subDays, isToday, isYesterday, differenceInDays } from 'date-fns';
+import { getAppDate } from './appDate';
 
 // Re-export date-fns functions for convenience
 export { parseISO, isToday, isYesterday };
@@ -30,8 +31,9 @@ export const formatDisplayTime = (date: Date | string): string => {
 
 export const getLast7Days = (): string[] => {
   const dates: string[] = [];
+  const anchor = getAppDate();
   for (let i = 6; i >= 0; i--) {
-    dates.push(formatDate(subDays(new Date(), i)));
+    dates.push(formatDate(subDays(anchor, i)));
   }
   return dates;
 };

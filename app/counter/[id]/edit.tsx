@@ -6,7 +6,6 @@ import { colors } from '../../../theme/colors';
 import { spacing, borderRadius, fontSize, fontWeight } from '../../../theme/tokens';
 import { useEffectiveTheme } from '../../../state/uiSlice';
 import { useCounters } from '../../../hooks/useCounters';
-import { GoalSection } from '../../../components/GoalSection';
 import { SchedulePicker } from '../../../components/SchedulePicker';
 import type { GoalPeriod, ScheduleType, DayOfWeek } from '../../../types';
 import { parseScheduleDays } from '../../../lib/features';
@@ -14,9 +13,10 @@ import CounterIcon from '@/src/components/icons/CounterIcon';
 import { resolveCounterIconType } from '@/src/components/icons/IconResolver';
 import type { MarkType } from '@/src/types/counters';
 import { logger } from '../../../lib/utils/logger';
+import { DailyTargetStepper } from '../../../components/DailyTargetStepper';
+import { resolveDailyTarget } from '../../../lib/markDailyTarget';
 
 const COLOR_OPTIONS = ['#3B82F6', '#10B981', '#A855F7', '#F97316', '#EF4444', '#EC4899'];
-const UNIT_OPTIONS = ['sessions', 'days', 'items'];
 
 // Mapping of icon types to emojis for storage compatibility
 const ICON_TYPE_TO_EMOJI: Record<Exclude<MarkType, 'custom'>, string> = {
@@ -112,7 +112,12 @@ export default function EditCounterScreen() {
   const [goalPeriod, setGoalPeriod] = useState<GoalPeriod>((counter?.goal_period as GoalPeriod) ?? 'day');
   const [scheduleType, setScheduleType] = useState<ScheduleType>((counter?.schedule_type as ScheduleType) ?? 'daily');
   const [scheduleDays, setScheduleDays] = useState<DayOfWeek[]>(counter ? parseScheduleDays(counter) : []);
+  const [dailyTarget, setDailyTarget] = useState(() => (counter ? resolveDailyTarget(counter) : 1));
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (counter) setDailyTarget(resolveDailyTarget(counter));
+  }, [counter]);
 
   if (!counter || !id) {
     return (
@@ -140,6 +145,7 @@ export default function EditCounterScreen() {
         color,
         unit,
         enable_streak: enableStreak,
+        dailyTarget,
         goal_value: goalValue,
         goal_period: goalPeriod,
         schedule_type: scheduleType,
@@ -164,7 +170,7 @@ export default function EditCounterScreen() {
           </TouchableOpacity>
           <Text style={[styles.headerTitle, { color: themeColors.text }]}>Edit Mark</Text>
           <TouchableOpacity onPress={handleSave} disabled={loading}>
-            <Text style={[styles.saveButton, { color: themeColors.primary }]}>Save</Text>
+            <Text style={[styles.saveButton, { color: themeColors.accent.primary }]}>Save</Text>
           </TouchableOpacity>
         </View>
 
@@ -231,42 +237,8 @@ export default function EditCounterScreen() {
           </View>
         </View>
 
-        {/* Unit Selector */}
         <View style={styles.section}>
-          <Text style={[styles.label, { color: themeColors.text }]}>Unit</Text>
-          <View style={styles.unitButtons}>
-            {UNIT_OPTIONS.map((u) => (
-              <TouchableOpacity
-                key={u}
-                style={[
-                  styles.unitButton,
-                  {
-                    backgroundColor: u === unit ? color : themeColors.surface,
-                    borderColor: u === unit ? color : themeColors.border,
-                  },
-                ]}
-                onPress={() => setUnit(u as 'sessions' | 'days' | 'items')}
-              >
-                <Text
-                  style={[styles.unitButtonText, { color: u === unit ? '#FFFFFF' : themeColors.text }]}
-                >
-                  {u}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* Goal */}
-        <View style={styles.section}>
-          <Text style={[styles.label, { color: themeColors.text }]}>Goal (optional)</Text>
-          <GoalSection
-            goalValue={goalValue}
-            goalPeriod={goalPeriod}
-            unit={unit}
-            color={color}
-            onChange={(v, p) => { setGoalValue(v); setGoalPeriod(p); }}
-          />
+          <DailyTargetStepper value={dailyTarget} onChange={setDailyTarget} />
         </View>
         {/* Schedule */}
         <View style={styles.section}>
@@ -299,7 +271,7 @@ export default function EditCounterScreen() {
                 },
               ]}
             >
-              <View style={styles.toggleThumb} />
+              <View style={[styles.toggleThumb, { backgroundColor: themeColors.surface }]} />
             </View>
           </TouchableOpacity>
         </View>
@@ -419,7 +391,6 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 13,
-    backgroundColor: '#FFFFFF',
   },
 });
 

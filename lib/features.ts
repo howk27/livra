@@ -3,12 +3,13 @@
 
 import type { Mark, MarkEvent, DayOfWeek, GoalPeriod, Milestone } from '../types';
 import { STREAK_MILESTONES } from '../types';
+import { getAppDate } from './appDate';
+import { formatDate } from './date';
 
 // ── Date utils ────────────────────────────────────────────
 
 export function todayISO(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return formatDate(getAppDate());
 }
 
 export function currentMonthISO(): string {
@@ -16,13 +17,13 @@ export function currentMonthISO(): string {
 }
 
 function startOfWeekISO(): string {
-  const d = new Date();
+  const d = getAppDate();
   d.setDate(d.getDate() - d.getDay());
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return formatDate(d);
 }
 
 function startOfMonthISO(): string {
-  const d = new Date();
+  const d = getAppDate();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
 }
 
@@ -58,7 +59,7 @@ export function parseScheduleDays(mark: Mark): DayOfWeek[] {
   } catch { return []; }
 }
 
-export function isMarkActiveOnDate(mark: Mark, date: Date = new Date()): boolean {
+export function isMarkActiveOnDate(mark: Mark, date: Date = getAppDate()): boolean {
   const type = mark.schedule_type ?? 'daily';
   if (type === 'daily') return true;
   const days = parseScheduleDays(mark);

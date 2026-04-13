@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
+  Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
@@ -14,7 +15,7 @@ import {
   Modal,
   Share,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, type Href } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as MailComposer from 'expo-mail-composer';
@@ -22,8 +23,13 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../theme/colors';
-import { spacing, borderRadius } from '../../theme/tokens';
-import { useEffectiveTheme, useUIStore } from '../../state/uiSlice';
+import { spacing, borderRadius, fontSize, fontWeight, shadow } from '../../theme/tokens';
+import {
+  useEffectiveTheme,
+  useUIStore,
+  ONBOARDING_COMPLETED_STORAGE_KEY,
+  ONBOARDING_REMOTE_PENDING_KEY,
+} from '../../state/uiSlice';
 import { getSupabaseClient } from '../../lib/supabase';
 import { useIapSubscriptions } from '../../hooks/useIapSubscriptions';
 import { useSync } from '../../hooks/useSync';
@@ -43,11 +49,16 @@ import { uploadAvatar, getAvatarUrl, deleteAvatar, refreshAvatarUrl } from '../.
 import { diagEvent } from '../../lib/debug/iapDiagnostics';
 import { setDiagnosticsUnlockedPersisted } from '../../lib/dev/diagnosticsUnlock';
 import Constants from 'expo-constants';
+import { applyOpacity } from '@/src/components/icons/color';
+
+/** Matches `tabBarStyle.height` in `app/(tabs)/_layout.tsx` (64 + safe area); tab bar is absolute so content must pad past it. */
+const TAB_BAR_CONTENT_HEIGHT = 64;
 
 export default function SettingsScreen() {
   const theme = useEffectiveTheme();
   const themeColors = colors[theme];
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const { themeMode, setThemeMode } = useUIStore();
   const { isProUnlocked, proStatus, refreshProStatus } = useIapSubscriptions();
@@ -71,6 +82,7 @@ export default function SettingsScreen() {
   const [lastResendTime, setLastResendTime] = useState<number | null>(null);
   const [csvExportEmail, setCsvExportEmail] = useState('');
   const [showEmailInput, setShowEmailInput] = useState(false);
+  const [changePasswordModalVisible, setChangePasswordModalVisible] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
   // Hidden gesture for diagnostics (tap version 7 times within 1.5 seconds)
@@ -111,7 +123,6 @@ export default function SettingsScreen() {
   };
   
   const profileName = user?.email ?? 'Guest user';
-  const profileInitials = user?.email ? user.email.slice(0, 2).toUpperCase() : 'LC';
   const profileHint = user
     ? 'Signed in and ready to sync.'
     : 'Sign in to sync safely across devices.';
@@ -731,12 +742,6 @@ export default function SettingsScreen() {
     showError(syncState.error);
   }, [syncState.error, showError]);
 
-  const handleProfileCardPress = () => {
-    if (user) {
-      setIsProfileExpanded(!isProfileExpanded);
-    }
-  };
-
   const handleChangePassword = async () => {
     if (!currentPassword.trim()) {
         showError('Please enter your current password');
@@ -786,6 +791,7 @@ export default function SettingsScreen() {
         setNewPassword('');
         setConfirmPassword('');
         setIsProfileExpanded(false);
+        setChangePasswordModalVisible(false);
       }
     } catch (error: any) {
       showError(toUserMessage(error, 'Failed to change password'));
@@ -1024,8 +1030,12 @@ export default function SettingsScreen() {
           logger.error('[Delete Account] Error clearing database storage keys:', error);
         }
 
-        // Reset onboarding state
-        await AsyncStorage.removeItem('is_onboarded');
+        // Reset onboarding flags (modern + legacy key)
+        await AsyncStorage.multiRemove([
+          ONBOARDING_COMPLETED_STORAGE_KEY,
+          'is_onboarded',
+          ONBOARDING_REMOTE_PENDING_KEY,
+        ]);
       } catch (error) {
         logger.error('[Delete Account] Error clearing AsyncStorage:', error);
         // Continue anyway
@@ -1077,83 +1087,83 @@ export default function SettingsScreen() {
     outputRange: ['0deg', '360deg'],
   });
 
+  const scrollContentBottomPad =
+    spacing['3xl'] + TAB_BAR_CONTENT_HEIGHT + insets.bottom + spacing.lg;
 
   return (
     <GradientBackground children={
       <>
         <SafeAreaView style={styles.container}>
-        <ScrollView contentContainerStyle={styles.content}>
-        {/* Header */}
-        <AppText variant="headline" style={[styles.screenTitle, { color: themeColors.text }]}>
-          Profile
-        </AppText>
-        <TouchableOpacity
-          onPress={handleProfileCardPress}
-          disabled={!user}
-          activeOpacity={user ? 0.7 : 1}
-          style={[styles.profileCard, { backgroundColor: themeColors.surface }]}
-        >
+        <ScrollView contentContainerStyle={[styles.content, { paddingBottom: scrollContentBottomPad }]}>
+        {/* Top bar — aligned with Marks screen rhythm */}
+        <View style={styles.topBar}>
           <TouchableOpacity
-            onPress={() => {
-              handlePickImage();
-            }}
-            style={[styles.avatarContainer, { backgroundColor: themeColors.accent.primary + '33' }]}
+            style={styles.topBarIconBtn}
+            onPress={() => router.push('/(tabs)/home')}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityLabel="Back to marks"
+          >
+            <Ionicons name="menu-outline" size={22} color={themeColors.textSecondary} />
+          </TouchableOpacity>
+          <AppText variant="headline" style={[styles.topBarTitle, { color: themeColors.text }]}>
+            Profile
+          </AppText>
+          <TouchableOpacity
+            onPress={handlePickImage}
+            style={[
+              styles.topBarAvatar,
+              { backgroundColor: themeColors.surface, borderColor: themeColors.border },
+            ]}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityLabel="Change profile photo"
           >
             {profileImageUri ? (
-              <Image source={{ uri: profileImageUri }} style={styles.avatarImage} />
+              <Image source={{ uri: profileImageUri }} style={styles.topBarAvatarImage} />
             ) : (
-              <AppText variant="headline" style={[styles.avatarText, { color: themeColors.primary }]}>
-                {profileInitials}
-              </AppText>
+              <Ionicons name="person-outline" size={20} color={themeColors.textSecondary} />
             )}
-            <View style={[styles.avatarEditBadge, { backgroundColor: themeColors.primary, borderColor: themeColors.surface }]}>
-              <Ionicons name="camera" size={20} color={themeColors.text} />
-            </View>
           </TouchableOpacity>
-          <View style={styles.profileMeta}>
-            <View style={styles.profileMetaRow}>
-              <View style={styles.profileInfo}>
-                <AppText variant="subtitle" style={{ color: themeColors.text }}>
-                  {profileName}
-                </AppText>
-                {user && isProfileExpanded && (
-                  <AppText variant="body" style={[styles.fullEmail, { color: themeColors.textSecondary }]}>
-                    {user.email}
-                  </AppText>
-                )}
-              </View>
+        </View>
+
+        {/* Identity + sync */}
+        <View style={styles.identityBlock}>
+          <TouchableOpacity
+            activeOpacity={user ? 0.75 : 1}
+            onPress={() => user && setIsProfileExpanded(!isProfileExpanded)}
+            disabled={!user}
+          >
+            <AppText
+              variant="subtitle"
+              style={{ color: themeColors.text, fontWeight: fontWeight.bold }}
+            >
+              {profileName}
+            </AppText>
+            {user && isProfileExpanded && user.email ? (
+              <AppText variant="caption" style={[styles.identityEmail, { color: themeColors.textSecondary }]}>
+                {user.email}
+              </AppText>
+            ) : null}
+          </TouchableOpacity>
+          <View style={styles.identityRow}>
+            <View style={styles.identityStatus}>
+              <View style={[styles.syncDot, { backgroundColor: themeColors.accent.primary }]} />
+              <AppText variant="caption" style={{ color: themeColors.textSecondary }}>
+                {profileHint}
+              </AppText>
             </View>
-            {!isProfileExpanded && (
-              <View>
-                <AppText variant="body" style={{ color: themeColors.textSecondary }}>
-                  {profileHint}
-                </AppText>
-                {user && syncState.lastSyncedAt && (
-                  <AppText variant="caption" style={[styles.lastSyncedText, { color: themeColors.textTertiary }]}>
-                    Last synced: {new Date(syncState.lastSyncedAt).toLocaleTimeString()}
-                  </AppText>
-                )}
-              </View>
-            )}
-            {user && (
-              <View style={styles.expandIndicator}>
-                <Ionicons
-                  name={isProfileExpanded ? 'chevron-up' : 'chevron-down'}
-                  size={16}
-                  color={themeColors.textSecondary}
-                />
-              </View>
-            )}
-          </View>
-          {user && (
-            <View style={styles.refreshButtonContainer}>
+            {user ? (
               <TouchableOpacity
-                onPress={() => {
-                  handleSync();
-                }}
+                onPress={handleSync}
                 disabled={syncState.isSyncing}
-                style={styles.refreshButton}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                style={[
+                  styles.syncPill,
+                  {
+                    backgroundColor: themeColors.surfaceVariant,
+                    borderColor: themeColors.border,
+                  },
+                ]}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                accessibilityLabel="Sync data"
               >
                 <Animated.View
                   style={{
@@ -1162,32 +1172,40 @@ export default function SettingsScreen() {
                 >
                   <Ionicons
                     name={syncState.isSyncing ? 'refresh' : 'refresh-outline'}
-                    size={28}
+                    size={22}
                     color={themeColors.textSecondary}
                   />
                 </Animated.View>
               </TouchableOpacity>
-              {syncState.isSyncing && (
-                <AppText variant="caption" style={[styles.syncStatusText, { color: themeColors.textSecondary }]}>
-                  Syncing...
-                </AppText>
-              )}
-            </View>
-          )}
-        </TouchableOpacity>
+            ) : null}
+          </View>
+          {user && syncState.lastSyncedAt ? (
+            <AppText variant="caption" style={[styles.lastSyncedText, { color: themeColors.textTertiary }]}>
+              Last synced {new Date(syncState.lastSyncedAt).toLocaleTimeString()}
+            </AppText>
+          ) : null}
+        </View>
+
+        {!user ? (
+          <TouchableOpacity
+            style={[styles.primaryCta, { backgroundColor: themeColors.accent.primary }, shadow.sm]}
+            onPress={handleSignIn}
+            activeOpacity={0.88}
+          >
+            <AppText variant="button" style={{ color: themeColors.text, fontWeight: fontWeight.bold }}>
+              Sign In
+            </AppText>
+          </TouchableOpacity>
+        ) : null}
 
         {/* Email Verification Banner - Only show when email is not verified */}
         {user && isEmailVerified === false && (() => {
-          // Use darker yellow/orange for both themes for better visibility
-          const bannerColor = theme === 'light' ? '#D97706' : '#F59E0B'; // Darker amber/orange for light, brighter amber for dark
-          const bannerBgColor = theme === 'light' ? '#FEF3C7' : 'rgba(217, 119, 6, 0.15)'; // Soft light amber for light, transparent dark orange for dark
-          const iconColor = theme === 'light' ? '#B45309' : '#F59E0B'; // Darker icon color for light, amber for dark
-          const buttonTextColor = theme === 'light' ? '#FFFFFF' : '#FFFFFF'; // White text on both themes for contrast
-          
+          const bannerBgColor = applyOpacity(themeColors.warning, theme === 'light' ? 0.28 : 0.18);
+          const bannerBorder = themeColors.warning;
           return (
-            <View style={[styles.verificationBanner, { backgroundColor: bannerBgColor, borderColor: bannerColor }]}>
+            <View style={[styles.verificationBanner, { backgroundColor: bannerBgColor, borderColor: bannerBorder }]}>
               <View style={styles.verificationBannerContent}>
-                <Ionicons name="mail-outline" size={20} color={iconColor} style={styles.verificationIcon} />
+                <Ionicons name="mail-outline" size={20} color={themeColors.textSecondary} style={styles.verificationIcon} />
                 <View style={styles.verificationTextContainer}>
                   <AppText variant="body" style={[styles.verificationTitle, { color: themeColors.text }]}>
                     Verify your email address
@@ -1210,15 +1228,15 @@ export default function SettingsScreen() {
               <TouchableOpacity
                 onPress={() => handleResendVerificationEmail()}
                 disabled={isResendingVerification}
-                style={[styles.resendButton, { backgroundColor: bannerColor }]}
+                style={[styles.resendButton, { backgroundColor: themeColors.accent.primary }]}
                 activeOpacity={0.7}
               >
                 {isResendingVerification ? (
-                  <AppText variant="body" style={[styles.resendButtonText, { color: buttonTextColor }]}>
+                  <AppText variant="body" style={[styles.resendButtonText, { color: themeColors.text }]}>
                     Sending...
                   </AppText>
                 ) : (
-                  <AppText variant="body" style={[styles.resendButtonText, { color: buttonTextColor }]}>
+                  <AppText variant="body" style={[styles.resendButtonText, { color: themeColors.text }]}>
                     Resend
                   </AppText>
                 )}
@@ -1313,7 +1331,7 @@ export default function SettingsScreen() {
               <TouchableOpacity
                 style={[
                   styles.changePasswordButton,
-                  { backgroundColor: themeColors.primary },
+                  { backgroundColor: themeColors.accent.primary },
                   isChangingPassword && styles.changePasswordButtonDisabled,
                 ]}
                 onPress={handleChangePassword}
@@ -1327,101 +1345,154 @@ export default function SettingsScreen() {
           </KeyboardAvoidingView>
         )}
 
-        {/* Account Section */}
+        {/* Appearance */}
         <View style={styles.section}>
-          {!user && (
-            <TouchableOpacity
-              style={[styles.button, { backgroundColor: themeColors.primary }]}
-              onPress={handleSignIn}
-            >
-              <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
-                Sign In
-              </AppText>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Appearance Section */}
-        <View style={styles.section}>
-          <AppText variant="caption" style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>
-            Appearance
-          </AppText>
-          
-          <View style={[styles.settingRow, { backgroundColor: themeColors.surface }]}>
-            <AppText variant="body" style={[styles.settingLabel, { color: themeColors.text }]}>
-              Dark Mode
-            </AppText>
-            <Switch
-              value={themeMode === 'dark'}
-              onValueChange={(value) => setThemeMode(value ? 'dark' : 'light')}
-            />
+          <Text style={[styles.sectionKicker, { color: themeColors.textTertiary }]}>Appearance</Text>
+          <View
+            style={[
+              styles.settingsCard,
+              { backgroundColor: themeColors.surface, borderColor: themeColors.border },
+            ]}
+          >
+            <View style={styles.settingRowTall}>
+              <View
+                style={[
+                  styles.settingIconWrap,
+                  {
+                    backgroundColor: applyOpacity(
+                      themeColors.accent.primary,
+                      theme === 'dark' ? 0.2 : 0.12,
+                    ),
+                  },
+                ]}
+              >
+                <Ionicons
+                  name={themeMode === 'dark' ? 'moon-outline' : 'sunny-outline'}
+                  size={22}
+                  color={themeColors.textSecondary}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <AppText
+                  variant="body"
+                  style={{ color: themeColors.text, fontWeight: fontWeight.semibold }}
+                >
+                  Dark Mode
+                </AppText>
+                <AppText variant="caption" style={{ color: themeColors.textSecondary, marginTop: 2 }}>
+                  {themeMode === 'dark'
+                    ? 'Optimal for nocturnal focus'
+                    : 'Warm surfaces for daytime'}
+                </AppText>
+              </View>
+              <Switch
+                value={themeMode === 'dark'}
+                onValueChange={(value) => setThemeMode(value ? 'dark' : 'light')}
+                trackColor={{ false: themeColors.border, true: themeColors.accent.primary }}
+                thumbColor={themeColors.surface}
+              />
+            </View>
           </View>
         </View>
 
-        {/* Pro Section */}
+        {/* Subscription */}
         <View style={styles.section}>
-          <AppText variant="caption" style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>
-            Livra+
-          </AppText>
-          
-          {isProUnlocked && (
-            <View style={[styles.proCard, { backgroundColor: themeColors.accent.primary + '2E' }]}>
-              <AppText variant="subtitle" style={[styles.proText, { color: themeColors.accent.primary }]}>
-                ✓ Livra+ Unlocked
-              </AppText>
-            </View>
-          )}
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: themeColors.primary }]}
-            onPress={() => router.push('/paywall')}
+          <Text style={[styles.sectionKicker, { color: themeColors.textTertiary }]}>Subscription</Text>
+          <View
+            style={[
+              styles.settingsCard,
+              { backgroundColor: themeColors.surface, borderColor: themeColors.border },
+            ]}
           >
-            <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
-              {isProUnlocked ? 'Manage Livra+' : 'Livra+'}
-            </AppText>
-          </TouchableOpacity>
+            <View style={styles.subscriptionBlock}>
+              <View style={styles.subscriptionTitleRow}>
+                <View style={{ flex: 1 }}>
+                  <AppText
+                    variant="body"
+                    style={{ color: themeColors.accent.primary, fontWeight: fontWeight.bold }}
+                  >
+                    {isProUnlocked ? 'Livra+ Unlocked' : 'Livra+'}
+                  </AppText>
+                  <AppText variant="caption" style={{ color: themeColors.textSecondary, marginTop: 2 }}>
+                    {isProUnlocked
+                      ? 'Unlimited cloud backup and advanced analytics active.'
+                      : 'Unlimited marks, CSV export, and more.'}
+                  </AppText>
+                </View>
+                {isProUnlocked ? (
+                  <Ionicons name="checkmark-circle" size={24} color={themeColors.accent.primary} />
+                ) : null}
+              </View>
+              <TouchableOpacity
+                style={[styles.primaryCta, { backgroundColor: themeColors.accent.primary }, shadow.sm]}
+                onPress={() => router.push('/paywall')}
+                activeOpacity={0.88}
+              >
+                <AppText variant="button" style={{ color: themeColors.text, fontWeight: fontWeight.bold }}>
+                  {isProUnlocked ? 'Manage Livra+' : 'Unlock Livra+'}
+                </AppText>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
 
-        {/* Data Section */}
+        {/* Data & Privacy */}
         <View style={styles.section}>
-          <AppText variant="caption" style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>
-            Data
-          </AppText>
-          
+          <Text style={[styles.sectionKicker, { color: themeColors.textTertiary }]}>Data & Privacy</Text>
+          {user ? (
+            <View
+              style={[
+                styles.settingsCard,
+                { backgroundColor: themeColors.surface, borderColor: themeColors.border, marginBottom: spacing.sm },
+              ]}
+            >
+              <TouchableOpacity
+                style={styles.settingRowTall}
+                onPress={() => setChangePasswordModalVisible(true)}
+                activeOpacity={0.75}
+              >
+                <View
+                  style={[
+                    styles.settingIconWrap,
+                    {
+                      backgroundColor: applyOpacity(
+                        themeColors.accent.primary,
+                        theme === 'dark' ? 0.16 : 0.12,
+                      ),
+                    },
+                  ]}
+                >
+                  <Ionicons name="key-outline" size={22} color={themeColors.textSecondary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <AppText variant="body" style={{ color: themeColors.text, fontWeight: fontWeight.semibold }}>
+                    Change Password
+                  </AppText>
+                  <AppText variant="caption" style={{ color: themeColors.textSecondary, marginTop: 2 }}>
+                    For accounts that sign in with email and password
+                  </AppText>
+                </View>
+                <Ionicons name="chevron-forward-outline" size={18} color={themeColors.textTertiary} />
+              </TouchableOpacity>
+            </View>
+          ) : null}
           <TouchableOpacity
-            style={[styles.button, { backgroundColor: themeColors.surface }]}
+            style={[
+              styles.csvButton,
+              {
+                backgroundColor: themeColors.surfaceVariant,
+                borderColor: themeColors.border,
+              },
+            ]}
             onPress={handleExportCSV}
+            activeOpacity={0.82}
           >
-            <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+            <Ionicons name="download-outline" size={22} color={themeColors.text} />
+            <AppText variant="button" style={{ color: themeColors.text, fontWeight: fontWeight.semibold }}>
               Export CSV
             </AppText>
           </TouchableOpacity>
-          {/* Backup & Restore (Feature 5) */}
-          <BackupRestoreSection />
-        </View>
-
-        {/* Legal Section */}
-        <View style={styles.section}>
-          <AppText variant="caption" style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>
-            Legal
-          </AppText>
-          
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: themeColors.surface }]}
-            onPress={() => router.push('/legal/privacy-policy')}
-          >
-            <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
-              Privacy Policy
-            </AppText>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: themeColors.surface }]}
-            onPress={() => router.push('/legal/terms-and-conditions')}
-          >
-            <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
-              Terms & Conditions
-            </AppText>
-          </TouchableOpacity>
+          <BackupRestoreSection embedded />
         </View>
 
         {/* Account Section */}
@@ -1469,16 +1540,39 @@ export default function SettingsScreen() {
           </View>
         )}
 
-        {/* About - Moved to bottom */}
-        <View style={[styles.section, styles.aboutSection]}>
-          <TouchableOpacity onPress={handleVersionTap} activeOpacity={1}>
-            <AppText variant="caption" style={[styles.aboutText, { color: themeColors.textTertiary }]}>
-              Livra v{Constants.expoConfig?.version || '1.0.42'}
-            </AppText>
+        {/* Footer — legal + version (screenshot-aligned) */}
+        <View style={[styles.section, styles.footerLegal]}>
+          <View style={styles.legalRow}>
+            <TouchableOpacity
+              onPress={() => router.push('/legal/terms-and-conditions')}
+              hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+            >
+              <AppText variant="caption" style={{ color: themeColors.textSecondary }}>
+                Terms of Service
+              </AppText>
+            </TouchableOpacity>
+            <Text style={{ color: themeColors.textTertiary }}> · </Text>
+            <TouchableOpacity
+              onPress={() => router.push('/legal/privacy-policy')}
+              hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+            >
+              <AppText variant="caption" style={{ color: themeColors.textSecondary }}>
+                Privacy Policy
+              </AppText>
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity
+            onPress={handleVersionTap}
+            activeOpacity={1}
+            hitSlop={{ top: 12, bottom: 12, left: 24, right: 24 }}
+          >
+            <Text style={[styles.versionCaps, { color: themeColors.textTertiary }]}>
+              LIVRA V{Constants.expoConfig?.version || '1.0.42'}
+              {Constants.expoConfig?.ios?.buildNumber || Constants.expoConfig?.android?.versionCode
+                ? ` (BUILD ${Constants.expoConfig?.ios?.buildNumber ?? Constants.expoConfig?.android?.versionCode})`
+                : ''}
+            </Text>
           </TouchableOpacity>
-          <AppText variant="caption" style={[styles.aboutText, { color: themeColors.textTertiary }]}>
-            Track progress, not pressure
-          </AppText>
         </View>
       </ScrollView>
       </SafeAreaView>
@@ -1525,7 +1619,7 @@ export default function SettingsScreen() {
                 </AppText>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalButton, styles.modalButtonConfirm, { backgroundColor: themeColors.primary }]}
+                style={[styles.modalButton, styles.modalButtonConfirm, { backgroundColor: themeColors.accent.primary }]}
                 onPress={async () => {
                   if (!csvExportEmail || !csvExportEmail.trim()) {
                     showError('Please enter a valid email address.');
@@ -1552,6 +1646,132 @@ export default function SettingsScreen() {
           </View>
         </View>
       </Modal>
+
+      <Modal
+        visible={changePasswordModalVisible}
+        animationType="slide"
+        onRequestClose={() => {
+          if (!isChangingPassword) setChangePasswordModalVisible(false);
+        }}
+      >
+        <SafeAreaView style={{ flex: 1, backgroundColor: themeColors.background }}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ flex: 1 }}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+          >
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                paddingHorizontal: spacing.lg,
+                paddingVertical: spacing.md,
+              }}
+            >
+              <TouchableOpacity
+                onPress={() => {
+                  if (!isChangingPassword) setChangePasswordModalVisible(false);
+                }}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <AppText style={{ color: themeColors.textSecondary }}>Cancel</AppText>
+              </TouchableOpacity>
+              <AppText variant="headline" style={{ color: themeColors.text }}>
+                Change Password
+              </AppText>
+              <View style={{ width: 56 }} />
+            </View>
+            <ScrollView
+              contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing['3xl'] }}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.inputContainer}>
+                <AppText variant="body" style={[styles.inputLabel, { color: themeColors.textSecondary }]}>
+                  Current Password
+                </AppText>
+                <TextInput
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: themeColors.surface,
+                      color: themeColors.text,
+                      borderColor: themeColors.border,
+                    },
+                  ]}
+                  placeholder="Enter current password"
+                  placeholderTextColor={themeColors.textTertiary}
+                  value={currentPassword}
+                  onChangeText={setCurrentPassword}
+                  secureTextEntry
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  editable={!isChangingPassword}
+                />
+              </View>
+              <View style={styles.inputContainer}>
+                <AppText variant="body" style={[styles.inputLabel, { color: themeColors.textSecondary }]}>
+                  New Password
+                </AppText>
+                <TextInput
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: themeColors.surface,
+                      color: themeColors.text,
+                      borderColor: themeColors.border,
+                    },
+                  ]}
+                  placeholder="Enter new password (min 6 characters)"
+                  placeholderTextColor={themeColors.textTertiary}
+                  value={newPassword}
+                  onChangeText={setNewPassword}
+                  secureTextEntry
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  editable={!isChangingPassword}
+                />
+              </View>
+              <View style={styles.inputContainer}>
+                <AppText variant="body" style={[styles.inputLabel, { color: themeColors.textSecondary }]}>
+                  Confirm New Password
+                </AppText>
+                <TextInput
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: themeColors.surface,
+                      color: themeColors.text,
+                      borderColor: themeColors.border,
+                    },
+                  ]}
+                  placeholder="Confirm new password"
+                  placeholderTextColor={themeColors.textTertiary}
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  secureTextEntry
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  editable={!isChangingPassword}
+                />
+              </View>
+              <TouchableOpacity
+                style={[
+                  styles.changePasswordButton,
+                  { backgroundColor: themeColors.accent.primary },
+                  isChangingPassword && styles.changePasswordButtonDisabled,
+                ]}
+                onPress={handleChangePassword}
+                disabled={isChangingPassword}
+              >
+                <AppText variant="button" style={[styles.changePasswordButtonText, { color: themeColors.text }]}>
+                  {isChangingPassword ? 'Changing Password...' : 'Change Password'}
+                </AppText>
+              </TouchableOpacity>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </Modal>
       </>
     } />
   );
@@ -1562,12 +1782,148 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    padding: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xs,
     paddingBottom: spacing['3xl'],
     flexGrow: 1,
   },
-  screenTitle: {
-    marginBottom: spacing.lg,
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    height: 48,
+    marginBottom: spacing.md,
+  },
+  topBarIconBtn: {
+    width: 36,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+  },
+  topBarTitle: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.bold,
+    letterSpacing: 0.5,
+  },
+  topBarAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: borderRadius.full,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  topBarAvatarImage: {
+    width: 36,
+    height: 36,
+    borderRadius: borderRadius.full,
+  },
+  identityBlock: {
+    marginBottom: spacing.xl,
+    gap: spacing.xs,
+  },
+  identityEmail: {
+    marginTop: spacing.xxs,
+  },
+  identityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.xs,
+  },
+  identityStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    flex: 1,
+    paddingRight: spacing.sm,
+  },
+  syncDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  syncPill: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.full,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionKicker: {
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.bold,
+    letterSpacing: 1.6,
+    marginBottom: spacing.sm,
+    textTransform: 'uppercase',
+  },
+  settingsCard: {
+    borderRadius: borderRadius.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+  },
+  settingRowTall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    gap: spacing.md,
+  },
+  settingIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  subscriptionBlock: {
+    padding: spacing.md,
+    gap: spacing.md,
+  },
+  subscriptionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+  },
+  primaryCta: {
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderRadius: borderRadius.lg,
+    alignItems: 'center',
+    width: '100%',
+  },
+  csvButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderRadius: borderRadius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    marginBottom: spacing.sm,
+  },
+  footerLegal: {
+    alignItems: 'center',
+    gap: spacing.md,
+    marginTop: spacing.xl,
+    paddingTop: spacing.lg,
+  },
+  legalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    flexWrap: 'wrap',
+  },
+  versionCaps: {
+    fontSize: 10,
+    letterSpacing: 1.2,
+    textAlign: 'center',
+    textTransform: 'uppercase',
   },
   profileCard: {
     flexDirection: 'row',
@@ -1788,16 +2144,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
     textAlign: 'center',
-  },
-  aboutSection: {
-    marginTop: spacing['3xl'],
-    paddingTop: spacing.xxl,
-    alignItems: 'center',
-    marginBottom: spacing.xl,
-  },
-  aboutText: {
-    textAlign: 'center',
-    marginBottom: spacing.xs,
   },
   modalOverlay: {
     flex: 1,

@@ -12,6 +12,7 @@ import {
   Keyboard,
   TouchableWithoutFeedback,
   ScrollView,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -38,6 +39,8 @@ import { logger } from '../../lib/utils/logger';
 import * as Notifications from 'expo-notifications';
 
 type AuthMode = 'login' | 'signup';
+
+const LIVRA_APP_ICON = require('../../assets/icon.png');
 
 export default function SignInScreen() {
   const theme = useEffectiveTheme();
@@ -796,7 +799,7 @@ export default function SignInScreen() {
       >
         {loading && (
           <View style={[styles.loadingOverlay, { backgroundColor: themeColors.background + 'E6' }]}>
-            <ActivityIndicator size="large" color={themeColors.primary} />
+            <ActivityIndicator size="large" color={themeColors.accent.primary} />
             <Text style={[styles.loadingText, { color: themeColors.text }]}>
               {mode === 'login' ? 'Signing in...' : 'Creating account...'}
             </Text>
@@ -809,6 +812,16 @@ export default function SignInScreen() {
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.content}>
+          <Animated.View entering={FadeIn.duration(400)} style={styles.logoWrap}>
+            <Image
+              source={LIVRA_APP_ICON}
+              style={styles.authLogo}
+              resizeMode="cover"
+              accessibilityLabel="Livra"
+              accessibilityIgnoresInvertColors
+            />
+          </Animated.View>
+
           {/* Header */}
           <Animated.View
             entering={FadeIn.duration(400)}
@@ -1015,9 +1028,12 @@ export default function SignInScreen() {
             {pendingEmailConfirmation && (
               <Animated.View
                 entering={FadeIn.duration(200)}
-                style={[styles.messageContainer, { backgroundColor: themeColors.primary + '20' }]}
+                style={[
+                  styles.messageContainer,
+                  { backgroundColor: `${themeColors.accent.primary}33` },
+                ]}
               >
-                <Text style={[styles.messageText, { color: themeColors.primary }]}>
+                <Text style={[styles.messageText, { color: themeColors.accent.primary }]}>
                   Check your email to verify your account, then sign in to continue.
                 </Text>
               </Animated.View>
@@ -1041,7 +1057,7 @@ export default function SignInScreen() {
                 disabled={loading}
                 style={styles.forgotPasswordButton}
               >
-                <Text style={[styles.forgotPasswordText, { color: themeColors.primary }]}>
+                <Text style={[styles.forgotPasswordText, { color: themeColors.accent.primary }]}>
                   Forgot Password?
                 </Text>
               </TouchableOpacity>
@@ -1051,7 +1067,7 @@ export default function SignInScreen() {
             <TouchableOpacity
               style={[
                 styles.submitButton,
-                { backgroundColor: themeColors.primary },
+                { backgroundColor: themeColors.accent.primary },
                 loading && styles.submitButtonDisabled,
                 shadow.md,
               ]}
@@ -1104,7 +1120,7 @@ export default function SignInScreen() {
                   : 'Already have an account? '}
               </Text>
               <TouchableOpacity onPress={toggleMode} disabled={loading}>
-                <Text style={[styles.toggleLink, { color: themeColors.primary }]}>
+                <Text style={[styles.toggleLink, { color: themeColors.accent.primary }]}>
                   {mode === 'login' ? 'Sign Up' : 'Sign In'}
                 </Text>
               </TouchableOpacity>
@@ -1135,6 +1151,16 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.xl,
+  },
+  logoWrap: {
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  authLogo: {
+    width: 88,
+    height: 88,
+    borderRadius: borderRadius.xl,
+    overflow: 'hidden',
   },
   header: {
     marginBottom: spacing['4xl'],

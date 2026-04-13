@@ -20,24 +20,16 @@ interface DuplicateCounterModalProps {
   showGoToButton?: boolean;
 }
 
-// Funny error messages array
-const FUNNY_MESSAGES = [
-  "We hit the same counter! It's already chilling in your dashboard 🎯",
-  "Plot twist: This counter is already living its best life on your dashboard! 🎪",
-  "Deja vu! This counter is already doing its thing in your collection 🌀",
-  "Hold up! This counter is already vibing in your dashboard 🎨",
-  "Nope! This counter already claimed its spot in your dashboard 🏠",
-  "Whoa there! This counter is already hanging out in your dashboard 🎭",
-  "Not so fast! This counter is already part of the squad in your dashboard ⚡",
-  "Hey! This counter is already having a party in your dashboard 🎉",
-  "Oops! This counter is already making moves in your dashboard 🚀",
-  "Wait, what? This counter is already on the team in your dashboard 🏆",
+const DUPLICATE_MESSAGES = [
+  "That mark is already on your board.",
+  "This mark already exists. Edit the current one instead.",
+  "Looks like this mark is already active.",
+  "You are already tracking this. No need to add it again.",
+  "This one is already part of your routine.",
 ];
 
-// Get a random funny message
-const getRandomMessage = (counterName: string) => {
-  const randomIndex = Math.floor(Math.random() * FUNNY_MESSAGES.length);
-  return FUNNY_MESSAGES[randomIndex];
+const getRandomMessage = (_counterName: string) => {
+  return DUPLICATE_MESSAGES[Math.floor(Math.random() * DUPLICATE_MESSAGES.length)];
 };
 
 export const DuplicateCounterModal: React.FC<DuplicateCounterModalProps> = ({
@@ -87,8 +79,8 @@ export const DuplicateCounterModal: React.FC<DuplicateCounterModalProps> = ({
               {/* Message */}
               <AppText variant="body" style={[styles.message, { color: themeColors.textSecondary }]}>
                 {showGoToButton
-                  ? "Would you like to go to your existing counter and continue tracking there?"
-                  : "Please choose a different name or delete the existing counter first."}
+                  ? "Open the existing mark and continue tracking there."
+                  : "Try a different name, or open the existing mark to edit it."}
               </AppText>
 
               {/* Buttons */}
@@ -98,25 +90,25 @@ export const DuplicateCounterModal: React.FC<DuplicateCounterModalProps> = ({
                   onPress={onClose}
                 >
                   <AppText variant="button" style={[styles.buttonText, { color: themeColors.textSecondary }]}>
-                    Cancel
+                    Dismiss
                   </AppText>
                 </TouchableOpacity>
                 {showGoToButton && onGoToCounter && (
                   <TouchableOpacity
-                    style={[styles.button, styles.primaryButton, { backgroundColor: themeColors.primary }]}
+                    style={[styles.button, styles.primaryButton, { backgroundColor: themeColors.accent.primary }]}
                     onPress={onGoToCounter}
                   >
-                    <AppText variant="button" style={[styles.buttonText, styles.primaryButtonText, { color: '#FFFFFF' }]}>
-                      Go to Counter
+                    <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+                      Go to Mark
                     </AppText>
                   </TouchableOpacity>
                 )}
                 {!showGoToButton && (
                   <TouchableOpacity
-                    style={[styles.button, styles.primaryButton, { backgroundColor: themeColors.primary }]}
+                    style={[styles.button, styles.primaryButton, { backgroundColor: themeColors.accent.primary }]}
                     onPress={onClose}
                   >
-                    <AppText variant="button" style={[styles.buttonText, styles.primaryButtonText, { color: '#FFFFFF' }]}>
+                    <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
                       Got it
                     </AppText>
                   </TouchableOpacity>
@@ -207,9 +199,6 @@ const styles = StyleSheet.create({
   buttonText: {
     fontSize: fontSize.base,
     fontWeight: fontWeight.semibold,
-  },
-  primaryButtonText: {
-    color: '#FFFFFF',
   },
 });
 

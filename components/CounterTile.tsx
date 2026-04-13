@@ -12,25 +12,14 @@ import MarkIcon from '@/src/components/icons/CounterIcon';
 import type { MarkType, MarkIconAnimation } from '@/src/types/counters';
 import { ICON_ANIMATION_TIMING, ICON_BACKGROUND_ALPHA } from '@/src/components/icons/IconTokens';
 import { applyOpacity } from '@/src/components/icons/color';
-import { GoalProgressBar } from './GoalProgressBar';
-import { useEventsStore } from '../state/eventsSlice';
+import { getCategoryColorForMark } from '../lib/markCategory';
 
-const TILE_HEIGHT = 260;
-
-// Small wrapper that subscribes to events for goal progress
-const GoalProgressBarOnTile: React.FC<{ markId: string; mark: Mark; color: string }> = ({ markId, mark, color }) => {
-  const events = useEventsStore(s => s.events.filter(e => e.mark_id === markId && !e.deleted_at));
-  if (!mark.goal_value) return null;
-  return (
-    <View style={{ marginTop: 4 }}>
-      <GoalProgressBar mark={mark} events={events} color={color} variant="compact" />
-    </View>
-  );
-};
+const TILE_HEIGHT = 178;
 
 interface MarkTileProps {
   mark: Mark;
   streak?: { current: number; longest: number };
+  momentumScore?: number; // Days active in last 10 — shown alongside streak
   onPress: () => void;
   onIncrement: () => void;
   onDecrement?: () => void;
@@ -45,6 +34,7 @@ interface MarkTileProps {
 export const MarkTile: React.FC<MarkTileProps> = ({
   mark,
   streak,
+  momentumScore,
   onPress,
   onIncrement,
   onDecrement,
@@ -59,8 +49,9 @@ export const MarkTile: React.FC<MarkTileProps> = ({
   const themeColors = colors[theme];
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  const iconPulseAnim = useRef(new Animated.Value(1)).current; // Separate animation for immediate icon feedback
-  const markColor = mark.color || themeColors.primary;
+  const iconPulseAnim = useRef(new Animated.Value(1)).current;
+  const flashAnim = useRef(new Animated.Value(0)).current; // White flash overlay for + button
+  const markColor = getCategoryColorForMark({ name: mark.name, color: mark.color }) || themeColors.primary;
   const prefersReducedMotion = useReducedMotion();
   const [iconAnimation, setIconAnimation] = useState<MarkIconAnimation>('none');
   const iconAnimationTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -81,54 +72,25 @@ export const MarkTile: React.FC<MarkTileProps> = ({
   // Use optimistic total if available, otherwise use mark.total
   const displayTotal = optimisticTotal !== null ? optimisticTotal : mark.total;
 
-  // Animate on increment - Success bump per design spec (140-180ms)
-  useEffect(() => {
-    if (prefersReducedMotion) {
-      return;
-    }
-    if (displayTotal > 0) {
-      const pulse = Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.06,
-          duration: motion.quick,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1.0,
-          duration: motion.quick,
-          useNativeDriver: true,
-          easing: (t) => t * (2 - t), // cubic-bezier(0.2, 0.8, 0.2, 1) equivalent
-        }),
-      ]);
-      pulse.start();
-    }
-  }, [displayTotal, prefersReducedMotion, pulseAnim]);
+  // No-op: animation is fully driven by handleIncrementPress / handleDecrementPress above
+  // Keeping hook call to avoid conditional hook ordering issues
+  useEffect(() => {}, [displayTotal, prefersReducedMotion, pulseAnim]);
 
   const handleIncrementPress = () => {
     if (!interactionsEnabled) return;
     
-    // IMMEDIATE VISUAL FEEDBACK: Start pulsing animation instantly (before any state updates)
-    // This gives instant feedback even if state update is delayed
+    // Section 3 — pop animation 0.95 → 1.05 → 1.0 + color flash
     if (!prefersReducedMotion) {
-      // Start pulsing animation immediately
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1.15,
-            duration: 200,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1.0,
-            duration: 200,
-            useNativeDriver: true,
-          }),
-        ]),
-        { iterations: 3 } // Pulse 3 times
-      ).start(() => {
-        // Reset to normal after pulsing
-        pulseAnim.setValue(1.0);
-      });
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 0.95, duration: 55, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1.05, duration: 90, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1.0, duration: 70, useNativeDriver: true }),
+      ]).start();
+      // Color flash on + button
+      Animated.sequence([
+        Animated.timing(flashAnim, { toValue: 1, duration: 80, useNativeDriver: true }),
+        Animated.timing(flashAnim, { toValue: 0, duration: 140, useNativeDriver: true }),
+      ]).start();
     }
     
     // Icon animation for immediate feedback
@@ -174,58 +136,26 @@ export const MarkTile: React.FC<MarkTileProps> = ({
   const handleDecrementPress = () => {
     if (!interactionsEnabled || !onDecrement || displayTotal <= 0) return;
     
-    // IMMEDIATE VISUAL FEEDBACK: Start pulsing animation instantly (before any state updates)
+    // Section 3 — softer pop for decrement
     if (!prefersReducedMotion) {
-      // Start pulsing animation immediately on icon (separate from value pulse)
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(iconPulseAnim, {
-            toValue: 0.85,
-            duration: 150,
-            useNativeDriver: true,
-          }),
-          Animated.timing(iconPulseAnim, {
-            toValue: 1.0,
-            duration: 150,
-            useNativeDriver: true,
-          }),
-        ]),
-        { iterations: 2 } // Pulse 2 times for decrement
-      ).start(() => {
-        // Reset to normal after pulsing
-        iconPulseAnim.setValue(1.0);
-      });
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 0.97, duration: 60, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1.03, duration: 80, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1.0, duration: 60, useNativeDriver: true }),
+      ]).start();
     }
-    
+
     // INSTANT OPTIMISTIC UPDATE: Update local state immediately (bypasses store)
     const newTotal = Math.max(0, displayTotal - 1);
     optimisticTotalRef.current = newTotal;
     setOptimisticTotal(newTotal);
-    
-    // CRITICAL: Call decrement for store sync (happens in background, non-blocking)
-    onDecrement();
-    
-    // Haptic feedback per design spec
+
+    // Haptic feedback
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-    
-    // Animate button press
-    if (!prefersReducedMotion) {
-      Animated.sequence([
-        Animated.timing(scaleAnim, {
-          toValue: 0.98,
-          duration: motion.quick,
-          useNativeDriver: true,
-        }),
-        Animated.spring(scaleAnim, {
-          toValue: 1,
-          friction: 3,
-          tension: 40,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }
+
+    // CRITICAL: Call decrement once for store sync
     onDecrement();
   };
 
@@ -243,9 +173,9 @@ export const MarkTile: React.FC<MarkTileProps> = ({
   );
 
 
-  // Use bg.surface per spec
-  const cardBgColor = themeColors.surface;
-  
+  // Phase 3.2 — subtle color-tinted card background
+  const cardBgColor = applyOpacity(markColor, 0.06);
+
   // Use border.soft per spec
   const strokeColor = themeColors.border;
 
@@ -301,7 +231,7 @@ export const MarkTile: React.FC<MarkTileProps> = ({
             {iconType ? (
               <MarkIcon
                 type={iconType}
-                size={28}
+                size={22}
                 variant="withBackground"
                 animate={iconAnimation}
                 ariaLabel={`${mark.name} mark icon`}
@@ -315,22 +245,27 @@ export const MarkTile: React.FC<MarkTileProps> = ({
             )}
           </Animated.View>
         </View>
-        {streak && streak.current > 0 ? (
-          <View
-            style={[
-              styles.streakBadge,
-              {
-                borderColor: themeColors.accent.secondary,
-                backgroundColor: applyOpacity(themeColors.accent.secondary, 0.2),
-              },
-            ]}
-          >
+      </View>
+
+      {/* Streak overlay for edit/drag mode */}
+      {streak && streak.current > 0 && (
+        <View
+          style={[
+            styles.streakOverlay,
+            {
+              backgroundColor: applyOpacity(themeColors.accent.secondary, 0.18),
+              borderColor: themeColors.accent.secondary,
+            },
+          ]}
+        >
+          <View style={styles.streakRow}>
+            <Ionicons name="flame-outline" size={13} color={themeColors.textSecondary} />
             <AppText variant="caption" style={[styles.streakText, { color: themeColors.text }]}>
-              🔥 {String(streak.current)} day{streak.current === 1 ? '' : 's'}
+              {String(streak.current)}
             </AppText>
           </View>
-        ) : null}
-      </View>
+        </View>
+      )}
 
       <View style={styles.valueBlock}>
         <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
@@ -345,11 +280,15 @@ export const MarkTile: React.FC<MarkTileProps> = ({
         >
           {mark.name}
         </AppText>
-        <AppText variant="label" style={[styles.unit, { color: themeColors.textSecondary }]}>
-          {String(mark.unit ?? '')}
-        </AppText>
-        {/* Goal progress bar – only shown when goal set */}
-        <GoalProgressBarOnTile markId={mark.id} mark={mark} color={markColor} />
+        {/* Momentum indicator — shows consistency over last 10 days */}
+        {momentumScore !== undefined && momentumScore > 0 && (
+          <View style={styles.momentumRow}>
+            <Ionicons name="pulse-outline" size={13} color={themeColors.textSecondary} />
+            <AppText variant="caption" style={[styles.momentumText, { color: themeColors.textSecondary }]}>
+              {momentumScore}/10
+            </AppText>
+          </View>
+        )}
       </View>
 
       <View style={styles.footerRow}>
@@ -357,7 +296,6 @@ export const MarkTile: React.FC<MarkTileProps> = ({
           style={[
             styles.actionButton,
             styles.decrementButton,
-            shadow.sm,
             {
               backgroundColor:
                 displayTotal <= 0 ? themeColors.surface : themeColors.error,
@@ -375,7 +313,7 @@ export const MarkTile: React.FC<MarkTileProps> = ({
 
         <Animated.View style={{ flex: 1, transform: [{ scale: scaleAnim }] }}>
           <TouchableOpacity
-            style={[styles.actionButton, { backgroundColor: markColor }, shadow.sm]}
+            style={[styles.actionButton, { backgroundColor: markColor }]}
             onPressIn={handleIncrementPress}
             disabled={!interactionsEnabled}
             activeOpacity={0.85}
@@ -438,7 +376,7 @@ export const MarkTile: React.FC<MarkTileProps> = ({
             {iconType ? (
               <MarkIcon
                 type={iconType}
-                size={28}
+                size={22}
                 variant="withBackground"
                 animate={iconAnimation}
                 ariaLabel={`${mark.name} mark icon`}
@@ -452,22 +390,27 @@ export const MarkTile: React.FC<MarkTileProps> = ({
             )}
           </Animated.View>
         </View>
-        {streak && streak.current > 0 ? (
-          <View
-            style={[
-              styles.streakBadge,
-              {
-                borderColor: themeColors.accent.secondary,
-                backgroundColor: applyOpacity(themeColors.accent.secondary, 0.2),
-              },
-            ]}
-          >
+      </View>
+
+      {/* Streak badge overlay (top-right) */}
+      {streak && streak.current > 0 && (
+        <View
+          style={[
+            styles.streakOverlay,
+            {
+              backgroundColor: applyOpacity(themeColors.accent.secondary, 0.18),
+              borderColor: themeColors.accent.secondary,
+            },
+          ]}
+        >
+          <View style={styles.streakRow}>
+            <Ionicons name="flame-outline" size={13} color={themeColors.textSecondary} />
             <AppText variant="caption" style={[styles.streakText, { color: themeColors.text }]}>
-              🔥 {String(streak.current)} day{streak.current === 1 ? '' : 's'}
+              {String(streak.current)}
             </AppText>
           </View>
-        ) : null}
-      </View>
+        </View>
+      )}
 
       <View style={styles.valueBlock}>
         <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
@@ -482,11 +425,15 @@ export const MarkTile: React.FC<MarkTileProps> = ({
         >
           {mark.name}
         </AppText>
-        <AppText variant="label" style={[styles.unit, { color: themeColors.textSecondary }]}>
-          {String(mark.unit ?? '')}
-        </AppText>
-        {/* Goal progress bar – only shown when goal set */}
-        <GoalProgressBarOnTile markId={mark.id} mark={mark} color={markColor} />
+        {/* Momentum indicator — shows consistency over last 10 days */}
+        {momentumScore !== undefined && momentumScore > 0 && (
+          <View style={styles.momentumRow}>
+            <Ionicons name="pulse-outline" size={13} color={themeColors.textSecondary} />
+            <AppText variant="caption" style={[styles.momentumText, { color: themeColors.textSecondary }]}>
+              {momentumScore}/10
+            </AppText>
+          </View>
+        )}
       </View>
 
       <View style={styles.footerRow}>
@@ -494,7 +441,6 @@ export const MarkTile: React.FC<MarkTileProps> = ({
           style={[
             styles.actionButton,
             styles.decrementButton,
-            shadow.sm,
             {
               backgroundColor:
                 displayTotal <= 0 ? themeColors.surface : themeColors.error,
@@ -512,10 +458,14 @@ export const MarkTile: React.FC<MarkTileProps> = ({
 
         <Animated.View style={{ flex: 1, transform: [{ scale: scaleAnim }] }}>
           <TouchableOpacity
-            style={[styles.actionButton, { backgroundColor: markColor }, shadow.sm]}
+            style={[styles.actionButton, { backgroundColor: markColor, overflow: 'hidden' }]}
             onPress={handleIncrementPress}
-            activeOpacity={0.85}
+            activeOpacity={0.9}
           >
+            {/* Section 3 — momentary brightness flash */}
+            <Animated.View
+              style={[StyleSheet.absoluteFillObject, styles.flashOverlay, { opacity: flashAnim }]}
+            />
             <AppText variant="title" style={styles.actionButtonText}>
               +
             </AppText>
@@ -529,18 +479,18 @@ export const MarkTile: React.FC<MarkTileProps> = ({
 const styles = StyleSheet.create({
   container: {
     borderRadius: borderRadius.card,
-    padding: spacing.lg,
+    padding: spacing.sm,
     borderWidth: 1,
     borderColor: 'transparent',
     width: '100%',
     height: TILE_HEIGHT,
     alignItems: 'stretch',
     justifyContent: 'flex-start',
-    gap: spacing.lg,
+    gap: 4,
   },
   pressed: {
     transform: [{ scale: 0.98 }],
-    opacity: 0.9,
+    opacity: 0.92,
   },
   headerRow: {
     flexDirection: 'row',
@@ -550,10 +500,10 @@ const styles = StyleSheet.create({
   },
   deleteButton: {
     position: 'absolute',
-    top: -8,
-    right: -8,
-    width: 32,
-    height: 32,
+    top: -6,
+    right: -6,
+    width: 28,
+    height: 28,
     borderRadius: borderRadius.full,
     alignItems: 'center',
     justifyContent: 'center',
@@ -562,73 +512,99 @@ const styles = StyleSheet.create({
   },
   emojiChip: {
     borderRadius: borderRadius.full,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.md,
+    paddingVertical: 3,
+    paddingHorizontal: spacing.sm,
     shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 1 },
   },
   iconChip: {
     paddingVertical: 0,
     paddingHorizontal: 0,
-    width: 44,
-    height: 44,
+    width: 36,
+    height: 36,
   },
   emoji: {
-    fontSize: 32,
+    fontSize: 24,
   },
   emojiWrapper: {
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: spacing.md,
+    marginTop: spacing.xs,
   },
   iconWrapper: {
     marginTop: 0,
   },
   valueBlock: {
-    gap: spacing.xs,
+    gap: 2,
   },
   value: {
-    fontSize: fontSize['2xl'],
+    fontSize: fontSize.xl,
     fontWeight: fontWeight.bold,
+    lineHeight: 26,
   },
   name: {
-    fontSize: fontSize.lg,
+    fontSize: fontSize.md,
     fontWeight: fontWeight.semibold,
+    lineHeight: 18,
   },
-  unit: {
-    letterSpacing: 1,
-  },
-  streakBadge: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
+  streakOverlay: {
+    position: 'absolute',
+    top: spacing.xs,
+    right: spacing.xs,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
     borderRadius: borderRadius.lg,
     borderWidth: 1,
+    zIndex: 5,
+  },
+  streakRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  momentumRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 1,
   },
   streakText: {
     fontWeight: fontWeight.medium,
+    fontSize: 10,
+  },
+  momentumText: {
+    fontSize: 11,
+    fontWeight: fontWeight.medium,
+    lineHeight: 14,
   },
   footerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: spacing.sm,
+    gap: 4,
   },
   actionButton: {
     flex: 1,
-    height: 48,
-    borderRadius: borderRadius.lg,
+    height: 34,
+    borderRadius: borderRadius.sm + 2,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
   decrementButton: {
-    marginRight: spacing.xs,
+    marginRight: 2,
   },
   actionButtonText: {
     color: '#FFFFFF',
-    fontSize: fontSize.xl,
+    fontSize: fontSize.md,
     fontWeight: fontWeight.bold,
+    lineHeight: 18,
+  },
+  flashOverlay: {
+    backgroundColor: 'rgba(255,255,255,0.30)',
+    borderRadius: borderRadius.sm + 2,
   },
 });
 
@@ -639,7 +615,6 @@ export const CounterTile: React.FC<Omit<MarkTileProps, 'mark'> & { counter: Mark
   const { counter, ...rest } = props;
   return <MarkTile mark={counter} {...rest} />;
 }, (prevProps, nextProps) => {
-  // Return true if props are equal (skip re-render), false if different (re-render)
   return (
     prevProps.counter.id === nextProps.counter.id &&
     prevProps.counter.total === nextProps.counter.total &&
@@ -647,8 +622,11 @@ export const CounterTile: React.FC<Omit<MarkTileProps, 'mark'> & { counter: Mark
     prevProps.counter.name === nextProps.counter.name &&
     prevProps.counter.color === nextProps.counter.color &&
     prevProps.counter.emoji === nextProps.counter.emoji &&
+    prevProps.counter.unit === nextProps.counter.unit &&
+    prevProps.counter.dailyTarget === nextProps.counter.dailyTarget &&
     prevProps.streak?.current === nextProps.streak?.current &&
     prevProps.streak?.longest === nextProps.streak?.longest &&
+    prevProps.momentumScore === nextProps.momentumScore &&
     prevProps.interactionsEnabled === nextProps.interactionsEnabled &&
     prevProps.iconType === nextProps.iconType &&
     prevProps.onPress === nextProps.onPress &&

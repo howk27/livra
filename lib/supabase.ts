@@ -154,6 +154,8 @@ export type Database = {
           gate_type: string | null;
           min_interval_minutes: number | null;
           max_per_day: number | null;
+          /** Present when migration `20250211100000_core_livra_sync_schema.sql` (or equivalent) is applied. */
+          dailyTarget?: number | null;
         };
         Insert: {
           id?: string;
@@ -173,6 +175,7 @@ export type Database = {
           gate_type?: string | null;
           min_interval_minutes?: number | null;
           max_per_day?: number | null;
+          dailyTarget?: number | null;
         };
         Update: {
           id?: string;
@@ -192,6 +195,7 @@ export type Database = {
           gate_type?: string | null;
           min_interval_minutes?: number | null;
           max_per_day?: number | null;
+          dailyTarget?: number | null;
         };
       };
       counter_events: {
@@ -307,6 +311,35 @@ export type Database = {
           earned_at?: string | null;
           last_progressed_at?: string | null;
           deleted_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      mark_notes: {
+        Row: {
+          id: string;
+          mark_id: string;
+          user_id: string;
+          date: string;        // YYYY-MM-DD
+          text: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          mark_id: string;
+          user_id: string;
+          date: string;
+          text: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          mark_id?: string;
+          user_id?: string;
+          date?: string;
+          text?: string;
           created_at?: string;
           updated_at?: string;
         };

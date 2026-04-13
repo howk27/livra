@@ -1,892 +1,924 @@
-import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Animated, Platform } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Alert,
+  Platform,
+  Animated,
+  TextInput,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+} from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
-import Svg, { Circle } from 'react-native-svg';
+import { LinearGradient } from 'expo-linear-gradient';
 import { colors } from '../../theme/colors';
 import { spacing, borderRadius, fontSize, fontWeight, shadow } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useCounters } from '../../hooks/useCounters';
 import { useEventsStore } from '../../state/eventsSlice';
-import { ChartMini } from '../../components/ChartMini';
-import { GradientBackground } from '../../components/GradientBackground';
 import { LoadingScreen } from '../../components/LoadingScreen';
-import { getLast7Days } from '../../lib/date';
-import { query } from '../../lib/db';
-import { CounterStreak } from '../../types';
 import { useAuth } from '../../hooks/useAuth';
 import { logger } from '../../lib/utils/logger';
-import { StreakMilestoneBanner, SkipTokenRow } from '../../components/StreakFeatures';
-import { NoteEditor } from '../../components/NoteEditor';
-import { GoalProgressBar } from '../../components/GoalProgressBar';
+import { useDailyTrackingStore } from '../../state/dailyTrackingSlice';
 import CounterIcon from '@/src/components/icons/CounterIcon';
 import { resolveCounterIconType } from '@/src/components/icons/IconResolver';
-import { applyOpacity } from '@/src/components/icons/color';
+import { applyOpacity, foregroundForHexBackground } from '@/src/components/icons/color';
+import { resolveDailyTarget } from '../../lib/markDailyTarget';
+import { getAppDate } from '../../lib/appDate';
+import { formatDate } from '../../lib/date';
+import { useAppDateStore } from '../../state/appDateSlice';
+import { deriveStreakForMark } from '../../hooks/useStreaks';
 
-// Counter Progress Ring constants
-const COUNTER_RING_RADIUS = 85;
-const COUNTER_RING_STROKE = 10;
-const COUNTER_RING_SIZE = COUNTER_RING_RADIUS * 2 + COUNTER_RING_STROKE;
-const COUNTER_RING_CIRCUMFERENCE = 2 * Math.PI * COUNTER_RING_RADIUS;
-const COUNTER_MAX_QUANTITY = 90;
+function toLocalDateStr(d: Date): string {
+  return formatDate(d);
+}
+
+const NOTE_MAX_LEN = 500;
 
 export default function CounterDetailScreen() {
   const theme = useEffectiveTheme();
   const themeColors = colors[theme];
+  const isDark = theme === 'dark';
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   const params = useLocalSearchParams<{ id: string }>();
   const id = typeof params.id === 'string' ? params.id : params.id?.[0];
 
-  const { counters, loading, getCounter, incrementCounter, decrementCounter, resetCounter, deleteCounter } =
-    useCounters();
-  // CRITICAL: Use selector to ensure reactivity - subscribe to events array changes
+  const { counters, loading, incrementCounter, decrementCounter, resetCounter, deleteCounter } = useCounters();
   const allEvents = useEventsStore((state) => state.events || []);
-  const getEventsByMark = useEventsStore((state) => state.getEventsByMark);
-  const loadEvents = useEventsStore((state) => state.loadEvents);
-  const { user } = useAuth();
-
-  // Subscribe to counters array to ensure re-renders when store updates
-  // Find counter from the reactive counters array instead of using getCounter
   const counter = id ? counters.find((c) => c.id === id) : null;
-  // Get events reactively - filter from allEvents to ensure reactivity to store updates
-  // CRITICAL: Use a more reliable dependency - the length and first event ID
-  // This ensures we catch ALL changes, not just the first 20 events
-  const eventsKey = useMemo(() => {
-    if (!allEvents || allEvents.length === 0) return 'no-events';
-    // Use length + first event ID + last event ID to catch all changes
-    const firstId = allEvents[0]?.id || '';
-    const lastId = allEvents[allEvents.length - 1]?.id || '';
-    return `${allEvents.length}-${firstId}-${lastId}`;
-  }, [allEvents]);
-  
-  const events = useMemo(() => {
-    if (!id) return [];
-    const filtered = (allEvents || []).filter((e) => e.mark_id === id && !e.deleted_at);
-    logger.log('[CounterDetail] Events filtered for mark:', {
-      markId: id,
-      allEventsCount: allEvents.length,
-      filteredCount: filtered.length,
-      eventTypes: filtered.slice(0, 5).map(e => `${e.event_type}:${e.amount}`),
-      eventsKey,
-    });
-    return filtered;
-  }, [id, allEvents, eventsKey]); // Include eventsKey to force recalculation
-  const [streak, setStreak] = useState<CounterStreak | null>(null);
-  const [progressAnim] = useState(new Animated.Value(0));
-  const [maxValue, setMaxValue] = useState(100);
-  
-  // Animation for large value display bump
-  const valueBumpAnim = useRef(new Animated.Value(1)).current;
-  const [showActionSheet, setShowActionSheet] = useState(false);
-  
-  // Animation for ring progress
-  const ringProgressAnim = useRef(new Animated.Value(0)).current;
-  const [ringProgress, setRingProgress] = useState(0);
-  
-  // Track if we've attempted to load events for this mark to avoid repeated loads
-  const hasLoadedEventsRef = useRef<string | null>(null);
+  const iconType = counter ? resolveCounterIconType(counter) : undefined;
 
-  // Reset loading ref when ID changes
-  useEffect(() => {
-    hasLoadedEventsRef.current = null;
-  }, [id]);
+  const [showCheck, setShowCheck] = useState(false);
+  const morphAnim = useRef(new Animated.Value(1)).current;
+  const [expandedActivityDate, setExpandedActivityDate] = useState<string | null>(null);
+  /** Local input only — never written to history/log until Save. */
+  const [draftNote, setDraftNote] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
+  const [deletingNote, setDeletingNote] = useState(false);
+  const noteFieldBusy = savingNote || deletingNote;
+  const scrollRef = useRef<ScrollView>(null);
+  const noteSectionYRef = useRef(0);
+  const appDateKey = useAppDateStore((s) => s.debugDateOverride ?? '');
 
-  // Initialize max value and progress when counter loads
-  useEffect(() => {
-    if (counter) {
-      // Set max to be at least 10, or 20% more than current total (whichever is higher, but at least 10)
-      const newMax = Math.max(Math.max(counter.total, 10) * 1.2, 10);
-      setMaxValue(newMax);
-      const progress = counter.total > 0 ? Math.min(counter.total / newMax, 1) : 0;
-      progressAnim.setValue(progress);
-    }
-  }, [counter?.id]); // Only run when counter ID changes (initial load)
+  const todayStr = useMemo(() => toLocalDateStr(getAppDate()), [appDateKey]);
 
-  // Update max value when counter total exceeds it
-  useEffect(() => {
-    if (counter && counter.total > maxValue) {
-      setMaxValue(Math.max(counter.total * 1.2, 10));
-    }
-  }, [counter?.total, maxValue]);
-
-  // Animate progress bar when counter changes
-  useEffect(() => {
-    if (counter) {
-      const currentMax = maxValue || 10;
-      const progress = counter.total > 0 ? Math.min(counter.total / currentMax, 1) : 0;
-      Animated.spring(progressAnim, {
-        toValue: progress,
-        useNativeDriver: false,
-        tension: 50,
-        friction: 7,
-      }).start();
-    }
-  }, [counter?.total, maxValue]);
-
-  // Animate value bump on change (scale 1.1 → 1.0, 180ms per spec)
-  useEffect(() => {
-    if (counter && counter.total > 0) {
-      Animated.sequence([
-        Animated.timing(valueBumpAnim, {
-          toValue: 1.1,
-          duration: 90,
-          useNativeDriver: true,
-        }),
-        Animated.timing(valueBumpAnim, {
-          toValue: 1.0,
-          duration: 90,
-          useNativeDriver: true,
-          easing: (t) => t * (2 - t), // cubic-bezier easing
-        }),
-      ]).start();
-    }
-  }, [counter?.total]);
-
-  // Animate ring progress when screen opens OR when counter total changes
-  // CRITICAL: Use a ref to track previous total to avoid unnecessary animations
-  const prevTotalRef = useRef<number | null>(null);
-  
-  useEffect(() => {
-    if (counter) {
-      const progress = Math.min(counter.total / COUNTER_MAX_QUANTITY, 1);
-      const prevTotal = prevTotalRef.current;
-      const isTotalChanged = prevTotal !== null && prevTotal !== counter.total;
-      
-      logger.log('[CounterDetail] Updating ring progress:', {
-        markId: counter.id,
-        total: counter.total,
-        prevTotal,
-        progress,
-        isTotalChanged,
-      });
-      
-      // Update ref
-      prevTotalRef.current = counter.total;
-      
-      // Don't reset to 0 if we're just updating (not initial load)
-      // Only reset on initial load (when ID changes)
-      // Use ringProgress state instead of accessing private _value property
-      const isInitialLoad = ringProgress === 0 && progress > 0;
-      if (isInitialLoad) {
-        ringProgressAnim.setValue(0);
-        setRingProgress(0);
-      }
-      
-      const listener = ringProgressAnim.addListener(({ value }) => {
-        setRingProgress(value);
-      });
-      
-      Animated.spring(ringProgressAnim, {
-        toValue: progress,
-        useNativeDriver: false, // strokeDashoffset doesn't support native driver
-        tension: 50,
-        friction: 7,
-      }).start();
-      
-      return () => {
-        ringProgressAnim.removeListener(listener);
-      };
-    } else {
-      // Reset ref when counter is null
-      prevTotalRef.current = null;
-    }
-  }, [counter?.id, counter?.total]); // Animate when counter ID changes (screen opens) OR total changes (increment/decrement)
-
-  // Only load events once when screen comes into focus
-  // Use ref to track loading state to prevent infinite loops
-  useFocusEffect(
-    React.useCallback(() => {
-      if (id && hasLoadedEventsRef.current !== id) {
-        // Check if we already have events for this mark in the store using the selector
-        const existingEventsForMark = getEventsByMark(id);
-        
-        // Only load if we have no events for this mark in the store
-        // If events exist, rely on reactive store updates (optimistic updates from addEvent)
-        if (existingEventsForMark.length === 0) {
-          hasLoadedEventsRef.current = id;
-          
-          if (user?.id) {
-            // Load all user events (not just this mark's) to avoid replacing the store
-            // Small delay to ensure any database writes from other screens have completed
-            const timeoutId = setTimeout(() => {
-              loadEvents(undefined, user.id).catch((error) => {
-                logger.error('Error loading events for counter detail:', error);
-                hasLoadedEventsRef.current = null; // Reset on error to allow retry
-              });
-            }, 300);
-            
-            return () => {
-              clearTimeout(timeoutId);
-            };
-          } else {
-            // Load events even without user ID (for offline mode)
-            loadEvents().catch((error) => {
-              logger.error('Error loading events for counter detail:', error);
-              hasLoadedEventsRef.current = null; // Reset on error to allow retry
-            });
-          }
-        } else {
-          // Mark as loaded since events already exist
-          hasLoadedEventsRef.current = id;
-        }
-      }
-      
-      // Reset ref when screen loses focus (navigating away)
-      return () => {
-        if (hasLoadedEventsRef.current === id) {
-          hasLoadedEventsRef.current = null;
-        }
-      };
-    }, [id, user?.id, loadEvents, getEventsByMark])
+  const events = useMemo(
+    () => (id ? allEvents.filter((e) => e.mark_id === id && !e.deleted_at) : []),
+    [id, allEvents],
   );
 
+  const streakDisplay = useMemo(() => {
+    if (!id || !counter) return null;
+    const d = deriveStreakForMark(id, allEvents, counter.enable_streak);
+    if (!d) return null;
+    return { current_streak: d.current, longest_streak: d.longest };
+  }, [id, allEvents, counter, appDateKey]);
+
+  const todayCount = useMemo(
+    () =>
+      events
+        .filter((e) => e.event_type === 'increment' && e.occurred_local_date === todayStr)
+        .reduce((sum, e) => sum + (e.amount ?? 1), 0),
+    [events, todayStr],
+  );
+
+  const dailyTarget = useMemo(() => (counter ? resolveDailyTarget(counter) : 1), [counter]);
+  const completedToday = todayCount >= dailyTarget;
+  const centerCount = Math.min(todayCount, dailyTarget);
+
+  const recentActivity = useMemo(
+    () =>
+      events
+        .filter((e) => e.event_type === 'increment' || e.event_type === 'decrement')
+        .sort((a, b) => +new Date(b.occurred_at) - +new Date(a.occurred_at))
+        .slice(0, 6),
+    [events],
+  );
+
+  const dailyLogsForMark = useDailyTrackingStore(
+    useCallback((s) => (id ? s.getDailyLogsForMark(id, 60) : []), [id]),
+  );
+
+  const todayDailyLog = useDailyTrackingStore(
+    useCallback((s) => (id ? s.getDailyLogForDate(id, todayStr) : null), [id, todayStr]),
+  );
+
+  const upsertDailyLogNote = useDailyTrackingStore((s) => s.upsertDailyLogNote);
+  const deleteDailyLogNote = useDailyTrackingStore((s) => s.deleteDailyLogNote);
+  const notesCloudError = useDailyTrackingStore((s) => s.notesCloudError);
+  const clearNotesCloudError = useDailyTrackingStore((s) => s.clearNotesCloudError);
+
+  /** Persisted note for this mark+day — from daily log store only (history / Save / Delete). */
+  const savedNoteText = todayDailyLog?.text ?? '';
+  const savedTrimmed = savedNoteText.trim();
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!id) return;
+      const row = useDailyTrackingStore.getState().getDailyLogForDate(id, todayStr);
+      setDraftNote(row?.text ?? '');
+    }, [id, todayStr]),
+  );
+
+  const draftTrimmed = draftNote.trim();
+  const canSaveNote =
+    draftTrimmed !== savedTrimmed && !(draftTrimmed === '' && savedTrimmed !== '');
+  const hasSavedNote = Boolean(todayDailyLog && savedTrimmed.length > 0);
+
+  const notesByDate = useMemo(() => {
+    const map = new Map<string, string>();
+    dailyLogsForMark.forEach((n) => {
+      const t = n.text.trim();
+      if (t) map.set(n.date, t);
+    });
+    return map;
+  }, [dailyLogsForMark]);
+
+  const markNotes = useMemo(
+    () =>
+      dailyLogsForMark.filter((n) => n.date !== todayStr && n.text.trim().length > 0),
+    [dailyLogsForMark, todayStr],
+  );
+
+  const noteUserId = user?.id ?? 'local';
+
   useEffect(() => {
-    if (id) {
-      // Load streak data
-      query<CounterStreak>('SELECT * FROM lc_streaks WHERE counter_id = ? AND deleted_at IS NULL', [
-        id,
-      ]).then((result) => {
-        if (result.length > 0) {
-          setStreak(result[0]);
-        }
-      });
+    if (!completedToday) {
+      setShowCheck(false);
+      morphAnim.setValue(1);
+      return;
     }
-  }, [id, allEvents]);
-
-  // CRITICAL: All hooks must be called BEFORE any early returns
-  // Prepare chart data
-  // CRITICAL: Include both increment and decrement events to show net daily value
-  // Use useMemo to ensure recalculation when events change
-  const last7Days = useMemo(() => getLast7Days(), []); // Stable - only calculate once per render cycle
-  const chartData = useMemo(() => {
-    logger.log('[CounterDetail] Recalculating chart data:', {
-      markId: id,
-      eventsCount: events.length,
-      eventTypes: events.slice(0, 10).map(e => `${e.event_type}:${e.amount}`).join(', '),
+    Animated.timing(morphAnim, { toValue: 0.88, duration: 90, useNativeDriver: true }).start(() => {
+      setShowCheck(true);
+      Animated.timing(morphAnim, { toValue: 1, duration: 110, useNativeDriver: true }).start();
     });
-    
-    const eventsByDate = new Map<string, number>();
-    
-    events.forEach((event) => {
-      if (event.event_type === 'increment' || event.event_type === 'decrement') {
-        const current = eventsByDate.get(event.occurred_local_date) || 0;
-        // Increments add, decrements subtract
-        const change = event.event_type === 'increment' 
-          ? event.amount 
-          : -event.amount;
-        eventsByDate.set(event.occurred_local_date, current + change);
-      }
-    });
+  }, [completedToday, morphAnim]);
 
-    const result = last7Days.map((date) => ({
-      date,
-      value: Math.max(0, eventsByDate.get(date) || 0), // Ensure non-negative for display
-    }));
-    
-    logger.log('[CounterDetail] Chart data calculated:', {
-      markId: id,
-      chartValues: result.map(d => `${d.date}:${d.value}`).join(', '),
+  const scrollNoteIntoView = useCallback(() => {
+    requestAnimationFrame(() => {
+      const y = noteSectionYRef.current;
+      scrollRef.current?.scrollTo({
+        y: Math.max(0, y - spacing.md),
+        animated: true,
+      });
     });
-    
-    return result;
-  }, [events, last7Days, id]); // Recalculate when events change
+  }, []);
 
-  // CRITICAL: Early returns MUST come AFTER all hooks
-  if (loading) {
-    return <LoadingScreen />;
-  }
+  if (loading) return <LoadingScreen />;
 
   if (!counter || !id) {
     return (
-      <GradientBackground>
-        <SafeAreaView style={styles.container}>
-          <View style={styles.centered}>
-            <Text style={[styles.errorText, { color: themeColors.text }]}>Counter not found</Text>
-          </View>
-        </SafeAreaView>
-      </GradientBackground>
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.background }]}>
+        <View style={styles.centered}>
+          <Text style={[styles.errorText, { color: themeColors.text }]}>Mark not found</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
-  const handleIncrement = async (amount: number = 1) => {
-    if (!id || !counter) {
-      return;
-    }
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
-    if (!user?.id) {
-      logger.error('[Counter] Cannot increment counter - user not authenticated');
-      Alert.alert('Error', 'You must be logged in to perform this action.');
-      return;
-    }
-    // Don't await - incrementCounter now uses optimistic updates for instant UI feedback
-    incrementCounter(id, user.id, amount).catch((error) => {
-      logger.error('Error incrementing counter:', error);
-      Alert.alert('Error', `Failed to increment counter: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  const markColor = counter.color || themeColors.primary;
+  const title = counter.name;
+  const cardSheenColors = isDark
+    ? [
+        applyOpacity(themeColors.surfaceActive, 0.22),
+        applyOpacity(themeColors.surface, 0.0),
+        applyOpacity(themeColors.surfaceVariant, 0.18),
+      ]
+    : [
+        applyOpacity(themeColors.surfaceActive, 0.36),
+        applyOpacity(themeColors.surface, 0.0),
+        applyOpacity(themeColors.surfaceVariant, 0.24),
+      ];
+
+  const handleIncrement = async () => {
+    if (!id || !user?.id) return;
+    if (completedToday) return;
+    if (Platform.OS !== 'web') await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    incrementCounter(id, user.id, 1).catch((error) => {
+      logger.error('increment failed:', error);
+      Alert.alert('Error', 'Could not update mark');
     });
   };
 
   const handleDecrement = async () => {
-    if (!id || !counter || counter.total <= 0) {
-      return;
-    }
-    if (Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    if (!user?.id) {
-      logger.error('[Counter] Cannot decrement counter - user not authenticated');
-      Alert.alert('Error', 'You must be logged in to perform this action.');
-      return;
-    }
-    // Don't await - decrementCounter now uses optimistic updates for instant UI feedback
+    if (!id || !user?.id || counter.total <= 0) return;
+    if (Platform.OS !== 'web') await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     decrementCounter(id, user.id, 1).catch((error) => {
-      logger.error('Error decrementing counter:', error);
-      Alert.alert('Error', `Failed to decrement counter: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      logger.error('decrement failed:', error);
+      Alert.alert('Error', 'Could not update mark');
     });
   };
 
   const handleReset = () => {
-    if (!id || !counter) return;
+    if (!id || !user?.id || todayCount === 0) return;
     Alert.alert(
-      'Reset Counter',
-      `Are you sure you want to reset "${counter.name}"? This will set the count to 0.`,
+      "Reset today's progress",
+      `Remove today's ${todayCount} log${todayCount === 1 ? '' : 's'} for "${title}"? This does not affect your streak or all-time total.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Reset',
           style: 'destructive',
           onPress: async () => {
-            if (!user?.id) {
-              logger.error('[Counter] Cannot reset counter - user not authenticated');
-              Alert.alert('Error', 'You must be logged in to perform this action.');
-              return;
-            }
             try {
-              await resetCounter(id, user.id);
+              await decrementCounter(id, user.id, todayCount);
             } catch (error) {
-              logger.error('Error resetting counter:', error);
-              Alert.alert('Error', 'Failed to reset counter. Please try again.');
+              logger.error('reset today failed:', error);
+              Alert.alert('Error', 'Could not reset progress for today');
             }
           },
         },
-      ]
+      ],
     );
   };
 
-  const handleDelete = () => {
+  const handleDeleteMark = () => {
+    if (!id) return;
     Alert.alert(
-      'Delete Mark',
-      `Are you sure you want to delete "${counter.name}"? This action cannot be undone.`,
+      'Delete mark?',
+      `Remove "${title}" from Livra? This deletes the mark and its activity on this device${
+        user?.id ? ' and from your account when synced' : ''
+      }.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Are you sure?',
+              `This permanently deletes "${title}". This cannot be undone.`,
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Delete forever',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      await deleteCounter(id);
+                      router.replace('/(tabs)/home');
+                    } catch (error) {
+                      logger.error('delete mark failed:', error);
+                      Alert.alert('Error', 'Could not delete this mark.');
+                    }
+                  },
+                },
+              ],
+            );
+          },
+        },
+      ],
+    );
+  };
+
+  const handleSaveNote = async () => {
+    if (!id || !canSaveNote || noteFieldBusy) return;
+    setSavingNote(true);
+    try {
+      await upsertDailyLogNote(id, noteUserId, todayStr, draftTrimmed);
+      setDraftNote('');
+    } catch (error) {
+      logger.error('save note failed:', error);
+      Alert.alert('Error', 'Could not save your note.');
+    } finally {
+      setSavingNote(false);
+    }
+  };
+
+  const handleDeleteNote = () => {
+    if (!todayDailyLog?.id || !hasSavedNote || noteFieldBusy) return;
+    Alert.alert(
+      'Delete note?',
+      'Remove the saved note for today? This cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            await deleteCounter(id);
-            router.back();
+            setDeletingNote(true);
+            try {
+              await deleteDailyLogNote(todayDailyLog.id);
+              setDraftNote('');
+            } catch (error) {
+              logger.error('delete note failed:', error);
+              Alert.alert('Error', 'Could not delete the note.');
+            } finally {
+              setDeletingNote(false);
+            }
           },
         },
-      ]
+      ],
     );
   };
 
-  const counterIconType = counter
-    ? resolveCounterIconType({
-        name: counter.name,
-        emoji: counter.emoji,
-      })
-    : undefined;
+  const primaryActionFg = foregroundForHexBackground(markColor, isDark);
 
   return (
-    <GradientBackground>
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        <ScrollView 
-          contentContainerStyle={styles.content}
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.background }]}>
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoid}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
+      >
+        <ScrollView
+          ref={scrollRef}
+          contentContainerStyle={[
+            styles.content,
+            {
+              paddingBottom: spacing.xxl + insets.bottom + (Platform.OS === 'android' ? 24 : 12),
+            },
+          ]}
           keyboardShouldPersistTaps="handled"
-          nestedScrollEnabled={true}
-          scrollEnabled={true}
-          showsVerticalScrollIndicator={true}
-          bounces={true}
-          alwaysBounceVertical={false}
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          showsVerticalScrollIndicator={false}
         >
-          {/* Header with Emoji Badge */}
-          <View style={styles.header}>
-            <TouchableOpacity onPress={() => router.back()}>
-              <Text style={[styles.backButton, { color: themeColors.textSecondary }]}>← Back</Text>
-            </TouchableOpacity>
-            <View style={styles.headerTitleContainer}>
-              <View
-                style={[
-                  styles.emojiBadge,
-                  {
-                    backgroundColor: applyOpacity(counter?.color || themeColors.primary, 0.12),
-                  },
-                ]}
-              >
-                {counterIconType ? (
-                  <CounterIcon
-                    type={counterIconType}
-                    size={28}
-                    variant="withBackground"
-                    fallbackEmoji={counter.emoji || '📊'}
-                    ariaLabel={`${counter.name} counter icon`}
-                    color={counter?.color}
-                  />
-                ) : (
-                  <Text style={styles.headerEmoji}>{counter.emoji || '📊'}</Text>
-                )}
-              </View>
-              <Text style={[styles.headerTitle, { color: themeColors.text }]}>{counter.name}</Text>
+        <View style={styles.topBar}>
+          <TouchableOpacity
+            style={styles.topIconBtn}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="arrow-back" size={22} color={themeColors.textSecondary} />
+          </TouchableOpacity>
+
+          <View style={styles.titleWrap}>
+            <View style={[styles.titleIconWrap, { backgroundColor: applyOpacity(markColor, 0.16) }]}>
+              {iconType ? (
+                <CounterIcon
+                  type={iconType}
+                  size={20}
+                  variant="withBackground"
+                  animate="none"
+                  fallbackEmoji={counter.emoji || '📊'}
+                  ariaLabel={`${title} icon`}
+                  color={markColor}
+                />
+              ) : (
+                <Text style={styles.titleEmoji}>{counter.emoji || '📊'}</Text>
+              )}
             </View>
-            <TouchableOpacity 
-              style={styles.headerActionButton}
-              onPress={() => setShowActionSheet(true)}
-            >
-              <Ionicons name="ellipsis-horizontal" size={24} color={themeColors.textSecondary} />
-            </TouchableOpacity>
+            <Text style={[styles.titleText, { color: themeColors.text }]} numberOfLines={1}>{title}</Text>
           </View>
 
-          {/* Large Value Display with Animated Bump and Progress Ring */}
-          <View style={styles.valueDisplay}>
-            {/* Progress Ring */}
-            <View style={styles.ringContainer}>
-              <Svg width={COUNTER_RING_SIZE} height={COUNTER_RING_SIZE} style={styles.ringSvg}>
-                {/* Background ring */}
-                <Circle
-                  cx={COUNTER_RING_SIZE / 2}
-                  cy={COUNTER_RING_SIZE / 2}
-                  r={COUNTER_RING_RADIUS}
-                  stroke={themeColors.surfaceVariant}
-                  strokeWidth={COUNTER_RING_STROKE}
-                  fill="none"
-                  opacity={0.5}
-                />
-                {/* Progress ring */}
-                <Circle
-                  cx={COUNTER_RING_SIZE / 2}
-                  cy={COUNTER_RING_SIZE / 2}
-                  r={COUNTER_RING_RADIUS}
-                  stroke={counter.color || themeColors.primary}
-                  strokeWidth={COUNTER_RING_STROKE}
-                  fill="none"
-                  strokeDasharray={COUNTER_RING_CIRCUMFERENCE}
-                  strokeDashoffset={COUNTER_RING_CIRCUMFERENCE * (1 - ringProgress)}
-                  strokeLinecap="round"
-                  transform={`rotate(-90 ${COUNTER_RING_SIZE / 2} ${COUNTER_RING_SIZE / 2})`}
-                />
-              </Svg>
-            </View>
-            <Animated.Text 
-              style={[
-                styles.largeValue, 
-                { color: themeColors.text },
-                { transform: [{ scale: valueBumpAnim }] }
-              ]}
+          <View style={styles.topIconGroup}>
+            <TouchableOpacity
+              style={styles.topIconBtn}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              onPress={() => router.push(`/counter/${id}/edit` as any)}
+              accessibilityLabel={`Edit mark ${title}`}
+              accessibilityRole="button"
             >
-              {counter.total}
-            </Animated.Text>
-            <Text style={[styles.valueUnit, { color: themeColors.textSecondary }]}>
-              {counter.unit}
+              <Ionicons name="pencil-outline" size={22} color={themeColors.textSecondary} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.topIconBtn}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              onPress={handleDeleteMark}
+              accessibilityLabel={`Delete mark ${title}`}
+              accessibilityRole="button"
+            >
+              <Ionicons name="trash-outline" size={24} color={themeColors.error} />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={styles.ringBlock}>
+          <View style={styles.centerReadout}>
+            <Text style={[styles.centerValue, { color: themeColors.text }]}>
+              {centerCount}
+            </Text>
+            <Text style={[styles.centerSub, { color: themeColors.textSecondary }]}>
+              {dailyTarget > 1
+                ? `of ${dailyTarget} ${String(counter.unit || 'sessions')}`
+                : completedToday
+                  ? 'Completed today'
+                  : 'Tap + when done'}
             </Text>
           </View>
+        </View>
 
-          {/* Quick Action Bar (-, +1) with Rounded Pill */}
-          <View style={styles.quickActionBar}>
-            <TouchableOpacity
-              style={[
-                styles.quickActionButton,
-                {
-                  backgroundColor: counter.total <= 0 
-                    ? themeColors.surface 
-                    : (counter.color || themeColors.primary),
-                  opacity: counter.total <= 0 ? 0.5 : 1,
-                },
-                shadow.md,
-              ]}
-              onPressIn={handleDecrement}
-              disabled={counter.total <= 0}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.quickActionText}>-</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[
-                styles.quickActionButton,
-                { backgroundColor: counter.color || themeColors.primary },
-                shadow.md,
-              ]}
-              onPressIn={() => handleIncrement(1)}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.quickActionText}>+1</Text>
-            </TouchableOpacity>
-          </View>
+        <View style={styles.actionRow}>
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: themeColors.surface }]}
+            onPress={handleDecrement}
+            disabled={counter.total <= 0}
+            activeOpacity={0.85}
+          >
+            <Text style={[styles.actionText, { color: themeColors.text }]}>−</Text>
+          </TouchableOpacity>
 
-          {/* Milestone Banner */}
-          {streak && counter.enable_streak && (
-            <StreakMilestoneBanner
-              streak={streak.current_streak}
-              color={counter.color || themeColors.primary}
-            />
-          )}
-          {/* Goal Progress (full variant) */}
-          <GoalProgressBar
-            mark={counter}
-            events={events}
-            color={counter.color || themeColors.primary}
-            variant="full"
-          />
-          {/* Streak Module with Brand/Primary Tint (12% opacity) - Moved down */}
-          {streak && counter.enable_streak && (
+          <Animated.View style={{ transform: [{ scale: morphAnim }] }}>
+            <TouchableOpacity
+              style={[styles.actionBtnPrimary, { backgroundColor: markColor }, shadow.sm]}
+              onPress={handleIncrement}
+              activeOpacity={0.88}
+            >
+              {showCheck ? (
+                <Ionicons name="checkmark" size={26} color={primaryActionFg} />
+              ) : (
+                <Text style={[styles.actionPrimaryText, { color: primaryActionFg }]}>+</Text>
+              )}
+            </TouchableOpacity>
+          </Animated.View>
+
+          <TouchableOpacity
+            style={[styles.actionBtn, { backgroundColor: themeColors.surface }]}
+            onPress={handleReset}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="refresh-outline" size={20} color={themeColors.text} />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.statsRow}>
+          <View style={[styles.statCard, { backgroundColor: themeColors.surface }]}>
             <LinearGradient
-              colors={[
-                (counter.color || themeColors.primary) + '20',
-                (counter.color || themeColors.primary) + '12',
-              ]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={[styles.streakModule, { borderColor: theme === 'dark' ? 'rgba(255,255,255,0.08)' : themeColors.border }]}
-            >
-              <View style={styles.streakItem}>
-                <Ionicons name="flame" size={20} color={themeColors.accent.secondary} />
-                <Text style={[styles.streakValue, { color: themeColors.text }]}>
-                  {streak.current_streak}
-                </Text>
-                <Text style={[styles.streakLabel, { color: themeColors.textSecondary }]}>
-                  Current Streak
-                </Text>
-              </View>
-              <View style={[styles.streakDivider, { backgroundColor: themeColors.border }]} />
-              <View style={styles.streakItem}>
-                {streak.longest_streak > 7 ? (
-                  <Ionicons name="trophy" size={20} color={themeColors.accent.secondary} />
+              pointerEvents="none"
+              colors={cardSheenColors}
+              start={{ x: 0.15, y: 0 }}
+              end={{ x: 0.85, y: 1 }}
+              style={styles.cardSheen}
+            />
+            <Text style={[styles.statKicker, { color: themeColors.textTertiary }]}>CURRENT</Text>
+            <Text style={[styles.statValue, { color: themeColors.text }]}>{streakDisplay?.current_streak ?? 0} Days</Text>
+          </View>
+          <View style={[styles.statCard, { backgroundColor: themeColors.surface }]}>
+            <LinearGradient
+              pointerEvents="none"
+              colors={cardSheenColors}
+              start={{ x: 0.15, y: 0 }}
+              end={{ x: 0.85, y: 1 }}
+              style={styles.cardSheen}
+            />
+            <Text style={[styles.statKicker, { color: themeColors.textTertiary }]}>LONGEST</Text>
+            <Text style={[styles.statValue, { color: themeColors.text }]}>{streakDisplay?.longest_streak ?? 0} Days</Text>
+          </View>
+        </View>
+
+        <View
+          onLayout={(e) => {
+            noteSectionYRef.current = e.nativeEvent.layout.y;
+          }}
+        >
+          <View style={[styles.noteCard, { backgroundColor: themeColors.surface }]}>
+          <LinearGradient
+            pointerEvents="none"
+            colors={cardSheenColors}
+            start={{ x: 0.15, y: 0 }}
+            end={{ x: 0.85, y: 1 }}
+            style={styles.cardSheen}
+          />
+          <View style={styles.noteHeader}>
+            <Text style={[styles.noteTitle, { color: themeColors.text }]}>{"Today's note"}</Text>
+            <Text style={[styles.noteDate, { color: themeColors.textSecondary }]}>
+              {getAppDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+            </Text>
+          </View>
+          <TextInput
+            value={draftNote}
+            onChangeText={(t) => setDraftNote(t.slice(0, NOTE_MAX_LEN))}
+            placeholder="Write a note for today…"
+            placeholderTextColor={themeColors.textSecondary}
+            multiline
+            editable={!noteFieldBusy}
+            onFocus={scrollNoteIntoView}
+            style={[
+              styles.noteInput,
+              {
+                color: themeColors.text,
+                borderColor: themeColors.border,
+                backgroundColor: themeColors.background,
+              },
+            ]}
+            textAlignVertical="top"
+          />
+          <View style={styles.noteActionsRow}>
+            <Text style={[styles.noteCharCount, { color: themeColors.textTertiary }]}>
+              {draftNote.length}/{NOTE_MAX_LEN}
+            </Text>
+            <View style={styles.noteActionsButtons}>
+              {hasSavedNote ? (
+                <TouchableOpacity
+                  onPress={handleDeleteNote}
+                  disabled={noteFieldBusy}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityRole="button"
+                  accessibilityLabel="Delete saved note"
+                >
+                  <Text
+                    style={[
+                      styles.noteDeleteLabel,
+                      { color: noteFieldBusy ? themeColors.textTertiary : themeColors.error },
+                    ]}
+                  >
+                    Delete note
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.noteDeletePlaceholder} />
+              )}
+              <TouchableOpacity
+                onPress={handleSaveNote}
+                disabled={!canSaveNote || noteFieldBusy}
+                style={[
+                  styles.noteSaveBtn,
+                  {
+                    backgroundColor:
+                      canSaveNote || savingNote ? themeColors.accent.primary : themeColors.surfaceVariant,
+                  },
+                ]}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel="Save note"
+              >
+                {savingNote ? (
+                  <ActivityIndicator
+                    size="small"
+                    color={foregroundForHexBackground(themeColors.accent.primary, isDark)}
+                  />
                 ) : (
-                  <Ionicons name="flame" size={20} color={themeColors.accent.secondary} />
+                  <Text
+                    style={[
+                      styles.noteSaveLabel,
+                      {
+                        color:
+                          canSaveNote
+                            ? foregroundForHexBackground(themeColors.accent.primary, isDark)
+                            : themeColors.textTertiary,
+                      },
+                    ]}
+                  >
+                    Save note
+                  </Text>
                 )}
-                <Text style={[styles.streakValue, { color: themeColors.text }]}>
-                  {streak.longest_streak}
-                </Text>
-                <Text style={[styles.streakLabel, { color: themeColors.textSecondary }]}>
-                  Longest Streak
-                </Text>
-              </View>
-            </LinearGradient>
-          )}
-
-          {/* Skip Tokens (Feature 3) */}
-          {counter.enable_streak && user?.id && (
-            <View style={{ marginBottom: spacing.lg }}>
-              <SkipTokenRow
-                markId={counter.id}
-                userId={user.id}
-                color={counter.color || themeColors.primary}
-              />
+              </TouchableOpacity>
             </View>
-          )}
-          {/* Daily Note (Feature 4) */}
-          {user?.id && (
-            <View style={{ marginBottom: spacing.lg }}>
-              <NoteEditor markId={counter.id} userId={user.id} />
+          </View>
+          {notesCloudError ? (
+            <View style={[styles.noteCloudRow, { borderTopColor: themeColors.border }]}>
+              <Text style={[styles.noteCloudHint, { color: themeColors.textSecondary }]}>
+                {notesCloudError}
+              </Text>
+              <TouchableOpacity
+                onPress={() => clearNotesCloudError()}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel="Dismiss note sync message"
+              >
+                <Text style={[styles.noteCloudDismiss, { color: themeColors.accent.primary }]}>Dismiss</Text>
+              </TouchableOpacity>
             </View>
-          )}
+          ) : null}
+          </View>
+        </View>
 
-          {/* Footer Actions - Show in Action Sheet (bottom sheet) */}
-          {showActionSheet && (
-            <View style={styles.actionSheetOverlay}>
-              <TouchableOpacity 
-                style={styles.actionSheetBackdrop}
-                onPress={() => setShowActionSheet(false)}
-                activeOpacity={1}
-              />
-              <View style={[styles.actionSheet, { backgroundColor: themeColors.surface }, shadow.lg]}>
-                <View style={[styles.actionSheetHandle, { backgroundColor: themeColors.border }]} />
+        <View style={styles.activitySection}>
+          <Text style={[styles.activityTitle, { color: themeColors.text }]}>Recent Activity</Text>
+          {recentActivity.length === 0 ? (
+            <View style={[styles.activityCard, { backgroundColor: themeColors.surface }]}>
+              <Text style={[styles.activitySub, { color: themeColors.textSecondary }]}>
+                No activity yet.
+              </Text>
+            </View>
+          ) : (
+            recentActivity.map((event) => {
+              const isInc = event.event_type === 'increment';
+              const dt = new Date(event.occurred_at);
+              const dateNote = notesByDate.get(event.occurred_local_date);
+              const isExpanded = expandedActivityDate === event.occurred_local_date;
+              return (
                 <TouchableOpacity
-                  style={[styles.actionSheetItem, { borderBottomColor: themeColors.border }]}
+                  key={event.id}
+                  style={[styles.activityCard, { backgroundColor: themeColors.surface }]}
+                  activeOpacity={dateNote ? 0.82 : 1}
                   onPress={() => {
-                    setShowActionSheet(false);
-                    handleReset();
+                    if (!dateNote) return;
+                    setExpandedActivityDate(isExpanded ? null : event.occurred_local_date);
                   }}
                 >
-                  <Text style={[styles.actionSheetItemText, { color: (themeColors as any).reset || themeColors.warning }]}>
-                    Reset Counter
-                  </Text>
+                  <LinearGradient
+                    pointerEvents="none"
+                    colors={cardSheenColors}
+                    start={{ x: 0.15, y: 0 }}
+                    end={{ x: 0.85, y: 1 }}
+                    style={styles.cardSheen}
+                  />
+                  <View style={[styles.activityStrip, { backgroundColor: isInc ? markColor : themeColors.border }]} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.activityMain, { color: themeColors.text }]}>
+                      {isInc ? 'Completion logged' : 'Adjustment made'}
+                    </Text>
+                    <Text style={[styles.activitySub, { color: themeColors.textSecondary }]}>
+                      {dt.toLocaleDateString('en-US', { weekday: 'short' })} · {dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </Text>
+                    {isExpanded && dateNote && (
+                      <View style={[styles.activityNoteRow, { borderTopColor: themeColors.border }]}>
+                        <Ionicons name="document-text-outline" size={13} color={markColor} style={{ marginTop: 1 }} />
+                        <Text style={[styles.activityNoteText, { color: themeColors.text }]}>
+                          {dateNote}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  <Ionicons
+                    name={isExpanded ? 'chevron-down' : 'chevron-forward'}
+                    size={18}
+                    color={dateNote ? themeColors.textSecondary : themeColors.textTertiary}
+                  />
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.actionSheetItem}
-                  onPress={() => {
-                    setShowActionSheet(false);
-                    handleDelete();
-                  }}
-                >
-                  <Text style={[styles.actionSheetItemText, { color: themeColors.error }]}>
-                    Delete Mark
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
+              );
+            })
           )}
+        </View>
+
+        {markNotes.length > 0 && (
+          <View style={styles.activitySection}>
+            <Text style={[styles.activityTitle, { color: themeColors.text }]}>Notes</Text>
+            {markNotes.map((note) => {
+              const noteDate = new Date(note.date + 'T12:00:00');
+              return (
+                <View key={note.id} style={[styles.activityCard, { backgroundColor: themeColors.surface }]}>
+                  <LinearGradient
+                    pointerEvents="none"
+                    colors={cardSheenColors}
+                    start={{ x: 0.15, y: 0 }}
+                    end={{ x: 0.85, y: 1 }}
+                    style={styles.cardSheen}
+                  />
+                  <View style={[styles.activityStrip, { backgroundColor: markColor }]} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.activityMain, { color: themeColors.text }]} numberOfLines={3}>
+                      {note.text}
+                    </Text>
+                    <Text style={[styles.activitySub, { color: themeColors.textSecondary }]}>
+                      {noteDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                    </Text>
+                  </View>
+                  <Ionicons name="document-text-outline" size={18} color={themeColors.textTertiary} />
+                </View>
+              );
+            })}
+          </View>
+        )}
         </ScrollView>
-      </SafeAreaView>
-    </GradientBackground>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  errorText: {
-    fontSize: fontSize.lg,
-  },
+  safeArea: { flex: 1 },
+  keyboardAvoid: { flex: 1 },
   content: {
-    padding: spacing.lg,
-    paddingBottom: spacing.xxl,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xs,
+    flexGrow: 1,
   },
-  // Header with Emoji Badge
-  header: {
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  errorText: { fontSize: fontSize.lg, fontWeight: fontWeight.semibold },
+  topBar: {
+    height: 42,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: spacing.xl,
+    marginBottom: spacing.lg,
   },
-  backButton: {
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.medium,
+  topIconBtn: {
+    width: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  headerTitleContainer: {
+  topIconGroup: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: spacing.sm,
+  },
+  titleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
     flex: 1,
     justifyContent: 'center',
-    marginHorizontal: spacing.md,
+    marginHorizontal: spacing.sm,
   },
-  emojiBadge: {
-    width: 40,
-    height: 40,
-    borderRadius: borderRadius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: spacing.sm,
-  },
-  headerEmoji: {
-    fontSize: 24,
-  },
-  headerTitle: {
-    fontSize: fontSize.xl,
-    fontWeight: fontWeight.bold,
-  },
-  headerActionButton: {
-    padding: spacing.xs,
-  },
-  // Large Value Display - Centered with ring
-  valueDisplay: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: spacing.xl,
-    marginBottom: spacing.xl,
-    position: 'relative',
-    minHeight: COUNTER_RING_SIZE + 100, // Ensure enough space for ring and text
-  },
-  ringContainer: {
-    position: 'absolute',
-    width: COUNTER_RING_SIZE,
-    height: COUNTER_RING_SIZE,
-    top: '50%',
-    marginTop: -COUNTER_RING_SIZE / 2, // Center vertically
-    left: '50%',
-    marginLeft: -COUNTER_RING_SIZE / 2, // Center horizontally
+  titleIconWrap: {
+    width: 24,
+    height: 24,
+    borderRadius: borderRadius.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  ringSvg: {
-    position: 'absolute',
-  },
-  largeValue: {
-    fontSize: 80,
-    fontWeight: fontWeight.bold,
-    lineHeight: 80,
-  },
-  valueUnit: {
+  titleEmoji: { fontSize: 16 },
+  titleText: {
     fontSize: fontSize.lg,
-    marginTop: spacing.sm,
-    fontWeight: fontWeight.medium,
-  },
-  // Goal / Progress Module
-  goalModule: {
-    padding: spacing.lg,
-    borderRadius: borderRadius.card, // Increased for more rounded corners
-    borderWidth: 1, // Border width
-    borderColor: 'transparent', // Default transparent, will be overridden by inline style
-    marginBottom: spacing.lg,
-  },
-  goalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.md,
-  },
-  goalTitle: {
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.semibold,
-  },
-  goalSubtitle: {
-    fontSize: fontSize.sm,
-  },
-  setGoalButton: {
-    borderWidth: 1, // Border width
-    borderColor: 'transparent', // Default transparent, will be overridden by inline style
-    borderRadius: borderRadius.lg, // Increased for more rounded corners
-    padding: spacing.md,
-    alignItems: 'center',
-  },
-  setGoalButtonText: {
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.semibold,
-  },
-  // Streak Module
-  streakModule: {
-    flexDirection: 'row',
-    padding: spacing.lg,
-    borderRadius: borderRadius.card, // Increased for more rounded corners
-    borderWidth: 1, // Border width
-    borderColor: 'transparent', // Default transparent, will be overridden by inline style
-    marginBottom: spacing.lg,
-  },
-  streakItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  streakIcon: {
-    fontSize: 24,
-    marginBottom: spacing.xs,
-  },
-  streakValue: {
-    fontSize: fontSize['2xl'],
     fontWeight: fontWeight.bold,
-    marginBottom: spacing.xs,
+    letterSpacing: -0.2,
   },
-  streakLabel: {
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
-  },
-  streakDivider: {
-    width: 1,
-    marginHorizontal: spacing.md,
-  },
-  // Insight Bubble
-  insightBubble: {
-    flexDirection: 'row',
+  ringBlock: {
     alignItems: 'center',
-    padding: spacing.md,
-    borderRadius: borderRadius.lg, // Increased for more rounded corners
-    borderWidth: 1, // Border width
-    borderColor: 'transparent', // Default transparent, will be overridden by inline style
-    marginBottom: spacing.lg,
+    marginBottom: spacing.xl,
   },
-  insightIcon: {
-    fontSize: 20,
-    marginRight: spacing.sm,
-  },
-  insightText: {
-    flex: 1,
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.medium,
-  },
-  insightSubtext: {
-    fontSize: fontSize.sm,
-    marginTop: spacing.xs,
-  },
-  // Quick Action Bar
-  quickActionBar: {
-    flexDirection: 'row',
+  centerReadout: {
+    alignItems: 'center',
     justifyContent: 'center',
+    minHeight: 160,
+  },
+  centerValue: {
+    fontSize: 52,
+    lineHeight: 56,
+    fontWeight: fontWeight.bold,
+    letterSpacing: -1,
+  },
+  centerSub: {
+    marginTop: spacing.xs,
+    fontSize: fontSize.sm,
+    letterSpacing: 2,
+    fontWeight: fontWeight.medium,
+  },
+  actionRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: spacing.md,
     marginBottom: spacing.xl,
   },
-  quickActionButton: {
-    minWidth: 64,
+  actionBtn: {
+    width: 64,
     height: 56,
-    borderRadius: borderRadius.full,
+    borderRadius: borderRadius.lg,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: spacing.lg,
   },
-  quickActionText: {
-    color: '#FFFFFF',
+  actionBtnPrimary: {
+    width: 74,
+    height: 64,
+    borderRadius: borderRadius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionText: {
+    fontSize: 28,
+    lineHeight: 30,
+    fontWeight: fontWeight.bold,
+  },
+  actionPrimaryText: {
+    fontSize: 34,
+    lineHeight: 36,
+    fontWeight: fontWeight.bold,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  statCard: {
+    flex: 1,
+    borderRadius: borderRadius.card,
+    padding: spacing.lg,
+    gap: spacing.xs,
+    overflow: 'hidden',
+  },
+  statKicker: {
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.bold,
+    letterSpacing: 1.2,
+  },
+  statValue: {
+    fontSize: fontSize.xl,
+    lineHeight: 30,
+    fontWeight: fontWeight.bold,
+  },
+  noteCard: {
+    borderRadius: borderRadius.card,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+    overflow: 'hidden',
+  },
+  noteHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  noteTitle: {
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.bold,
+  },
+  noteDate: {
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.medium,
+  },
+  noteInput: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    minHeight: 100,
+    fontSize: fontSize.base,
+    lineHeight: 22,
+  },
+  noteActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.sm,
+    gap: spacing.sm,
+  },
+  noteCharCount: {
+    fontSize: fontSize.xs,
+  },
+  noteActionsButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  noteDeleteLabel: {
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.semibold,
+  },
+  noteDeletePlaceholder: {
+    minWidth: 92,
+  },
+  noteSaveBtn: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.md,
+    minWidth: 104,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 36,
+  },
+  noteCloudRow: {
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: spacing.xs,
+  },
+  noteCloudHint: {
+    fontSize: fontSize.sm,
+    lineHeight: 20,
+  },
+  noteCloudDismiss: {
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.semibold,
+    alignSelf: 'flex-start',
+  },
+  noteSaveLabel: {
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.bold,
+  },
+  activitySection: {
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  activityTitle: {
     fontSize: fontSize.xl,
     fontWeight: fontWeight.bold,
   },
-  // Chart Section
-  chartSection: {
-    padding: spacing.lg,
-    borderRadius: borderRadius.card, // Increased for more rounded corners
-    borderWidth: 1, // Border width
-    borderColor: 'transparent', // Default transparent, will be overridden by inline style
-    marginBottom: spacing.lg,
-    // shadow.card removed per user request
-  },
-  // Action Sheet (Bottom Sheet)
-  actionSheetOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'flex-end',
-    zIndex: 1000,
-  },
-  actionSheetBackdrop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  actionSheet: {
-    borderTopLeftRadius: borderRadius.xl,
-    borderTopRightRadius: borderRadius.xl,
-    paddingBottom: spacing.xl,
-    maxHeight: '50%',
-  },
-  actionSheetHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: borderRadius.full,
-    alignSelf: 'center',
-    marginTop: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  actionSheetItem: {
-    padding: spacing.lg,
-    borderBottomWidth: 1,
-  },
-  actionSheetItemText: {
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.semibold,
-    textAlign: 'center',
-  },
-  // Progress Bar
-  progressBarTrack: {
-    height: 12,
-    borderRadius: borderRadius.full,
+  activityCard: {
+    borderRadius: borderRadius.lg,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
     overflow: 'hidden',
   },
-  progressBarFill: {
-    height: '100%',
+  activityStrip: {
+    width: 4,
+    height: 28,
     borderRadius: borderRadius.full,
   },
+  activityMain: {
+    fontSize: fontSize.base,
+    fontWeight: fontWeight.semibold,
+  },
+  activitySub: {
+    fontSize: fontSize.sm,
+    marginTop: 1,
+  },
+  activityNoteRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    marginTop: spacing.sm,
+    paddingTop: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  activityNoteText: {
+    flex: 1,
+    fontSize: fontSize.sm,
+    lineHeight: 20,
+  },
+  cardSheen: {
+    ...StyleSheet.absoluteFillObject,
+  },
 });
-

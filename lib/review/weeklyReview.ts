@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { addDays, format, subDays } from 'date-fns';
 import { initDatabase, query } from '../db';
 import { env } from '../env';
+import { getAppDate } from '../appDate';
 import { WeeklyReview, WeeklyReviewDay, WeeklyReviewStreakHighlight } from '../../types/WeeklyReview';
 
 type ReviewEvent = {
@@ -44,7 +45,7 @@ const toLabel = (dateStr: string): string => {
   return format(date, 'EEE');
 };
 
-export const getWeekRange = (referenceDate: Date = new Date()) => {
+export const getWeekRange = (referenceDate: Date = getAppDate()) => {
   const weekEndDate = referenceDate;
   const weekStartDate = subDays(weekEndDate, 6);
   return {
@@ -264,7 +265,7 @@ const upsertHistory = async (weekStart: string, totalActivity: number): Promise<
 };
 
 export const getWeeklyReview = async (
-  referenceDate: Date = new Date(),
+  referenceDate: Date = getAppDate(),
   userId?: string
 ): Promise<WeeklyReview> => {
   await initDatabase();

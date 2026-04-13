@@ -14,6 +14,10 @@ web-build/
 .env.local
 .env.production
 
+# Play Console / local submit credentials (never commit)
+google-play-service-account.json
+**/google-play-service-account.json
+
 # macOS
 .DS_Store
 *.DS_Store

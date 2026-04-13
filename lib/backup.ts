@@ -4,6 +4,11 @@ import * as Sharing from 'expo-sharing';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { logger } from './utils/logger';
 import { buildBackupPayload, validateBackupPayload, type BackupPayload } from './features';
+import {
+  markNotesSqliteSupported,
+  loadAllMarkNotes,
+  sqliteUpsertMarkNote,
+} from './db/markNotesSqlite';
 
 const STORAGE_KEYS = {
   counters: '@livra_db_counters',
@@ -14,17 +19,30 @@ const STORAGE_KEYS = {
 
 export async function exportBackup(): Promise<{ success: boolean; message: string }> {
   try {
-    const [countersRaw, eventsRaw, streaksRaw, notesRaw] = await Promise.all([
+    const [countersRaw, eventsRaw, streaksRaw] = await Promise.all([
       AsyncStorage.getItem(STORAGE_KEYS.counters),
       AsyncStorage.getItem(STORAGE_KEYS.events),
       AsyncStorage.getItem(STORAGE_KEYS.streaks),
-      AsyncStorage.getItem(STORAGE_KEYS.notes),
     ]);
 
     const marks   = countersRaw ? JSON.parse(countersRaw) : [];
     const events  = eventsRaw   ? JSON.parse(eventsRaw)   : [];
     const streaks = streaksRaw  ? JSON.parse(streaksRaw)  : [];
-    const notes   = notesRaw    ? JSON.parse(notesRaw)    : [];
+
+    // On native, notes live in the SQLite DB (AsyncStorage key was cleared after migration)
+    let notes: unknown[] = [];
+    if (markNotesSqliteSupported()) {
+      try {
+        notes = await loadAllMarkNotes();
+      } catch (err) {
+        logger.error('[Backup] Failed to load notes from SQLite, falling back to AsyncStorage:', err);
+        const notesRaw = await AsyncStorage.getItem(STORAGE_KEYS.notes);
+        notes = notesRaw ? JSON.parse(notesRaw) : [];
+      }
+    } else {
+      const notesRaw = await AsyncStorage.getItem(STORAGE_KEYS.notes);
+      notes = notesRaw ? JSON.parse(notesRaw) : [];
+    }
 
     const payload = buildBackupPayload(marks, events, streaks, notes);
     const json = JSON.stringify(payload, null, 2);
@@ -83,32 +101,48 @@ export async function importBackup(mode: 'merge' | 'replace' = 'merge'): Promise
 
     const backup = payload as BackupPayload;
 
+    const merge = <T extends { id: string }>(existing: T[], incoming: T[]): T[] => {
+      const ids = new Set(existing.map(x => x.id));
+      return [...existing, ...incoming.filter(x => !ids.has(x.id))];
+    };
+
     if (mode === 'replace') {
       await Promise.all([
         AsyncStorage.setItem(STORAGE_KEYS.counters, JSON.stringify(backup.marks)),
         AsyncStorage.setItem(STORAGE_KEYS.events,   JSON.stringify(backup.events)),
         AsyncStorage.setItem(STORAGE_KEYS.streaks,  JSON.stringify(backup.streaks)),
-        AsyncStorage.setItem(STORAGE_KEYS.notes,    JSON.stringify(backup.notes)),
       ]);
     } else {
-      const [ec, ee, es, en] = await Promise.all([
+      const [ec, ee, es] = await Promise.all([
         AsyncStorage.getItem(STORAGE_KEYS.counters).then(r => r ? JSON.parse(r) : []),
         AsyncStorage.getItem(STORAGE_KEYS.events).then(r   => r ? JSON.parse(r) : []),
         AsyncStorage.getItem(STORAGE_KEYS.streaks).then(r  => r ? JSON.parse(r) : []),
-        AsyncStorage.getItem(STORAGE_KEYS.notes).then(r    => r ? JSON.parse(r) : []),
       ]);
-
-      const merge = <T extends { id: string }>(existing: T[], incoming: T[]): T[] => {
-        const ids = new Set(existing.map(x => x.id));
-        return [...existing, ...incoming.filter(x => !ids.has(x.id))];
-      };
 
       await Promise.all([
         AsyncStorage.setItem(STORAGE_KEYS.counters, JSON.stringify(merge(ec, backup.marks))),
         AsyncStorage.setItem(STORAGE_KEYS.events,   JSON.stringify(merge(ee, backup.events))),
         AsyncStorage.setItem(STORAGE_KEYS.streaks,  JSON.stringify(merge(es, backup.streaks))),
-        AsyncStorage.setItem(STORAGE_KEYS.notes,    JSON.stringify(merge(en, backup.notes))),
       ]);
+    }
+
+    // Restore notes: use SQLite on native, AsyncStorage on web
+    if (markNotesSqliteSupported()) {
+      // Upsert all notes from backup into SQLite (handles both merge and replace)
+      for (const note of backup.notes) {
+        try {
+          await sqliteUpsertMarkNote(note as any);
+        } catch (err) {
+          logger.error('[Backup] Failed to upsert note into SQLite:', err);
+        }
+      }
+    } else {
+      if (mode === 'replace') {
+        await AsyncStorage.setItem(STORAGE_KEYS.notes, JSON.stringify(backup.notes));
+      } else {
+        const en = await AsyncStorage.getItem(STORAGE_KEYS.notes).then(r => r ? JSON.parse(r) : []);
+        await AsyncStorage.setItem(STORAGE_KEYS.notes, JSON.stringify(merge(en, backup.notes)));
+      }
     }
 
     logger.log(`[Backup] Restored ${backup.marks.length} marks, ${backup.events.length} events (${mode})`);

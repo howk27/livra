@@ -46,7 +46,7 @@ export const WeeklyReviewHero = ({
           <View style={themedStyles.header}>
             <View>
               <AppText variant="headline" style={themedStyles.title}>
-                Weekly Review
+                Weekly snapshot
               </AppText>
               <AppText variant="caption" style={themedStyles.subtitle}>
                 {weekRange}

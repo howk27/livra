@@ -1,10 +1,21 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  ActivityIndicator,
+  Animated,
+  Platform,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { colors } from '../theme/colors';
-import { spacing, borderRadius, fontSize, fontWeight } from '../theme/tokens';
+import { spacing, borderRadius, fontSize, fontWeight, shadow } from '../theme/tokens';
 import { useEffectiveTheme, useUIStore } from '../state/uiSlice';
 import { useCounters } from '../hooks/useCounters';
 import { useNotifications } from '../hooks/useNotifications';
@@ -16,9 +27,7 @@ import { logger } from '../lib/utils/logger';
 import CounterIcon from '@/src/components/icons/CounterIcon';
 import { resolveCounterIconType } from '@/src/components/icons/IconResolver';
 import { applyOpacity } from '@/src/components/icons/color';
-
-const APP_BRAND_LOGO_LIGHT = require('../assets/branding/Logo NoBG.png');
-const APP_BRAND_LOGO_DARK = require('../assets/branding/Logo NoBG dark.png');
+import { BigIncrementButton } from '../components/BigIncrementButton';
 
 const SAMPLE_COUNTERS = [
   { name: 'Gym Sessions', emoji: '🏋️', color: '#3B82F6', unit: 'sessions' as const },
@@ -28,390 +37,388 @@ const SAMPLE_COUNTERS = [
   { name: 'Study Hours', emoji: '📚', color: '#F97316', unit: 'sessions' as const },
 ];
 
+type ActivationMark = {
+  id: string;
+  name: string;
+  emoji: string | null;
+  color: string | null;
+  unit?: string | null;
+};
+
+type Phase = 'loading' | 'select' | 'activate';
+
 export default function OnboardingScreen() {
   const theme = useEffectiveTheme();
   const themeColors = colors[theme];
   const router = useRouter();
 
   const { completeOnboarding } = useUIStore();
-  const { createCounter } = useCounters();
+  const { createCounter, incrementCounter } = useCounters();
   const { requestPermissions } = useNotifications();
   const { user } = useAuth();
   const { showError, showSuccess, showWarning } = useNotification();
 
-  const [step, setStep] = useState(0);
-  const [selectedCounters, setSelectedCounters] = useState<number[]>([]);
-  const [skipSetup, setSkipSetup] = useState<boolean | null>(null); // null = not answered, true = skip, false = continue
-  const [checkingExistingCounters, setCheckingExistingCounters] = useState(true);
+  const [phase, setPhase] = useState<Phase>('loading');
+  const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
+  const [activationMark, setActivationMark] = useState<ActivationMark | null>(null);
+  const [creatingMarks, setCreatingMarks] = useState(false);
+  const [incrementing, setIncrementing] = useState(false);
+  const [celebrated, setCelebrated] = useState(false);
 
-  // Check if user already has counters in the database - if so, skip onboarding
+  const scaleAnims = useRef(SAMPLE_COUNTERS.map(() => new Animated.Value(1))).current;
+
+  const pulseSelect = useCallback((index: number, selected: boolean) => {
+    Animated.spring(scaleAnims[index], {
+      toValue: selected ? 1.03 : 1,
+      friction: 7,
+      tension: 140,
+      useNativeDriver: true,
+    }).start();
+  }, [scaleAnims]);
+
   useEffect(() => {
-    const checkExistingCounters = async () => {
-      // Only check for authenticated users with valid UUID
+    let cancelled = false;
+
+    const resolveEntryPhase = async () => {
       if (!user?.id) {
-        setCheckingExistingCounters(false);
+        if (!cancelled) setPhase('select');
         return;
       }
 
       try {
-        // Query database directly for existing counters (non-deleted)
-        const existingCounters = await query<{ id: string }>(
-          'SELECT id FROM lc_counters WHERE user_id = ? AND deleted_at IS NULL LIMIT 1',
-          [user.id]
+        const rows = await query<ActivationMark>(
+          `SELECT id, name, emoji, color, unit FROM lc_counters WHERE user_id = ? AND deleted_at IS NULL ORDER BY sort_index ASC, created_at ASC LIMIT 1`,
+          [user.id],
         );
 
-        if (existingCounters && existingCounters.length > 0) {
-          // User already has counters - skip onboarding
-          logger.log('[Onboarding] User already has counters in database - skipping onboarding');
-          try {
-            await requestPermissions(); // Still request permissions
-            await completeOnboarding(user.id);
-            router.replace('/(tabs)/home');
-          } catch (error) {
-            logger.error('[Onboarding] Error completing onboarding after finding existing counters:', error);
-            // Even if this fails, we can still navigate (onboarding state might already be set)
-            router.replace('/(tabs)/home');
-          }
-          return;
+        if (cancelled) return;
+
+        if (rows?.length) {
+          setActivationMark(rows[0]);
+          setPhase('activate');
+        } else {
+          setPhase('select');
         }
       } catch (error) {
-        logger.error('[Onboarding] Error checking for existing counters:', error);
-        // Continue with onboarding if check fails
-      } finally {
-        setCheckingExistingCounters(false);
+        logger.error('[Onboarding] Error resolving entry phase:', error);
+        if (!cancelled) setPhase('select');
       }
     };
 
-    checkExistingCounters();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]); // Only re-run when user ID changes
+    resolveEntryPhase();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   const handleCounterToggle = (index: number) => {
-    if (selectedCounters.includes(index)) {
-      setSelectedCounters(selectedCounters.filter((i) => i !== index));
-    } else {
-      if (selectedCounters.length < 2) {
-        setSelectedCounters([...selectedCounters, index]);
-      }
-    }
-  };
-
-  const handleSkipSetup = async (skip: boolean) => {
-    setSkipSetup(skip);
-    
-    if (skip) {
-      // User wants to skip setup - complete onboarding immediately and go to dashboard
-      try {
-        await requestPermissions(); // Still request permissions even if skipping
-        await completeOnboarding(user?.id);
-        router.replace('/(tabs)/home');
-      } catch (error) {
-        logger.error('Error completing onboarding:', error);
-        showError('Error completing onboarding. Please try again.');
-      }
-    } else {
-      // User wants to continue with setup - go to counter selection
-      setStep(1);
-    }
-  };
-
-  const handleNext = async () => {
-    if (step === 0) {
-      // This shouldn't happen if user answered yes/no
+    if (selectedIndices.includes(index)) {
+      setSelectedIndices(selectedIndices.filter((i) => i !== index));
+      pulseSelect(index, false);
       return;
-    } else if (step === 1) {
-      setStep(2);
-    } else {
-      try {
-        // Set sync timestamp BEFORE creating counters
-        // This ensures that when sync happens, it won't pull old counters from Supabase
-        // Only counters created/updated after this timestamp will be pulled
-        const onboardingStartTime = new Date().toISOString();
-        await AsyncStorage.setItem('last_synced_at', onboardingStartTime);
+    }
+    if (selectedIndices.length >= 2) {
+      const [first, second] = selectedIndices;
+      setSelectedIndices([second, index]);
+      pulseSelect(first, false);
+      pulseSelect(index, true);
+      return;
+    }
+    setSelectedIndices([...selectedIndices, index]);
+    pulseSelect(index, true);
+  };
 
-        // Create selected counters
-        // IMPORTANT: Create all counters with skipSync=true to prevent multiple syncs during onboarding
-        // This prevents each counter creation from triggering a sync that might pull back old/deleted counters
-        const duplicateCounterNames: string[] = [];
-        const createdCounters: string[] = [];
-        const errors: string[] = [];
-        
-        for (const index of selectedCounters) {
-          const sample = SAMPLE_COUNTERS[index];
-          try {
-            await createCounter({
-              name: sample.name,
-              emoji: sample.emoji,
-              color: sample.color,
-              unit: sample.unit,
-              enable_streak: true,
-              user_id: user?.id!,
-              skipSync: true, // Skip sync during onboarding to prevent pulling old counters
-            });
-            createdCounters.push(sample.name);
-          } catch (counterError) {
-            // Handle duplicate counter/mark error gracefully - skip it and continue
-            if (counterError instanceof DuplicateCounterError || counterError instanceof DuplicateMarkError) {
-              const counterName = counterError instanceof DuplicateCounterError 
-                ? counterError.counterName 
-                : (counterError as any).markName || sample.name;
-              logger.warn(`[Onboarding] Duplicate counter detected: "${counterName}" - skipping`);
-              duplicateCounterNames.push(counterName);
-              // Continue with other counters instead of stopping
-            } else {
-              // Log unexpected errors but continue with other counters
-              logger.error(`[Onboarding] Error creating counter "${sample.name}":`, counterError);
-              errors.push(sample.name);
-            }
-          }
-        }
+  const handleContinueFromSelect = async () => {
+    if (selectedIndices.length < 1 || !user?.id) return;
 
-        // Show user-friendly summary after all counters are processed
-        if (duplicateCounterNames.length > 0 || errors.length > 0) {
-          if (duplicateCounterNames.length > 0) {
-            const duplicateMessage = `${duplicateCounterNames.length > 1 ? 'Some marks' : 'A mark'} you selected already exists (${duplicateCounterNames.join(', ')}). ${duplicateCounterNames.length > 1 ? 'They were' : 'It was'} skipped.`;
-            showWarning(duplicateMessage);
-          }
-          if (errors.length > 0) {
-            const errorMessage = `There was an error creating ${errors.length} mark(s): ${errors.join(', ')}.`;
-            showError(errorMessage);
-          }
-          if (createdCounters.length > 0) {
-            const successMessage = `Successfully created ${createdCounters.length} mark(s): ${createdCounters.join(', ')}.`;
-            showSuccess(successMessage);
-          }
-        } else if (createdCounters.length > 0) {
-          // Show success message if all marks were created successfully
-          const successMessage = `Successfully created ${createdCounters.length} mark(s): ${createdCounters.join(', ')}.`;
-          showSuccess(successMessage);
-        }
+    setCreatingMarks(true);
+    try {
+      const onboardingStartTime = new Date().toISOString();
+      await AsyncStorage.setItem('last_synced_at', onboardingStartTime);
 
-        // Request notification permissions
-        await requestPermissions();
+      const ordered = [...selectedIndices].sort((a, b) => a - b);
+      const created: ActivationMark[] = [];
+      const duplicateNames: string[] = [];
+      const failedNames: string[] = [];
 
-        // Complete onboarding (save to both local storage and database)
-        await completeOnboarding(user?.id);
-        
-        // Navigate to home - sync will happen automatically via useCounters hook
-        // The sync will push the new counters but won't pull old ones because of the timestamp we set
-        router.replace('/(tabs)/home');
-      } catch (error) {
-        // Handle unexpected errors during onboarding completion
-        logger.error('Error completing onboarding:', error);
-        const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
-        
-        showError(`There was an issue completing your setup: ${errorMessage}. You can continue using the app and complete setup later.`);
-        // Try to complete onboarding even if there was an error
+      for (const index of ordered) {
+        const sample = SAMPLE_COUNTERS[index];
         try {
-          await completeOnboarding(user?.id);
-        } catch (fallbackError) {
-          // If even that fails, just log it (user can fix later)
-          logger.error('Error in fallback onboarding completion:', fallbackError);
+          const mark = await createCounter({
+            name: sample.name,
+            emoji: sample.emoji,
+            color: sample.color,
+            unit: sample.unit,
+            enable_streak: true,
+            user_id: user.id,
+            skipSync: true,
+          });
+          created.push({
+            id: mark.id,
+            name: mark.name,
+            emoji: mark.emoji ?? sample.emoji,
+            color: mark.color ?? sample.color,
+            unit: mark.unit,
+          });
+        } catch (counterError) {
+          if (counterError instanceof DuplicateCounterError || counterError instanceof DuplicateMarkError) {
+            const counterName =
+              counterError instanceof DuplicateCounterError
+                ? counterError.counterName
+                : counterError.markName;
+            duplicateNames.push(counterName);
+          } else {
+            logger.error(`[Onboarding] Error creating mark "${sample.name}":`, counterError);
+            failedNames.push(sample.name);
+          }
         }
-        // Navigate to home after a short delay to allow notification to be seen
-        setTimeout(() => {
-          router.replace('/(tabs)/home');
-        }, 2000);
       }
+
+      if (duplicateNames.length > 0) {
+        showWarning(
+          `${duplicateNames.length > 1 ? 'Some marks' : 'A mark'} already exist (${duplicateNames.join(', ')}). Skipped.`,
+        );
+      }
+      if (failedNames.length > 0) {
+        showError(`Could not create: ${failedNames.join(', ')}.`);
+      }
+
+      if (created.length === 0) {
+        showError('Add at least one new mark to continue.');
+        return;
+      }
+
+      setActivationMark(created[0]);
+      setPhase('activate');
+      if (created.length > 1) {
+        showSuccess(`${created.length} marks added. Log your first one below.`);
+      }
+    } catch (error) {
+      logger.error('[Onboarding] Error creating marks:', error);
+      showError('Something went wrong. Please try again.');
+    } finally {
+      setCreatingMarks(false);
     }
   };
 
-  const canContinue = (step === 0 && skipSetup !== null) || step === 1 || (step === 2 && selectedCounters.length > 0);
+  const finishOnboarding = useCallback(async () => {
+    try {
+      await requestPermissions();
+    } catch (e) {
+      logger.warn('[Onboarding] Notification permission:', e);
+    }
+    try {
+      const remoteOk = await completeOnboarding(user?.id);
+      if (user?.id && !remoteOk) {
+        showWarning(
+          'You are set up on this device. Syncing completion to your account failed — stay online and open the app again so other devices pick it up.',
+        );
+      }
+      router.replace('/(tabs)/home');
+    } catch (error) {
+      logger.error('[Onboarding] Error finishing onboarding:', error);
+      showError('Could not finish setup. Please try again.');
+    }
+  }, [completeOnboarding, requestPermissions, router, user?.id, showWarning, showError]);
 
-  // Show loading indicator while checking for existing counters
-  if (checkingExistingCounters) {
+  const handleFirstCompletion = async () => {
+    if (!activationMark || !user?.id || incrementing || celebrated) return;
+
+    setIncrementing(true);
+    try {
+      await incrementCounter(activationMark.id, user.id, 1);
+      if (Platform.OS !== 'web') {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+      setCelebrated(true);
+      setTimeout(() => {
+        finishOnboarding();
+      }, 900);
+    } catch (error) {
+      logger.error('[Onboarding] First completion increment failed:', error);
+      showError('Could not log completion. Try again.');
+      setIncrementing(false);
+    }
+  };
+
+  const canContinueSelect = selectedIndices.length >= 1 && selectedIndices.length <= 2;
+  const ctaLabel = 'Continue';
+
+  if (phase === 'loading') {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={themeColors.primary} />
+          <ActivityIndicator size="large" color={themeColors.accent.primary} />
         </View>
       </SafeAreaView>
     );
   }
 
+  const markColor = activationMark?.color || themeColors.accent.primary;
+  const activationIconType =
+    activationMark &&
+    resolveCounterIconType({
+      name: activationMark.name,
+      emoji: activationMark.emoji || '📊',
+      color: activationMark.color || markColor,
+      unit: (activationMark.unit as 'sessions') || 'sessions',
+    });
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
-      <ScrollView contentContainerStyle={styles.content}>
-        {step === 0 && (
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        {phase === 'select' && (
           <View style={styles.stepContent}>
-            <View style={styles.appIconContainer}>
-              <Image
-                source={theme === 'dark' ? APP_BRAND_LOGO_DARK : APP_BRAND_LOGO_LIGHT}
-                style={styles.appIcon}
-                resizeMode="contain"
-              />
-            </View>
-            <Text style={[styles.title, { color: themeColors.text }]}>Welcome to Livra</Text>
-            <Text style={[styles.description, { color: themeColors.textSecondary }]}>
-              Track your progress without guilt or pressure. Simple marks for the things that
-              matter to you.
-            </Text>
-            
-            <View style={styles.yesNoContainer}>
-              <Text style={[styles.yesNoQuestion, { color: themeColors.text }]}>
-                Would you like to set up your first marks now?
-              </Text>
-              <View style={styles.yesNoButtons}>
-                <TouchableOpacity
-                  style={[
-                    styles.yesNoButton,
-                    {
-                      backgroundColor: skipSetup === false ? themeColors.primary : themeColors.surface,
-                      borderColor: themeColors.border,
-                    },
-                  ]}
-                  onPress={() => handleSkipSetup(false)}
-                >
-                  <Text
-                    style={[
-                      styles.yesNoButtonText,
-                      { color: skipSetup === false ? '#FFFFFF' : themeColors.text },
-                    ]}
-                  >
-                    Yes, let's set up
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.yesNoButton,
-                    {
-                      backgroundColor: skipSetup === true ? themeColors.primary : themeColors.surface,
-                      borderColor: themeColors.border,
-                    },
-                  ]}
-                  onPress={() => handleSkipSetup(true)}
-                >
-                  <Text
-                    style={[
-                      styles.yesNoButtonText,
-                      { color: skipSetup === true ? '#FFFFFF' : themeColors.text },
-                    ]}
-                  >
-                    No, skip for now
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        )}
-
-        {step === 1 && (
-          <View style={styles.stepContent}>
-            <Text style={[styles.stepTitle, { color: themeColors.text }]}>
-              Choose Your First Marks
-            </Text>
+            <Text style={[styles.stepTitle, { color: themeColors.text }]}>Choose your first marks</Text>
             <Text style={[styles.stepDescription, { color: themeColors.textSecondary }]}>
-              Select up to 2 sample marks to get started (you can create more later)
+              Pick 1–2 to start. You can add more anytime from the home screen.
             </Text>
 
             <View style={styles.counterOptions}>
               {SAMPLE_COUNTERS.map((counter, index) => {
                 const iconType = resolveCounterIconType(counter);
-                const isSelected = selectedCounters.includes(index);
+                const isSelected = selectedIndices.includes(index);
 
                 return (
-                  <TouchableOpacity
-                    key={index}
-                    style={[
-                      styles.counterOption,
-                      {
-                        backgroundColor: isSelected
-                          ? applyOpacity(themeColors.primary, 0.12)
-                          : themeColors.surface,
-                        borderColor: isSelected ? themeColors.primary : themeColors.border,
-                      },
-                    ]}
-                    onPress={() => handleCounterToggle(index)}
-                    activeOpacity={0.7}
+                  <Animated.View
+                    key={counter.name}
+                    style={{ transform: [{ scale: scaleAnims[index] }] }}
                   >
-                    <View style={styles.iconContainer}>
-                      {iconType ? (
-                        <CounterIcon
-                          type={iconType}
-                          size={32}
-                          variant="withBackground"
-                          fallbackEmoji={counter.emoji}
-                          ariaLabel={`${counter.name} mark icon`}
-                          color={counter.color}
-                        />
-                      ) : (
-                        <Text style={styles.counterEmoji}>{counter.emoji}</Text>
-                      )}
-                    </View>
-                    <Text style={[styles.counterName, { color: themeColors.text }]}>
-                      {counter.name}
-                    </Text>
-                    {isSelected && (
-                      <View style={styles.checkmark}>
-                        <Text style={styles.checkmarkText}>✓</Text>
+                    <TouchableOpacity
+                      style={[
+                        styles.counterOption,
+                        {
+                          backgroundColor: isSelected
+                            ? applyOpacity(themeColors.accent.primary, theme === 'dark' ? 0.22 : 0.14)
+                            : themeColors.surface,
+                          borderColor: isSelected ? themeColors.accent.primary : themeColors.border,
+                          borderWidth: isSelected ? 2 : StyleSheet.hairlineWidth,
+                        },
+                        isSelected && shadow.md,
+                      ]}
+                      onPress={() => handleCounterToggle(index)}
+                      activeOpacity={0.75}
+                    >
+                      <View
+                        style={[
+                          styles.iconContainer,
+                          isSelected && {
+                            backgroundColor: applyOpacity(counter.color, 0.2),
+                            borderRadius: borderRadius.md,
+                            padding: spacing.xs,
+                          },
+                        ]}
+                      >
+                        {iconType ? (
+                          <CounterIcon
+                            type={iconType}
+                            size={isSelected ? 36 : 32}
+                            variant="withBackground"
+                            fallbackEmoji={counter.emoji}
+                            ariaLabel={`${counter.name} mark icon`}
+                            color={counter.color}
+                          />
+                        ) : (
+                          <Text style={[styles.counterEmoji, isSelected && { fontSize: fontSize['3xl'] }]}>
+                            {counter.emoji}
+                          </Text>
+                        )}
                       </View>
-                    )}
-                  </TouchableOpacity>
+                      <Text style={[styles.counterName, { color: themeColors.text }]}>{counter.name}</Text>
+                      {isSelected ? (
+                        <View style={[styles.checkmark, { backgroundColor: themeColors.accent.primary }]}>
+                          <Ionicons name="checkmark" size={18} color={themeColors.text} />
+                        </View>
+                      ) : null}
+                    </TouchableOpacity>
+                  </Animated.View>
                 );
               })}
+            </View>
+
+            <TouchableOpacity
+              style={[
+                styles.primaryCta,
+                { backgroundColor: themeColors.accent.primary },
+                (!canContinueSelect || creatingMarks) && styles.primaryCtaDisabled,
+                shadow.md,
+              ]}
+              onPress={handleContinueFromSelect}
+              disabled={!canContinueSelect || creatingMarks}
+              activeOpacity={0.88}
+            >
+              {creatingMarks ? (
+                <ActivityIndicator color={themeColors.text} />
+              ) : (
+                <Text style={[styles.primaryCtaText, { color: themeColors.text }]}>{ctaLabel}</Text>
+              )}
+            </TouchableOpacity>
+
+            <View style={styles.indicators}>
+              <View style={[styles.indicator, { backgroundColor: themeColors.accent.primary }]} />
+              <View style={[styles.indicator, { backgroundColor: themeColors.border }]} />
             </View>
           </View>
         )}
 
-        {step === 2 && (
+        {phase === 'activate' && activationMark && (
           <View style={styles.stepContent}>
-            <Text style={styles.emoji}>🔔</Text>
-            <Text style={[styles.stepTitle, { color: themeColors.text }]}>
-              Stay on Track with Reminders
-            </Text>
+            <Text style={[styles.stepTitle, { color: themeColors.text }]}>Log your first completion</Text>
             <Text style={[styles.stepDescription, { color: themeColors.textSecondary }]}>
-              Get gentle reminders to update your marks. You can customize these later in
-              settings.
+              Tap +1 on <Text style={{ fontWeight: fontWeight.semibold }}>{activationMark.name}</Text> to see how
+              Livra works.
             </Text>
-          </View>
-        )}
 
-        {/* Navigation Buttons */}
-        {step > 0 && (
-          <View style={styles.navigation}>
-            {step > 1 && (
-              <TouchableOpacity
-                style={[styles.button, { backgroundColor: themeColors.surface }]}
-                onPress={() => setStep(step - 1)}
-              >
-                <Text style={[styles.buttonText, { color: themeColors.text }]}>Back</Text>
-              </TouchableOpacity>
-            )}
-            
-            <TouchableOpacity
-              style={[
-                styles.button,
-                styles.primaryButton,
-                { backgroundColor: themeColors.primary },
-                !canContinue && styles.disabledButton,
-              ]}
-              onPress={handleNext}
-              disabled={!canContinue}
-            >
-              <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>
-                {step === 2 ? 'Get Started' : 'Next'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Step Indicators */}
-        <View style={styles.indicators}>
-          {[0, 1, 2].map((i) => (
             <View
-              key={i}
               style={[
-                styles.indicator,
+                styles.activateCard,
                 {
-                  backgroundColor:
-                    i === step ? themeColors.primary : themeColors.border,
+                  backgroundColor: themeColors.surface,
+                  borderColor: themeColors.border,
                 },
+                celebrated && { borderColor: themeColors.success, borderWidth: 2 },
               ]}
-            />
-          ))}
-        </View>
-      </ScrollView>
+            >
+              <View style={[styles.activateIconWrap, { backgroundColor: applyOpacity(markColor, 0.15) }]}>
+                {activationIconType ? (
+                  <CounterIcon
+                    type={activationIconType}
+                    size={44}
+                    variant="withBackground"
+                    fallbackEmoji={activationMark.emoji || '📊'}
+                    ariaLabel={`${activationMark.name} icon`}
+                    color={activationMark.color || markColor}
+                  />
+                ) : (
+                  <Text style={styles.activateEmoji}>{activationMark.emoji || '📊'}</Text>
+                )}
+              </View>
+              <Text style={[styles.activateName, { color: themeColors.text }]}>{activationMark.name}</Text>
 
+              {celebrated ? (
+                <View style={styles.celebrateBlock}>
+                  <Ionicons name="checkmark-circle" size={56} color={themeColors.success} />
+                  <Text style={[styles.celebrateTitle, { color: themeColors.text }]}>Nice work!</Text>
+                  <Text style={[styles.celebrateSub, { color: themeColors.textSecondary }]}>
+                    Taking you to your marks…
+                  </Text>
+                </View>
+              ) : (
+                <BigIncrementButton
+                  onPress={handleFirstCompletion}
+                  disabled={incrementing}
+                  label="+1"
+                />
+              )}
+            </View>
+
+            <View style={styles.indicators}>
+              <View style={[styles.indicator, { backgroundColor: themeColors.border }]} />
+              <View style={[styles.indicator, { backgroundColor: themeColors.accent.primary }]} />
+            </View>
+          </View>
+        )}
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -434,37 +441,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  appIconContainer: {
-    marginBottom: spacing.xl,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 8,
-    },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 12,
-  },
-  appIcon: {
-    width: 180,
-    height: 180,
-  },
-  emoji: {
-    fontSize: 80,
-    marginBottom: spacing.xl,
-  },
-  title: {
-    fontSize: fontSize['4xl'],
-    fontWeight: fontWeight.bold,
-    textAlign: 'center',
-    marginBottom: spacing.md,
-  },
-  description: {
-    fontSize: fontSize.lg,
-    textAlign: 'center',
-    lineHeight: 28,
-    marginBottom: spacing.xl,
+    minHeight: 420,
   },
   stepTitle: {
     fontSize: fontSize['2xl'],
@@ -477,6 +454,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 24,
     marginBottom: spacing.xl,
+    paddingHorizontal: spacing.sm,
   },
   counterOptions: {
     width: '100%',
@@ -486,52 +464,40 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: spacing.md,
     borderRadius: borderRadius.lg,
-    borderWidth: 2,
     marginBottom: spacing.sm,
     position: 'relative',
   },
   iconContainer: {
-    marginRight: 15,
+    marginRight: spacing.md,
   },
   counterEmoji: {
     fontSize: fontSize['2xl'],
   },
   counterName: {
     fontSize: fontSize.lg,
-    fontWeight: fontWeight.medium,
+    fontWeight: fontWeight.semibold,
     flex: 1,
   },
   checkmark: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#10B981',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  checkmarkText: {
-    color: '#FFFFFF',
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.bold,
-  },
-  navigation: {
-    flexDirection: 'row',
-    gap: spacing.md,
+  primaryCta: {
+    width: '100%',
     marginTop: spacing.xl,
-  },
-  button: {
-    flex: 1,
-    padding: spacing.md,
+    paddingVertical: spacing.md,
     borderRadius: borderRadius.lg,
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 52,
   },
-  primaryButton: {
-    flex: 2,
+  primaryCtaDisabled: {
+    opacity: 0.45,
   },
-  disabledButton: {
-    opacity: 0.5,
-  },
-  buttonText: {
+  primaryCtaText: {
     fontSize: fontSize.lg,
     fontWeight: fontWeight.semibold,
   },
@@ -539,39 +505,46 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     gap: spacing.sm,
-    marginTop: spacing.xl,
+    marginTop: spacing['3xl'],
   },
   indicator: {
     width: 8,
     height: 8,
     borderRadius: 4,
   },
-  yesNoContainer: {
-    marginTop: spacing.xl,
-    alignItems: 'center',
-  },
-  yesNoQuestion: {
-    fontSize: fontSize.xl,
-    fontWeight: fontWeight.semibold,
-    textAlign: 'center',
-    marginBottom: spacing.xl,
-  },
-  yesNoButtons: {
+  activateCard: {
     width: '100%',
-    flexDirection: 'row',
-    gap: spacing.md,
+    alignItems: 'center',
+    padding: spacing.xl,
+    borderRadius: borderRadius.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: spacing.lg,
   },
-  yesNoButton: {
-    flex: 1,
-    padding: spacing.lg,
-    borderRadius: borderRadius.lg,
-    borderWidth: 1,
+  activateIconWrap: {
+    padding: spacing.md,
+    borderRadius: borderRadius.xl,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  yesNoButtonText: {
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.semibold,
+  activateEmoji: {
+    fontSize: 44,
+  },
+  activateName: {
+    fontSize: fontSize.xl,
+    fontWeight: fontWeight.bold,
+    textAlign: 'center',
+  },
+  celebrateBlock: {
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.md,
+  },
+  celebrateTitle: {
+    fontSize: fontSize.xl,
+    fontWeight: fontWeight.bold,
+  },
+  celebrateSub: {
+    fontSize: fontSize.sm,
+    textAlign: 'center',
   },
 });
-

@@ -5,11 +5,18 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getSupabaseClient } from '../lib/supabase';
 import { logger } from '../lib/utils/logger';
 
+/** AsyncStorage key — user has finished onboarding (incl. first-completion step). Legacy: `is_onboarded`. */
+export const ONBOARDING_COMPLETED_STORAGE_KEY = 'has_completed_onboarding';
+export const ONBOARDING_COMPLETED_LEGACY_KEY = 'is_onboarded';
+/** Set when local completion succeeded but profile.onboarding_completed could not be updated (cross-device may lag). */
+export const ONBOARDING_REMOTE_PENDING_KEY = 'onboarding_remote_pending';
+
 interface UIState {
   themeMode: ThemeMode;
   accentColor: AccentColor;
   sortBy: SortOption;
   searchQuery: string;
+  /** True when user has completed onboarding (same as `hasCompletedOnboarding` in product copy). */
   isOnboarded: boolean;
   uiStateLoaded: boolean; // Track if UI state has been loaded from storage
   
@@ -18,7 +25,8 @@ interface UIState {
   setAccentColor: (color: AccentColor) => Promise<void>;
   setSortBy: (sort: SortOption) => void;
   setSearchQuery: (query: string) => void;
-  completeOnboarding: (userId?: string) => Promise<void>;
+  /** Returns false if logged-in cloud update failed (local completion still applied). */
+  completeOnboarding: (userId?: string) => Promise<boolean>;
   loadUIState: (userId?: string) => Promise<void>;
   getEffectiveTheme: () => 'light' | 'dark';
 }
@@ -50,40 +58,54 @@ export const useUIStore = create<UIState>((set, get) => ({
   },
 
   completeOnboarding: async (userId?: string) => {
-    set({ isOnboarded: true });
     const supabase = getSupabaseClient();
-    
-    // Save to AsyncStorage for offline support
-    await AsyncStorage.setItem('is_onboarded', 'true');
-    
-    // Save to database if user is logged in (for cross-device sync)
-    if (userId) {
+    const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
+    const isSupabaseConfigured = Boolean(supabaseUrl && !supabaseUrl.includes('placeholder'));
+
+    let remoteOk = true;
+
+    if (userId && isSupabaseConfigured) {
       try {
         const { error } = await supabase
           .from('profiles')
           .update({ onboarding_completed: true })
           .eq('id', userId);
-        
+
         if (error) {
-          logger.error('Error updating onboarding status in database:', error);
-          // Don't throw - AsyncStorage is already updated, so local state is fine
+          logger.error('[UIState] profile onboarding_completed update failed:', error);
+          remoteOk = false;
+        } else {
+          await AsyncStorage.removeItem(ONBOARDING_REMOTE_PENDING_KEY);
         }
       } catch (error) {
-        logger.error('Error updating onboarding status in database:', error);
-        // Don't throw - AsyncStorage is already updated, so local state is fine
+        logger.error('[UIState] profile onboarding_completed update threw:', error);
+        remoteOk = false;
       }
     }
+
+    await AsyncStorage.multiSet([
+      [ONBOARDING_COMPLETED_STORAGE_KEY, 'true'],
+      [ONBOARDING_COMPLETED_LEGACY_KEY, 'true'],
+    ]);
+    set({ isOnboarded: true });
+
+    if (userId && isSupabaseConfigured && !remoteOk) {
+      await AsyncStorage.setItem(ONBOARDING_REMOTE_PENDING_KEY, '1');
+    }
+
+    return remoteOk;
   },
 
   loadUIState: async (userId?: string) => {
     const supabase = getSupabaseClient();
-    const [themeMode, accentColor, localOnboarded] = await Promise.all([
+    const [themeMode, accentColor, completedModern, completedLegacy] = await Promise.all([
       AsyncStorage.getItem('theme_mode'),
       AsyncStorage.getItem('accent_color'),
-      AsyncStorage.getItem('is_onboarded'),
+      AsyncStorage.getItem(ONBOARDING_COMPLETED_STORAGE_KEY),
+      AsyncStorage.getItem(ONBOARDING_COMPLETED_LEGACY_KEY),
     ]);
 
-    let isOnboarded = localOnboarded === 'true';
+    let isOnboarded = completedModern === 'true' || completedLegacy === 'true';
     
     // If user is logged in, check database for onboarding status (takes precedence)
     if (userId) {
@@ -120,14 +142,12 @@ export const useUIStore = create<UIState>((set, get) => ({
               // Normal query result (success or non-timeout error)
               if (!queryResult.error && queryResult.data?.onboarding_completed) {
                 isOnboarded = true;
-                // Sync to AsyncStorage for offline support
-                await AsyncStorage.setItem('is_onboarded', 'true');
-              } else if (!queryResult.error && queryResult.data && !queryResult.data.onboarding_completed) {
-                // User exists but hasn't completed onboarding
-                isOnboarded = false;
-                // Clear AsyncStorage to match database state
-                await AsyncStorage.removeItem('is_onboarded');
+                await AsyncStorage.multiSet([
+                  [ONBOARDING_COMPLETED_STORAGE_KEY, 'true'],
+                  [ONBOARDING_COMPLETED_LEGACY_KEY, 'true'],
+                ]);
               }
+              // If server says onboarding_completed false, keep local flags + isOnboarded (local-first; no silent wipe).
               // If error (e.g., profile doesn't exist yet), fall back to local storage
             } else {
               // Timeout occurred - silently fall back to local storage

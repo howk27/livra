@@ -1,13 +1,19 @@
 import * as Notifications from 'expo-notifications';
 import { query } from '../lib/db';
-import { formatDate, addDays, daysBetween } from '../lib/date';
-import { Counter, CounterEvent, CounterStreak } from '../types';
+import { formatDate, daysBetween } from '../lib/date';
+import { getAppDate } from '../lib/appDate';
+import { Counter, CounterEvent } from '../types';
 import { computeStreak } from '../hooks/useStreaks';
 import { logger } from '../lib/utils/logger';
+import {
+  runBehaviorNotificationScheduler,
+  cancelBehaviorNotifications,
+} from './behaviorNotifications';
 
 export interface NotificationAnalysis {
   countersNeedingLog: Counter[];
-  countersWithStreakWarning: Array<{ counter: Counter; streak: CounterStreak; daysUntilBreak: number }>;
+  /** currentStreak is derived from increment events (same definition as the app UI). */
+  countersWithStreakWarning: Array<{ counter: Counter; currentStreak: number; daysUntilBreak: number }>;
   inactiveCounters: Array<{ counter: Counter; daysSinceLastActivity: number }>;
 }
 
@@ -137,8 +143,8 @@ const getFunnyPhrases = () => {
 export const analyzeCountersForNotifications = async (
   userId?: string
 ): Promise<NotificationAnalysis> => {
-  const today = formatDate(new Date());
-  const yesterday = formatDate(addDays(new Date(), -1));
+  const appAnchor = getAppDate();
+  const today = formatDate(appAnchor);
 
   // Get all active counters for the authenticated user
   // Require valid userId (must be authenticated)
@@ -167,23 +173,11 @@ export const analyzeCountersForNotifications = async (
     ? await query<CounterEvent>(eventsQuery, counterIds)
     : [];
 
-  // Get all streaks
-  const streaksPlaceholders = counterIds.map(() => '?').join(',');
-  const streaksQuery =
-    counterIds.length > 0
-      ? `SELECT id, user_id, counter_id as mark_id, current_streak, longest_streak, last_increment_date, deleted_at, created_at, updated_at FROM lc_streaks WHERE deleted_at IS NULL AND counter_id IN (${streaksPlaceholders})`
-      : 'SELECT id, user_id, counter_id as mark_id, current_streak, longest_streak, last_increment_date, deleted_at, created_at, updated_at FROM lc_streaks WHERE deleted_at IS NULL';
-  const allStreaks = counterIds.length > 0
-    ? await query<CounterStreak>(streaksQuery, counterIds)
-    : [];
-
-  const streakMap = new Map(allStreaks.map((s) => [s.mark_id, s]));
-
   // Find counters needing log today
   const countersNeedingLog: Counter[] = [];
   const countersWithStreakWarning: Array<{
     counter: Counter;
-    streak: CounterStreak;
+    currentStreak: number;
     daysUntilBreak: number;
   }> = [];
   const inactiveCounters: Array<{
@@ -206,11 +200,11 @@ export const analyzeCountersForNotifications = async (
     const lastActivityDate = counter.last_activity_date;
     let daysSinceLastActivity = 0;
     if (lastActivityDate) {
-      daysSinceLastActivity = Math.abs(daysBetween(new Date(today), new Date(lastActivityDate)));
+      daysSinceLastActivity = Math.abs(daysBetween(appAnchor, new Date(lastActivityDate)));
     } else if (counterEvents.length === 0) {
       // Counter has never been used
       const createdDate = new Date(counter.created_at);
-      daysSinceLastActivity = Math.abs(daysBetween(new Date(today), createdDate));
+      daysSinceLastActivity = Math.abs(daysBetween(appAnchor, createdDate));
     }
 
     // Check if counter needs logging today
@@ -218,26 +212,20 @@ export const analyzeCountersForNotifications = async (
       countersNeedingLog.push(counter);
     }
 
-    // Check streak warnings (if streak is active and might break)
     if (counter.enable_streak) {
-      const streak = streakMap.get(counter.id);
-      if (streak && streak.current_streak > 0) {
-          // Check if last activity was yesterday (streak might break today)
-          const lastStreakDate = streak.last_increment_date;
-          if (lastStreakDate) {
-            const daysSinceLastStreakActivity = Math.abs(
-              daysBetween(new Date(today), new Date(lastStreakDate))
-            );
-
-            // If last activity was yesterday and no activity today, streak will break
-            if (daysSinceLastStreakActivity === 1 && !hasActivityToday) {
-              countersWithStreakWarning.push({
-                counter,
-                streak,
-                daysUntilBreak: 0, // Will break today if not logged
-              });
-            }
-          }
+      const inc = counterEvents.filter((e) => e.event_type === 'increment' && !e.deleted_at);
+      const streakData = computeStreak(inc, appAnchor);
+      if (streakData.current > 0 && streakData.lastDate) {
+        const daysSinceLastStreakActivity = Math.abs(
+          daysBetween(appAnchor, new Date(streakData.lastDate)),
+        );
+        if (daysSinceLastStreakActivity === 1 && !hasActivityToday) {
+          countersWithStreakWarning.push({
+            counter,
+            currentStreak: streakData.current,
+            daysUntilBreak: 0,
+          });
+        }
       }
     }
 
@@ -303,13 +291,13 @@ export const scheduleSmartNotifications = async (
     analysis.countersWithStreakWarning.length > 0
   ) {
     const phrases = getFunnyPhrases();
-    for (const { counter, streak } of analysis.countersWithStreakWarning.slice(
+    for (const { counter, currentStreak } of analysis.countersWithStreakWarning.slice(
       0,
       3
     )) {
       const title = phrases.getStreakWarningTitle();
-      const body = phrases.getStreakWarningBody(counter.name, streak.current_streak);
-      
+      const body = phrases.getStreakWarningBody(counter.name, currentStreak);
+
       const streakId = await Notifications.scheduleNotificationAsync({
         content: {
           title,
@@ -317,7 +305,7 @@ export const scheduleSmartNotifications = async (
           data: {
             type: 'streak_warning',
             counterId: counter.id,
-            streak: streak.current_streak,
+            streak: currentStreak,
           },
         },
         trigger: {
@@ -375,21 +363,24 @@ export const updateNotifications = async (
   config?: Partial<NotificationConfig>
 ): Promise<void> => {
   try {
-    // Check permissions
+    const finalConfig = { ...DEFAULT_CONFIG, ...config };
+    const anyEnabled =
+      finalConfig.enableDailyReminders ||
+      finalConfig.enableStreakWarnings ||
+      finalConfig.enableInactiveReminders;
+
+    if (!anyEnabled) {
+      await cancelBehaviorNotifications();
+      return;
+    }
+
     const { status } = await Notifications.getPermissionsAsync();
     if (status !== 'granted') {
       logger.warn('[NotificationService] Notification permissions not granted');
       return;
     }
 
-    // Analyze counters
-    const analysis = await analyzeCountersForNotifications(userId);
-
-    // Merge config
-    const finalConfig = { ...DEFAULT_CONFIG, ...config };
-
-    // Schedule notifications
-    await scheduleSmartNotifications(analysis, finalConfig);
+    await runBehaviorNotificationScheduler(userId);
   } catch (error) {
     logger.error('[NotificationService] Error updating notifications:', error);
   }

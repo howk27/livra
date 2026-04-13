@@ -1,5 +1,17 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Linking, Alert, Platform } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  ActivityIndicator,
+  Linking,
+  Alert,
+  Platform,
+  Image,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import Constants from 'expo-constants';
@@ -14,13 +26,25 @@ import { ErrorBoundary } from '../components/ErrorBoundary';
 import { diagEvent, exportSupportBundle, getSupportDiagnosticsEnabled } from '../lib/debug/iapDiagnostics';
 import { checkProStatus, normalizeIapError, type NormalizedIapError } from '../lib/iap/iap';
 import { env } from '../lib/env';
+import { applyOpacity } from '@/src/components/icons/color';
 
 const PRO_FEATURES = [
-  { icon: '∞', title: 'Unlimited Marks', description: 'Create as many marks as you need' },
-  { icon: '📊', title: 'CSV Export', description: 'Export your data anytime' },
+  {
+    ion: 'infinite-outline',
+    title: 'Unlimited Marks',
+    description: 'Track every milestone without artificial caps.',
+  },
+  {
+    ion: 'bar-chart-outline',
+    title: 'CSV Export',
+    description: 'Export your history for analysis anytime.',
+  },
 ];
 
 const SHIPPED_PREMIUM_FEATURE_TITLES = ['Unlimited Marks', 'CSV Export'];
+
+/** App store icon — same asset as `expo.icon` in app.json */
+const LIVRA_APP_ICON = require('../assets/icon.png');
 
 type PlanType = 'monthly' | 'yearly';
 
@@ -28,6 +52,7 @@ function PaywallScreenContent() {
   const iapService = getIapService();
   const theme = useEffectiveTheme();
   const themeColors = colors[theme];
+  const isDark = theme === 'dark';
   const router = useRouter();
   const [selectedPlan, setSelectedPlan] = useState<PlanType>('monthly');
   
@@ -866,7 +891,7 @@ function PaywallScreenContent() {
               productId: p?.productId || '—',
               price: (p && p.localizedPrice) ? String(p.localizedPrice) : '—',
               currency: (p && p.currency) ? String(p.currency) : '—',
-              title: (p && p.title) ? String(p.title) : 'Livra Plus',
+              title: (p && p.title) ? String(p.title) : 'Livra+',
               description: (p && p.description) ? String(p.description) : '—',
             };
           }),
@@ -906,19 +931,23 @@ function PaywallScreenContent() {
       <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
         <ScrollView contentContainerStyle={styles.content}>
           <View style={styles.header}>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => router.back()}
               disabled={purchaseInProgress}
               style={{ opacity: purchaseInProgress ? 0.5 : 1 }}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             >
-              <Text style={[styles.closeButton, { color: themeColors.textSecondary }]}>✕</Text>
+              <Ionicons name="close-outline" size={28} color={themeColors.textSecondary} />
             </TouchableOpacity>
           </View>
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color={themeColors.primary} />
-            <Text style={[styles.loadingText, { color: themeColors.textSecondary }]}>
-              {isLoadingProducts ? 'Loading subscription options...' : 'Connecting to store...'}
-            </Text>
+          <View style={styles.loadingBlock}>
+            <Image source={LIVRA_APP_ICON} style={styles.loadingLogo} accessibilityIgnoresInvertColors />
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color={themeColors.primary} />
+              <Text style={[styles.loadingText, { color: themeColors.textSecondary }]}>
+                {isLoadingProducts ? 'Loading subscription options...' : 'Connecting to store...'}
+              </Text>
+            </View>
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -930,53 +959,72 @@ function PaywallScreenContent() {
       <ScrollView contentContainerStyle={styles.content}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={() => router.back()}
             disabled={purchaseInProgress}
             style={{ opacity: purchaseInProgress ? 0.5 : 1 }}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           >
-            <Text style={[styles.closeButton, { color: themeColors.textSecondary }]}>✕</Text>
+            <Ionicons name="close-outline" size={28} color={themeColors.textSecondary} />
           </TouchableOpacity>
         </View>
 
-        {/* Title Section */}
+        {/* Hero + title — structural match to reference */}
         <View style={styles.titleSection}>
-          <Text style={styles.proIcon}>⭐</Text>
+          <View
+            style={[
+              styles.heroIconWrap,
+              {
+                backgroundColor: themeColors.surface,
+                borderColor: applyOpacity(themeColors.border, 0.9),
+              },
+            ]}
+          >
+            <Image
+              source={LIVRA_APP_ICON}
+              style={styles.heroLogo}
+              resizeMode="cover"
+              accessibilityLabel="Livra"
+              accessibilityIgnoresInvertColors
+            />
+          </View>
           <TouchableOpacity onPress={handleTitleTap} activeOpacity={1}>
-            <Text style={[styles.title, { color: themeColors.text }]}>Upgrade to Livra+</Text>
+            <Text style={[styles.title, { color: themeColors.text }]}>Livra+</Text>
           </TouchableOpacity>
           <Text style={[styles.subtitle, { color: themeColors.textSecondary }]}>
             Unlock unlimited tracking potential
           </Text>
         </View>
 
-        {/* Features List */}
+        {/* Features */}
         <View style={styles.featuresList}>
-          {PRO_FEATURES && Array.isArray(PRO_FEATURES) && PRO_FEATURES.map((feature, index) => {
-            if (!feature) return null;
-            return (
+          {PRO_FEATURES.map((feature, index) => (
+            <View
+              key={`feature-${index}-${feature.title}`}
+              style={[
+                styles.featureItem,
+                {
+                  backgroundColor: themeColors.surface,
+                  borderColor: themeColors.border,
+                },
+              ]}
+            >
               <View
-                key={`feature-${index}-${feature.title || index}`}
-                style={[styles.featureItem, { backgroundColor: themeColors.surface }]}
+                style={[
+                  styles.featureIcon,
+                  { backgroundColor: applyOpacity(themeColors.text, isDark ? 0.12 : 0.06) },
+                ]}
               >
-                <View
-                  style={[styles.featureIcon, { backgroundColor: themeColors.primary + '20' }]}
-                >
-                  <Text style={[styles.featureIconText, { color: themeColors.primary }]}>
-                    {feature.icon || ''}
-                  </Text>
-                </View>
-                <View style={styles.featureText}>
-                  <Text style={[styles.featureTitle, { color: themeColors.text }]}>
-                    {feature.title || ''}
-                  </Text>
-                  <Text style={[styles.featureDescription, { color: themeColors.textSecondary }]}>
-                    {feature.description || ''}
-                  </Text>
-                </View>
+                <Ionicons name={feature.ion as any} size={26} color={themeColors.text} />
               </View>
-            );
-          })}
+              <View style={styles.featureText}>
+                <Text style={[styles.featureTitle, { color: themeColors.text }]}>{feature.title}</Text>
+                <Text style={[styles.featureDescription, { color: themeColors.textSecondary }]}>
+                  {feature.description}
+                </Text>
+              </View>
+            </View>
+          ))}
         </View>
 
         {/* Pricing Selection - Only show when products are loaded and connection is ready */}
@@ -988,7 +1036,7 @@ function PaywallScreenContent() {
                 styles.planOption,
                 { 
                   backgroundColor: themeColors.surface,
-                  borderColor: selectedPlan === 'monthly' ? themeColors.primary : themeColors.border,
+                  borderColor: selectedPlan === 'monthly' ? themeColors.accent.primary : themeColors.border,
                   borderWidth: selectedPlan === 'monthly' ? 2 : 1,
                 },
                 selectedPlan === 'monthly' && shadow.md,
@@ -1001,8 +1049,8 @@ function PaywallScreenContent() {
               <View style={styles.planHeader}>
                 <Text style={[styles.planLabel, { color: themeColors.text }]}>Monthly</Text>
                 {selectedPlan === 'monthly' && (
-                  <View style={[styles.selectedBadge, { backgroundColor: themeColors.primary }]}>
-                    <Text style={styles.selectedBadgeText}>✓</Text>
+                  <View style={[styles.selectedBadge, { backgroundColor: themeColors.accent.primary }]}>
+                    <Text style={[styles.selectedBadgeText, { color: themeColors.text }]}>✓</Text>
                   </View>
                 )}
               </View>
@@ -1027,7 +1075,7 @@ function PaywallScreenContent() {
                 styles.planOption,
                 { 
                   backgroundColor: themeColors.surface,
-                  borderColor: selectedPlan === 'yearly' ? themeColors.primary : themeColors.border,
+                  borderColor: selectedPlan === 'yearly' ? themeColors.accent.primary : themeColors.border,
                   borderWidth: selectedPlan === 'yearly' ? 2 : 1,
                 },
                 selectedPlan === 'yearly' && shadow.md,
@@ -1040,13 +1088,13 @@ function PaywallScreenContent() {
               <View style={styles.planHeader}>
                 <View style={styles.planHeaderLeft}>
                   <Text style={[styles.planLabel, { color: themeColors.text }]}>Yearly</Text>
-                  <View style={[styles.bestValueBadge, { backgroundColor: themeColors.accent?.primary || themeColors.primary }]}>
-                    <Text style={styles.bestValueText}>Best value</Text>
+                  <View style={[styles.bestValueBadge, { backgroundColor: themeColors.accent.primary }]}>
+                    <Text style={[styles.bestValueText, { color: themeColors.text }]}>Best value</Text>
                   </View>
                 </View>
                 {selectedPlan === 'yearly' && (
-                  <View style={[styles.selectedBadge, { backgroundColor: themeColors.primary }]}>
-                    <Text style={styles.selectedBadgeText}>✓</Text>
+                  <View style={[styles.selectedBadge, { backgroundColor: themeColors.accent.primary }]}>
+                    <Text style={[styles.selectedBadgeText, { color: themeColors.text }]}>✓</Text>
                   </View>
                 )}
               </View>
@@ -1076,16 +1124,15 @@ function PaywallScreenContent() {
 
         {isSubscribed && (
           <TouchableOpacity
-            style={[styles.subscribedContainer, { backgroundColor: themeColors.surface, borderColor: themeColors.primary }]}
+            style={[
+              styles.purchaseButton,
+              { backgroundColor: themeColors.accent.primary },
+              shadow.lg,
+            ]}
             onPress={handleManageSubscription}
-            activeOpacity={0.8}
+            activeOpacity={0.88}
           >
-            <Text style={[styles.subscribedText, { color: themeColors.primary }]}>
-              Subscribed
-            </Text>
-            <Text style={[styles.subscribedHint, { color: themeColors.textSecondary }]}>
-              Tap to manage
-            </Text>
+            <Text style={[styles.purchaseButtonText, { color: themeColors.text }]}>Manage Livra+</Text>
           </TouchableOpacity>
         )}
 
@@ -1129,7 +1176,7 @@ function PaywallScreenContent() {
           <TouchableOpacity
             style={[
               styles.purchaseButton,
-              { backgroundColor: themeColors.primary },
+              { backgroundColor: themeColors.accent.primary },
               shadow.lg,
               buttonDisabled && styles.disabledButton,
             ]}
@@ -1138,19 +1185,19 @@ function PaywallScreenContent() {
             activeOpacity={0.8}
           >
             {purchaseInProgress ? (
-              <ActivityIndicator color="#FFFFFF" />
+              <ActivityIndicator color={themeColors.text} />
             ) : isSubscribed ? (
-              <Text style={styles.purchaseButtonText}>Subscribed</Text>
+              <Text style={[styles.purchaseButtonText, { color: themeColors.text }]}>Subscribed</Text>
             ) : !isReady ? (
-              <Text style={styles.purchaseButtonText}>Initializing...</Text>
+              <Text style={[styles.purchaseButtonText, { color: themeColors.text }]}>Initializing...</Text>
             ) : connectionStatus !== 'connected' ? (
-              <Text style={styles.purchaseButtonText}>Store Not Available</Text>
+              <Text style={[styles.purchaseButtonText, { color: themeColors.text }]}>Store Not Available</Text>
             ) : !selectedProduct ? (
-              <Text style={styles.purchaseButtonText}>Select a Plan</Text>
+              <Text style={[styles.purchaseButtonText, { color: themeColors.text }]}>Select a Plan</Text>
             ) : pricesMissing || (!selectedPrice || selectedPrice.trim() === '') ? (
-              <Text style={styles.purchaseButtonText}>Loading price...</Text>
+              <Text style={[styles.purchaseButtonText, { color: themeColors.text }]}>Loading price...</Text>
             ) : (
-              <Text style={styles.purchaseButtonText}>
+              <Text style={[styles.purchaseButtonText, { color: themeColors.text }]}>
                 Continue with {selectedPlan === 'monthly' ? 'Monthly' : 'Yearly'} Plan
                 {selectedPrice && selectedPrice.trim() !== '' ? ` - ${selectedPrice}` : ''}
               </Text>
@@ -1166,15 +1213,15 @@ function PaywallScreenContent() {
         )}
         {(operationMessage || lastError) && !productsLoadError && !isStrictFailure && (
           <View
-            style={[
+                style={[
               styles.errorContainer,
               {
                 backgroundColor: themeColors.surface,
                 borderColor:
                   operationState === 'subscribed'
-                    ? (themeColors.success || '#4CAF50')
+                    ? themeColors.success
                     : operationState === 'transient_error' || operationState === 'info'
-                      ? (themeColors.primary || '#007AFF')
+                      ? themeColors.accent.primary
                       : themeColors.error,
               },
             ]}
@@ -1185,9 +1232,9 @@ function PaywallScreenContent() {
                 {
                   color:
                     operationState === 'subscribed'
-                      ? (themeColors.success || '#4CAF50')
+                      ? themeColors.success
                       : operationState === 'transient_error' || operationState === 'info'
-                        ? (themeColors.primary || '#007AFF')
+                        ? themeColors.accent.primary
                         : themeColors.error,
                   fontWeight: fontWeight.semibold,
                 },
@@ -1202,19 +1249,19 @@ function PaywallScreenContent() {
             )}
             {isTransientState && !isAlreadyOwned && (
               <TouchableOpacity
-                style={[styles.retryButton, { backgroundColor: themeColors.primary, marginTop: spacing.md }]}
+                style={[styles.retryButton, { backgroundColor: themeColors.accent.primary, marginTop: spacing.md }]}
                 onPress={handleRetryVerification}
               >
-                <Text style={styles.retryButtonText}>Retry Verification</Text>
+                <Text style={[styles.retryButtonText, { color: themeColors.text }]}>Retry Verification</Text>
               </TouchableOpacity>
             )}
             {isAlreadyOwned && !isSubscribed && (
               <TouchableOpacity
-                style={[styles.retryButton, { backgroundColor: themeColors.primary, marginTop: spacing.sm }]}
+                style={[styles.retryButton, { backgroundColor: themeColors.accent.primary, marginTop: spacing.sm }]}
                 onPress={handleManageSubscription}
                 disabled={purchaseInProgress}
               >
-                <Text style={styles.retryButtonText}>Manage Subscription</Text>
+                <Text style={[styles.retryButtonText, { color: themeColors.text }]}>Manage Subscription</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -1245,25 +1292,25 @@ function PaywallScreenContent() {
             styles.restoreMessageContainer,
             {
               backgroundColor: restoreMessageType === 'success' 
-                ? (themeColors.success || '#4CAF50') + '20'
+                ? applyOpacity(themeColors.success, 0.15)
                 : restoreMessageType === 'info'
-                  ? (themeColors.primary || '#007AFF') + '15'
-                  : (themeColors.error || '#F44336') + '20',
+                  ? applyOpacity(themeColors.accent.primary, 0.18)
+                  : applyOpacity(themeColors.error, 0.15),
               borderColor: restoreMessageType === 'success'
-                ? (themeColors.success || '#4CAF50')
+                ? themeColors.success
                 : restoreMessageType === 'info'
-                  ? (themeColors.primary || '#007AFF')
-                  : (themeColors.error || '#F44336'),
+                  ? themeColors.accent.primary
+                  : themeColors.error,
             }
           ]}>
             <Text style={[
               styles.restoreMessageText,
               {
                 color: restoreMessageType === 'success'
-                  ? (themeColors.success || '#4CAF50')
+                  ? themeColors.success
                   : restoreMessageType === 'info'
-                    ? (themeColors.primary || '#007AFF')
-                    : (themeColors.error || '#F44336'),
+                    ? themeColors.accent.primary
+                    : themeColors.error,
               }
             ]}>
               {restoreMessage}
@@ -1272,51 +1319,44 @@ function PaywallScreenContent() {
         )}
 
 
-        {/* FAQ */}
+        {/* Common questions — reference layout */}
         <View style={styles.faq}>
-          <Text style={[styles.faqTitle, { color: themeColors.text }]}>
-            Frequently Asked Questions
-          </Text>
-          
-          <View style={styles.faqItem}>
-            <Text style={[styles.faqQuestion, { color: themeColors.text }]}>
-              Will this work offline?
+          <View style={styles.faqRuleRow}>
+            <View style={[styles.faqRule, { backgroundColor: themeColors.border }]} />
+            <Text style={[styles.faqRuleLabel, { color: themeColors.textTertiary }]}>
+              COMMON QUESTIONS
             </Text>
+            <View style={[styles.faqRule, { backgroundColor: themeColors.border }]} />
+          </View>
+
+          <View style={styles.faqItem}>
+            <Text style={[styles.faqQuestion, { color: themeColors.text }]}>Does it work offline?</Text>
             <Text style={[styles.faqAnswer, { color: themeColors.textSecondary }]}>
-              Yes! All features work offline. Cloud sync is optional and requires sign-in.
+              Yes. Tracking is local-first; sync runs when you are online.
             </Text>
           </View>
 
           <View style={styles.faqItem}>
-            <Text style={[styles.faqQuestion, { color: themeColors.text }]}>
-              Can I cancel anytime?
-            </Text>
+            <Text style={[styles.faqQuestion, { color: themeColors.text }]}>How do I cancel?</Text>
             <Text style={[styles.faqAnswer, { color: themeColors.textSecondary }]}>
-              Yes! You can cancel your subscription anytime through your App Store account settings. Your subscription will remain active until the end of the current billing period.
+              Manage or cancel anytime in your App Store subscription settings.
             </Text>
           </View>
         </View>
 
-        {/* Legal Links - Required for App Store */}
         <View style={styles.legalLinks}>
-          <TouchableOpacity
-            onPress={() => router.push('/legal/privacy-policy')}
-            style={styles.legalLink}
-          >
-            <Text style={[styles.legalLinkText, { color: themeColors.textSecondary }]}>
-              Privacy Policy
-            </Text>
+          <TouchableOpacity onPress={() => router.push('/legal/privacy-policy')} style={styles.legalLink}>
+            <Text style={[styles.legalLinkText, { color: themeColors.textSecondary }]}>Privacy Policy</Text>
           </TouchableOpacity>
-          <Text style={[styles.legalSeparator, { color: themeColors.textTertiary }]}>•</Text>
-          <TouchableOpacity
-            onPress={() => router.push('/legal/terms-and-conditions')}
-            style={styles.legalLink}
-          >
-            <Text style={[styles.legalLinkText, { color: themeColors.textSecondary }]}>
-              Terms & Conditions
-            </Text>
+          <Text style={[styles.legalSeparator, { color: themeColors.textTertiary }]}> · </Text>
+          <TouchableOpacity onPress={() => router.push('/legal/terms-and-conditions')} style={styles.legalLink}>
+            <Text style={[styles.legalLinkText, { color: themeColors.textSecondary }]}>Terms & Conditions</Text>
           </TouchableOpacity>
         </View>
+
+        <Text style={[styles.copyrightLine, { color: themeColors.textTertiary }]}>
+          © {new Date().getFullYear()} Livra
+        </Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -1345,7 +1385,7 @@ function ErrorDetails({
     if (!showDiagnostics) return;
     const loadDiagnostics = async () => {
       try {
-        const managerDiag = iapService.getDiagnostics();
+        const managerDiag = getIapService().getDiagnostics();
         setDiagnostics({
           manager: managerDiag,
           exports: managerDiag.exportDiagnostics,
@@ -1358,15 +1398,15 @@ function ErrorDetails({
   }, [showDiagnostics]);
 
   return (
-    <View style={styles.errorContainer}>
+    <View style={[styles.errorContainer, { backgroundColor: applyOpacity(themeColors.error, 0.1), borderColor: themeColors.error }]}>
       <Text style={[styles.errorText, { color: themeColors.error }]}>
         {error || 'Unable to load subscription options. Please check your connection and try again.'}
       </Text>
       <TouchableOpacity
-        style={[styles.retryButton, { backgroundColor: themeColors.primary }]}
+        style={[styles.retryButton, { backgroundColor: themeColors.accent.primary }]}
         onPress={onRetry}
       >
-        <Text style={styles.retryButtonText}>Retry Loading Subscriptions</Text>
+        <Text style={[styles.retryButtonText, { color: themeColors.text }]}>Retry Loading Subscriptions</Text>
       </TouchableOpacity>
       
       {/* Expandable Details */}
@@ -1408,7 +1448,7 @@ function ErrorDetails({
               Export Validation:
             </Text>
             <Text style={[styles.detailsValue, { 
-              color: diagnostics.exports?.requiredExportsPresent ? '#34C759' : themeColors.error 
+              color: diagnostics.exports?.requiredExportsPresent ? themeColors.success : themeColors.error 
             }]}>
               {diagnostics.exports?.requiredExportsPresent ? '✓ Passed' : '✕ Failed'}
             </Text>
@@ -1470,25 +1510,35 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     marginBottom: spacing.md,
   },
-  closeButton: {
-    fontSize: fontSize['2xl'],
-    fontWeight: fontWeight.bold,
-  },
   titleSection: {
     alignItems: 'center',
     marginBottom: spacing.xl,
   },
-  proIcon: {
-    fontSize: 64,
-    marginBottom: spacing.md,
+  heroIconWrap: {
+    width: 88,
+    height: 88,
+    borderRadius: borderRadius.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
+  },
+  heroLogo: {
+    width: '100%',
+    height: '100%',
   },
   title: {
     fontSize: fontSize['3xl'],
     fontWeight: fontWeight.bold,
     marginBottom: spacing.sm,
+    letterSpacing: -0.5,
   },
   subtitle: {
-    fontSize: fontSize.lg,
+    fontSize: fontSize.base,
+    textAlign: 'center',
+    paddingHorizontal: spacing.lg,
+    lineHeight: 22,
   },
   featuresList: {
     marginBottom: spacing.xl,
@@ -1496,8 +1546,10 @@ const styles = StyleSheet.create({
   featureItem: {
     flexDirection: 'row',
     padding: spacing.md,
-    borderRadius: borderRadius.lg,
+    borderRadius: borderRadius.card,
     marginBottom: spacing.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
   },
   featureIcon: {
     width: 48,
@@ -1506,9 +1558,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: spacing.md,
-  },
-  featureIconText: {
-    fontSize: fontSize['2xl'],
   },
   featureText: {
     flex: 1,
@@ -1547,7 +1596,6 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.md,
   },
   manageSubscriptionText: {
-    color: '#FFFFFF',
     fontSize: fontSize.sm,
     fontWeight: fontWeight.semibold,
   },
@@ -1580,7 +1628,6 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.sm,
   },
   bestValueText: {
-    color: '#FFFFFF',
     fontSize: fontSize.xs,
     fontWeight: fontWeight.bold,
     textTransform: 'uppercase',
@@ -1593,7 +1640,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   selectedBadgeText: {
-    color: '#FFFFFF',
     fontSize: fontSize.sm,
     fontWeight: fontWeight.bold,
   },
@@ -1616,7 +1662,6 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   purchaseButtonText: {
-    color: '#FFFFFF',
     fontSize: fontSize.lg,
     fontWeight: fontWeight.bold,
   },
@@ -1628,7 +1673,6 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     padding: spacing.md,
     borderRadius: borderRadius.md,
-    backgroundColor: 'rgba(255, 59, 48, 0.1)',
     borderWidth: 1,
     borderStyle: 'solid',
   },
@@ -1642,6 +1686,17 @@ const styles = StyleSheet.create({
     fontSize: fontSize.xs,
     textAlign: 'center',
     lineHeight: 16,
+  },
+  loadingBlock: {
+    alignItems: 'center',
+    marginTop: spacing.xl,
+    marginBottom: spacing.md,
+    gap: spacing.lg,
+  },
+  loadingLogo: {
+    width: 72,
+    height: 72,
+    borderRadius: borderRadius.lg,
   },
   loadingContainer: {
     flexDirection: 'row',
@@ -1683,12 +1738,22 @@ const styles = StyleSheet.create({
     textDecorationLine: 'underline',
   },
   faq: {
-    marginTop: spacing.lg,
+    marginTop: spacing.xl,
   },
-  faqTitle: {
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.semibold,
-    marginBottom: spacing.md,
+  faqRuleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  faqRule: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+  },
+  faqRuleLabel: {
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.bold,
+    letterSpacing: 1.4,
   },
   faqItem: {
     marginBottom: spacing.md,
@@ -1706,9 +1771,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: spacing.xl,
-    marginBottom: spacing.lg,
-    gap: spacing.sm,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
+    gap: spacing.xs,
+    flexWrap: 'wrap',
+  },
+  copyrightLine: {
+    fontSize: fontSize.xs,
+    textAlign: 'center',
+    marginBottom: spacing.xl,
   },
   legalLink: {
     paddingVertical: spacing.xs,
@@ -1728,7 +1799,6 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   retryButtonText: {
-    color: '#FFFFFF',
     fontSize: fontSize.sm,
     fontWeight: fontWeight.semibold,
   },
@@ -1778,9 +1848,10 @@ function PaywallErrorFallback({ onRetry }: { onRetry: () => void }) {
     <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.header}>
-          <Text style={[styles.closeButton, { color: themeColors.textSecondary }]}>✕</Text>
+          <Ionicons name="close-outline" size={28} color={themeColors.textSecondary} />
         </View>
-        <View style={styles.loadingContainer}>
+        <View style={styles.loadingBlock}>
+          <Image source={LIVRA_APP_ICON} style={styles.loadingLogo} accessibilityIgnoresInvertColors />
           <Text style={[styles.title, { color: themeColors.text }]}>
             Unable to load subscription options
           </Text>
@@ -1788,10 +1859,10 @@ function PaywallErrorFallback({ onRetry }: { onRetry: () => void }) {
             Please check your connection and try again.
           </Text>
           <TouchableOpacity
-            style={[styles.retryButton, { backgroundColor: themeColors.primary, marginTop: spacing.md }]}
+            style={[styles.retryButton, { backgroundColor: themeColors.accent.primary, marginTop: spacing.md }]}
             onPress={onRetry}
           >
-            <Text style={styles.retryButtonText}>Try Again</Text>
+            <Text style={[styles.retryButtonText, { color: themeColors.text }]}>Try Again</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>

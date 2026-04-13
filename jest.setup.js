@@ -1,9 +1,17 @@
 import '@testing-library/jest-native/extend-expect';
 
 // Mock Expo modules
-jest.mock('expo-sqlite', () => ({
-  openDatabaseAsync: jest.fn(),
-}));
+jest.mock('expo-sqlite', () => {
+  const mockDb = {
+    execAsync: jest.fn(() => Promise.resolve()),
+    runAsync: jest.fn(() => Promise.resolve({ changes: 1 })),
+    getAllAsync: jest.fn(() => Promise.resolve([])),
+    withTransactionAsync: jest.fn(async (cb) => cb(mockDb)),
+  };
+  return {
+    openDatabaseAsync: jest.fn(() => Promise.resolve(mockDb)),
+  };
+});
 
 jest.mock('expo-notifications', () => ({
   setNotificationHandler: jest.fn(),

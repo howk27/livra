@@ -1,6 +1,8 @@
 // CRITICAL: Import react-native-get-random-values FIRST before any uuid imports
 import 'react-native-get-random-values';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
+import { AppState, AppStateStatus } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -20,6 +22,12 @@ import { logger } from '../lib/utils/logger';
 import { DevToolsProvider } from '../providers/DevToolsProvider';
 import { ExperimentsProvider } from '../providers/ExperimentsProvider';
 import { useFeaturesStore } from '../state/featuresSlice';
+import { useDailyTrackingStore } from '../state/dailyTrackingSlice';
+import { useAppDateStore } from '../state/appDateSlice';
+import {
+  runBehaviorNotificationScheduler,
+  recordBehaviorNotificationTap,
+} from '../services/behaviorNotifications';
 
 const queryClient = new QueryClient();
 
@@ -46,13 +54,52 @@ export default function RootLayout() {
   const { user, initialized } = useAuth();
   const { sync } = useSync();
   const router = useRouter();
+  const appStateRef = useRef(AppState.currentState);
+
+  useEffect(() => {
+    if (!initialized) return;
+
+    const handleBehaviorResponse = (response: Notifications.NotificationResponse | null) => {
+      if (!response) return;
+      const data = response.notification.request.content.data as Record<string, unknown>;
+      const t = data?.type;
+      if (data?.behavior === true || (typeof t === 'string' && t.startsWith('behavior_'))) {
+        recordBehaviorNotificationTap().catch(() => {});
+      }
+    };
+
+    Notifications.getLastNotificationResponseAsync()
+      .then(handleBehaviorResponse)
+      .catch(() => {});
+
+    const responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
+      handleBehaviorResponse(response);
+      runBehaviorNotificationScheduler(user?.id).catch(() => {});
+    });
+
+    const onAppState = (next: AppStateStatus) => {
+      const wasBackground =
+        appStateRef.current === 'background' || appStateRef.current === 'inactive';
+      appStateRef.current = next;
+      if (next === 'active' && wasBackground) {
+        runBehaviorNotificationScheduler(user?.id).catch(() => {});
+      }
+    };
+    const appSub = AppState.addEventListener('change', onAppState);
+
+    return () => {
+      responseSub.remove();
+      appSub.remove();
+    };
+  }, [initialized, user?.id]);
 
   useEffect(() => {
     // Initialize database first, then cleanup invalid badges
     const init = async () => {
       await initDatabase();
-      // Load feature data (notes + skip tokens)
-      await useFeaturesStore.getState().loadFeatures();
+      await useAppDateStore.getState().hydrate();
+      await useDailyTrackingStore.getState().loadDailyTracking();
+      await useFeaturesStore.getState().loadSkipFeatures();
       // Cleanup badges with invalid user_id (like "local-user")
       const removedCount = await cleanupInvalidBadges();
       if (removedCount > 0) {
@@ -252,6 +299,8 @@ export default function RootLayout() {
           logger.log('[App] Reloading marks after sync (merge will preserve local values)...');
           await useCountersStore.getState().loadMarks(user.id);
           useEventsStore.getState().loadEvents(undefined, user.id);
+          await useDailyTrackingStore.getState().loadDailyTracking();
+          await useFeaturesStore.getState().loadSkipFeatures();
         } catch (error: any) {
           // Parse error to extract clean message (handles HTML responses like Cloudflare errors)
           const parsed = parseError(error);
@@ -301,7 +350,7 @@ function RootNavigator() {
       <Stack
         screenOptions={{
           headerShown: false,
-          contentStyle: { backgroundColor: theme === 'dark' ? '#111827' : colors.light.background },
+          contentStyle: { backgroundColor: colors[theme].background },
         }}
       >
         <Stack.Screen name="(tabs)" />

@@ -7,10 +7,12 @@ import { useEffectiveTheme } from '../state/uiSlice';
 import CounterIcon from '@/src/components/icons/CounterIcon';
 import { resolveCounterIconType } from '@/src/components/icons/IconResolver';
 import { applyOpacity } from '@/src/components/icons/color';
+import { getCategoryColor, getCategoryForSuggestedCounter } from '../lib/markCategory';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_MARGIN = 10; // Increased spacing between cards
-const CARDS_PER_ROW = 3;
+const CARD_MARGIN = 8;
+// Two columns to match Add Mark suggested layout (reference: narrow grid cards)
+const CARDS_PER_ROW = 2;
 // Calculate card size: with marginHorizontal: CARD_MARGIN/2 (5px each side), we have:
 // - CARD_MARGIN/2 on left of first card
 // - CARD_MARGIN/2 on right of last card  
@@ -24,12 +26,14 @@ interface SuggestedCountersListProps {
   onCounterSelect?: (counter: SuggestedCounter) => void;
   maxSelections?: number;
   selectedCounters?: SuggestedCounter[];
+  contentBottomPadding?: number;
 }
 
 export const SuggestedCountersList: React.FC<SuggestedCountersListProps> = ({
   onCounterSelect,
   maxSelections,
   selectedCounters = [],
+  contentBottomPadding = spacing.xl,
 }) => {
   const theme = useEffectiveTheme();
   const themeColors = colors[theme];
@@ -47,28 +51,22 @@ export const SuggestedCountersList: React.FC<SuggestedCountersListProps> = ({
 
   const handleCounterPress = (counter: SuggestedCounter) => {
     if (!onCounterSelect) return;
-
-    if (isSelected(counter)) {
-      // Deselect
-      const updated = selectedCounters.filter(
-        (c) => !(c.name === counter.name && c.emoji === counter.emoji)
-      );
-      onCounterSelect(counter); // Let parent handle the deselection logic
-    } else {
-      // Select
-      if (canSelectMore()) {
-        onCounterSelect(counter);
-      }
+    if (canSelectMore() || isSelected(counter)) {
+      onCounterSelect(counter);
     }
   };
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+    <ScrollView
+      style={styles.container}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={{ paddingBottom: contentBottomPadding }}
+    >
       {SUGGESTED_COUNTERS_BY_CATEGORY.map((category, categoryIndex) => (
         <View key={categoryIndex} style={styles.categorySection}>
           {(category.title || category.emoji) && (
             <View style={styles.categoryHeader}>
-              {category.emoji ? <Text style={styles.categoryEmoji}>{category.emoji}</Text> : null}
+              <View style={[styles.categoryAccent, { backgroundColor: themeColors.accent.primary }]} />
               {category.title ? (
                 <Text style={[styles.categoryTitle, { color: themeColors.text }]}>
                   {category.title}
@@ -82,6 +80,8 @@ export const SuggestedCountersList: React.FC<SuggestedCountersListProps> = ({
             {category.counters.map((counter, counterIndex) => {
               const selected = isSelected(counter);
               const disabled = !selected && !canSelectMore();
+              const category = getCategoryForSuggestedCounter(counter);
+              const categoryColor = getCategoryColor(category);
               const iconType = resolveCounterIconType({
                 name: counter.name,
                 emoji: counter.emoji,
@@ -96,10 +96,10 @@ export const SuggestedCountersList: React.FC<SuggestedCountersListProps> = ({
                       width: CARD_SIZE,
                       height: CARD_SIZE,
                       backgroundColor: selected
-                        ? applyOpacity(counter.color, 0.12)
+                        ? applyOpacity(categoryColor, 0.12)
                         : themeColors.surface,
                       borderColor: selected
-                        ? counter.color
+                        ? categoryColor
                         : themeColors.border,
                       opacity: disabled ? 0.5 : 1,
                     },
@@ -108,20 +108,6 @@ export const SuggestedCountersList: React.FC<SuggestedCountersListProps> = ({
                   disabled={disabled && !selected}
                   activeOpacity={0.8}
                 >
-                  {/* Glow effect for selected */}
-                  {selected && (
-                    <View
-                      style={[
-                        styles.glowEffect,
-                        {
-                          backgroundColor: applyOpacity(counter.color, 0.08),
-                          borderColor: applyOpacity(counter.color, 0.25),
-                        },
-                      ]}
-                    />
-                  )}
-                  
-                  {/* Content */}
                   <View style={styles.cardContent}>
                     {iconType ? (
                       <CounterIcon
@@ -130,7 +116,7 @@ export const SuggestedCountersList: React.FC<SuggestedCountersListProps> = ({
                         variant="withBackground"
                         fallbackEmoji={counter.emoji}
                         ariaLabel={`${counter.name} counter icon`}
-                        color={counter.color}
+                        color={categoryColor}
                       />
                     ) : (
                       <Text style={styles.counterEmoji}>{counter.emoji}</Text>
@@ -143,21 +129,6 @@ export const SuggestedCountersList: React.FC<SuggestedCountersListProps> = ({
                       {counter.name}
                     </Text>
                   </View>
-
-                  {/* Selection indicator */}
-                  {selected && (
-                    <View
-                      style={[
-                        styles.selectionBadge,
-                        { 
-                          backgroundColor: counter.color,
-                          borderColor: theme === 'dark' ? 'rgba(255,255,255,0.08)' : themeColors.border,
-                        },
-                      ]}
-                    >
-                      <Text style={styles.checkmarkText}>✓</Text>
-                    </View>
-                  )}
                 </TouchableOpacity>
               );
             })}
@@ -173,60 +144,50 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   categorySection: {
-    marginBottom: spacing.xl,
+    marginBottom: spacing.lg,
   },
   categoryHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing.md,
-    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
+    marginTop: spacing.md,
     paddingHorizontal: spacing.lg,
     gap: spacing.sm,
   },
-  categoryEmoji: {
-    fontSize: fontSize.xl,
+  categoryAccent: {
+    width: 3,
+    height: 18,
+    borderRadius: 2,
     marginRight: spacing.sm,
   },
   categoryTitle: {
-    fontSize: fontSize.xl,
-    fontWeight: fontWeight.bold, // BOLD category titles
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.bold,
   },
   countersGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     paddingHorizontal: spacing.lg,
-    marginBottom: spacing.md,
   },
   counterCard: {
     borderRadius: borderRadius.lg,
-    borderWidth: 1.5,
+    borderWidth: StyleSheet.hairlineWidth,
     marginBottom: CARD_MARGIN,
-    marginHorizontal: CARD_MARGIN / 2, // Half margin on each side for proper spacing
+    marginHorizontal: CARD_MARGIN / 2,
     overflow: 'hidden',
     position: 'relative',
-    // Futuristic styling with enhanced shadows
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  glowEffect: {
-    position: 'absolute',
-    top: -2,
-    left: -2,
-    right: -2,
-    bottom: -2,
-    borderRadius: borderRadius.lg,
-    borderWidth: 2,
-    zIndex: 0,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
   },
   cardContent: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: spacing.sm,
-    zIndex: 1,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.md,
   },
   counterEmoji: {
     fontSize: 32,
@@ -237,29 +198,5 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.semibold,
     textAlign: 'center',
     lineHeight: fontSize.sm * 1.3,
-  },
-  selectionBadge: {
-    position: 'absolute',
-    top: spacing.xs,
-    right: spacing.xs,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 2,
-    // Futuristic glow with stronger shadow
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.4,
-    shadowRadius: 6,
-    elevation: 6,
-    borderWidth: 2,
-    // borderColor will be set dynamically in the component
-  },
-  checkmarkText: {
-    color: '#FFFFFF',
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.bold,
   },
 });

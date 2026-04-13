@@ -4,6 +4,7 @@ import { Mark } from '../types';
 import { execute, query, queryFirst } from '../lib/db';
 import { cleanupDuplicateCounters } from '../lib/db/cleanup';
 import { logger } from '../lib/utils/logger';
+import { normalizeDailyTargetInput, resolveDailyTarget } from '../lib/markDailyTarget';
 
 // Custom error class for duplicate marks
 export class DuplicateMarkError extends Error {
@@ -107,12 +108,14 @@ export const useMarksStore = create<MarksState>((set, get) => ({
     }
 
     const now = new Date().toISOString();
+    const dailyTarget = normalizeDailyTargetInput(markData.dailyTarget);
     const mark: Mark = {
       ...markData,
       id: uuidv4(),
       created_at: now,
       updated_at: now,
       total: 0,
+      dailyTarget,
     };
 
     await execute(
@@ -135,6 +138,18 @@ export const useMarksStore = create<MarksState>((set, get) => ({
       ]
     );
 
+    await execute(
+      'UPDATE lc_counters SET dailyTarget = ?, schedule_type = ?, schedule_days = ?, goal_value = ?, goal_period = ? WHERE id = ?',
+      [
+        dailyTarget,
+        mark.schedule_type ?? 'daily',
+        mark.schedule_days ?? null,
+        mark.goal_value ?? null,
+        mark.goal_period ?? null,
+        mark.id,
+      ],
+    );
+
     set((state) => ({
       marks: [...state.marks, mark],
     }));
@@ -147,41 +162,53 @@ export const useMarksStore = create<MarksState>((set, get) => ({
     const mark = get().marks.find((m) => m.id === id);
     if (!mark) return;
 
-    const updated = { ...mark, ...updates, updated_at: now };
+    const nextDaily =
+      updates.dailyTarget !== undefined
+        ? normalizeDailyTargetInput(updates.dailyTarget)
+        : resolveDailyTarget(mark);
+    const updated = { ...mark, ...updates, dailyTarget: nextDaily, updated_at: now };
 
     // OPTIMISTIC UPDATE: Update store immediately for instant UI feedback
     set((state) => ({
       marks: state.marks.map((m) => (m.id === id ? updated : m)),
     }));
 
-    // Persist to database in background (don't await to avoid blocking UI)
-    execute(
-      `UPDATE lc_counters SET 
+    // Await persistence so sync / loadMarks read the same values (avoids stale UI after edits)
+    try {
+      await execute(
+        `UPDATE lc_counters SET 
         name = ?, emoji = ?, color = ?, unit = ?, enable_streak = ?,
-        sort_index = ?, total = ?, last_activity_date = ?, updated_at = ?
+        sort_index = ?, total = ?, last_activity_date = ?, dailyTarget = ?,
+        schedule_type = ?, schedule_days = ?, goal_value = ?, goal_period = ?,
+        updated_at = ?
       WHERE id = ?`,
-      [
-        updated.name,
-        updated.emoji,
-        updated.color,
-        updated.unit,
-        updated.enable_streak ? 1 : 0,
-        updated.sort_index,
-        updated.total,
-        updated.last_activity_date,
-        updated.updated_at,
-        id,
-      ]
-    ).catch((error) => {
+        [
+          updated.name,
+          updated.emoji,
+          updated.color,
+          updated.unit,
+          updated.enable_streak ? 1 : 0,
+          updated.sort_index,
+          updated.total,
+          updated.last_activity_date,
+          nextDaily,
+          updated.schedule_type ?? 'daily',
+          updated.schedule_days ?? null,
+          updated.goal_value ?? null,
+          updated.goal_period ?? null,
+          updated.updated_at,
+          id,
+        ]
+      );
+    } catch (error) {
       logger.error('Error persisting mark update to database:', error);
-      // On error, revert optimistic update by reloading from database
       const userId = mark.user_id;
       if (userId) {
         get().loadMarks(userId).catch((err) => {
           logger.error('Error reloading marks after failed update:', err);
         });
       }
-    });
+    }
   },
 
   deleteMark: async (id) => {
@@ -206,6 +233,19 @@ export const useMarksStore = create<MarksState>((set, get) => ({
     set((state) => ({
       marks: state.marks.filter((m) => m.id !== id),
     }));
+
+    try {
+      const { useDailyTrackingStore } = await import('./dailyTrackingSlice');
+      await useDailyTrackingStore.getState().deleteDailyLogsForMark(id);
+    } catch (err) {
+      logger.error('[MarksSlice] Failed to clean up daily tracking for deleted mark:', err);
+    }
+    try {
+      const { useFeaturesStore } = await import('./featuresSlice');
+      await useFeaturesStore.getState().deleteSkipDataForMark(id);
+    } catch (err) {
+      logger.error('[MarksSlice] Failed to clean up skip tokens for deleted mark:', err);
+    }
   },
 
   incrementTotal: async (id, amount) => {

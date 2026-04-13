@@ -2,10 +2,11 @@ export const colors = {
   // Light theme (UI/UX Spec palette)
   light: {
     // Core colors from spec
-    background: '#CDECE5', // bg.default
-    surface: '#FAF9F6', // bg.surface
-    surfaceVariant: '#F5F4F0', // Slightly darker variant
-    surfaceActive: '#F0EFEA', // Active/pressed states
+    // Desaturated neutral “canvas” — not a hue-forward mint; lets warm cream cards read clearly
+    background: '#E5E7E6', // bg.default
+    surface: '#F7F6F2', // bg.surface — slightly off-white vs page tint
+    surfaceVariant: '#F1F0EB', // Slightly darker variant
+    surfaceActive: '#ECEAE4', // Active/pressed states
     
     // Text colors from spec
     text: '#2C3E50', // text.primary
@@ -13,25 +14,28 @@ export const colors = {
     textTertiary: '#8A95A7', // Lighter for tertiary
     
     // Accent colors from spec
-    primary: '#F4C7C3', // accent.primary
-    primaryLight: '#F8D4D0', // Lighter variant
-    primaryHover: '#F0BAB5', // Hover state
+    // primary = pale pink tint (for backgrounds and subtle fills)
+    // accent.primary = deeper rose (for text labels, CTAs, active states — readable on light surfaces)
+    primary: '#F4C7C3', // Tint color — used for subtle fills, backgrounds
+    primaryLight: '#F8D4D0', // Lighter tint variant
+    primaryHover: '#E8A8A3', // Hover state (slightly deeper)
     accent: {
-      primary: '#F4C7C3', // Main CTA, active tab
+      primary: '#C26960', // CTA / active label — readable rose on light backgrounds
       secondary: '#F8E8A6', // Secondary highlights
     },
     
     // Border and state colors
-    border: '#E7E3DC', // border.soft
+    border: '#DED9CF', // border.soft — clearer separation from surface
     error: '#E6B1AE', // state.destructive
-    success: '#BFE3C7', // state.success
+    // Slightly deeper sage than prior mint for contrast on light surfaces (momentum, states)
+    success: '#4F8F72', // state.success — deeper sage for light UI contrast
     warning: '#F8E8A6', // accent.secondary for warnings
     
     // Overlay for press states
     overlay: 'rgba(0,0,0,0.06)', // Press/hover overlay
-    
+
     // Legacy support (mapped to new colors)
-    successGlow: '#BFE3C7',
+    successGlow: '#4F8F72',
     warningGlow: '#F8E8A6',
     reset: '#F8E8A6',
     
@@ -80,7 +84,7 @@ export const colors = {
     
     // Overlay for press states
     overlay: 'rgba(0,0,0,0.24)', // Press/hover overlay
-    
+
     // Legacy support (mapped to new colors)
     successGlow: '#8FBFA0',
     warningGlow: '#D7C47B',

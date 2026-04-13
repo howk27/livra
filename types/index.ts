@@ -19,6 +19,8 @@ export type Mark = {
   updated_at: string;
   // Feature 1: Habit Goals
   goal_value?: number | null;
+  /** Taps/increments needed to complete this mark today; default 1 when unset */
+  dailyTarget?: number | null;
   goal_period?: 'day' | 'week' | 'month' | null;
   // Feature 2: Flexible Schedules
   schedule_type?: 'daily' | 'weekly' | 'custom';
@@ -84,7 +86,7 @@ export type ThemeMode = 'light' | 'dark' | 'system';
 
 export type AccentColor = 'blue' | 'purple' | 'green' | 'orange' | 'red' | 'pink';
 
-// Feature 4: Notes
+// Feature 4: Daily tracking log — one saved row per (user_id, mark_id, local calendar date)
 export type MarkNote = {
   id: string;
   mark_id: string;
@@ -94,6 +96,9 @@ export type MarkNote = {
   created_at: string;
   updated_at: string;
 };
+
+/** Alias: persisted note attached to that day’s tracking record (same storage as MarkNote). */
+export type DailyTrackingLogEntry = MarkNote;
 
 // Feature 3: Skip Token records
 export type SkipToken = {

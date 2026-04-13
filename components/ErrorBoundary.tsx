@@ -109,11 +109,11 @@ function ErrorFallback({ error, onReload }: ErrorFallbackProps) {
         )}
 
         <TouchableOpacity
-          style={[styles.button, { backgroundColor: themeColors.primary }]}
+          style={[styles.button, { backgroundColor: themeColors.accent.primary }]}
           onPress={onReload}
           activeOpacity={0.7}
         >
-          <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>
+          <Text style={[styles.buttonText, { color: themeColors.text }]}>
             Try Again
           </Text>
         </TouchableOpacity>

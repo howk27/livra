@@ -89,8 +89,7 @@ const FloatingActionButton = () => {
   const { isEditMode } = useFABContext();
 
   // Only show FAB on home screen
-  // Check if pathname includes 'home' (handles various pathname formats)
-  const isHomeScreen = pathname?.includes('home') || pathname?.endsWith('/(tabs)/home') || pathname === '/(tabs)/home' || (!pathname?.includes('stats') && !pathname?.includes('settings'));
+  const isHomeScreen = pathname === '/(tabs)/home' || pathname?.endsWith('/home');
 
   if (!isHomeScreen) {
     return null;
@@ -152,12 +151,12 @@ const fabStyles = StyleSheet.create({
     ...(Platform.OS === 'ios'
       ? {
           shadowColor: '#000',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.2,
-          shadowRadius: 8,
+          shadowOffset: { width: 0, height: 3 },
+          shadowOpacity: 0.14,
+          shadowRadius: 6,
         }
       : {
-          elevation: 10,
+          elevation: 6,
         }),
   },
 });
@@ -219,9 +218,15 @@ export default function TabLayout() {
       <Tabs.Screen
         name="stats"
         options={{
-          title: 'Stats',
-          tabBarIcon: createTabBarIcon({ focused: 'stats-chart', unfocused: 'stats-chart-outline' }, themeColors),
-          tabBarLabel: createTabBarLabel('Stats', themeColors),
+          href: null, // Hidden — preserved for future use
+        }}
+      />
+      <Tabs.Screen
+        name="tracking"
+        options={{
+          title: 'Tracking',
+          tabBarIcon: createTabBarIcon({ focused: 'bar-chart', unfocused: 'bar-chart-outline' }, themeColors),
+          tabBarLabel: createTabBarLabel('Tracking', themeColors),
         }}
       />
       <Tabs.Screen

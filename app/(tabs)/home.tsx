@@ -5,30 +5,33 @@ import {
   StyleSheet,
   Alert,
   TouchableOpacity,
-  FlatList,
-  Platform,
+  SectionList,
   Image,
   Dimensions,
   ScrollView,
+  ActivityIndicator,
+  Platform,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { DraggableGrid, IDraggableGridProps } from 'react-native-draggable-grid';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { colors } from '../../theme/colors';
 import { spacing, borderRadius, fontSize, fontWeight, shadow } from '../../theme/tokens';
-import { useEffectiveTheme, useUIStore } from '../../state/uiSlice';
+import { useEffectiveTheme } from '../../state/uiSlice';
 import { useFABContext } from './_layout';
 import { useCounters } from '../../hooks/useCounters';
 import { useCountersStore } from '../../state/countersSlice';
-import { CounterTile } from '../../components/CounterTile';
+import { HabitRowCounter, getCompressedProgress } from '../../components/HabitRow';
 import { EmptyState } from '../../components/EmptyState';
 import { GradientBackground } from '../../components/GradientBackground';
 import { LoadingScreen } from '../../components/LoadingScreen';
-import { query, execute } from '../../lib/db';
-import { CounterStreak, Counter } from '../../types';
+import { execute } from '../../lib/db';
+import { Counter } from '../../types';
 import { resolveCounterIconType } from '@/src/components/icons/IconResolver';
+import MarkIcon from '@/src/components/icons/CounterIcon';
+import { applyOpacity } from '@/src/components/icons/color';
 import { useAuth } from '../../hooks/useAuth';
 import { useSync } from '../../hooks/useSync';
 import { useNotifications } from '../../hooks/useNotifications';
@@ -36,43 +39,51 @@ import { AppText } from '../../components/Typography';
 import { logger } from '../../lib/utils/logger';
 import { getAvatarUrl, refreshAvatarUrl } from '../../lib/storage/avatarStorage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { resolveDailyTarget } from '../../lib/markDailyTarget';
+import { useEventsStore } from '../../state/eventsSlice';
+import { useDailyTrackingStore } from '../../state/dailyTrackingSlice';
+import { useAppDateStore } from '../../state/appDateSlice';
+import { getAppDate } from '../../lib/appDate';
+import { formatDate } from '../../lib/date';
+import { subDays } from 'date-fns';
+import { DailyProgressCard } from '../../components/DailyProgressCard';
+import { WeeklySummaryStrip } from '../../components/WeeklySummaryStrip';
+import { deriveStreakForMark } from '../../hooks/useStreaks';
 
 const APP_BRAND_LOGO_LIGHT = require('../../assets/branding/Logo NoBG.png');
 const APP_BRAND_LOGO_DARK = require('../../assets/branding/Logo NoBG dark.png');
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
-const GRID_OUTER_PADDING = spacing.lg;
-const GRID_COLUMN_GAP = spacing.lg;
-const GRID_ROW_GAP = spacing.lg;
-const GRID_ITEM_HEIGHT = 260;
+const GRID_OUTER_PADDING = spacing.md;
+const GRID_COLUMN_GAP = spacing.sm;
+const GRID_ROW_GAP = spacing.sm;
+const GRID_ITEM_HEIGHT = 178;
 const GRID_AVAILABLE_WIDTH = SCREEN_WIDTH - GRID_OUTER_PADDING * 2;
 const GRID_BLOCK_WIDTH = GRID_AVAILABLE_WIDTH / 2;
+const EDIT_ROW_HEIGHT = 58;
+const EDIT_ROW_GAP = spacing.xs;
+/** Edit-mode list only: mark title + symbol icon scale vs normal grid tiles */
+const EDIT_MODE_MARK_TITLE_ICON_SCALE = 1.2;
+const EDIT_MODE_MARK_ICON_SIZE = Math.round(16 * EDIT_MODE_MARK_TITLE_ICON_SCALE);
+const EDIT_MODE_MARK_ICON_WRAP = Math.round(22 * EDIT_MODE_MARK_TITLE_ICON_SCALE);
 
 export default function HomeScreen() {
   const theme = useEffectiveTheme();
   const themeColors = colors[theme];
   const router = useRouter();
   const { user } = useAuth();
-  const insets = useSafeAreaInsets();
 
-  const { counters, loading, incrementCounter, decrementCounter, deleteCounter } = useCounters();
+  const { counters, loading, incrementCounter, deleteCounter } = useCounters();
   const { sync } = useSync();
   const { updateSmartNotifications, permissionGranted } = useNotifications();
-  const [streaks, setStreaks] = useState<Map<string, CounterStreak>>(new Map());
   const [localCounters, setLocalCounters] = useState<Counter[]>([]);
   const [scrollEnabled, setScrollEnabled] = useState(true);
   const [profileImageUri, setProfileImageUri] = useState<string | null>(null);
+  const [doneCollapsed, setDoneCollapsed] = useState(true);
   const { isEditMode, setIsEditMode } = useFABContext();
+  const appDateKey = useAppDateStore((s) => s.debugDateOverride ?? '');
   const scrollViewRef = useRef<ScrollView>(null);
   const scrollViewYRef = useRef<number>(0);
-  const isOnboarded = useUIStore((state) => state.isOnboarded);
-  const completeOnboarding = useUIStore((state) => state.completeOnboarding);
-  const activeCounterCount = localCounters.length;
-  const countersSubtitle = isEditMode
-    ? 'Hold & Drag to organize'
-    : counters.length
-        ? `${counters.length} active mark${counters.length === 1 ? '' : 's'} ready for today`
-        : 'Create your first mark to start tracking wins.';
 
   // Sync local state with counters from store
   // Deduplicate by ID to prevent React key errors
@@ -92,6 +103,14 @@ export default function HomeScreen() {
     setLocalCounters(uniqueCounters);
   }, [uniqueCounters]);
 
+  // When returning from mark edit/detail, realign list rows with the store (avoids stale rows)
+  useFocusEffect(
+    useCallback(() => {
+      if (isEditMode) return;
+      setLocalCounters(uniqueCounters);
+    }, [uniqueCounters, isEditMode])
+  );
+
   // Reset grid data when entering edit mode to ensure DraggableGrid initializes properly
   useEffect(() => {
     if (isEditMode) {
@@ -110,28 +129,6 @@ export default function HomeScreen() {
       return () => clearTimeout(timer);
     }
   }, [isEditMode, counters]);
-
-  // Load streaks - only reload when counter IDs change, not on every update
-  // Use a ref to track previous counter IDs to avoid unnecessary reloads
-  const prevCounterIdsRef = useRef<string>('');
-  const counterIds = useMemo(() => {
-    return counters.map(c => c.id).sort().join(',');
-  }, [counters]);
-  
-  useEffect(() => {
-    // Only reload streaks if the counter IDs actually changed (added/removed counters)
-    if (counterIds !== prevCounterIdsRef.current) {
-      prevCounterIdsRef.current = counterIds;
-      const loadStreaks = async () => {
-        const streakData = await query<CounterStreak>(
-          'SELECT * FROM lc_streaks WHERE deleted_at IS NULL'
-        );
-        const streakMap = new Map(streakData.map((s) => [s.mark_id, s]));
-        setStreaks(streakMap);
-      };
-      loadStreaks();
-    }
-  }, [counterIds]);
 
   // Initialize and update smart notifications
   useEffect(() => {
@@ -241,6 +238,311 @@ export default function HomeScreen() {
     }, [profileImageUri, user?.id])
   );
 
+  // ── Daily Progress (Phase 2) ──────────────────────────────
+  const allEvents = useEventsStore(s => s.events);
+  const todayStr = useMemo(() => formatDate(getAppDate()), [appDateKey]);
+
+  // Today increment totals — single source for rows + Daily Momentum (avoids drift vs list).
+  const todayCountsMap = useMemo(() => {
+    const map = new Map<string, number>();
+    allEvents.forEach((e) => {
+      if (e.deleted_at || e.event_type !== 'increment') return;
+      if (e.occurred_local_date !== todayStr) return;
+      map.set(e.mark_id, (map.get(e.mark_id) ?? 0) + (e.amount ?? 1));
+    });
+    return map;
+  }, [allEvents, todayStr]);
+
+  /** Per-mark streak from event history only (same definition as detail screen and post-sync recompute). */
+  const streakDerivedByMark = useMemo(() => {
+    const map = new Map<string, { current: number; longest: number }>();
+    uniqueCounters.forEach((c) => {
+      if (c.deleted_at) return;
+      const d = deriveStreakForMark(c.id, allEvents, c.enable_streak);
+      if (d) map.set(c.id, { current: d.current, longest: d.longest });
+    });
+    return map;
+  }, [uniqueCounters, allEvents, appDateKey]);
+
+  // Same pool as the home list (localCounters) so Daily Momentum never drifts from rendered rows.
+  const marksForDailyMomentum = useMemo(
+    () => localCounters.filter((c) => !c.deleted_at),
+    [localCounters],
+  );
+
+  const activeMarkCount = marksForDailyMomentum.length;
+
+  // Daily momentum = count of marks fully completed today (todayCount >= dailyTarget), not tap sum.
+  const completedMarksToday = useMemo(() => {
+    let n = 0;
+    marksForDailyMomentum.forEach((c) => {
+      const todayCount = todayCountsMap.get(c.id) ?? 0;
+      if (todayCount >= resolveDailyTarget(c)) n++;
+    });
+    return n;
+  }, [marksForDailyMomentum, todayCountsMap, resolveDailyTarget]);
+
+  // ── Overall streak: consecutive days with any activity ──────────
+  const overallStreakDays = useMemo(() => {
+    let streak = 0;
+    const anchor = getAppDate();
+    for (let i = 0; i < 365; i++) {
+      const dateStr = formatDate(subDays(anchor, i));
+      const hasActivity = allEvents.some(
+        e => e.occurred_local_date === dateStr && !e.deleted_at && e.event_type === 'increment',
+      );
+      if (hasActivity) streak++;
+      else break;
+    }
+    return streak;
+  }, [allEvents, appDateKey]);
+
+  const incompleteMarksToday = useMemo(
+    () => Math.max(0, activeMarkCount - completedMarksToday),
+    [activeMarkCount, completedMarksToday],
+  );
+
+  const prevOverallStreakRef = useRef<number | null>(null);
+  const [streakPulseToken, setStreakPulseToken] = useState(0);
+  useEffect(() => {
+    if (prevOverallStreakRef.current === null) {
+      prevOverallStreakRef.current = overallStreakDays;
+      return;
+    }
+    if (overallStreakDays > prevOverallStreakRef.current) {
+      setStreakPulseToken((x) => x + 1);
+      if (Platform.OS !== 'web') {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+    }
+    prevOverallStreakRef.current = overallStreakDays;
+  }, [overallStreakDays]);
+
+  const [momentumHighlight, setMomentumHighlight] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const run = async () => {
+      if (completedMarksToday < activeMarkCount || activeMarkCount === 0) return;
+      try {
+        const key = '@livra_hint_first_all_done_momentum';
+        const seen = await AsyncStorage.getItem(key);
+        if (seen === '1' || cancelled) return;
+        await AsyncStorage.setItem(key, '1');
+        if (cancelled) return;
+        setMomentumHighlight(true);
+        timer = setTimeout(() => setMomentumHighlight(false), 2000);
+      } catch {
+        /* ignore */
+      }
+    };
+    run();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [completedMarksToday, activeMarkCount]);
+
+  const [multiHintDismissed, setMultiHintDismissed] = useState(false);
+  const [multiHintLoaded, setMultiHintLoaded] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const d = await AsyncStorage.getItem('@livra_hint_multi_target_dismissed');
+        if (!cancelled) {
+          setMultiHintDismissed(d === '1');
+          setMultiHintLoaded(true);
+        }
+      } catch {
+        if (!cancelled) setMultiHintLoaded(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const hasMultiTargetMark = useMemo(
+    () => uniqueCounters.some((c) => !c.deleted_at && resolveDailyTarget(c) > 1),
+    [uniqueCounters],
+  );
+
+  // ── Momentum System ───────────────────────────────────────
+  // momentum_score = number of days (out of the last 10, including today)
+  // on which this counter had at least 1 increment.
+  // Streak resets on a missed day, but momentum reflects longer consistency,
+  // so a missed day doesn't feel like total failure.
+  const momentumScores = useMemo(() => {
+    // Build set of the 10 most recent date strings (today + 9 days back)
+    const last10: Set<string> = new Set();
+    const anchor = getAppDate();
+    for (let i = 0; i < 10; i++) {
+      last10.add(formatDate(subDays(anchor, i)));
+    }
+
+    // Group active dates per mark from increment events within the window
+    const markDays = new Map<string, Set<string>>();
+    allEvents.forEach(e => {
+      if (e.deleted_at || e.event_type !== 'increment') return;
+      if (!last10.has(e.occurred_local_date)) return;
+      if (!markDays.has(e.mark_id)) markDays.set(e.mark_id, new Set());
+      markDays.get(e.mark_id)!.add(e.occurred_local_date);
+    });
+
+    // Map each active counter ID → its momentum score (0–10)
+    const scores = new Map<string, number>();
+    uniqueCounters.forEach(c => {
+      if (!c.deleted_at) {
+        scores.set(c.id, markDays.get(c.id)?.size ?? 0);
+      }
+    });
+    return scores;
+  }, [allEvents, uniqueCounters, appDateKey]);
+
+  const hasPartialProgressToday = useMemo(
+    () =>
+      uniqueCounters.some((c) => {
+        if (c.deleted_at) return false;
+        const t = todayCountsMap.get(c.id) ?? 0;
+        const g = resolveDailyTarget(c);
+        return t > 0 && t < g;
+      }),
+    [uniqueCounters, todayCountsMap],
+  );
+
+  // ── Weekly completion per mark [Mon=0 … Sun=6] ──────────────────
+  // true when the mark's daily goal was fully met on that weekday.
+  // Today's slot is computed from events too (the row overrides it optimistically).
+  const weekCompletionMap = useMemo(() => {
+    const today = getAppDate();
+    const mondayOffset = (today.getDay() + 6) % 7; // days back to Monday
+    const weekDates = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(today.getDate() - mondayOffset + i);
+      return formatDate(d);
+    });
+
+    // Sum increment amounts per mark per weekday
+    const sumsByMark = new Map<string, number[]>();
+    allEvents.forEach(e => {
+      if (e.deleted_at || e.event_type !== 'increment') return;
+      const dayIdx = weekDates.indexOf(e.occurred_local_date);
+      if (dayIdx === -1) return;
+      if (!sumsByMark.has(e.mark_id)) sumsByMark.set(e.mark_id, [0, 0, 0, 0, 0, 0, 0]);
+      sumsByMark.get(e.mark_id)![dayIdx] += e.amount ?? 1;
+    });
+
+    const map = new Map<string, boolean[]>();
+    uniqueCounters.forEach(c => {
+      if (c.deleted_at) return;
+      const goal = resolveDailyTarget(c);
+      const sums = sumsByMark.get(c.id) ?? [0, 0, 0, 0, 0, 0, 0];
+      map.set(c.id, sums.map(sum => sum >= goal));
+    });
+    return map;
+  }, [allEvents, uniqueCounters, resolveDailyTarget, appDateKey]);
+
+  // ── Note indicator: marks that have a daily log note for today ───
+  const dailyLogs = useDailyTrackingStore((s) => s.dailyLogs);
+  const noteMarkIdsToday = useMemo(() => {
+    const set = new Set<string>();
+    dailyLogs.forEach((row) => {
+      if (row.date === todayStr && row.text.trim()) set.add(row.mark_id);
+    });
+    return set;
+  }, [dailyLogs, todayStr, appDateKey]);
+
+  // ── Near-completion: marks 1–2 taps away from their goal ────────
+  const nearCompletionMap = useMemo(() => {
+    const map = new Map<string, number>();
+    localCounters.forEach(mark => {
+      const goal = resolveDailyTarget(mark);
+      const today = todayCountsMap.get(mark.id) ?? 0;
+      const remaining = goal - today;
+      const compressed = getCompressedProgress(today, goal);
+      const segmentRemaining = compressed.units - compressed.filled;
+      if ((remaining >= 1 && remaining <= 2) || segmentRemaining <= 1) {
+        map.set(mark.id, remaining);
+      }
+    });
+    return map;
+  }, [localCounters, todayCountsMap, resolveDailyTarget]);
+
+  // ── Directional header message (marks left today, not taps) ──────────
+  const directionalMessage = useMemo(() => {
+    if (activeMarkCount === 0) return null;
+    if (incompleteMarksToday === 0) return null;
+    const nearCount = nearCompletionMap.size;
+    if (nearCount > 0 && incompleteMarksToday <= 2) {
+      return `${incompleteMarksToday} left · ${nearCount} almost there`;
+    }
+    if (incompleteMarksToday === 1) return '1 mark left today';
+    return `${incompleteMarksToday} marks left today`;
+  }, [activeMarkCount, incompleteMarksToday, nearCompletionMap]);
+
+  // ── Priority sort for active rows ────────────────────────────────
+  // 1) 1 segment left first
+  // 2) started rows above untouched
+  // 3) higher completion ratio first
+  // 4) fallback to manual order
+  const sortedActiveCounters = useMemo(() => {
+    const indexed = localCounters.map((counter, index) => ({ counter, index }));
+    const active = indexed.filter(({ counter }) => {
+      const goal = resolveDailyTarget(counter);
+      const done = (todayCountsMap.get(counter.id) ?? 0) >= goal;
+      return !done;
+    });
+
+    active.sort((a, b) => {
+      const aToday = todayCountsMap.get(a.counter.id) ?? 0;
+      const bToday = todayCountsMap.get(b.counter.id) ?? 0;
+      const aGoal = resolveDailyTarget(a.counter);
+      const bGoal = resolveDailyTarget(b.counter);
+
+      const aCompressed = getCompressedProgress(aToday, aGoal);
+      const bCompressed = getCompressedProgress(bToday, bGoal);
+      const aSegLeft = Math.max(0, aCompressed.units - aCompressed.filled);
+      const bSegLeft = Math.max(0, bCompressed.units - bCompressed.filled);
+      const aOneLeft = aSegLeft === 1;
+      const bOneLeft = bSegLeft === 1;
+      if (aOneLeft !== bOneLeft) return aOneLeft ? -1 : 1;
+
+      const aStarted = aToday > 0;
+      const bStarted = bToday > 0;
+      if (aStarted !== bStarted) return aStarted ? -1 : 1;
+
+      const aRatio = Math.min(1, aToday / aGoal);
+      const bRatio = Math.min(1, bToday / bGoal);
+      if (aRatio !== bRatio) return bRatio - aRatio;
+
+      return a.index - b.index;
+    });
+
+    return active.map(({ counter }) => counter);
+  }, [localCounters, todayCountsMap, resolveDailyTarget]);
+
+  const activeMarkId = useMemo(
+    () => sortedActiveCounters[0]?.id ?? null,
+    [sortedActiveCounters],
+  );
+
+  // ── Completed counters (separated so header can access count even when collapsed) ──
+  const completedCounters = useMemo(() => {
+    return localCounters.filter(c => (todayCountsMap.get(c.id) ?? 0) >= resolveDailyTarget(c));
+  }, [localCounters, todayCountsMap, resolveDailyTarget]);
+
+  // ── Sections for the list: active first, done-today below ───────
+  const listSections = useMemo(() => {
+    const collapseCompleted = doneCollapsed && completedCounters.length >= 2;
+    return [
+      { key: 'active', data: sortedActiveCounters },
+      ...(completedCounters.length > 0
+        ? [{ key: 'done-today', data: collapseCompleted ? [] : completedCounters }]
+        : []),
+    ];
+  }, [completedCounters, sortedActiveCounters, doneCollapsed]);
+
   const handleCreateCounter = () => {
     router.push('/counter/new');
   };
@@ -254,9 +556,14 @@ export default function HomeScreen() {
       logger.error('[Home] Cannot increment counter - user not authenticated');
       return;
     }
-    // incrementCounter now checks gating rules and throws errors if blocked
-    // The error will be caught and displayed in CounterTile
+    // incrementCounter may throw (e.g. validation); gating is not enforced in 2.0
     try {
+      const counter = counters.find(c => c.id === counterId);
+      if (counter) {
+        const target = resolveDailyTarget(counter);
+        const currentToday = todayCountsMap.get(counterId) ?? 0;
+        if (currentToday >= target) return;
+      }
       await incrementCounter(counterId, user.id, 1);
       // Update notifications after incrementing (in case streak status changed)
       // Don't await - let it happen in background
@@ -265,32 +572,11 @@ export default function HomeScreen() {
           logger.error('Error updating notifications after increment:', error);
         });
       }
-    } catch (error: any) {
-      // Gating errors are handled in CounterTile, but log other errors here
-      if (!error?.gatingBlocked) {
-        logger.error('Error incrementing counter:', error);
-      }
-      // Re-throw so CounterTile can handle it
+    } catch (error: unknown) {
+      logger.error('Error incrementing counter:', error);
       throw error;
     }
-  }, [user?.id, incrementCounter, permissionGranted, updateSmartNotifications]);
-
-  const handleQuickDecrement = useCallback((counterId: string) => {
-    if (!user?.id) {
-      logger.error('[Home] Cannot decrement counter - user not authenticated');
-      return;
-    }
-    // Don't await - decrementCounter now uses optimistic updates for instant UI feedback
-    decrementCounter(counterId, user.id, 1).catch((error) => {
-      logger.error('Error decrementing counter:', error);
-    });
-    // Update notifications after decrementing (in case streak status changed)
-    if (permissionGranted) {
-      updateSmartNotifications(user?.id).catch((error) => {
-        logger.error('Error updating notifications after decrement:', error);
-      });
-    }
-  }, [user?.id, decrementCounter, permissionGranted, updateSmartNotifications]);
+  }, [user?.id, incrementCounter, permissionGranted, updateSmartNotifications, counters, todayCountsMap, resolveDailyTarget]);
 
   const persistReorderedCounters = useCallback(
     async (orderedCounters: Counter[]) => {
@@ -391,32 +677,82 @@ export default function HomeScreen() {
 
   const renderGridItem: IDraggableGridProps<GridCounter>['renderItem'] = useCallback(
     (item) => {
-      const streak =
-        streaks.get(item.id)
-          ? {
-              current: streaks.get(item.id)!.current_streak,
-              longest: streaks.get(item.id)!.longest_streak,
-            }
-          : undefined;
+      const isDark = theme === 'dark';
+      const themeC = colors[theme];
+      const markColor = item.color || themeC.primary;
+      const rowBg = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.025)';
+      const borderC = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)';
+      const iconType = resolveCounterIconType(item);
 
       return (
-        <View style={styles.gridItemWrapper}>
-          <View style={styles.gridItemInner}>
-            <CounterTile
-              counter={item}
-              streak={streak}
-              onPress={() => {}}
-              onIncrement={() => {}}
-              onDecrement={() => {}}
-              onDelete={user ? () => handleDeleteCounter(item) : undefined}
-              interactionsEnabled={false}
-              iconType={resolveCounterIconType(item)}
+        <View style={styles.editItemWrapper}>
+          <View
+            style={[
+              styles.editItemInner,
+              { backgroundColor: rowBg, borderColor: borderC },
+            ]}
+          >
+            {/* Drag handle */}
+            <Ionicons
+              name="reorder-two-outline"
+              size={20}
+              color={themeC.textSecondary}
+              style={styles.dragHandle}
             />
+
+            {/* Identity: icon + name */}
+            <View style={styles.editIdentity}>
+              <View
+                style={[
+                  styles.editIconWrap,
+                  {
+                    width: EDIT_MODE_MARK_ICON_WRAP,
+                    height: EDIT_MODE_MARK_ICON_WRAP,
+                    backgroundColor: applyOpacity(markColor, 0.15),
+                  },
+                ]}
+              >
+                <MarkIcon
+                  type={iconType ?? 'focus'}
+                  size={EDIT_MODE_MARK_ICON_SIZE}
+                  variant="symbol"
+                  animate="none"
+                  ariaLabel={`${item.name} icon`}
+                  color={markColor}
+                />
+              </View>
+              <Text
+                numberOfLines={1}
+                style={[
+                  styles.editRowName,
+                  {
+                    color: themeC.text,
+                    fontSize: fontSize.sm * EDIT_MODE_MARK_TITLE_ICON_SCALE,
+                  },
+                ]}
+              >
+                {item.name}
+              </Text>
+            </View>
+
+            {/* Spacer — keeps delete button right-aligned without progress clutter */}
+            <View style={{ flex: 1 }} />
+
+            {/* Delete */}
+            {user && (
+              <TouchableOpacity
+                onPress={() => handleDeleteCounter(item)}
+                style={styles.deleteBtn}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons name="trash-outline" size={16} color={themeC.textSecondary} />
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       );
     },
-    [streaks, isEditMode, user, handleDeleteCounter]
+    [theme, user, handleDeleteCounter],
   );
 
   // Auto-scroll during drag
@@ -569,31 +905,69 @@ export default function HomeScreen() {
     };
   }, [isEditMode, stopAutoScroll]);
 
-  // Render item for normal mode (regular FlatList)
-  // Memoized to prevent re-creating on every render
-  const renderNormalItem = useCallback(({ item }: { item: Counter }) => {
-    return (
-      <View style={styles.gridItemWrapper}>
-        <View style={styles.gridItemInner}>
-          <CounterTile
-            counter={item}
-            streak={
-              streaks.get(item.id)
-                ? {
-                    current: streaks.get(item.id)!.current_streak,
-                    longest: streaks.get(item.id)!.longest_streak,
-                  }
-                : undefined
-            }
-            onPress={() => handleCounterPress(item.id)}
-            onIncrement={() => handleQuickIncrement(item.id)}
-            onDecrement={() => handleQuickDecrement(item.id)}
-            iconType={resolveCounterIconType(item)}
-          />
-        </View>
-      </View>
-    );
-  }, [streaks, handleCounterPress, handleQuickIncrement, handleQuickDecrement]);
+  // ── List-mode render callbacks ──────────────────────────────────
+  const renderHabitRow = useCallback(
+    ({ item, section }: { item: Counter; section: { key: string } }) => {
+      const isCompleted = section.key === 'done-today';
+      const goalMet = (todayCountsMap.get(item.id) ?? 0) >= resolveDailyTarget(item);
+      return (
+        <HabitRowCounter
+          counter={item}
+          streak={
+            streakDerivedByMark.get(item.id)
+              ? {
+                  current: streakDerivedByMark.get(item.id)!.current,
+                  longest: streakDerivedByMark.get(item.id)!.longest,
+                }
+              : undefined
+          }
+          momentumScore={momentumScores.get(item.id)}
+          todayCount={todayCountsMap.get(item.id) ?? 0}
+          isCompleted={goalMet}
+          isCompact={isCompleted}
+          isActive={!isCompleted && item.id === activeMarkId}
+          nearCompletion={nearCompletionMap.get(item.id) ?? null}
+          hasNote={noteMarkIdsToday.has(item.id)}
+          weekCompletedDays={weekCompletionMap.get(item.id)}
+          onPress={() => handleCounterPress(item.id)}
+          onIncrement={() => handleQuickIncrement(item.id)}
+          iconType={resolveCounterIconType(item)}
+        />
+      );
+    },
+    [
+      streakDerivedByMark, momentumScores, todayCountsMap,
+      activeMarkId, nearCompletionMap, weekCompletionMap, noteMarkIdsToday,
+      handleCounterPress, handleQuickIncrement, resolveDailyTarget,
+    ],
+  );
+
+  const renderSectionHeader = useCallback(
+    ({ section }: { section: { key: string; data: Counter[] } }) => {
+      if (section.key !== 'done-today') return null;
+      const canCollapse = completedCounters.length >= 2;
+      return (
+        <TouchableOpacity
+          style={styles.sectionHeader}
+          onPress={canCollapse ? () => setDoneCollapsed(v => !v) : undefined}
+          activeOpacity={canCollapse ? 0.6 : 1}
+        >
+          <Text style={[styles.sectionHeaderText, { color: themeColors.textTertiary }]}>
+            DONE TODAY · {completedCounters.length}
+          </Text>
+          {canCollapse && (
+            <Ionicons
+              name={doneCollapsed ? 'chevron-down' : 'chevron-up'}
+              size={12}
+              color={themeColors.textTertiary}
+              style={{ marginLeft: 4 }}
+            />
+          )}
+        </TouchableOpacity>
+      );
+    },
+    [themeColors.textTertiary, completedCounters.length, doneCollapsed],
+  );
 
   if (loading) {
     return <LoadingScreen />;
@@ -601,13 +975,27 @@ export default function HomeScreen() {
 
   return (
     <GradientBackground>
-      <SafeAreaView style={styles.container}>
-        <View style={styles.headerContainer}>
-          <Image
-            source={theme === 'dark' ? APP_BRAND_LOGO_DARK : APP_BRAND_LOGO_LIGHT}
-            style={styles.brandLogo}
-            resizeMode="contain"
-          />
+      <SafeAreaView style={[styles.container, { backgroundColor: 'transparent' }]}>
+        {/* ── Top bar ──────────────────────────────────────────── */}
+        <View style={styles.topBar}>
+          {/* Edit / Done toggle */}
+          <TouchableOpacity
+            style={styles.editIconBtn}
+            onPress={() => setIsEditMode(!isEditMode)}
+            activeOpacity={0.7}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons
+              name={isEditMode ? 'checkmark-circle-outline' : 'apps-outline'}
+              size={22}
+              color={isEditMode ? themeColors.primary : themeColors.textSecondary}
+            />
+          </TouchableOpacity>
+
+          {/* App name (centered) */}
+          <Text style={[styles.appTitle, { color: themeColors.text }]}>LIVRA</Text>
+
+          {/* Avatar */}
           <TouchableOpacity
             style={styles.profileButton}
             onPress={() => router.push('/(tabs)/settings')}
@@ -615,73 +1003,64 @@ export default function HomeScreen() {
           >
             <View style={[styles.profileIcon, { backgroundColor: themeColors.surface }]}>
               {profileImageUri ? (
-                <Image 
-                  source={{ uri: profileImageUri }} 
+                <Image
+                  source={{ uri: profileImageUri }}
                   style={styles.profileImage}
                   resizeMode="cover"
                 />
               ) : (
-                <Ionicons
-                  name="person-circle"
-                  size={40}
-                  color={themeColors.primary}
-                />
+                <Ionicons name="person-circle-outline" size={22} color={themeColors.textSecondary} />
               )}
             </View>
           </TouchableOpacity>
         </View>
 
-        <View style={styles.subheaderRow}>
-          <View style={styles.headerLeft}>
-            <AppText variant="body" style={{ color: themeColors.textSecondary }}>
-              {countersSubtitle}
-            </AppText>
-          </View>
-          <TouchableOpacity
-            style={[styles.editPill, { borderColor: themeColors.border }]}
-            onPress={() => setIsEditMode(!isEditMode)}
-            activeOpacity={0.8}
-          >
-            <Ionicons
-              name={isEditMode ? 'checkmark' : 'create-outline'}
-              size={18}
-              color={themeColors.textSecondary}
+        {/* ── Inline progress (flat, no card) — hidden in edit mode ── */}
+        {!isEditMode && activeMarkCount > 0 && (
+          <>
+            <DailyProgressCard
+              completedToday={completedMarksToday}
+              totalMarks={activeMarkCount}
+              directionalMessage={directionalMessage}
+              streakDays={overallStreakDays}
+              streakPulseToken={streakPulseToken}
+              allMarksComplete={completedMarksToday >= activeMarkCount}
+              momentumHighlight={momentumHighlight}
+              flat
             />
-            <AppText variant="label" style={[styles.editText, { color: themeColors.text }]}>
-              {isEditMode ? 'Done' : 'Edit'}
-            </AppText>
-          </TouchableOpacity>
-        </View>
-
-        {!isOnboarded && (
-          <View style={[styles.hintCard, { backgroundColor: themeColors.surface }]}>
-            <AppText variant="body" style={{ color: themeColors.text }}>
-              Tip: Tap a counter to open details, or long-press to reorder your routine.
-            </AppText>
-            <View style={styles.hintActions}>
+            <WeeklySummaryStrip
+              onPress={() => router.navigate('/(tabs)/tracking')}
+              incompleteMarksToday={incompleteMarksToday}
+              hasPartialProgressToday={hasPartialProgressToday}
+            />
+            {multiHintLoaded && hasMultiTargetMark && !multiHintDismissed && (
               <TouchableOpacity
-                style={[styles.hintButton, { borderColor: themeColors.border }]}
-                onPress={async () => {
-                  await completeOnboarding(user?.id);
-                }}
-              >
-                <AppText variant="label" style={{ color: themeColors.textSecondary }}>
-                  Dismiss
-                </AppText>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.hintButtonPrimary, { backgroundColor: themeColors.accent.primary }]}
-                onPress={async () => {
-                  await completeOnboarding(user?.id);
-                  router.push('/onboarding');
-                }}
+                style={[styles.inlineHint, { borderColor: themeColors.border, backgroundColor: themeColors.surfaceVariant }]}
                 activeOpacity={0.85}
+                onPress={async () => {
+                  setMultiHintDismissed(true);
+                  try {
+                    await AsyncStorage.setItem('@livra_hint_multi_target_dismissed', '1');
+                  } catch {
+                    /* ignore */
+                  }
+                }}
               >
-                <AppText variant="label" style={{ color: themeColors.text }}>
-                  Show me
+                <AppText style={[styles.inlineHintText, { color: themeColors.textSecondary }]}>
+                  Multi-tap marks fill segments until the daily target is met. Tap to dismiss.
                 </AppText>
               </TouchableOpacity>
-            </View>
+            )}
+          </>
+        )}
+
+        {/* ── Edit mode hint ────────────────────────────────────── */}
+        {isEditMode && (
+          <View style={styles.editHintBar}>
+            <Ionicons name="reorder-two-outline" size={14} color={themeColors.textSecondary} />
+            <AppText style={[styles.editHintText, { color: themeColors.textSecondary }]}>
+              Hold &amp; drag to reorder
+            </AppText>
           </View>
         )}
 
@@ -689,7 +1068,13 @@ export default function HomeScreen() {
           <EmptyState
             title={loading ? "Loading marks" : "Start Your Journey"}
             message={loading ? "Please wait while we load your marks..." : "Create your first mark to start tracking your progress and building momentum!"}
-            icon={loading ? "⏳" : "✨"}
+            iconElement={
+              loading ? (
+                <ActivityIndicator size="large" color={themeColors.textSecondary} />
+              ) : (
+                <Ionicons name="sparkles-outline" size={52} color={themeColors.textTertiary} />
+              )
+            }
             actionLabel={loading ? undefined : "Create Mark"}
             onAction={loading ? undefined : handleCreateCounter}
           />
@@ -779,24 +1164,25 @@ export default function HomeScreen() {
             <DraggableGrid
               key={`draggable-grid-${isEditMode}-${localCounters.length}`}
               data={gridData}
-              numColumns={2}
+              numColumns={1}
               renderItem={renderGridItem}
               onDragRelease={handleGridDragRelease}
               delayLongPress={180}
-              itemHeight={GRID_ITEM_HEIGHT + GRID_ROW_GAP}
+              itemHeight={EDIT_ROW_HEIGHT + EDIT_ROW_GAP}
               style={styles.draggableGrid}
               dragStartAnimation={styles.dragStartAnimation}
             />
           </ScrollView>
         ) : (
-          <FlatList
-            data={localCounters}
+          <SectionList
+            sections={listSections}
             keyExtractor={(item) => item.id}
+            renderItem={renderHabitRow}
+            renderSectionHeader={renderSectionHeader}
+            stickySectionHeadersEnabled={false}
             contentContainerStyle={styles.listContent}
-            renderItem={renderNormalItem}
-            scrollEnabled
-            numColumns={2}
-            columnWrapperStyle={styles.row}
+            showsVerticalScrollIndicator={false}
+            extraData={localCounters}
           />
         )}
       </SafeAreaView>
@@ -808,49 +1194,87 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  headerContainer: {
+  topBar: {
     paddingHorizontal: spacing.lg,
-    paddingTop: 13.6, // Reduced by 15% from 16 (spacing.lg)
-    paddingBottom: 3.4, // Reduced by 15% from 4 (spacing.xs)
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.xxs,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    height: 48,
   },
+  appTitle: {
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.bold,
+    letterSpacing: 2.5,
+  },
+  editIconBtn: {
+    padding: spacing.xs,
+    width: 36,
+    alignItems: 'flex-start',
+  },
+  editHintBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.sm,
+  },
+  editHintText: {
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.medium,
+  },
+  // ── Edit-mode list row ─────────────────────────────────────────
+  editItemWrapper: {
+    width: GRID_AVAILABLE_WIDTH,
+    height: EDIT_ROW_HEIGHT + EDIT_ROW_GAP,
+    paddingBottom: EDIT_ROW_GAP,
+  },
+  editItemInner: {
+    height: EDIT_ROW_HEIGHT,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    gap: spacing.sm,
+    borderRadius: borderRadius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  dragHandle: {
+    paddingRight: spacing.xxs,
+  },
+  editIdentity: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    flex: 1,
+    minWidth: 120,
+  },
+  editIconWrap: {
+    width: 22,
+    height: 22,
+    borderRadius: borderRadius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editRowName: {
+    flex: 1,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.medium,
+  },
+  deleteBtn: {
+    padding: spacing.xs,
+  },
+  // ── Legacy header refs (onboarding is index-gated; no home hint) ──
   brandLogo: {
     width: 94,
     height: 94,
   },
-  subheaderRow: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xs,
-    paddingBottom: spacing.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  headerLeft: {
-    flex: 1,
-    gap: spacing.xs,
-  },
-  editPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: borderRadius.lg,
-    borderWidth: 1,
-  },
-  editText: {
-    letterSpacing: 0.6,
-  },
   profileButton: {
     padding: spacing.xs,
-    marginLeft: -spacing.xs, // Move icon more to the left
   },
   profileIcon: {
-    width: 52,
-    height: 52,
+    width: 36,
+    height: 36,
     borderRadius: borderRadius.full,
     alignItems: 'center',
     justifyContent: 'center',
@@ -858,14 +1282,38 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   profileImage: {
-    width: 52,
-    height: 52,
+    width: 36,
+    height: 36,
     borderRadius: borderRadius.full,
   },
+  inlineHint: {
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  inlineHintText: {
+    fontSize: fontSize.xs,
+    lineHeight: 16,
+    fontWeight: fontWeight.medium,
+  },
   listContent: {
-    paddingHorizontal: GRID_OUTER_PADDING - GRID_COLUMN_GAP / 2,
+    paddingTop: spacing.xs,
     paddingBottom: spacing['4xl'],
+  },
+  sectionHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xs,
+  },
+  sectionHeaderText: {
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.semibold,
+    letterSpacing: 1.2,
   },
   scrollView: {
     flex: 1,
@@ -878,30 +1326,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   draggableGrid: {
-    width: GRID_BLOCK_WIDTH * 2,
-  },
-  hintCard: {
-    marginHorizontal: spacing.lg,
-    marginBottom: spacing.lg,
-    padding: spacing.lg,
-    borderRadius: borderRadius.card,
-    gap: spacing.md,
-  },
-  hintActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: spacing.sm,
-  },
-  hintButton: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: borderRadius.lg,
-    borderWidth: 1,
-  },
-  hintButtonPrimary: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: borderRadius.lg,
+    width: GRID_AVAILABLE_WIDTH,
   },
   row: {
     width: GRID_BLOCK_WIDTH * 2,

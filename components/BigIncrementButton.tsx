@@ -55,7 +55,7 @@ export const BigIncrementButton: React.FC<BigIncrementButtonProps> = ({
       <Pressable
         style={({ pressed }) => [
           styles.button,
-          { backgroundColor: themeColors.primary },
+          { backgroundColor: themeColors.accent.primary },
           disabled && styles.disabled,
           pressed && { opacity: 0.8 },
           shadow.lg,
@@ -66,7 +66,7 @@ export const BigIncrementButton: React.FC<BigIncrementButtonProps> = ({
         disabled={disabled}
         hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
       >
-        <AppText variant="display" style={styles.buttonText}>
+        <AppText variant="display" style={[styles.buttonText, { color: themeColors.text }]}>
           {label}
         </AppText>
       </Pressable>
@@ -84,7 +84,6 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   buttonText: {
-    color: '#FFFFFF',
     textAlign: 'center',
   },
   disabled: {

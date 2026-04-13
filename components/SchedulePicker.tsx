@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { colors } from '../theme/colors';
+import { foregroundForHexBackground } from '@/src/components/icons/color';
 import type { ScheduleType, DayOfWeek } from '../types';
 
 const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
@@ -55,7 +56,16 @@ export const SchedulePicker: React.FC<SchedulePickerProps> = ({
               onPress={() => handleTypePress(opt.key)}
               activeOpacity={0.75}
             >
-              <Text style={[styles.typePillText, { color: active ? '#fff' : themeColors.textSecondary }]}>
+              <Text
+                style={[
+                  styles.typePillText,
+                  {
+                    color: active
+                      ? foregroundForHexBackground(color, theme === 'dark')
+                      : themeColors.textSecondary,
+                  },
+                ]}
+              >
                 {opt.label}
               </Text>
             </TouchableOpacity>
@@ -81,7 +91,16 @@ export const SchedulePicker: React.FC<SchedulePickerProps> = ({
                 onPress={() => toggleDay(day)}
                 activeOpacity={0.75}
               >
-                <Text style={[styles.dayChipText, { color: active ? '#fff' : themeColors.textSecondary }]}>
+                <Text
+                  style={[
+                    styles.dayChipText,
+                    {
+                      color: active
+                        ? foregroundForHexBackground(color, theme === 'dark')
+                        : themeColors.textSecondary,
+                    },
+                  ]}
+                >
                   {label}
                 </Text>
               </TouchableOpacity>

@@ -7,10 +7,14 @@ import {
   scheduleSmartNotifications,
   NotificationConfig,
   NotificationAnalysis,
-  reminderNotifications,
-  NotificationCategory,
 } from '../services/notificationService';
 import { logger } from '../lib/utils/logger';
+
+const EVENING_REMINDER_BODIES = [
+  'Quick check-in: log a mark before the day ends.',
+  'Your marks are waiting — one tap keeps the day honest.',
+  'Evening nudge: close the loop on today’s progress.',
+];
 
 // Configure notification behavior
 Notifications.setNotificationHandler({
@@ -85,11 +89,8 @@ export const useNotifications = () => {
           repeats: true,
         };
 
-        // Get a random notification based on time of day
-        // Use evening category for manual reminders (most common case)
-        const category: NotificationCategory = "evening";
-        const notifications = reminderNotifications[category];
-        const randomBody = notifications[Math.floor(Math.random() * notifications.length)];
+        const randomBody =
+          EVENING_REMINDER_BODIES[Math.floor(Math.random() * EVENING_REMINDER_BODIES.length)]!;
 
         const identifier = await Notifications.scheduleNotificationAsync({
           content: {

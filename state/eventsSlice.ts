@@ -3,6 +3,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { MarkEvent } from '../types';
 import { execute, query } from '../lib/db';
 import { formatDate } from '../lib/date';
+import { getAppDateTime } from '../lib/appDate';
+import { subDays } from 'date-fns';
 import { logger } from '../lib/utils/logger';
 
 interface EventsState {
@@ -34,7 +36,8 @@ export const useEventsStore = create<EventsState>((set, get) => ({
       
       // Default limit for stats screen to reduce I/O (last 90 days of events)
       const defaultLimit = limit || (markId ? undefined : 5000);
-      const cutoffDate = !markId && !limit ? new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString() : undefined;
+      const cutoffDate =
+        !markId && !limit ? subDays(getAppDateTime(), 90).toISOString() : undefined;
       
       if (markId && userId) {
         sql = 'SELECT id, user_id, counter_id as mark_id, event_type, amount, occurred_at, occurred_local_date, meta, deleted_at, created_at, updated_at FROM lc_events WHERE counter_id = ? AND user_id = ? AND deleted_at IS NULL ORDER BY occurred_at DESC';
@@ -88,7 +91,7 @@ export const useEventsStore = create<EventsState>((set, get) => ({
   },
 
   addEvent: async (eventData) => {
-    const now = new Date();
+    const now = getAppDateTime();
     const event: MarkEvent = {
       ...eventData,
       id: uuidv4(),
@@ -135,7 +138,7 @@ export const useEventsStore = create<EventsState>((set, get) => ({
   },
 
   deleteEvent: async (id) => {
-    const now = new Date().toISOString();
+    const now = getAppDateTime().toISOString();
     await execute('UPDATE lc_events SET deleted_at = ?, updated_at = ? WHERE id = ?', [
       now,
       now,

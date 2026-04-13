@@ -41,7 +41,11 @@ export default function IapDashboardScreen() {
   useEffect(() => {
     const isProduction = env.isProduction && Constants.executionEnvironment !== 'storeClient';
     if (isProduction && !isDashboardUnlocked()) {
-      router.back();
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/(tabs)/home');
+      }
       return;
     }
     resetDashboardUnlock();
@@ -74,7 +78,11 @@ export default function IapDashboardScreen() {
   useEffect(() => {
     if (env.isDev) return;
     if (!supportDiagnosticsEnabled) {
-      router.back();
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/(tabs)/home');
+      }
     }
   }, [router, supportDiagnosticsEnabled]);
 
