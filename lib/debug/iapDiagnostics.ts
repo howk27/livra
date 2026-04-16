@@ -36,7 +36,10 @@ export type DiagnosticEventType =
   | 'restore_error'
   | 'restore_cancelled'
   | 'restore_none_found'
+  | 'restore_unverifiable_receipt'
+  | 'restore_unsupported_environment'
   | 'restore_refresh_failed'
+  | 'iap_manager_buy_unsupported_environment'
   | 'iap_manager_receipt_missing_transient'
   | 'iap_manager_purchase_token_missing_transient'
   | 'iap_manager_clearTransactionsIOS_executed'
@@ -165,6 +168,15 @@ interface IAPDiagnosticsState {
     bundleId: string;
   };
   iapListenersActive: boolean;
+  /** Non-PII entitlement snapshot for support mode */
+  entitlementSnapshot?: {
+    effectiveUnlocked: boolean;
+    dbUnlocked: boolean;
+    verification: 'verified_db' | 'cache_grace' | 'unverified';
+    proStatusTier: 'unlocked' | 'locked' | 'unknown';
+  };
+  iapEnvironment?: 'native_store' | 'unsupported_expo_web';
+  lastRestoreOutcomeCategory?: string;
 }
 
 const MAX_EVENTS = 200;

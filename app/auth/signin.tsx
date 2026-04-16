@@ -37,10 +37,11 @@ import { useAuth } from '../../hooks/useAuth';
 import { useNotifications } from '../../hooks/useNotifications';
 import { logger } from '../../lib/utils/logger';
 import * as Notifications from 'expo-notifications';
+import { getAuthStorageWriteFailed } from '../../lib/auth/authStorageHealth';
 
 type AuthMode = 'login' | 'signup';
 
-const LIVRA_APP_ICON = require('../../assets/icon.png');
+const LIVRA_AUTH_LOGO = require('../../assets/adaptive-icon.png');
 
 export default function SignInScreen() {
   const theme = useEffectiveTheme();
@@ -425,6 +426,8 @@ export default function SignInScreen() {
           
           // Successfully signed in - auth listener will route
           return;
+        } else {
+          setError('Unable to sign in. Please try again.');
         }
       } else {
         // Sign up
@@ -597,10 +600,23 @@ export default function SignInScreen() {
             setConfirmPassword('');
             setFullName('');
           }
+        } else {
+          setError('Could not create account. Please try again.');
         }
       }
-    } catch (err: any) {
-      setError(err.message || 'An unexpected error occurred');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '';
+      const storageFlag = await getAuthStorageWriteFailed();
+      if (
+        storageFlag ||
+        /securestore|keychain|keystore|user interaction|not available|storage/i.test(msg)
+      ) {
+        setError(
+          'This device could not save your sign-in securely. Check storage space and Keychain / device security settings, then try again.',
+        );
+      } else {
+        setError(msg || 'Something went wrong. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -751,27 +767,22 @@ export default function SignInScreen() {
         
         return;
       }
-    } catch (error: any) {
-      // Handle user cancellation gracefully - don't log as error
-      if (error.code === 'ERR_REQUEST_CANCELED' || error.code === 'ERR_CANCELED') {
-        // User canceled the Apple Sign-In flow - this is expected behavior
+    } catch (error: unknown) {
+      const err = error as { code?: string; message?: string };
+      if (err.code === 'ERR_REQUEST_CANCELED' || err.code === 'ERR_CANCELED') {
         logger.log('Apple Sign-In was canceled by user');
         setIsAppleLoading(false);
         return;
       }
 
-      // Log other errors
-      logger.error('Error during Apple Sign-In:', error);
-      
-      // Provide user-friendly error message
+      logger.error('Error during Apple Sign-In:', err.message ?? err.code ?? 'unknown');
+
       let errorMessage = 'Failed to sign in with Apple. Please try again.';
-      
-      if (error.message) {
-        // Use the error message if available
-        errorMessage = error.message;
-      } else if (error.code) {
-        // Provide specific messages for known error codes
-        switch (error.code) {
+
+      if (err.message) {
+        errorMessage = err.message;
+      } else if (err.code) {
+        switch (err.code) {
           case 'ERR_INVALID_RESPONSE':
             errorMessage = 'Invalid response from Apple. Please try again.';
             break;
@@ -779,10 +790,16 @@ export default function SignInScreen() {
             errorMessage = 'Apple Sign-In is not available on this device.';
             break;
           default:
-            errorMessage = `Apple Sign-In error: ${error.code}. Please try again.`;
+            errorMessage = `Apple Sign-In error: ${err.code}. Please try again.`;
         }
       }
-      
+
+      const storageFlag = await getAuthStorageWriteFailed();
+      if (storageFlag || /securestore|keychain|keystore|storage/i.test(err.message ?? '')) {
+        errorMessage =
+          'This device could not save your sign-in securely. Check storage and security settings, then try again.';
+      }
+
       setError(errorMessage);
       setIsAppleLoading(false);
     } finally {
@@ -814,9 +831,9 @@ export default function SignInScreen() {
             <View style={styles.content}>
           <Animated.View entering={FadeIn.duration(400)} style={styles.logoWrap}>
             <Image
-              source={LIVRA_APP_ICON}
+              source={LIVRA_AUTH_LOGO}
               style={styles.authLogo}
-              resizeMode="cover"
+              resizeMode="contain"
               accessibilityLabel="Livra"
               accessibilityIgnoresInvertColors
             />
@@ -1157,10 +1174,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   authLogo: {
-    width: 88,
-    height: 88,
-    borderRadius: borderRadius.xl,
-    overflow: 'hidden',
+    width: 96,
+    height: 96,
   },
   header: {
     marginBottom: spacing['4xl'],

@@ -12,6 +12,7 @@ import { useIapSubscriptions } from './useIapSubscriptions';
 import { logger } from '../lib/utils/logger';
 import { getAppDate, getAppDateTime, isDebugAppDateActive } from '../lib/appDate';
 import { useAppDateStore } from '../state/appDateSlice';
+import { updateNotifications } from '../services/notificationService';
 
 const FREE_COUNTER_LIMIT = 3;
 
@@ -38,8 +39,6 @@ export const useMarks = () => {
   const loadEvents = useEventsStore((state) => state.loadEvents);
   const events = useEventsStore((state) => state.events);
   const getEventsByMark = useEventsStore((state) => state.getEventsByMark);
-  const getLastIncrementEvent = useEventsStore((state) => state.getLastIncrementEvent);
-  const getIncrementsToday = useEventsStore((state) => state.getIncrementsToday);
   const { user } = useAuth();
   const { sync } = useSync();
   const { isProUnlocked, proStatus } = useIapSubscriptions();
@@ -86,8 +85,8 @@ export const useMarks = () => {
       skipSync?: boolean; // Optional flag to skip sync (useful for batch operations)
     }) => {
       // Check counter limit for free users (skip check if skipSync is true - used for onboarding)
-      if (!data.skipSync && (proStatus.status === 'unknown' || !isProUnlocked)) {
-        if (proStatus.status === 'unknown') {
+      if (!data.skipSync && !isProUnlocked) {
+        if (proStatus.verification === 'unverified' && proStatus.status === 'unknown') {
           throw new Error('PRO_STATUS_UNKNOWN: Unable to verify subscription. Please try again.');
         }
         // Count only active (non-deleted) counters
@@ -122,13 +121,25 @@ export const useMarks = () => {
         });
       }
 
+      void updateNotifications(data.user_id);
+
       evaluateMarkBadges(mark.id, data.user_id).catch((error) => {
         logger.error('Error initializing badges for new mark:', error);
       });
 
       return mark;
     },
-    [addMarkAction, marks, marks.length, user, sync, evaluateMarkBadges, isProUnlocked, proStatus.status]
+    [
+      addMarkAction,
+      marks,
+      marks.length,
+      user,
+      sync,
+      evaluateMarkBadges,
+      isProUnlocked,
+      proStatus.status,
+      proStatus.verification,
+    ]
   );
 
   const incrementMark = useCallback(
@@ -238,67 +249,51 @@ export const useMarks = () => {
           total: newTotal,
           last_activity_date: today,
         });
-        // Write completed successfully - the optimistic update is now persisted
-        logger.log('[INCREMENT] ✅ DB write completed successfully:', { markId, newTotal });
-        
-        // Verify the write by reading back from DB
-        const { queryFirst } = await import('../lib/db');
-        const verifyMark = await queryFirst<{ total: number }>(
-          'SELECT total FROM lc_counters WHERE id = ?',
-          [markId]
-        );
-        logger.log('[INCREMENT] DB verification read:', {
-          markId,
-          dbTotal: verifyMark?.total,
-          expectedTotal: newTotal,
-          match: verifyMark?.total === newTotal,
+        await addEvent({
+          mark_id: markId,
+          user_id: userId,
+          event_type: 'increment',
+          amount,
+          occurred_at: now.toISOString(),
+          occurred_local_date: today,
         });
+        logger.log('[INCREMENT] ✅ Counter and event persisted:', { markId, newTotal });
       } catch (error) {
-        logger.error('[INCREMENT] ❌ DB write FAILED:', {
+        logger.error('[INCREMENT] ❌ Persist failed — reverting counter row to pre-increment state', {
           markId,
           newTotal,
           error: error instanceof Error ? error.message : String(error),
-          errorStack: error instanceof Error ? error.stack : undefined,
         });
-        // On error, reload from database but preserve the optimistic update if it's newer
-        // Don't immediately reload as that would overwrite the optimistic update
-        // Instead, let the next sync handle it, or reload after a delay
-        setTimeout(() => {
-          loadMarks(userId).catch((err) => {
-            logger.error('[INCREMENT] Error reloading marks after failed update:', err);
+        try {
+          await updateMarkAction(markId, {
+            total: currentTotal,
+            last_activity_date: mark.last_activity_date,
           });
-        }, 1000); // Delay to allow database write to complete if it's just slow
-      }
-
-      // CRITICAL: Add event IMMEDIATELY (not deferred) so stats screen can update in real-time
-      // The event store update triggers reactivity in components that depend on events (ring, pie chart)
-      logger.log('[INCREMENT] Adding event immediately:', {
-        markId,
-        eventType: 'increment',
-        amount,
-        occurred_at: now.toISOString(),
-        occurred_local_date: today,
-      });
-
-      // Add event immediately (not in InteractionManager) so UI updates instantly
-      // CRITICAL: occurred_local_date must match device local timezone
-      addEvent({
-        mark_id: markId,
-        user_id: userId,
-        event_type: 'increment',
-        amount,
-        occurred_at: now.toISOString(),
-        occurred_local_date: today,
-      })
-      .then(() => {
-        logger.log('[INCREMENT] ✅ Event added successfully:', { markId });
-      })
-      .catch((error) => {
-        logger.error('[INCREMENT] ❌ Error adding event after increment:', {
-          markId,
-          error: error instanceof Error ? error.message : String(error),
+        } catch (revertErr) {
+          logger.error('[INCREMENT] Revert counter total failed:', revertErr);
+          const { reconcileMarkTotalWithPersistedEvents } = await import(
+            '../lib/db/markTotalReconciliation'
+          );
+          await reconcileMarkTotalWithPersistedEvents(userId, markId).catch((reconcileErr) => {
+            logger.error('[INCREMENT] reconcile after failed revert failed', {
+              markId,
+              message: reconcileErr instanceof Error ? reconcileErr.message : String(reconcileErr),
+            });
+          });
+        }
+        useMarksStore.setState((state) => {
+          const ru = new Map(state.recentUpdates || new Map());
+          ru.delete(markId);
+          return {
+            marks: state.marks.map((m) => (m.id === markId ? mark : m)),
+            recentUpdates: ru,
+          };
         });
-      });
+        loadMarks(userId).catch((err) => {
+          logger.error('[INCREMENT] loadMarks after revert failed:', err);
+        });
+        throw error;
+      }
 
       // Defer non-critical operations to avoid blocking the main thread
       InteractionManager.runAfterInteractions(() => {
@@ -405,69 +400,56 @@ export const useMarks = () => {
         lastActivityDate: today,
       });
       
+      const previousTotal = mark.total;
       try {
         await updateMarkAction(markId, {
           total: newTotal,
           last_activity_date: today,
         });
-        // Write completed successfully - the optimistic update is now persisted
-        logger.log('[DECREMENT] ✅ DB write completed successfully:', { markId, newTotal });
-        
-        // Verify the write by reading back from DB
-        const { queryFirst } = await import('../lib/db');
-        const verifyMark = await queryFirst<{ total: number }>(
-          'SELECT total FROM lc_counters WHERE id = ?',
-          [markId]
-        );
-        logger.log('[DECREMENT] DB verification read:', {
-          markId,
-          dbTotal: verifyMark?.total,
-          expectedTotal: newTotal,
-          match: verifyMark?.total === newTotal,
+        await addEvent({
+          mark_id: markId,
+          user_id: userId,
+          event_type: 'decrement',
+          amount,
+          occurred_at: now.toISOString(),
+          occurred_local_date: today,
         });
+        logger.log('[DECREMENT] ✅ Counter and event persisted:', { markId, newTotal });
       } catch (error) {
-        logger.error('[DECREMENT] ❌ DB write FAILED:', {
+        logger.error('[DECREMENT] ❌ Persist failed — reverting counter', {
           markId,
-          newTotal,
           error: error instanceof Error ? error.message : String(error),
         });
-        // On error, reload from database but preserve the optimistic update if it's newer
-        setTimeout(() => {
-          loadMarks(userId).catch((err) => {
-            logger.error('[DECREMENT] Error reloading marks after failed update:', err);
+        try {
+          await updateMarkAction(markId, {
+            total: previousTotal,
+            last_activity_date: mark.last_activity_date,
           });
-        }, 1000); // Delay to allow database write to complete if it's just slow
-      }
-
-      // CRITICAL: Add event IMMEDIATELY (not deferred) so chart/ring update instantly
-      // The event store update triggers reactivity in components
-      logger.log('[DECREMENT] Adding event immediately:', {
-        markId,
-        eventType: 'decrement',
-        amount,
-        occurred_at: now.toISOString(),
-        occurred_local_date: today,
-      });
-
-      // Add event immediately (don't defer) so UI updates instantly
-      // CRITICAL: Decrement events must be added so charts can recalculate
-      addEvent({
-        mark_id: markId,
-        user_id: userId,
-        event_type: 'decrement',
-        amount,
-        occurred_at: now.toISOString(),
-        occurred_local_date: today,
-      })
-      .then(() => {
-        logger.log('[DECREMENT] ✅ Event added successfully:', { markId });
-      })
-      .catch((error) => {
-        logger.error('[DECREMENT] ❌ Error adding event after decrement:', {
-          markId,
-          error: error instanceof Error ? error.message : String(error),
+        } catch (revertErr) {
+          logger.error('[DECREMENT] Revert counter total failed:', revertErr);
+          const { reconcileMarkTotalWithPersistedEvents } = await import(
+            '../lib/db/markTotalReconciliation'
+          );
+          await reconcileMarkTotalWithPersistedEvents(userId, markId).catch((reconcileErr) => {
+            logger.error('[DECREMENT] reconcile after failed revert failed', {
+              markId,
+              message: reconcileErr instanceof Error ? reconcileErr.message : String(reconcileErr),
+            });
+          });
+        }
+        useMarksStore.setState((state) => {
+          const ru = new Map(state.recentUpdates || new Map());
+          ru.delete(markId);
+          return {
+            marks: state.marks.map((m) => (m.id === markId ? mark : m)),
+            recentUpdates: ru,
+          };
         });
-      });
+        loadMarks(userId).catch((err) => {
+          logger.error('[DECREMENT] loadMarks after revert failed:', err);
+        });
+        throw error;
+      }
 
       // Defer other non-critical operations to avoid blocking the main thread
       InteractionManager.runAfterInteractions(() => {
@@ -490,23 +472,37 @@ export const useMarks = () => {
       const now = getAppDateTime();
       const today = formatDate(now);
 
-      // Add reset event
-      await addEvent({
-        mark_id: markId,
-        user_id: userId,
-        event_type: 'reset',
-        amount: mark.total,
-        occurred_at: now.toISOString(),
-        occurred_local_date: today,
-      });
+      try {
+        await addEvent({
+          mark_id: markId,
+          user_id: userId,
+          event_type: 'reset',
+          amount: mark.total,
+          occurred_at: now.toISOString(),
+          occurred_local_date: today,
+        });
 
-      // Reset mark total
-      await updateMarkAction(markId, {
-        total: 0,
-        last_activity_date: today,
-      });
+        await updateMarkAction(markId, {
+          total: 0,
+          last_activity_date: today,
+        });
+      } catch (error) {
+        const { reconcileMarkTotalWithPersistedEvents } = await import('../lib/db/markTotalReconciliation');
+        await reconcileMarkTotalWithPersistedEvents(userId, markId).catch((reconcileErr) => {
+          logger.error('[RESET_MARK] reconcile after persist error failed', {
+            markId,
+            message: reconcileErr instanceof Error ? reconcileErr.message : String(reconcileErr),
+          });
+        });
+        loadMarks(userId).catch((loadErr) => {
+          logger.error('[RESET_MARK] loadMarks after persist error failed', {
+            markId,
+            message: loadErr instanceof Error ? loadErr.message : String(loadErr),
+          });
+        });
+        throw error;
+      }
 
-      // Reset streak if enabled
       if (mark.enable_streak) {
         await updateStreakInDB(markId, userId, {
           current: 0,
@@ -518,14 +514,13 @@ export const useMarks = () => {
         logger.error('Error evaluating badges after reset:', error);
       });
 
-      // Sync to Supabase after resetting
       if (user) {
         sync().catch((error) => {
           logger.error('Error syncing after mark reset:', error);
         });
       }
     },
-    [getMark, addEvent, updateMarkAction, user, sync]
+    [getMark, addEvent, updateMarkAction, user, sync, loadMarks]
   );
 
   const updateMark = useCallback(
@@ -552,8 +547,10 @@ export const useMarks = () => {
           logger.error('Error syncing after mark update:', error);
         });
       }
+      const m = getMark(markId);
+      if (m?.user_id) void updateNotifications(m.user_id);
     },
-    [updateMarkAction, user, sync]
+    [updateMarkAction, user, sync, getMark]
   );
 
   const deleteMark = useCallback(
@@ -565,12 +562,12 @@ export const useMarks = () => {
       // Don't reload marks - the store is already updated by deleteMarkAction
       if (user) {
         try {
-          await sync(); // AWAIT the sync to ensure it completes before continuing
+          await sync({ bypassThrottle: true });
         } catch (error) {
           logger.error('Error syncing after mark delete:', error);
-          // Don't throw - deletion is already done locally
         }
       }
+      void updateNotifications(user?.id);
     },
     [deleteMarkAction, user, sync]
   );

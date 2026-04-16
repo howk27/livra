@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { View, StyleSheet, ActivityIndicator } from 'react-native';
+import React, { useEffect, useState, useRef } from 'react';
+import { View, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { colors } from '../../theme/colors';
@@ -8,38 +8,55 @@ import { useEffectiveTheme } from '../../state/uiSlice';
 import { AppText } from '../../components/Typography';
 import { GradientBackground } from '../../components/GradientBackground';
 import { useAuth } from '../../hooks/useAuth';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { logger } from '../../lib/utils/logger';
 
 export default function SigningOutScreen() {
   const theme = useEffectiveTheme();
   const themeColors = colors[theme];
   const router = useRouter();
-  const { signOut } = useAuth();
+  const { signOut, user, initialized, loading } = useAuth();
+  const [signOutError, setSignOutError] = useState<string | null>(null);
+  const attemptedRef = useRef(false);
 
+  // If already signed out, leave immediately (no fake delays).
   useEffect(() => {
-    const performSignOut = async () => {
-      try {
-        // Small delay to show the loading screen
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        // Perform sign out
-        await signOut();
-        
-        // Wait a bit more to ensure sign out completes
-        await new Promise(resolve => setTimeout(resolve, 300));
-        
-        // Redirect to sign in screen
-        router.replace('/auth/signin');
-      } catch (error) {
-        logger.error('Error during sign out:', error);
-        // Even if there's an error, try to redirect
-        router.replace('/auth/signin');
-      }
-    };
+    if (!initialized || loading) return;
+    if (!user) {
+      router.replace('/auth/signin');
+    }
+  }, [initialized, loading, user, router]);
 
-    performSignOut();
-  }, [router, signOut]);
+  // Single sign-out attempt tied to real auth API; navigation is driven by `user` becoming null.
+  useEffect(() => {
+    if (!initialized || loading || !user || attemptedRef.current) {
+      return;
+    }
+    attemptedRef.current = true;
+    setSignOutError(null);
+    void signOut().catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : 'Could not sign out';
+      logger.error('[SigningOut] signOut failed:', msg);
+      setSignOutError(
+        'We could not reach the server to sign out. Check your connection, or try again to clear this device.',
+      );
+      attemptedRef.current = false;
+    });
+  }, [initialized, loading, user, signOut]);
+
+  const handleRetry = () => {
+    if (!user) {
+      router.replace('/auth/signin');
+      return;
+    }
+    setSignOutError(null);
+    void signOut().catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : 'Could not sign out';
+      logger.error('[SigningOut] Retry signOut failed:', msg);
+      setSignOutError(
+        'We could not reach the server to sign out. Check your connection, or try again to clear this device.',
+      );
+    });
+  };
 
   return (
     <GradientBackground>
@@ -47,11 +64,23 @@ export default function SigningOutScreen() {
         <View style={styles.content}>
           <ActivityIndicator size="large" color={themeColors.primary} />
           <AppText variant="headline" style={[styles.title, { color: themeColors.text }]}>
-            Signing out...
+            {signOutError ? 'Sign-out pending' : 'Signing out…'}
           </AppText>
           <AppText variant="body" style={[styles.subtitle, { color: themeColors.textSecondary }]}>
-            Please wait while we sign you out
+            {signOutError ??
+              'Finishing on this device. If you stay here, your session is being cleared.'}
           </AppText>
+          {signOutError ? (
+            <TouchableOpacity
+              style={[styles.retry, { backgroundColor: themeColors.primary }]}
+              onPress={handleRetry}
+              activeOpacity={0.85}
+            >
+              <AppText variant="button" style={{ color: themeColors.text }}>
+                Try again
+              </AppText>
+            </TouchableOpacity>
+          ) : null}
         </View>
       </SafeAreaView>
     </GradientBackground>
@@ -78,5 +107,10 @@ const styles = StyleSheet.create({
     fontSize: fontSize.base,
     textAlign: 'center',
   },
+  retry: {
+    marginTop: spacing.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xl,
+    borderRadius: 12,
+  },
 });
-

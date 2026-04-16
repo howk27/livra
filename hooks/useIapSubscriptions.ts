@@ -16,6 +16,7 @@ import {
   ALL_PRODUCT_IDS,
   type IAPProduct,
   type IAPState,
+  isNativeStorePurchasesSupported,
 } from '../lib/iap/iap';
 import { logger } from '../lib/utils/logger';
 import {
@@ -30,15 +31,37 @@ import { env } from '../lib/env';
 const isExpoGo = Constants.appOwnership === 'expo';
 
 const normalizeProStatus = (status: ProStatusResult | null | undefined): ProStatusResult => {
+  const fallback = (reason: string): ProStatusResult => ({
+    status: 'unknown',
+    source: 'none',
+    reason,
+    dbUnlocked: false,
+    effectiveUnlocked: false,
+    verification: 'unverified',
+  });
   if (!status || typeof status !== 'object') {
-    return { status: 'unknown', source: 'none', reason: 'invalid_status' };
+    return fallback('invalid_status');
   }
   const validStatuses = new Set(['unlocked', 'locked', 'unknown']);
   const validSources = new Set(['db', 'cache', 'none']);
+  const validVerification = new Set(['verified_db', 'cache_grace', 'unverified']);
   if (!validStatuses.has(status.status) || !validSources.has(status.source)) {
-    return { status: 'unknown', source: 'none', reason: 'invalid_status' };
+    return fallback('invalid_status');
   }
-  return status;
+  const verification = validVerification.has(status.verification)
+    ? status.verification
+    : 'unverified';
+  const dbUnlocked = typeof status.dbUnlocked === 'boolean' ? status.dbUnlocked : status.status === 'unlocked';
+  const effectiveUnlocked =
+    typeof status.effectiveUnlocked === 'boolean'
+      ? status.effectiveUnlocked
+      : dbUnlocked || (verification === 'cache_grace' && status.status === 'unknown');
+  return {
+    ...status,
+    verification,
+    dbUnlocked,
+    effectiveUnlocked,
+  };
 };
 
 interface UseIapSubscriptionsReturn {
@@ -76,13 +99,22 @@ interface UseIapSubscriptionsReturn {
       lastError: string | null;
       isExpoGo: boolean;
       platform: string;
+      iapNativePurchasesSupported: boolean;
     };
 }
 
 type RestoreOutcome = {
-  outcome: 'success' | 'none_found' | 'cancelled' | 'error';
+  outcome:
+    | 'success'
+    | 'none_found'
+    | 'unverifiable_receipt'
+    | 'unsupported_environment'
+    | 'cancelled'
+    | 'error';
   foundPurchases: number;
   dbConfirmed?: boolean;
+  accountEntitlementOnly?: boolean;
+  restoreFailureCategory?: 'receipt_unavailable' | 'purchase_token_unavailable';
   errorCode?: string;
   message?: string;
 };
@@ -104,6 +136,9 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
     status: 'unknown',
     source: 'none',
     reason: 'not_checked',
+    dbUnlocked: false,
+    effectiveUnlocked: false,
+    verification: 'unverified',
   });
   const [hasPendingVerification, setHasPendingVerification] = useState(false);
   
@@ -116,6 +151,7 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
     lastError: null as string | null,
     isExpoGo,
     platform: Platform.OS,
+    iapNativePurchasesSupported: isNativeStorePurchasesSupported(),
   });
 
   const initRef = useRef(false);
@@ -158,6 +194,7 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
         productsReturned: state.products.length,
         connectionStatus: state.connectionStatus,
         lastError: state.lastError?.message || null,
+        iapNativePurchasesSupported: isNativeStorePurchasesSupported(),
       }));
     });
 
@@ -187,7 +224,16 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
         // Check premium status
         const status = normalizeProStatus(await checkProStatus());
         setProStatus(status);
-        setIsProUnlocked(status.status === 'unlocked');
+        setIsProUnlocked(status.effectiveUnlocked);
+        updateDiagnosticsState({
+          entitlementSnapshot: {
+            effectiveUnlocked: status.effectiveUnlocked,
+            dbUnlocked: status.dbUnlocked,
+            verification: status.verification,
+            proStatusTier: status.status,
+          },
+          iapEnvironment: isNativeStorePurchasesSupported() ? 'native_store' : 'unsupported_expo_web',
+        });
       } catch (error: any) {
         logger.error('[IAP Hook] Initialization error:', error);
       }
@@ -205,7 +251,16 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
     const checkStatus = async () => {
       const status = normalizeProStatus(await checkProStatus());
       setProStatus(status);
-      setIsProUnlocked(status.status === 'unlocked');
+      setIsProUnlocked(status.effectiveUnlocked);
+      updateDiagnosticsState({
+        entitlementSnapshot: {
+          effectiveUnlocked: status.effectiveUnlocked,
+          dbUnlocked: status.dbUnlocked,
+          verification: status.verification,
+          proStatusTier: status.status,
+        },
+        iapEnvironment: isNativeStorePurchasesSupported() ? 'native_store' : 'unsupported_expo_web',
+      });
     };
     checkStatus();
   }, [managerState.products.length]);
@@ -229,7 +284,10 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
             : false;
           setHasPendingVerification(pending || isTransient);
         }
-      } catch {
+      } catch (err) {
+        logger.warn('[IAP Hook] hasPendingVerification failed; treating as unknown (not clearing double-charge UI aggressively)', {
+          message: err instanceof Error ? err.message : String(err),
+        });
         if (mounted) {
           setHasPendingVerification(false);
         }
@@ -350,11 +408,20 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
       // never downgrade a successful restore if refresh fails.
       // Keep outcome 'success' and surface a non-fatal message instead.
       // Refresh premium status only after confirmed success
-      if (outcomeResult.outcome === 'success' && outcomeResult.dbConfirmed !== false) {
+      if (outcomeResult.outcome === 'success') {
         try {
           const status = normalizeProStatus(await checkProStatus());
           setProStatus(status);
-          setIsProUnlocked(status.status === 'unlocked');
+          setIsProUnlocked(status.effectiveUnlocked);
+          updateDiagnosticsState({
+            entitlementSnapshot: {
+              effectiveUnlocked: status.effectiveUnlocked,
+              dbUnlocked: status.dbUnlocked,
+              verification: status.verification,
+              proStatusTier: status.status,
+            },
+            lastRestoreOutcomeCategory: 'success',
+          });
         } catch (refreshError: any) {
           diagEvent('restore_refresh_failed', {
             code: refreshError?.code || 'UNKNOWN',
@@ -378,6 +445,18 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
         diagEvent('restore_none_found', {
           foundPurchases: result.foundPurchases,
         });
+        updateDiagnosticsState({ lastRestoreOutcomeCategory: 'none_found' });
+      } else if (result.outcome === 'unverifiable_receipt') {
+        diagEvent('restore_unverifiable_receipt', {
+          foundPurchases: result.foundPurchases,
+          category: result.restoreFailureCategory,
+        });
+        updateDiagnosticsState({
+          lastRestoreOutcomeCategory: result.restoreFailureCategory || 'receipt_unavailable',
+        });
+      } else if (result.outcome === 'unsupported_environment') {
+        diagEvent('restore_unsupported_environment', {});
+        updateDiagnosticsState({ lastRestoreOutcomeCategory: 'unsupported_environment' });
       } else if (result.outcome === 'cancelled') {
         logger.log('[IAP Hook] Restore cancelled by user');
         diagEvent('restore_cancelled', {
@@ -417,7 +496,16 @@ export function useIapSubscriptions(): UseIapSubscriptionsReturn {
   const refreshProStatus = useCallback(async () => {
     const status = normalizeProStatus(await checkProStatus());
     setProStatus(status);
-    setIsProUnlocked(status.status === 'unlocked');
+    setIsProUnlocked(status.effectiveUnlocked);
+    updateDiagnosticsState({
+      entitlementSnapshot: {
+        effectiveUnlocked: status.effectiveUnlocked,
+        dbUnlocked: status.dbUnlocked,
+        verification: status.verification,
+        proStatusTier: status.status,
+      },
+      iapEnvironment: isNativeStorePurchasesSupported() ? 'native_store' : 'unsupported_expo_web',
+    });
   }, []);
 
   /**

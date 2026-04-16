@@ -3,9 +3,22 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import { logger } from './utils/logger';
 import { env } from './env';
+import {
+  markAuthStorageWriteFailed,
+  clearAuthStorageWriteFailed,
+  markAuthStorageRemoveFailed,
+  clearAuthStorageRemoveFailed,
+} from './auth/authStorageHealth';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+
+/** Log storage issues without key names or values (auth tokens). */
+function logAuthStorageError(op: 'getItem' | 'setItem' | 'removeItem', error: unknown): void {
+  const name = error instanceof Error ? error.name : 'unknown';
+  const message = error instanceof Error ? error.message : String(error);
+  logger.error(`[AuthStorage] ${op} failed`, { errorName: name, messageLength: message.length });
+}
 
 // Custom storage adapter for Expo SecureStore
 const ExpoSecureStoreAdapter = {
@@ -16,7 +29,7 @@ const ExpoSecureStoreAdapter = {
       }
       return await SecureStore.getItemAsync(key);
     } catch (error) {
-      logger.error('Error getting item from SecureStore:', error);
+      logAuthStorageError('getItem', error);
       return null;
     }
   },
@@ -24,24 +37,45 @@ const ExpoSecureStoreAdapter = {
     try {
       if (Platform.OS === 'web') {
         localStorage.setItem(key, value);
+        await clearAuthStorageWriteFailed();
         return;
       }
       await SecureStore.setItemAsync(key, value);
+      await clearAuthStorageWriteFailed();
     } catch (error) {
-      logger.error('Error setting item in SecureStore:', error);
-      // Don't throw - allow app to continue without secure storage
+      logAuthStorageError('setItem', error);
+      await markAuthStorageWriteFailed();
+      // Propagate so GoTrue does not assume persistence succeeded (avoids fake-success logins)
+      throw error;
     }
   },
+  // Bounded retry: transient Keychain errors should not leave a ghost session on disk after sign-out.
   removeItem: async (key: string) => {
+    const runWeb = () => {
+      localStorage.removeItem(key);
+    };
+    const runNative = async () => {
+      await SecureStore.deleteItemAsync(key);
+    };
     try {
       if (Platform.OS === 'web') {
-        localStorage.removeItem(key);
+        runWeb();
+        await clearAuthStorageRemoveFailed();
         return;
       }
-      await SecureStore.deleteItemAsync(key);
+      try {
+        await runNative();
+      } catch (firstErr) {
+        logAuthStorageError('removeItem', firstErr);
+        await new Promise<void>((r) => setTimeout(r, 120));
+        await runNative();
+      }
+      await clearAuthStorageRemoveFailed();
     } catch (error) {
-      logger.error('Error removing item from SecureStore:', error);
-      // Don't throw - allow app to continue without secure storage
+      logAuthStorageError('removeItem', error);
+      // Separate from write-failed: boot will run local signOut once to clear orphaned SecureStore session.
+      await markAuthStorageRemoveFailed();
+      // Resolve so GoTrue can finish in-memory sign-out.
     }
   },
 };

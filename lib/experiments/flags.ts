@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { env } from '../env';
+import { logger } from '../utils/logger';
 
 export type FeatureFlag =
   | 'weeklyReview'
@@ -47,8 +48,8 @@ const persistOverrides = async () => {
       return;
     }
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(overrides));
-  } catch {
-    // Best effort only
+  } catch (err) {
+    logger.warn('[Flags] persistOverrides failed', { message: err instanceof Error ? err.message : String(err) });
   }
 };
 
@@ -57,7 +58,10 @@ export const hydrateFlagOverrides = async (): Promise<void> => {
   try {
     const raw = await AsyncStorage.getItem(STORAGE_KEY);
     overrides = raw ? sanitizeOverrides(JSON.parse(raw)) : {};
-  } catch {
+  } catch (err) {
+    logger.warn('[Flags] hydrateFlagOverrides read/parse failed; using defaults', {
+      message: err instanceof Error ? err.message : String(err),
+    });
     overrides = {};
   } finally {
     hydrated = true;

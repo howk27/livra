@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { addDays } from 'date-fns';
+import { logger } from '../lib/utils/logger';
 
 const STORAGE_KEY = '@livra_debug_app_date_override';
 
@@ -33,7 +34,10 @@ export const useAppDateStore = create<AppDateState>((set, get) => ({
       } else {
         set({ hydrated: true });
       }
-    } catch {
+    } catch (err) {
+      logger.warn('[AppDate] hydrate AsyncStorage read failed', {
+        message: err instanceof Error ? err.message : String(err),
+      });
       set({ hydrated: true });
     }
   },
@@ -44,8 +48,10 @@ export const useAppDateStore = create<AppDateState>((set, get) => ({
     try {
       if (value) await AsyncStorage.setItem(STORAGE_KEY, value);
       else await AsyncStorage.removeItem(STORAGE_KEY);
-    } catch {
-      /* ignore */
+    } catch (err) {
+      logger.warn('[AppDate] persist debug date override failed', {
+        message: err instanceof Error ? err.message : String(err),
+      });
     }
   },
 

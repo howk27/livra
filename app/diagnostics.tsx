@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Switch, TextInput, TouchableOpacity, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppText } from '../components/Typography';
 import { useEffectiveTheme } from '../state/uiSlice';
@@ -29,12 +29,15 @@ import { logger } from '../lib/utils/logger';
 import { getAppDate } from '../lib/appDate';
 import { formatDate } from '../lib/date';
 import { useAppDateStore } from '../state/appDateSlice';
+import { readSyncDiagSnapshot, type SyncDiagSnapshotV1 } from '../lib/sync/syncDiagSnapshot';
 
 export default function DiagnosticsScreen() {
   const theme = useEffectiveTheme();
   const themeColors = colors[theme];
   const router = useRouter();
   const { diagnosticsUnlocked } = useDevTools();
+  /** Mock/seed/feature-flag tooling — development builds only (production uses gesture unlock for read-only diagnostics). */
+  const showDevInjectionUI = env.isDev;
   const queryClient = useQueryClient();
   const [devStatus, setDevStatus] = useState<{
     localDate: string;
@@ -46,12 +49,27 @@ export default function DiagnosticsScreen() {
     seedUserId: string | null;
   } | null>(null);
   const { user } = useAuth();
+  const [syncDiagSnapshot, setSyncDiagSnapshot] = useState<SyncDiagSnapshotV1 | null>(null);
+  const refreshSyncDiagSnapshot = useCallback(async () => {
+    setSyncDiagSnapshot(await readSyncDiagSnapshot());
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshSyncDiagSnapshot();
+    }, [refreshSyncDiagSnapshot]),
+  );
+
   const [resetBeforeWeeklySeed, setResetBeforeWeeklySeed] = useState(false);
   const debugDateOverride = useAppDateStore((s) => s.debugDateOverride);
   const setDebugDateOverride = useAppDateStore((s) => s.setDebugDateOverride);
   const shiftDebugDateByDays = useAppDateStore((s) => s.shiftDebugDateByDays);
   const useRealDate = useAppDateStore((s) => s.useRealDate);
   const [manualSimDate, setManualSimDate] = useState('');
+  const [totalMismatchSummary, setTotalMismatchSummary] = useState<{
+    count: number;
+    sampleIds: string[];
+  } | null>(null);
 
   const loadDevStatus = async () => {
     await initDatabase();
@@ -85,6 +103,17 @@ export default function DiagnosticsScreen() {
       lastSeedAction,
       seedUserId,
     });
+
+    if (user?.id) {
+      const { scanMarkTotalMismatchesForUser } = await import('../lib/db/markTotalReconciliation');
+      const mismatches = await scanMarkTotalMismatchesForUser(user.id);
+      setTotalMismatchSummary({
+        count: mismatches.length,
+        sampleIds: mismatches.slice(0, 3).map((m) => m.markId),
+      });
+    } else {
+      setTotalMismatchSummary(null);
+    }
   };
 
   const [weeklyReview, setWeeklyReview] = useFeatureFlag('weeklyReview');
@@ -244,7 +273,8 @@ export default function DiagnosticsScreen() {
 
   useEffect(() => {
     loadDevStatus();
-  }, [user?.id]);
+    void refreshSyncDiagSnapshot();
+  }, [user?.id, refreshSyncDiagSnapshot]);
 
   const handleResetFlags = async () => {
     await resetFlagOverrides();
@@ -262,6 +292,60 @@ export default function DiagnosticsScreen() {
         <AppText variant="title" style={[styles.title, { color: themeColors.text }]}>
           Diagnostics
         </AppText>
+        {!showDevInjectionUI ? (
+          <AppText variant="caption" style={[styles.readOnlyHint, { color: themeColors.textSecondary }]}>
+            Read-only device summary. No data can be changed from this screen.
+          </AppText>
+        ) : null}
+
+        {user ? (
+          <View style={styles.section}>
+            <AppText variant="caption" style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>
+              Sync health
+            </AppText>
+            <View style={[styles.card, { backgroundColor: themeColors.surface }]}>
+              <AppText variant="body" style={[styles.cardText, { color: themeColors.textSecondary }]}>
+                Core last synced:{' '}
+                {syncDiagSnapshot?.coreSyncedAtIso
+                  ? new Date(syncDiagSnapshot.coreSyncedAtIso).toLocaleString()
+                  : 'never (no successful sync recorded on device)'}
+              </AppText>
+              <AppText variant="body" style={[styles.cardText, { color: themeColors.textSecondary }]}>
+                Streak recompute (last): {syncDiagSnapshot?.lastStreakRecomputeSource ?? 'none'}
+              </AppText>
+              <AppText variant="body" style={[styles.cardText, { color: themeColors.textSecondary }]}>
+                Same-name mark groups (different ids): {syncDiagSnapshot?.duplicateMarkNameGroupCount ?? 0}
+              </AppText>
+              <AppText variant="body" style={[styles.cardText, { color: themeColors.textSecondary }]}>
+                Maintenance warnings:{' '}
+                {syncDiagSnapshot?.maintenanceWarnings?.length
+                  ? syncDiagSnapshot.maintenanceWarnings.join(', ')
+                  : 'none'}
+              </AppText>
+              <AppText variant="caption" style={[styles.cardText, { color: themeColors.textTertiary }]}>
+                Persisted after each successful core sync (push+pull). Maintenance codes are best-effort post-steps;
+                core data can still be correct if a code is listed. No account secrets logged.
+              </AppText>
+            </View>
+            <View style={[styles.card, { backgroundColor: themeColors.surface, marginTop: spacing.sm }]}>
+              <AppText variant="caption" style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>
+                Totals vs lc_events (local)
+              </AppText>
+              <AppText variant="body" style={[styles.cardText, { color: themeColors.textSecondary }]}>
+                Mismatches (row total ≠ replay of non-deleted events):{' '}
+                {totalMismatchSummary === null ? '…' : totalMismatchSummary.count}
+              </AppText>
+              {totalMismatchSummary && totalMismatchSummary.count > 0 ? (
+                <AppText variant="caption" style={[styles.cardText, { color: themeColors.textTertiary }]}>
+                  Sample mark ids: {totalMismatchSummary.sampleIds.join(', ') || '—'}
+                </AppText>
+              ) : null}
+              <AppText variant="caption" style={[styles.cardText, { color: themeColors.textTertiary }]}>
+                Refreshed when this screen loads. No names or tokens logged.
+              </AppText>
+            </View>
+          </View>
+        ) : null}
 
         <View style={styles.section}>
           <AppText variant="caption" style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>
@@ -271,9 +355,11 @@ export default function DiagnosticsScreen() {
             <AppText variant="body" style={[styles.cardText, { color: themeColors.text }]}>
               Mode: {env.isProduction ? 'production' : env.isPreview ? 'preview' : 'development'}
             </AppText>
-            <AppText variant="body" style={[styles.cardText, { color: themeColors.textSecondary }]}>
-              Diagnostics unlocked: {diagnosticsUnlocked ? 'yes' : 'no'}
-            </AppText>
+            {showDevInjectionUI ? (
+              <AppText variant="body" style={[styles.cardText, { color: themeColors.textSecondary }]}>
+                Diagnostics unlocked: {diagnosticsUnlocked ? 'yes' : 'no'}
+              </AppText>
+            ) : null}
             <AppText variant="body" style={[styles.cardText, { color: themeColors.textSecondary }]}>
               Execution environment: {env.executionEnvironment}
             </AppText>
@@ -297,16 +383,30 @@ export default function DiagnosticsScreen() {
                 <AppText variant="body" style={[styles.cardText, { color: themeColors.textSecondary }]}>
                   Source table: lc_events (event_type = 'increment')
                 </AppText>
-                <AppText variant="body" style={[styles.cardText, { color: themeColors.textSecondary }]}>
-                  Last seed action: {devStatus.lastSeedAction || 'none'}
-                </AppText>
-                <AppText variant="body" style={[styles.cardText, { color: themeColors.textSecondary }]}>
-                  Seed user ID: {devStatus.seedUserId || 'none'}
-                </AppText>
+                {showDevInjectionUI ? (
+                  <>
+                    <AppText variant="body" style={[styles.cardText, { color: themeColors.textSecondary }]}>
+                      Last seed action: {devStatus.lastSeedAction || 'none'}
+                    </AppText>
+                    <AppText variant="body" style={[styles.cardText, { color: themeColors.textSecondary }]}>
+                      Seed user ID: {devStatus.seedUserId || 'none'}
+                    </AppText>
+                  </>
+                ) : null}
               </>
             )}
           </View>
         </View>
+
+        {!user && !showDevInjectionUI ? (
+          <View style={styles.section}>
+            <View style={[styles.card, { backgroundColor: themeColors.surface }]}>
+              <AppText variant="body" style={[styles.cardText, { color: themeColors.textSecondary }]}>
+                Sign in to view account sync health and totals checks.
+              </AppText>
+            </View>
+          </View>
+        ) : null}
 
         {__DEV__ && (
           <View style={styles.section}>
@@ -392,161 +492,165 @@ export default function DiagnosticsScreen() {
           </View>
         )}
 
-        <View style={styles.section}>
-          <AppText variant="caption" style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>
-            Feature Flags
-          </AppText>
-          {flagRows.map((flag) => {
-            const override = getFlagOverride(flag.key);
-            return (
-              <View key={flag.key} style={[styles.settingRow, { backgroundColor: themeColors.surface }]}>
-                <View style={styles.flagInfo}>
-                  <AppText variant="body" style={[styles.settingLabel, { color: themeColors.text }]}>
-                    {flag.label}
-                  </AppText>
-                  <AppText variant="caption" style={[styles.settingMeta, { color: themeColors.textSecondary }]}>
-                    Default: {defaultFlags[flag.key] ? 'on' : 'off'}
-                    {typeof override === 'boolean' ? ` • Override: ${override ? 'on' : 'off'}` : ''}
-                  </AppText>
-                </View>
-                <Switch value={flag.value} onValueChange={flag.onChange} />
-              </View>
-            );
-          })}
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: themeColors.surface }]}
-            onPress={handleResetFlags}
-          >
-            <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
-              Reset Flag Overrides
-            </AppText>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.section}>
-          <AppText variant="caption" style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>
-            Simulation
-          </AppText>
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: themeColors.surface }]}
-            onPress={handleSeedDemo}
-          >
-            <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
-              Seed Demo Data
-            </AppText>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: themeColors.surface }]}
-            onPress={handleSeedHighUsage}
-          >
-            <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
-              Simulate High Usage
-            </AppText>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: themeColors.surface }]}
-            onPress={handleBrokenStreak}
-          >
-            <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
-              Simulate Streak Loss
-            </AppText>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: themeColors.surface }]}
-            onPress={handlePerfectWeek}
-          >
-            <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
-              Simulate Perfect Week
-            </AppText>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.section}>
-          <AppText variant="caption" style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>
-            Weekly Review Demo
-          </AppText>
-          <AppText variant="caption" style={[styles.warningText, { color: themeColors.textSecondary }]}>
-            Seeding adds demo activity on top of existing data. Use “Reset App” to start fresh.
-          </AppText>
-          <View style={[styles.settingRow, { backgroundColor: themeColors.surface }]}>
-            <AppText variant="body" style={[styles.settingLabel, { color: themeColors.text }]}>
-              Reset before seeding
-            </AppText>
-            <Switch value={resetBeforeWeeklySeed} onValueChange={setResetBeforeWeeklySeed} />
-          </View>
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: themeColors.surface }]}
-            onPress={() => handleSeedWeeklyReview('balanced')}
-          >
-            <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
-              Seed: Balanced Week
-            </AppText>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: themeColors.surface }]}
-            onPress={() => handleSeedWeeklyReview('perfect')}
-          >
-            <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
-              Seed: Perfect Week
-            </AppText>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: themeColors.surface }]}
-            onPress={() => handleSeedWeeklyReview('midweekDip')}
-          >
-            <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
-              Seed: Midweek Dip
-            </AppText>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: themeColors.surface }]}
-            onPress={() => handleSeedWeeklyReview('strongFinish')}
-          >
-            <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
-              Seed: Strong Finish
-            </AppText>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: themeColors.surface }]}
-            onPress={() => handleSeedWeeklyReview('chaotic')}
-          >
-            <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
-              Seed: Chaotic Week
-            </AppText>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.section}>
-          <AppText variant="caption" style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>
-            Maintenance
-          </AppText>
-          {weeklyReview && (
-            <TouchableOpacity
-              style={[styles.button, { backgroundColor: themeColors.surface }]}
-              onPress={() => router.push('/(tabs)/tracking')}
-            >
-              <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
-                Open Tracking (weekly snapshot)
+        {showDevInjectionUI ? (
+          <>
+            <View style={styles.section}>
+              <AppText variant="caption" style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>
+                Feature Flags
               </AppText>
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: themeColors.surface }]}
-            onPress={handleResetApp}
-          >
-            <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
-              Reset App
-            </AppText>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: themeColors.surface }]}
-            onPress={handleOpenIapDiagnostics}
-          >
-            <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
-              Open IAP Diagnostics
-            </AppText>
-          </TouchableOpacity>
-        </View>
+              {flagRows.map((flag) => {
+                const override = getFlagOverride(flag.key);
+                return (
+                  <View key={flag.key} style={[styles.settingRow, { backgroundColor: themeColors.surface }]}>
+                    <View style={styles.flagInfo}>
+                      <AppText variant="body" style={[styles.settingLabel, { color: themeColors.text }]}>
+                        {flag.label}
+                      </AppText>
+                      <AppText variant="caption" style={[styles.settingMeta, { color: themeColors.textSecondary }]}>
+                        Default: {defaultFlags[flag.key] ? 'on' : 'off'}
+                        {typeof override === 'boolean' ? ` • Override: ${override ? 'on' : 'off'}` : ''}
+                      </AppText>
+                    </View>
+                    <Switch value={flag.value} onValueChange={flag.onChange} />
+                  </View>
+                );
+              })}
+              <TouchableOpacity
+                style={[styles.button, { backgroundColor: themeColors.surface }]}
+                onPress={handleResetFlags}
+              >
+                <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+                  Reset Flag Overrides
+                </AppText>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.section}>
+              <AppText variant="caption" style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>
+                Simulation
+              </AppText>
+              <TouchableOpacity
+                style={[styles.button, { backgroundColor: themeColors.surface }]}
+                onPress={handleSeedDemo}
+              >
+                <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+                  Seed Demo Data
+                </AppText>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, { backgroundColor: themeColors.surface }]}
+                onPress={handleSeedHighUsage}
+              >
+                <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+                  Simulate High Usage
+                </AppText>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, { backgroundColor: themeColors.surface }]}
+                onPress={handleBrokenStreak}
+              >
+                <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+                  Simulate Streak Loss
+                </AppText>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, { backgroundColor: themeColors.surface }]}
+                onPress={handlePerfectWeek}
+              >
+                <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+                  Simulate Perfect Week
+                </AppText>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.section}>
+              <AppText variant="caption" style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>
+                Weekly Review Demo
+              </AppText>
+              <AppText variant="caption" style={[styles.warningText, { color: themeColors.textSecondary }]}>
+                Seeding adds demo activity on top of existing data. Use “Reset App” to start fresh.
+              </AppText>
+              <View style={[styles.settingRow, { backgroundColor: themeColors.surface }]}>
+                <AppText variant="body" style={[styles.settingLabel, { color: themeColors.text }]}>
+                  Reset before seeding
+                </AppText>
+                <Switch value={resetBeforeWeeklySeed} onValueChange={setResetBeforeWeeklySeed} />
+              </View>
+              <TouchableOpacity
+                style={[styles.button, { backgroundColor: themeColors.surface }]}
+                onPress={() => handleSeedWeeklyReview('balanced')}
+              >
+                <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+                  Seed: Balanced Week
+                </AppText>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, { backgroundColor: themeColors.surface }]}
+                onPress={() => handleSeedWeeklyReview('perfect')}
+              >
+                <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+                  Seed: Perfect Week
+                </AppText>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, { backgroundColor: themeColors.surface }]}
+                onPress={() => handleSeedWeeklyReview('midweekDip')}
+              >
+                <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+                  Seed: Midweek Dip
+                </AppText>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, { backgroundColor: themeColors.surface }]}
+                onPress={() => handleSeedWeeklyReview('strongFinish')}
+              >
+                <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+                  Seed: Strong Finish
+                </AppText>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, { backgroundColor: themeColors.surface }]}
+                onPress={() => handleSeedWeeklyReview('chaotic')}
+              >
+                <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+                  Seed: Chaotic Week
+                </AppText>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.section}>
+              <AppText variant="caption" style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>
+                Maintenance
+              </AppText>
+              {weeklyReview && (
+                <TouchableOpacity
+                  style={[styles.button, { backgroundColor: themeColors.surface }]}
+                  onPress={() => router.push('/(tabs)/tracking')}
+                >
+                  <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+                    Open Tracking (weekly snapshot)
+                  </AppText>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={[styles.button, { backgroundColor: themeColors.surface }]}
+                onPress={handleResetApp}
+              >
+                <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+                  Reset App
+                </AppText>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, { backgroundColor: themeColors.surface }]}
+                onPress={handleOpenIapDiagnostics}
+              >
+                <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+                  Open IAP Diagnostics
+                </AppText>
+              </TouchableOpacity>
+            </View>
+          </>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -561,7 +665,11 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xl,
   },
   title: {
+    marginBottom: spacing.sm,
+  },
+  readOnlyHint: {
     marginBottom: spacing.lg,
+    lineHeight: 20,
   },
   section: {
     marginBottom: spacing.lg,

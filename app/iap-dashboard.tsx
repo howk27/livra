@@ -36,6 +36,8 @@ export default function IapDashboardScreen() {
   const [snapshot, setSnapshot] = useState(getDiagSnapshot());
   const [managerDiagnostics, setManagerDiagnostics] = useState<any>(null);
   const [supportDiagnosticsEnabled, setSupportDiagnosticsEnabledState] = useState(false);
+  /** Avoid redirecting before AsyncStorage read completes (false was treated as disabled). */
+  const [supportDiagnosticsPrefLoaded, setSupportDiagnosticsPrefLoaded] = useState(() => env.isDev);
 
   // Production route guard: require unlock flag or dev mode
   useEffect(() => {
@@ -69,14 +71,19 @@ export default function IapDashboardScreen() {
 
   useEffect(() => {
     const loadSupportToggle = async () => {
-      const enabled = await getSupportDiagnosticsEnabled();
-      setSupportDiagnosticsEnabledState(enabled);
+      try {
+        const enabled = await getSupportDiagnosticsEnabled();
+        setSupportDiagnosticsEnabledState(enabled);
+      } finally {
+        setSupportDiagnosticsPrefLoaded(true);
+      }
     };
-    loadSupportToggle();
+    void loadSupportToggle();
   }, []);
 
   useEffect(() => {
     if (env.isDev) return;
+    if (!supportDiagnosticsPrefLoaded) return;
     if (!supportDiagnosticsEnabled) {
       if (router.canGoBack()) {
         router.back();
@@ -84,7 +91,7 @@ export default function IapDashboardScreen() {
         router.replace('/(tabs)/home');
       }
     }
-  }, [router, supportDiagnosticsEnabled]);
+  }, [router, supportDiagnosticsEnabled, supportDiagnosticsPrefLoaded]);
 
   const handleCopy = async () => {
     try {

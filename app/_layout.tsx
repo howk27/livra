@@ -1,7 +1,7 @@
 // CRITICAL: Import react-native-get-random-values FIRST before any uuid imports
 import 'react-native-get-random-values';
 import { useEffect, useRef } from 'react';
-import { AppState, AppStateStatus } from 'react-native';
+import { AppState, AppStateStatus, View } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -18,6 +18,7 @@ import { NotificationProvider } from '../contexts/NotificationContext';
 import { cleanupDuplicateCounters } from '../lib/db/cleanup';
 import { parseError } from '../hooks/useSync';
 import { ErrorBoundary } from '../components/ErrorBoundary';
+import { AuthPersistenceGate } from '../components/AuthPersistenceGate';
 import { logger } from '../lib/utils/logger';
 import { DevToolsProvider } from '../providers/DevToolsProvider';
 import { ExperimentsProvider } from '../providers/ExperimentsProvider';
@@ -25,9 +26,11 @@ import { useFeaturesStore } from '../state/featuresSlice';
 import { useDailyTrackingStore } from '../state/dailyTrackingSlice';
 import { useAppDateStore } from '../state/appDateSlice';
 import {
-  runBehaviorNotificationScheduler,
   recordBehaviorNotificationTap,
+  recordBehaviorAppForeground,
 } from '../services/behaviorNotifications';
+import { requestLivraLocalNotificationReschedule } from '../services/livraLocalNotificationOwner';
+import { getSupabaseClient } from '../lib/supabase';
 
 const queryClient = new QueryClient();
 
@@ -74,7 +77,8 @@ export default function RootLayout() {
 
     const responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
       handleBehaviorResponse(response);
-      runBehaviorNotificationScheduler(user?.id).catch(() => {});
+      void recordBehaviorAppForeground();
+      requestLivraLocalNotificationReschedule(user?.id);
     });
 
     const onAppState = (next: AppStateStatus) => {
@@ -82,7 +86,8 @@ export default function RootLayout() {
         appStateRef.current === 'background' || appStateRef.current === 'inactive';
       appStateRef.current = next;
       if (next === 'active' && wasBackground) {
-        runBehaviorNotificationScheduler(user?.id).catch(() => {});
+        void recordBehaviorAppForeground();
+        requestLivraLocalNotificationReschedule(user?.id);
       }
     };
     const appSub = AppState.addEventListener('change', onAppState);
@@ -109,137 +114,138 @@ export default function RootLayout() {
     init();
   }, []);
 
-  // Handle deep links for password reset
+  // Handle deep links for password reset (async: must call setSession — auth has detectSessionInUrl: false)
   useEffect(() => {
-    // Handle initial URL (app opened from closed state)
-    const handleInitialURL = async () => {
-      const initialUrl = await Linking.getInitialURL();
-      if (initialUrl) {
-        handleDeepLink(initialUrl);
+    const qp = (params: Record<string, unknown>, key: string): string | undefined => {
+      const v = params[key];
+      if (typeof v === 'string') return v;
+      if (Array.isArray(v) && typeof v[0] === 'string') return v[0];
+      return undefined;
+    };
+
+    const parseHashParams = (fullUrl: string): Record<string, string> => {
+      const out: Record<string, string> = {};
+      const hashIndex = fullUrl.indexOf('#');
+      if (hashIndex === -1) return out;
+      const hashFragment = fullUrl.substring(hashIndex + 1);
+      try {
+        hashFragment.split('&').forEach((param) => {
+          const eq = param.indexOf('=');
+          if (eq <= 0) return;
+          const key = param.slice(0, eq);
+          const raw = param.slice(eq + 1);
+          if (key && raw) {
+            out[key] = decodeURIComponent(raw.replace(/\+/g, ' '));
+          }
+        });
+      } catch (hashError) {
+        logger.warn('[Deep Link] Failed to parse hash fragment:', hashError);
+      }
+      return out;
+    };
+
+    const handleDeepLink = async (incomingUrl: string) => {
+      try {
+        if (!incomingUrl || typeof incomingUrl !== 'string' || incomingUrl.trim().length === 0) {
+          logger.warn('[Deep Link] Invalid URL received:', incomingUrl);
+          return;
+        }
+
+        logger.log('[Deep Link] Received URL:', incomingUrl);
+
+        let parsed;
+        try {
+          parsed = Linking.parse(incomingUrl);
+        } catch (parseError) {
+          logger.error('[Deep Link] Failed to parse URL:', parseError);
+          return;
+        }
+
+        const isResetPassword =
+          parsed.path === 'auth/reset-password' ||
+          parsed.path === '/auth/reset-password' ||
+          incomingUrl.includes('/auth/reset-password') ||
+          incomingUrl.includes('auth/reset-password');
+
+        const isUniversalLink =
+          (incomingUrl.startsWith('https://livralife.com/auth/reset-password') ||
+            incomingUrl.startsWith('https://www.livralife.com/auth/reset-password')) &&
+          incomingUrl.includes('livralife.com/auth/reset-password');
+
+        if (!isResetPassword && !isUniversalLink) {
+          return;
+        }
+
+        const isLikelyAccessToken = (value: string) =>
+          value.trim().length > 20 && value.includes('.');
+
+        const queryParams = (parsed.queryParams || {}) as Record<string, unknown>;
+        const hashParams = parseHashParams(incomingUrl);
+
+        const accessToken =
+          qp(queryParams, 'access_token') ||
+          hashParams.access_token ||
+          qp(queryParams, 'token') ||
+          hashParams.token;
+
+        const refreshToken =
+          qp(queryParams, 'refresh_token') || hashParams.refresh_token || '';
+
+        const type =
+          qp(queryParams, 'type') || hashParams.type || qp(queryParams, '#type') || '';
+
+        logger.log('[Deep Link] Password reset detected', {
+          hasAccessToken: Boolean(accessToken),
+          hasRefreshToken: Boolean(refreshToken),
+          type,
+          urlFormat: isUniversalLink ? 'universal' : 'deep',
+        });
+
+        if (type === 'recovery' && accessToken && refreshToken && isLikelyAccessToken(accessToken)) {
+          const supabase = getSupabaseClient();
+          const { error: sessionError } = await supabase.auth.setSession({
+            access_token: accessToken.trim(),
+            refresh_token: refreshToken.trim(),
+          });
+          if (sessionError) {
+            logger.error('[Deep Link] Recovery setSession failed:', sessionError);
+            router.replace('/auth/reset-password');
+            return;
+          }
+          router.replace('/auth/reset-password-complete');
+          return;
+        }
+
+        if (type === 'recovery' && accessToken && isLikelyAccessToken(accessToken)) {
+          logger.warn('[Deep Link] Recovery link missing refresh_token; request a new reset email');
+          router.replace('/auth/reset-password');
+          return;
+        }
+
+        logger.warn('[Deep Link] No valid recovery tokens in URL; opening reset screen to check session');
+        router.replace('/auth/reset-password-complete');
+      } catch (error) {
+        logger.error('[Deep Link] Error handling deep link:', error);
       }
     };
 
-    // Handle URLs when app is already open
+    const handleInitialURL = async () => {
+      const initialUrl = await Linking.getInitialURL();
+      if (initialUrl) {
+        await handleDeepLink(initialUrl);
+      }
+    };
+
     const subscription = Linking.addEventListener('url', (event) => {
-      handleDeepLink(event.url);
+      void handleDeepLink(event.url);
     });
 
-    handleInitialURL();
+    void handleInitialURL();
 
     return () => {
       subscription.remove();
     };
-  }, [initialized]);
-
-  const handleDeepLink = (url: string) => {
-    try {
-      // Validate URL is a string and not empty
-      if (!url || typeof url !== 'string' || url.trim().length === 0) {
-        logger.warn('[Deep Link] Invalid URL received:', url);
-        return;
-      }
-
-      logger.log('[Deep Link] Received URL:', url);
-      
-      // Parse the URL with error handling
-      let parsed;
-      try {
-        parsed = Linking.parse(url);
-      } catch (parseError) {
-        logger.error('[Deep Link] Failed to parse URL:', parseError);
-        return;
-      }
-
-      // Check if it's a password reset link - support multiple URL formats
-      const isResetPassword = 
-        parsed.path === 'auth/reset-password' || 
-        parsed.path === '/auth/reset-password' ||
-        url.includes('/auth/reset-password') ||
-        url.includes('auth/reset-password');
-      
-      // Also check for universal links (https://livralife.com/auth/reset-password or https://www.livralife.com/auth/reset-password)
-      const isUniversalLink = 
-        (url.startsWith('https://livralife.com/auth/reset-password') ||
-         url.startsWith('https://www.livralife.com/auth/reset-password')) &&
-        (url.includes('livralife.com/auth/reset-password'));
-      
-      if (isResetPassword || isUniversalLink) {
-        const isLikelyToken = (value: any) =>
-          typeof value === 'string' &&
-          value.trim().length > 20 &&
-          // Supabase recovery tokens are JWT-like and contain at least one '.'
-          value.includes('.');
-
-        // Extract token and type from URL - handle multiple formats
-        // Supabase sends URLs like:
-        // - livra://auth/reset-password#access_token=...&type=recovery
-        // - livra://auth/reset-password?token=...&type=recovery
-        // - https://livralife.com/auth/reset-password?access_token=...&type=recovery
-        // - https://livralife.com/auth/reset-password#access_token=...&type=recovery
-        
-        const queryParams = parsed.queryParams || {};
-        const hashParams: Record<string, any> = {};
-        
-        // Extract hash fragment parameters if present
-        const hashIndex = url.indexOf('#');
-        if (hashIndex !== -1) {
-          const hashFragment = url.substring(hashIndex + 1);
-          try {
-            // Parse hash fragment (format: key=value&key2=value2)
-            hashFragment.split('&').forEach(param => {
-              const [key, value] = param.split('=');
-              if (key && value) {
-                hashParams[key] = decodeURIComponent(value);
-              }
-            });
-          } catch (hashError) {
-            logger.warn('[Deep Link] Failed to parse hash fragment:', hashError);
-          }
-        }
-        
-        // Try multiple token parameter names and locations
-        const token = 
-          queryParams.access_token ||
-          queryParams.token ||
-          hashParams.access_token ||
-          hashParams.token ||
-          queryParams['#access_token'] ||
-          hashParams['#access_token'];
-        
-        // Try multiple type parameter names and locations
-        const type = 
-          queryParams.type ||
-          hashParams.type ||
-          queryParams['#type'] ||
-          hashParams['#type'];
-        
-        logger.log('[Deep Link] Password reset detected', { 
-          hasToken: !!token, 
-          type,
-          urlFormat: isUniversalLink ? 'universal' : 'deep'
-        });
-        
-        // Validate token format (should be a non-empty string)
-        if (token && isLikelyToken(token) && type === 'recovery') {
-          // Navigate to reset password complete screen with token
-          router.push({
-            pathname: '/auth/reset-password-complete',
-            params: {
-              token: token.trim(),
-              type: 'recovery',
-            },
-          });
-        } else {
-          // If no token in URL, Supabase might have set it in the session
-          // Check session and navigate anyway - the screen will handle it
-          logger.warn('[Deep Link] No valid token found in URL, navigating to reset screen to check session');
-          router.push('/auth/reset-password-complete');
-        }
-      }
-    } catch (error) {
-      logger.error('[Deep Link] Error handling deep link:', error);
-    }
-  };
+  }, [initialized, router]);
 
   // Load UI state after auth initializes (with userId if available)
   // This ensures we check the database for onboarding status on app refresh
@@ -332,7 +338,10 @@ export default function RootLayout() {
           <DevToolsProvider>
             <ExperimentsProvider>
               <NotificationProvider>
-                <RootNavigator />
+                <View style={{ flex: 1 }}>
+                  <RootNavigator />
+                  <AuthPersistenceGate />
+                </View>
               </NotificationProvider>
             </ExperimentsProvider>
           </DevToolsProvider>

@@ -1,8 +1,12 @@
 /**
  * Streak source of truth (Livra 2.0):
- * - **Canonical:** `computeStreak(increment events, getAppDate())` — all UI that shows a streak must use this.
- * - **lc_streaks / Supabase streak rows:** denormalized cache for sync and legacy queries; updated after increments
- *   and after sync. Never treat them as authoritative when events are available.
+ * - **Canonical input:** all non-deleted `increment` events for the mark (full history). `computeStreak(events, getAppDate())`.
+ * - **UI:** may use the in-memory events store (possibly windowed, e.g. 90 days) — acceptable for interactive screens
+ *   if the window covers recent activity; detail views should load enough history or trust lc_streaks until next sync.
+ * - **Post-sync:** `recomputeStreaksAfterSyncFromSqlite` loads every increment from `lc_events` in SQLite (no window) then
+ *   writes `lc_streaks` — authoritative cache after a successful sync pass.
+ * - **lc_streaks / remote streak rows:** denormalized cache for sync; never authoritative over a full event list when available.
+ * - **lc_counters.total:** separate denormalized cache; kept consistent with lc_events via `markTotalReconciliation` (increments/decrement paths, undo/delete, pull). Badge progress may read `total` — repair mismatches via diagnostics or sync pull.
  */
 import { useMemo } from 'react';
 import type { CounterEvent, MarkEvent, CounterStreak } from '../types';

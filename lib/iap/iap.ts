@@ -30,14 +30,27 @@ export type ReceiptValidationResult =
   | { status: 'invalid'; reason: string }
   | { status: 'transient'; reason: string };
 
+/** How we know the user should get Livra+ features (gating). */
+export type ProVerification = 'verified_db' | 'cache_grace' | 'unverified';
+
 export type ProStatusResult = {
   status: 'unlocked' | 'locked' | 'unknown';
   source: 'db' | 'cache' | 'none';
   reason?: string;
+  /** True only after a successful `profiles.pro_unlocked` read from DB with value true. Never from cache grace alone. */
+  dbUnlocked: boolean;
+  /** True for feature gating: `dbUnlocked` OR fresh TTL cache from a prior DB-confirmed unlock (offline / DB outage grace). */
+  effectiveUnlocked: boolean;
+  verification: ProVerification;
 };
 
 // Check if running in Expo Go
 const isExpoGo = Constants.appOwnership === 'expo';
+
+/** Native App Store / Play Billing — not Expo Go and not web. */
+export function isNativeStorePurchasesSupported(): boolean {
+  return Platform.OS !== 'web' && Constants.appOwnership !== 'expo';
+}
 
 export interface IAPProduct {
   productId: string;
@@ -178,6 +191,18 @@ export function normalizeIapError(error: any): NormalizedIapError {
     };
   }
 
+  if (code === 'IAP_UNSUPPORTED_ENV') {
+    return {
+      kind: 'billing_unavailable',
+      title: 'Purchases unavailable in this build',
+      message:
+        'Store purchases are not available in Expo Go or on web. Use a development build or TestFlight to test subscriptions.',
+      canRetry: false,
+      showManage: false,
+      showRestore: false,
+    };
+  }
+
   return {
     kind: 'unknown',
     title: 'Purchase failed',
@@ -269,11 +294,77 @@ export function getIAPErrorMessage(error: any): IAPError {
 
 /**
  * Check if user has premium status
- * Priority: Supabase database > Local storage (with TTL)
+ * Priority: Supabase database > Local storage (with TTL) for signed-in users only.
+ * `effectiveUnlocked` may be true under `verification: 'cache_grace'` when DB is unreachable
+ * but a fresh local cache exists from a prior DB-confirmed unlock (does not replace receipt/DB for new purchases).
  */
 export async function checkProStatus(): Promise<ProStatusResult> {
   const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
-  
+
+  const notSignedIn = (): ProStatusResult => ({
+    status: 'locked',
+    source: 'none',
+    reason: 'not_signed_in',
+    dbUnlocked: false,
+    effectiveUnlocked: false,
+    verification: 'unverified',
+  });
+
+  const readCacheGrace = async (): Promise<ProStatusResult | null> => {
+    try {
+      const cached = await AsyncStorage.getItem('pro_unlocked');
+      if (!cached) {
+        return null;
+      }
+      try {
+        const cacheEntry = JSON.parse(cached);
+        if (cacheEntry.checkedAt) {
+          const checkedAt = new Date(cacheEntry.checkedAt);
+          const age = Date.now() - checkedAt.getTime();
+          if (age < CACHE_TTL_MS && cacheEntry.value === true) {
+            logger.log('[IAP] Cached pro status available (non-authoritative grace)', {
+              ageHours: age / (60 * 60 * 1000),
+            });
+            return {
+              status: 'unknown',
+              source: 'cache',
+              reason: 'db_unavailable',
+              dbUnlocked: false,
+              effectiveUnlocked: true,
+              verification: 'cache_grace',
+            };
+          }
+          logger.log('[IAP] Cached pro status expired, requiring online verification', {
+            ageHours: age / (60 * 60 * 1000),
+          });
+          await AsyncStorage.removeItem('pro_unlocked');
+          return {
+            status: 'unknown',
+            source: 'none',
+            reason: 'cache_expired',
+            dbUnlocked: false,
+            effectiveUnlocked: false,
+            verification: 'unverified',
+          };
+        }
+      } catch {
+        logger.log('[IAP] Legacy cache format detected, clearing');
+        await AsyncStorage.removeItem('pro_unlocked');
+        return {
+          status: 'unknown',
+          source: 'none',
+          reason: 'legacy_cache',
+          dbUnlocked: false,
+          effectiveUnlocked: false,
+          verification: 'unverified',
+        };
+      }
+    } catch (cacheError) {
+      logger.error('[IAP] Error reading cache:', cacheError);
+    }
+    return null;
+  };
+
   try {
     const { getSupabaseClient } = await import('../supabase');
     const supabase = getSupabaseClient();
@@ -281,62 +372,85 @@ export async function checkProStatus(): Promise<ProStatusResult> {
       data: { user },
     } = await supabase.auth.getUser();
 
-    if (user) {
-      const { data } = await supabase
-        .from('profiles')
-        .select('pro_unlocked')
-        .eq('id', user.id)
-        .single();
+    if (!user?.id) {
+      return notSignedIn();
+    }
 
-      if (data?.pro_unlocked) {
-        // Store with timestamp
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('pro_unlocked')
+      .eq('id', user.id)
+      .single();
+
+    if (!error && data != null) {
+      if (data.pro_unlocked) {
         const cacheEntry = {
           value: true,
           checkedAt: new Date().toISOString(),
         };
         await AsyncStorage.setItem('pro_unlocked', JSON.stringify(cacheEntry));
-        return { status: 'unlocked', source: 'db' };
-      } else {
-        // Clear stale local cache if user is not premium in database
-        await AsyncStorage.removeItem('pro_unlocked');
-        return { status: 'locked', source: 'db' };
+        return {
+          status: 'unlocked',
+          source: 'db',
+          dbUnlocked: true,
+          effectiveUnlocked: true,
+          verification: 'verified_db',
+        };
       }
+      await AsyncStorage.removeItem('pro_unlocked');
+      return {
+        status: 'locked',
+        source: 'db',
+        dbUnlocked: false,
+        effectiveUnlocked: false,
+        verification: 'verified_db',
+      };
+    }
+
+    if (error?.code === 'PGRST116') {
+      await AsyncStorage.removeItem('pro_unlocked');
+      return {
+        status: 'locked',
+        source: 'db',
+        reason: 'no_profile',
+        dbUnlocked: false,
+        effectiveUnlocked: false,
+        verification: 'verified_db',
+      };
+    }
+
+    if (error) {
+      logger.error('[IAP] Error reading profiles for pro status:', error);
     }
   } catch (error) {
     logger.error('[IAP] Error checking Supabase pro status:', error);
-    // Fall through to cache check with TTL
   }
 
-  // Fallback to local storage with TTL check
   try {
-    const cached = await AsyncStorage.getItem('pro_unlocked');
-    if (cached) {
-      try {
-        const cacheEntry = JSON.parse(cached);
-        if (cacheEntry.checkedAt) {
-          const checkedAt = new Date(cacheEntry.checkedAt);
-          const age = Date.now() - checkedAt.getTime();
-          if (age < CACHE_TTL_MS && cacheEntry.value === true) {
-            logger.log('[IAP] Cached pro status available (non-authoritative)', { ageHours: age / (60 * 60 * 1000) });
-            return { status: 'unknown', source: 'cache', reason: 'db_unavailable' };
-          } else {
-            logger.log('[IAP] Cached pro status expired, requiring online verification', { ageHours: age / (60 * 60 * 1000) });
-            await AsyncStorage.removeItem('pro_unlocked');
-            return { status: 'unknown', source: 'none', reason: 'cache_expired' };
-          }
-        }
-      } catch (parseError) {
-        // Legacy format (just "true" string) - treat as expired
-        logger.log('[IAP] Legacy cache format detected, clearing');
-        await AsyncStorage.removeItem('pro_unlocked');
-        return { status: 'unknown', source: 'none', reason: 'legacy_cache' };
-      }
+    const { getSupabaseClient } = await import('../supabase');
+    const {
+      data: { user },
+    } = await getSupabaseClient().auth.getUser();
+    if (!user?.id) {
+      return notSignedIn();
     }
-  } catch (cacheError) {
-    logger.error('[IAP] Error reading cache:', cacheError);
+  } catch {
+    return notSignedIn();
   }
 
-  return { status: 'unknown', source: 'none', reason: 'db_unavailable' };
+  const grace = await readCacheGrace();
+  if (grace) {
+    return grace;
+  }
+
+  return {
+    status: 'unknown',
+    source: 'none',
+    reason: 'db_unavailable',
+    dbUnlocked: false,
+    effectiveUnlocked: false,
+    verification: 'unverified',
+  };
 }
 
 /**
@@ -506,7 +620,7 @@ export async function setLocalProCache(): Promise<boolean> {
     // This ensures we only cache if DB has confirmed the unlock
     try {
       const proStatus = await checkProStatus();
-      if (proStatus.status === 'unlocked') {
+      if (proStatus.dbUnlocked) {
         // DB confirms pro_unlocked = true - safe to cache locally with timestamp
         const cacheEntry = {
           value: true,
@@ -521,7 +635,7 @@ export async function setLocalProCache(): Promise<boolean> {
         // Wait 1000ms and retry once (max 1 retry) to allow Edge Function propagation
         await new Promise(resolve => setTimeout(resolve, 1000));
         const retryStatus = await checkProStatus();
-        if (retryStatus.status === 'unlocked') {
+        if (retryStatus.dbUnlocked) {
           const cacheEntry = {
             value: true,
             checkedAt: new Date().toISOString(),
@@ -540,7 +654,11 @@ export async function setLocalProCache(): Promise<boolean> {
     } catch (error) {
       logger.error('[IAP] Error setting local Pro cache:', error);
       // Remove stale cache on error
-      await AsyncStorage.removeItem('pro_unlocked').catch(() => {});
+      await AsyncStorage.removeItem('pro_unlocked').catch((clearErr) => {
+        logger.warn('[IAP] removeItem pro_unlocked failed after cache error', {
+          message: clearErr instanceof Error ? clearErr.message : String(clearErr),
+        });
+      });
       return false;
     }
 }

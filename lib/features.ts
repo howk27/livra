@@ -5,6 +5,9 @@ import type { Mark, MarkEvent, DayOfWeek, GoalPeriod, Milestone } from '../types
 import { STREAK_MILESTONES } from '../types';
 import { getAppDate } from './appDate';
 import { formatDate } from './date';
+import { logger } from './utils/logger';
+
+const warnedScheduleParseIds = new Set<string>();
 
 // ── Date utils ────────────────────────────────────────────
 
@@ -56,7 +59,13 @@ export function parseScheduleDays(mark: Mark): DayOfWeek[] {
   try {
     if (!mark.schedule_days) return [];
     return JSON.parse(mark.schedule_days) as DayOfWeek[];
-  } catch { return []; }
+  } catch {
+    if (!warnedScheduleParseIds.has(mark.id)) {
+      warnedScheduleParseIds.add(mark.id);
+      logger.warn('[Features] parseScheduleDays invalid JSON; using empty schedule', { markId: mark.id });
+    }
+    return [];
+  }
 }
 
 export function isMarkActiveOnDate(mark: Mark, date: Date = getAppDate()): boolean {

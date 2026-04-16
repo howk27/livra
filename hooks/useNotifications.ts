@@ -1,22 +1,13 @@
 import { useEffect, useState, useCallback } from 'react';
 import * as Notifications from 'expo-notifications';
-import { Platform } from 'react-native';
+import { analyzeCountersForNotifications, updateNotifications, NotificationAnalysis } from '../services/notificationService';
 import {
-  analyzeCountersForNotifications,
-  updateNotifications,
-  scheduleSmartNotifications,
-  NotificationConfig,
-  NotificationAnalysis,
-} from '../services/notificationService';
-import { logger } from '../lib/utils/logger';
+  getLivraRemindersEnabled,
+  setLivraRemindersEnabled as persistLivraRemindersEnabledPref,
+} from '../lib/notifications/livraReminderPrefs';
+import { applyLivraRemindersPreference } from '../services/livraLocalNotificationOwner';
 
-const EVENING_REMINDER_BODIES = [
-  'Quick check-in: log a mark before the day ends.',
-  'Your marks are waiting — one tap keeps the day honest.',
-  'Evening nudge: close the loop on today’s progress.',
-];
-
-// Configure notification behavior
+// Configure notification behavior (banners for delivered push/local notifications)
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowBanner: true,
@@ -29,157 +20,97 @@ Notifications.setNotificationHandler({
 interface NotificationState {
   permissionGranted: boolean;
   loading: boolean;
-}
-
-interface ReminderConfig {
-  counterId: string;
-  counterName: string;
-  hour: number;
-  minute: number;
-  weekdays?: boolean[]; // [sun, mon, tue, wed, thu, fri, sat]
+  livraRemindersEnabled: boolean;
 }
 
 export const useNotifications = () => {
   const [state, setState] = useState<NotificationState>({
     permissionGranted: false,
     loading: true,
+    livraRemindersEnabled: true,
   });
 
   useEffect(() => {
-    checkPermissions();
+    const init = async () => {
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      const enabled = await getLivraRemindersEnabled();
+      setState({
+        permissionGranted: existingStatus === 'granted',
+        loading: false,
+        livraRemindersEnabled: enabled,
+      });
+    };
+    void init();
   }, []);
 
-  const checkPermissions = async () => {
+  const checkPermissions = useCallback(async () => {
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    
-    setState({
+    setState((prev) => ({
+      ...prev,
       permissionGranted: existingStatus === 'granted',
-      loading: false,
-    });
-  };
+    }));
+  }, []);
 
   const requestPermissions = useCallback(async (): Promise<boolean> => {
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    
     let finalStatus = existingStatus;
-    
     if (existingStatus !== 'granted') {
       const { status } = await Notifications.requestPermissionsAsync();
       finalStatus = status;
     }
-
     const granted = finalStatus === 'granted';
     setState((prev) => ({ ...prev, permissionGranted: granted }));
-    
     return granted;
-  }, []);
-
-  const scheduleReminder = useCallback(
-    async (config: ReminderConfig): Promise<string | null> => {
-      if (!state.permissionGranted) {
-        const granted = await requestPermissions();
-        if (!granted) return null;
-      }
-
-      try {
-        const trigger: Notifications.CalendarTriggerInput = {
-          type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
-          hour: config.hour,
-          minute: config.minute,
-          repeats: true,
-        };
-
-        const randomBody =
-          EVENING_REMINDER_BODIES[Math.floor(Math.random() * EVENING_REMINDER_BODIES.length)]!;
-
-        const identifier = await Notifications.scheduleNotificationAsync({
-          content: {
-            title: "Livra",
-            body: randomBody,
-            data: { counterId: config.counterId },
-          },
-          trigger,
-        });
-
-        return identifier;
-      } catch (error) {
-        logger.error('Error scheduling notification:', error);
-        return null;
-      }
-    },
-    [state.permissionGranted, requestPermissions]
-  );
-
-  const cancelReminder = useCallback(async (identifier: string) => {
-    await Notifications.cancelScheduledNotificationAsync(identifier);
-  }, []);
-
-  const cancelAllReminders = useCallback(async () => {
-    await Notifications.cancelAllScheduledNotificationsAsync();
   }, []);
 
   const getScheduledReminders = useCallback(async () => {
     return await Notifications.getAllScheduledNotificationsAsync();
   }, []);
 
-  // Smart notification functions
-  const analyzeNotifications = useCallback(
-    async (userId?: string): Promise<NotificationAnalysis> => {
-      return await analyzeCountersForNotifications(userId);
-    },
-    []
-  );
+  const analyzeNotifications = useCallback(async (userId?: string): Promise<NotificationAnalysis> => {
+    return await analyzeCountersForNotifications(userId);
+  }, []);
 
+  /** Coalesced reschedule via `livraLocalNotificationOwner` (behavior DATE model only). */
   const updateSmartNotifications = useCallback(
-    async (userId?: string, config?: Partial<NotificationConfig>) => {
+    async (userId?: string) => {
       if (!state.permissionGranted) {
         const granted = await requestPermissions();
         if (!granted) return;
       }
-
-      await updateNotifications(userId, config);
+      await updateNotifications(userId);
     },
-    [state.permissionGranted, requestPermissions]
+    [state.permissionGranted, requestPermissions],
   );
 
-  const scheduleSmartNotificationsForAnalysis = useCallback(
-    async (
-      analysis: NotificationAnalysis,
-      config?: Partial<NotificationConfig>
-    ) => {
-      if (!state.permissionGranted) {
+  const setLivraRemindersEnabled = useCallback(
+    async (userId: string | undefined, enabled: boolean) => {
+      await persistLivraRemindersEnabledPref(enabled);
+      setState((prev) => ({ ...prev, livraRemindersEnabled: enabled }));
+      if (enabled) {
         const granted = await requestPermissions();
-        if (!granted) return [];
+        if (!granted) return;
       }
-
-      const defaultConfig: NotificationConfig = {
-        enableDailyReminders: true,
-        enableStreakWarnings: true,
-        enableInactiveReminders: true,
-        dailyReminderHour: 18,
-        dailyReminderMinute: 0,
-        streakWarningHour: 20,
-        streakWarningMinute: 0,
-      };
-
-      const finalConfig = { ...defaultConfig, ...config };
-      return await scheduleSmartNotifications(analysis, finalConfig);
+      await applyLivraRemindersPreference(userId, enabled);
     },
-    [state.permissionGranted, requestPermissions]
+    [requestPermissions],
   );
+
+  const refreshLivraRemindersPref = useCallback(async () => {
+    const enabled = await getLivraRemindersEnabled();
+    setState((prev) => ({ ...prev, livraRemindersEnabled: enabled }));
+  }, []);
 
   return {
     permissionGranted: state.permissionGranted,
     loading: state.loading,
+    livraRemindersEnabled: state.livraRemindersEnabled,
     requestPermissions,
-    scheduleReminder,
-    cancelReminder,
-    cancelAllReminders,
+    checkPermissions,
     getScheduledReminders,
-    // Smart notification functions
     analyzeNotifications,
     updateSmartNotifications,
-    scheduleSmartNotificationsForAnalysis,
+    setLivraRemindersEnabled,
+    refreshLivraRemindersPref,
   };
 };
-

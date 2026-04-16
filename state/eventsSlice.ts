@@ -1,11 +1,13 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 import { MarkEvent } from '../types';
-import { execute, query } from '../lib/db';
+import { execute, query, queryFirst } from '../lib/db';
 import { formatDate } from '../lib/date';
 import { getAppDateTime } from '../lib/appDate';
 import { subDays } from 'date-fns';
 import { logger } from '../lib/utils/logger';
+import { reconcileMarkTotalWithPersistedEvents } from '../lib/db/markTotalReconciliation';
+import { useMarksStore } from './countersSlice';
 
 interface EventsState {
   events: MarkEvent[];
@@ -20,6 +22,10 @@ interface EventsState {
   undoLastAction: () => Promise<void>;
   getEventsByMark: (markId: string) => MarkEvent[];
   getEventsByDate: (date: string) => MarkEvent[];
+  /** Most recent increment for a mark in the current in-memory list (detail UI / hooks). */
+  getLastIncrementEvent: (markId: string) => MarkEvent | undefined;
+  /** Count of non-deleted increment events for mark on `occurred_local_date === todayStr` in current list. */
+  getIncrementsToday: (markId: string, todayStr: string) => number;
 }
 
 export const useEventsStore = create<EventsState>((set, get) => ({
@@ -107,37 +113,42 @@ export const useEventsStore = create<EventsState>((set, get) => ({
       lastActionId: event.id,
     }));
 
-    // Persist to database in background (don't await to avoid blocking UI)
-    execute(
-      `INSERT INTO lc_events (
+    try {
+      await execute(
+        `INSERT INTO lc_events (
         id, user_id, counter_id, event_type, amount, occurred_at,
         occurred_local_date, meta, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        event.id,
-        event.user_id,
-        event.mark_id, // Map mark_id to counter_id column
-        event.event_type,
-        event.amount,
-        event.occurred_at,
-        event.occurred_local_date,
-        JSON.stringify(event.meta || {}),
-        event.created_at,
-        event.updated_at,
-      ]
-    ).catch((error) => {
+        [
+          event.id,
+          event.user_id,
+          event.mark_id,
+          event.event_type,
+          event.amount,
+          event.occurred_at,
+          event.occurred_local_date,
+          JSON.stringify(event.meta || {}),
+          event.created_at,
+          event.updated_at,
+        ],
+      );
+    } catch (error) {
       logger.error('Error persisting event to database:', error);
-      // On error, remove the optimistic update from store
       set((state) => ({
         events: state.events.filter((e) => e.id !== event.id),
         lastActionId: state.lastActionId === event.id ? null : state.lastActionId,
       }));
-    });
+      throw error;
+    }
 
     return event;
   },
 
   deleteEvent: async (id) => {
+    const row = await queryFirst<{ counter_id: string; user_id: string }>(
+      'SELECT counter_id, user_id FROM lc_events WHERE id = ?',
+      [id],
+    );
     const now = getAppDateTime().toISOString();
     await execute('UPDATE lc_events SET deleted_at = ?, updated_at = ? WHERE id = ?', [
       now,
@@ -148,8 +159,18 @@ export const useEventsStore = create<EventsState>((set, get) => ({
     set((state) => ({
       events: state.events.filter((e) => e.id !== id),
     }));
+
+    if (row?.counter_id && row.user_id) {
+      try {
+        await reconcileMarkTotalWithPersistedEvents(row.user_id, row.counter_id);
+        await useMarksStore.getState().loadMarks(row.user_id);
+      } catch (reconcileErr) {
+        logger.error('[Events] Total reconcile after deleteEvent failed:', reconcileErr);
+      }
+    }
   },
 
+  // Soft-deletes the last event row; lc_counters.total is realigned via reconcileMarkTotalWithPersistedEvents in deleteEvent.
   undoLastAction: async () => {
     const { lastActionId } = get();
     if (lastActionId) {
@@ -164,6 +185,26 @@ export const useEventsStore = create<EventsState>((set, get) => ({
 
   getEventsByDate: (date) => {
     return get().events.filter((e) => e.occurred_local_date === date && !e.deleted_at);
+  },
+
+  getLastIncrementEvent: (markId) => {
+    const list = get().events.filter(
+      (e) => e.mark_id === markId && !e.deleted_at && e.event_type === 'increment',
+    );
+    if (list.length === 0) return undefined;
+    return [...list].sort(
+      (a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime(),
+    )[0];
+  },
+
+  getIncrementsToday: (markId, todayStr) => {
+    return get().events.filter(
+      (e) =>
+        e.mark_id === markId &&
+        !e.deleted_at &&
+        e.event_type === 'increment' &&
+        e.occurred_local_date === todayStr,
+    ).length;
   },
 }));
 

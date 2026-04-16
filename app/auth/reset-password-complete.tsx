@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -19,6 +19,9 @@ import { useEffectiveTheme } from '../../state/uiSlice';
 import { getSupabaseClient } from '../../lib/supabase';
 import { logger } from '../../lib/utils/logger';
 
+/** `checking` → session probe; `ready` → form; `invalid` → request new email (no defect in naming). */
+type RecoveryGate = 'checking' | 'ready' | 'invalid';
+
 export default function ResetPasswordCompleteScreen() {
   const supabase = getSupabaseClient();
   const theme = useEffectiveTheme();
@@ -30,33 +33,67 @@ export default function ResetPasswordCompleteScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [recoveryGate, setRecoveryGate] = useState<RecoveryGate>('checking');
 
-  // Extract token from URL params or hash
-  useEffect(() => {
-    // Check if we have token in params (from deep link)
-    if (params.token && params.type === 'recovery') {
-      logger.log('[Password Reset] Token received from deep link');
-      // Token is already in params, ready to use
-    } else {
-      // Try to get from URL hash (Supabase sends it this way)
-      // This will be handled by Supabase auth state change
-      logger.log('[Password Reset] No token in params, checking session');
-      checkSessionForRecovery();
-    }
-  }, [params.token, params.type]);
-
-  const checkSessionForRecovery = async () => {
+  const validateRecoverySession = useCallback(async (): Promise<boolean> => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        // User is already authenticated, might be from recovery link
-        // Check if this is a password recovery session
-        logger.log('[Password Reset] Session found, user can update password');
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError) {
+        logger.warn('[Password Reset] getSession error on mount:', sessionError.message);
+        return false;
       }
-    } catch (err) {
-      logger.error('[Password Reset] Error checking session:', err);
+      if (!session?.user) {
+        return false;
+      }
+      if (!session.expires_at) {
+        return true;
+      }
+      const expiresAt = session.expires_at * 1000;
+      if (Date.now() >= expiresAt) {
+        return false;
+      }
+      return true;
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      logger.error('[Password Reset] validateRecoverySession failed:', msg);
+      return false;
     }
-  };
+  }, [supabase]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      let ok = await validateRecoverySession();
+      if (cancelled) return;
+      if (!ok) {
+        // setSession from deep link may complete just after this screen mounts; one bounded retry.
+        await new Promise<void>((r) => setTimeout(r, 450));
+        if (cancelled) return;
+        ok = await validateRecoverySession();
+      }
+      setRecoveryGate(ok ? 'ready' : 'invalid');
+      if (!ok) {
+        setError(
+          'This reset link is missing, expired, or already used. Request a new password reset email and open the link from your inbox.',
+        );
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [params.token, params.type, validateRecoverySession]);
+
+  const recoverySubtitle =
+    recoveryGate === 'checking'
+      ? 'Verifying your reset link…'
+      : recoveryGate === 'invalid'
+        ? 'We could not confirm a valid reset session on this device.'
+        : 'Choose a new password for your account.';
 
   const validatePassword = (password: string) => {
     return password.length >= 6;
@@ -64,6 +101,11 @@ export default function ResetPasswordCompleteScreen() {
 
   const handleResetPassword = async () => {
     setError(null);
+
+    if (recoveryGate !== 'ready') {
+      setError('You need a valid reset link. Go back and request a new email.');
+      return;
+    }
 
     if (!newPassword.trim()) {
       setError('Please enter a new password');
@@ -83,67 +125,69 @@ export default function ResetPasswordCompleteScreen() {
     setLoading(true);
 
     try {
-      // Check if we have a valid session (Supabase sets this when user clicks email link)
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
       if (sessionError || !session) {
-        throw new Error('Invalid or expired reset link. Please request a new password reset.');
+        setRecoveryGate('invalid');
+        throw new Error('Your reset session is no longer valid. Please request a new password reset.');
       }
 
-      // Update password using the recovery session
-      // Supabase automatically provides a session when user clicks the recovery link
       const { error: updateError } = await supabase.auth.updateUser({
         password: newPassword,
       });
 
       if (updateError) {
-        // Check if it's an expired/invalid session error
-        if (updateError.message.includes('expired') || 
-            updateError.message.includes('invalid') ||
-            updateError.message.includes('session')) {
-          throw new Error('Invalid or expired reset link. Please request a new password reset.');
+        if (
+          updateError.message.includes('expired') ||
+          updateError.message.includes('invalid') ||
+          updateError.message.includes('session')
+        ) {
+          setRecoveryGate('invalid');
+          throw new Error('This reset link has expired. Please request a new password reset.');
         }
         throw updateError;
       }
 
-      // Success
       Alert.alert(
-        'Password Reset Successful',
-        'Your password has been updated successfully. You can now sign in with your new password.',
+        'Password updated',
+        'You can now sign in with your new password.',
         [
           {
-            text: 'Sign In',
+            text: 'Sign in',
             onPress: () => {
               router.replace('/auth/signin');
             },
           },
-        ]
+        ],
       );
-    } catch (err: any) {
-      logger.error('[Password Reset] Error updating password:', err);
-      const errorMessage = err.message || 'Failed to reset password. The link may have expired.';
+    } catch (err: unknown) {
+      const errorMessage =
+        err instanceof Error ? err.message : 'Failed to reset password. Please try again.';
+      logger.error('[Password Reset] Error updating password:', errorMessage);
       setError(errorMessage);
-      
-      if (errorMessage.includes('expired') || errorMessage.includes('invalid')) {
-        Alert.alert(
-          'Link Expired',
-          'This password reset link has expired. Please request a new one.',
-          [
-            {
-              text: 'Request New Link',
-              onPress: () => router.replace('/auth/reset-password'),
-            },
-            {
-              text: 'Cancel',
-              style: 'cancel',
-            },
-          ]
-        );
+
+      if (
+        errorMessage.includes('expired') ||
+        errorMessage.includes('invalid') ||
+        errorMessage.includes('no longer valid')
+      ) {
+        Alert.alert('Reset link invalid', 'Request a new link from the sign-in screen.', [
+          {
+            text: 'Request new link',
+            onPress: () => router.replace('/auth/reset-password'),
+          },
+          { text: 'Cancel', style: 'cancel' },
+        ]);
       }
     } finally {
       setLoading(false);
     }
   };
+
+  const goRequestNew = () => router.replace('/auth/reset-password');
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
@@ -152,120 +196,126 @@ export default function ResetPasswordCompleteScreen() {
         style={styles.keyboardView}
       >
         <View style={styles.content}>
-          {/* Header */}
-          <Animated.View
-            entering={FadeIn.duration(400)}
-            style={styles.header}
-          >
+          <Animated.View entering={FadeIn.duration(400)} style={styles.header}>
             <TouchableOpacity
               onPress={() => router.replace('/auth/signin')}
               style={styles.backButton}
             >
               <Text style={[styles.backButtonText, { color: themeColors.textSecondary }]}>←</Text>
             </TouchableOpacity>
-            <Text style={[styles.title, { color: themeColors.text }]}>Reset Password</Text>
-            <Text style={[styles.subtitle, { color: themeColors.textSecondary }]}>
-              Enter your new password below.
-            </Text>
+            <Text style={[styles.title, { color: themeColors.text }]}>Reset password</Text>
+            <Text style={[styles.subtitle, { color: themeColors.textSecondary }]}>{recoverySubtitle}</Text>
           </Animated.View>
 
-          {/* Form */}
-          <Animated.View
-            style={styles.form}
-            entering={SlideInDown.duration(400).delay(100)}
-          >
-            {/* New Password Input */}
-            <View style={styles.inputContainer}>
-              <Text style={[styles.label, { color: themeColors.textSecondary }]}>New Password</Text>
-              <TextInput
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: themeColors.surface,
-                    color: themeColors.text,
-                    borderColor: error ? themeColors.error : themeColors.border,
-                  },
-                ]}
-                placeholder="Enter new password (min 6 characters)"
-                placeholderTextColor={themeColors.textTertiary}
-                value={newPassword}
-                onChangeText={(text) => {
-                  setNewPassword(text);
-                  setError(null);
-                }}
-                secureTextEntry
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!loading}
-              />
-            </View>
-
-            {/* Confirm Password Input */}
-            <View style={styles.inputContainer}>
-              <Text style={[styles.label, { color: themeColors.textSecondary }]}>Confirm Password</Text>
-              <TextInput
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: themeColors.surface,
-                    color: themeColors.text,
-                    borderColor: error ? themeColors.error : themeColors.border,
-                  },
-                ]}
-                placeholder="Confirm new password"
-                placeholderTextColor={themeColors.textTertiary}
-                value={confirmPassword}
-                onChangeText={(text) => {
-                  setConfirmPassword(text);
-                  setError(null);
-                }}
-                secureTextEntry
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!loading}
-              />
-            </View>
-
-            {/* Error Message */}
-            {error && (
-              <Animated.View
-                entering={FadeIn.duration(200)}
-                style={styles.errorContainer}
-              >
-                <Text style={[styles.errorText, { color: themeColors.error }]}>{error}</Text>
-              </Animated.View>
-            )}
-
-            {/* Submit Button */}
-            <TouchableOpacity
-              style={[
-                styles.submitButton,
-                { backgroundColor: themeColors.primary },
-                loading && styles.submitButtonDisabled,
-                shadow.md,
-              ]}
-              onPress={handleResetPassword}
-              disabled={loading}
-              activeOpacity={0.8}
-            >
-              {loading ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={styles.submitButtonText}>Reset Password</Text>
-              )}
-            </TouchableOpacity>
-
-            {/* Back to Sign In */}
-            <TouchableOpacity
-              onPress={() => router.replace('/auth/signin')}
-              disabled={loading}
-              style={styles.backToSignInButton}
-            >
-              <Text style={[styles.backToSignInText, { color: themeColors.primary }]}>
-                ← Back to Sign In
+          {recoveryGate === 'checking' ? (
+            <View style={styles.centerBlock}>
+              <ActivityIndicator size="large" color={themeColors.primary} />
+              <Text style={[styles.hint, { color: themeColors.textSecondary }]}>
+                Checking your reset link…
               </Text>
-            </TouchableOpacity>
-          </Animated.View>
+            </View>
+          ) : recoveryGate === 'invalid' ? (
+            <Animated.View entering={SlideInDown.duration(400)} style={styles.block}>
+              {error ? (
+                <Text style={[styles.errorText, { color: themeColors.error }]}>{error}</Text>
+              ) : null}
+              <TouchableOpacity
+                style={[styles.submitButton, { backgroundColor: themeColors.primary }, shadow.md]}
+                onPress={goRequestNew}
+              >
+                <Text style={styles.submitButtonText}>Request a new reset email</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => router.replace('/auth/signin')} style={styles.linkBtn}>
+                <Text style={[styles.linkText, { color: themeColors.primary }]}>Back to sign in</Text>
+              </TouchableOpacity>
+            </Animated.View>
+          ) : (
+            <Animated.View style={styles.form} entering={SlideInDown.duration(400).delay(100)}>
+              <View style={styles.inputContainer}>
+                <Text style={[styles.label, { color: themeColors.textSecondary }]}>New password</Text>
+                <TextInput
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: themeColors.surface,
+                      color: themeColors.text,
+                      borderColor: error ? themeColors.error : themeColors.border,
+                    },
+                  ]}
+                  placeholder="At least 6 characters"
+                  placeholderTextColor={themeColors.textTertiary}
+                  value={newPassword}
+                  onChangeText={(text) => {
+                    setNewPassword(text);
+                    setError(null);
+                  }}
+                  secureTextEntry
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  editable={!loading}
+                />
+              </View>
+
+              <View style={styles.inputContainer}>
+                <Text style={[styles.label, { color: themeColors.textSecondary }]}>Confirm password</Text>
+                <TextInput
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: themeColors.surface,
+                      color: themeColors.text,
+                      borderColor: error ? themeColors.error : themeColors.border,
+                    },
+                  ]}
+                  placeholder="Confirm new password"
+                  placeholderTextColor={themeColors.textTertiary}
+                  value={confirmPassword}
+                  onChangeText={(text) => {
+                    setConfirmPassword(text);
+                    setError(null);
+                  }}
+                  secureTextEntry
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  editable={!loading}
+                />
+              </View>
+
+              {error ? (
+                <Animated.View entering={FadeIn.duration(200)} style={styles.errorContainer}>
+                  <Text style={[styles.errorText, { color: themeColors.error }]}>{error}</Text>
+                </Animated.View>
+              ) : null}
+
+              <TouchableOpacity
+                style={[
+                  styles.submitButton,
+                  { backgroundColor: themeColors.primary },
+                  loading && styles.submitButtonDisabled,
+                  shadow.md,
+                ]}
+                onPress={handleResetPassword}
+                disabled={loading}
+                activeOpacity={0.8}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.submitButtonText}>Update password</Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={() => router.replace('/auth/signin')}
+                disabled={loading}
+                style={styles.backToSignInButton}
+              >
+                <Text style={[styles.backToSignInText, { color: themeColors.primary }]}>
+                  ← Back to sign in
+                </Text>
+              </TouchableOpacity>
+            </Animated.View>
+          )}
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -309,6 +359,18 @@ const styles = StyleSheet.create({
   form: {
     flex: 1,
   },
+  block: {
+    gap: spacing.lg,
+  },
+  centerBlock: {
+    alignItems: 'center',
+    gap: spacing.md,
+    marginTop: spacing.xl,
+  },
+  hint: {
+    fontSize: fontSize.sm,
+    textAlign: 'center',
+  },
   inputContainer: {
     marginBottom: spacing.md,
   },
@@ -330,6 +392,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: fontSize.sm,
+    lineHeight: 20,
   },
   submitButton: {
     height: 52,
@@ -355,5 +418,12 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     fontWeight: fontWeight.medium,
   },
+  linkBtn: {
+    alignSelf: 'center',
+    paddingVertical: spacing.sm,
+  },
+  linkText: {
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.medium,
+  },
 });
-

@@ -130,24 +130,13 @@ export default function HomeScreen() {
     }
   }, [isEditMode, counters]);
 
-  // Initialize and update smart notifications
+  // Reschedule Livra local reminders when marks list changes (coalesced in `livraLocalNotificationOwner`).
   useEffect(() => {
     const setupNotifications = async () => {
       if (!permissionGranted || counters.length === 0) return;
-
-      // Update notifications when counters change
       await updateSmartNotifications(user?.id);
     };
-
-    // Initial setup
-    setupNotifications();
-
-    // Also update when counters change (after a delay to avoid too frequent updates)
-    const timeoutId = setTimeout(() => {
-      setupNotifications();
-    }, 2000); // Wait 2 seconds after counters change
-
-    return () => clearTimeout(timeoutId);
+    void setupNotifications();
   }, [counters, permissionGranted, user?.id, updateSmartNotifications]);
 
   // Load profile image on mount and when user changes

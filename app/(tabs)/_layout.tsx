@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Tabs, useRouter, usePathname } from 'expo-router';
 import { View, StyleSheet, Text, Platform, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,6 +7,7 @@ import * as Haptics from 'expo-haptics';
 import { colors } from '../../theme/colors';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { spacing, borderRadius, fontSize, fontWeight, shadow } from '../../theme/tokens';
+import { useAuth } from '../../hooks/useAuth';
 
 // Context to share FAB state from home screen
 type FABContextType = {
@@ -166,6 +167,17 @@ export default function TabLayout() {
   const themeColors = colors[theme];
   const insets = useSafeAreaInsets();
   const [isEditMode, setIsEditMode] = useState(false);
+  const router = useRouter();
+  const { initialized, loading, isAuthenticated } = useAuth();
+
+  // Auth is presented as a root modal; dismissing it (e.g. swipe down) could leave tabs visible
+  // with no session — "Guest user" and local data still on screen. Force sign-in when logged out.
+  useEffect(() => {
+    if (!initialized || loading) return;
+    if (!isAuthenticated) {
+      router.replace('/auth/signin');
+    }
+  }, [initialized, loading, isAuthenticated, router]);
 
   return (
     <FABContext.Provider value={{ isEditMode, setIsEditMode }}>

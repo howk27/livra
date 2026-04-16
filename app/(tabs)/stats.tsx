@@ -27,6 +27,7 @@ import { useWeeklyReview } from '../../hooks/useWeeklyReview';
 import { getAppDate, getAppDateTime } from '../../lib/appDate';
 import { useAppDateStore } from '../../state/appDateSlice';
 import { WeeklyReviewPreviewCard } from '../../components/stats/WeeklyReviewPreviewCard';
+import { Card } from '../../components/ui';
 
 const APP_BRAND_LOGO_LIGHT = require('../../assets/branding/Logo NoBG.png');
 const APP_BRAND_LOGO_DARK = require('../../assets/branding/Logo NoBG dark.png');
@@ -1244,7 +1245,13 @@ const CategoryBreakdown: React.FC<{
     // This handles the case where events exist but categoryData calculation failed
     if (hasActiveMarks && (!hasValidEvents || !hasAnyValidEvents)) {
       return (
-        <View style={[styles.categoryCard, { borderColor: themeColors.border, backgroundColor: themeColors.surface }]}>
+        <Card
+          backgroundColor={themeColors.surface}
+          borderColor={themeColors.border}
+          borderRadiusKey="card"
+          paddingKey="lg"
+          style={{ marginBottom: spacing.md }}
+        >
           <View style={styles.categoryHeader}>
             <AppText variant="subtitle" style={[styles.categoryTitle, { color: themeColors.textSecondary }]}>
               Category Breakdown
@@ -1272,7 +1279,7 @@ const CategoryBreakdown: React.FC<{
               Add some units to your marks to see how your activity is distributed across different categories.
             </AppText>
           </View>
-        </View>
+        </Card>
       );
     }
     
@@ -1287,7 +1294,13 @@ const CategoryBreakdown: React.FC<{
       });
       // Show the friendly placeholder instead of "no category data available"
       return (
-        <View style={[styles.categoryCard, { borderColor: themeColors.border, backgroundColor: themeColors.surface }]}>
+        <Card
+          backgroundColor={themeColors.surface}
+          borderColor={themeColors.border}
+          borderRadiusKey="card"
+          paddingKey="lg"
+          style={{ marginBottom: spacing.md }}
+        >
           <View style={styles.categoryHeader}>
             <AppText variant="subtitle" style={[styles.categoryTitle, { color: themeColors.textSecondary }]}>
               Category Breakdown
@@ -1315,13 +1328,19 @@ const CategoryBreakdown: React.FC<{
               Add some units to your marks to see how your activity is distributed across different categories.
             </AppText>
           </View>
-        </View>
+        </Card>
       );
     }
     
     // Default empty state (no marks at all)
     return (
-      <View style={[styles.categoryCard, { borderColor: themeColors.border, backgroundColor: themeColors.surface }]}>
+      <Card
+          backgroundColor={themeColors.surface}
+          borderColor={themeColors.border}
+          borderRadiusKey="card"
+          paddingKey="lg"
+          style={{ marginBottom: spacing.md }}
+        >
         <View style={styles.categoryHeader}>
           <AppText variant="subtitle" style={[styles.categoryTitle, { color: themeColors.textSecondary }]}>
             Category Breakdown
@@ -1349,14 +1368,20 @@ const CategoryBreakdown: React.FC<{
             Add some units to your marks to see how your activity is distributed across different categories.
           </AppText>
         </View>
-      </View>
+      </Card>
     );
   }
 
   // Check if validCategoryData is empty after filtering
   if (validCategoryData.length === 0) {
     return (
-      <View style={[styles.categoryCard, { borderColor: themeColors.border, backgroundColor: themeColors.surface }]}>
+      <Card
+          backgroundColor={themeColors.surface}
+          borderColor={themeColors.border}
+          borderRadiusKey="card"
+          paddingKey="lg"
+          style={{ marginBottom: spacing.md }}
+        >
         <View style={styles.categoryHeader}>
           <AppText variant="subtitle" style={[styles.categoryTitle, { color: themeColors.textSecondary }]}>
             Category Breakdown
@@ -1378,14 +1403,20 @@ const CategoryBreakdown: React.FC<{
         <AppText variant="body" style={[styles.emptyText, { color: themeColors.textSecondary }]}>
           No valid category data available
         </AppText>
-      </View>
+      </Card>
     );
   }
 
   // Check if pieData is empty after all hooks are called
   if (!pieData.length) {
     return (
-      <View style={[styles.categoryCard, { borderColor: themeColors.border, backgroundColor: themeColors.surface }]}>
+      <Card
+          backgroundColor={themeColors.surface}
+          borderColor={themeColors.border}
+          borderRadiusKey="card"
+          paddingKey="lg"
+          style={{ marginBottom: spacing.md }}
+        >
         <View style={styles.categoryHeader}>
           <AppText variant="subtitle" style={[styles.categoryTitle, { color: themeColors.textSecondary }]}>
             Category Breakdown
@@ -1407,12 +1438,18 @@ const CategoryBreakdown: React.FC<{
         <AppText variant="body" style={[styles.emptyText, { color: themeColors.textSecondary }]}>
           No pie chart data available
         </AppText>
-      </View>
+      </Card>
     );
   }
 
   return (
-    <View style={[styles.categoryCard, { borderColor: themeColors.border, backgroundColor: themeColors.surface }]}>
+    <Card
+          backgroundColor={themeColors.surface}
+          borderColor={themeColors.border}
+          borderRadiusKey="card"
+          paddingKey="lg"
+          style={{ marginBottom: spacing.md }}
+        >
       <View style={styles.categoryHeader}>
         <AppText variant="subtitle" style={[styles.categoryTitle, { color: themeColors.textSecondary }]}>
           Category Breakdown
@@ -1543,7 +1580,7 @@ const CategoryBreakdown: React.FC<{
           );
         })}
       </View>
-    </View>
+    </Card>
   );
 });
 
@@ -1685,7 +1722,13 @@ const StreakTimelineInner: React.FC<{
   // Animation disabled - no longer needed
 
   return (
-    <View style={[styles.timelineCard, { borderColor: themeColors.border, backgroundColor: themeColors.surface }]}>
+    <Card
+      backgroundColor={themeColors.surface}
+      borderColor={themeColors.border}
+      borderRadiusKey="card"
+      paddingKey="lg"
+      style={{ marginBottom: spacing.md }}
+    >
       <AppText variant="body" style={[styles.timelineTitle, { color: themeColors.textSecondary }]}>
         Last 30 Days
       </AppText>
@@ -1774,7 +1817,7 @@ const StreakTimelineInner: React.FC<{
           })()}
         </View>
       )}
-    </View>
+    </Card>
   );
 };
 
@@ -2634,13 +2677,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     fontSize: fontSize.sm,
   },
-  // Category Breakdown
-  categoryCard: {
-    padding: spacing.lg,
-    borderRadius: borderRadius.card,
-    marginBottom: spacing.md,
-    borderWidth: 1,
-  },
+  // Category Breakdown (surface shell is `components/ui/Card`)
   categoryHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -2731,13 +2768,7 @@ const styles = StyleSheet.create({
     lineHeight: fontSize.base * 1.5,
     maxWidth: 280,
   },
-  // Streak Timeline
-  timelineCard: {
-    padding: spacing.lg,
-    borderRadius: borderRadius.card,
-    marginBottom: spacing.md,
-    borderWidth: 1,
-  },
+  // Streak Timeline (surface shell is `components/ui/Card`)
   timelineTitle: {
     fontSize: fontSize.base,
     marginBottom: spacing.md,

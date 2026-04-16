@@ -24,9 +24,16 @@ import { logger } from '../lib/utils/logger';
 import { getIapService } from '../lib/services/iap/getIapService';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { diagEvent, exportSupportBundle, getSupportDiagnosticsEnabled } from '../lib/debug/iapDiagnostics';
-import { checkProStatus, normalizeIapError, type NormalizedIapError } from '../lib/iap/iap';
+import {
+  checkProStatus,
+  normalizeIapError,
+  isNativeStorePurchasesSupported,
+  type NormalizedIapError,
+} from '../lib/iap/iap';
 import { env } from '../lib/env';
 import { applyOpacity } from '@/src/components/icons/color';
+import { AppText } from '../components/Typography';
+import { Card, PrimaryButton } from '../components/ui';
 
 const PRO_FEATURES = [
   {
@@ -86,7 +93,7 @@ function PaywallScreenContent() {
   const purchaseInProgressRef = useRef(false);
   const [supportModeEnabled, setSupportModeEnabled] = useState(false);
 
-  // Hidden gesture for diagnostics (tap title 7 times within 3 seconds)
+  /** Hidden gesture (7 taps on title): support bundle export when `enableSupportBundle` + support diagnostics flag. */
   const titleTapCount = useRef(0);
   const titleTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -113,12 +120,8 @@ function PaywallScreenContent() {
       clearTimeout(titleTapTimer.current);
     }
 
-    // Check if support bundle is enabled (TestFlight-safe)
     const enableSupportBundle = Constants.expoConfig?.extra?.enableSupportBundle === true;
 
-    // If 7 taps reached:
-    // - In env.isDev: open diagnostics screen
-    // - In TestFlight (if enableSupportBundle): export support bundle
     if (titleTapCount.current >= 7) {
       titleTapCount.current = 0;
       if (titleTapTimer.current) {
@@ -247,7 +250,7 @@ function PaywallScreenContent() {
   };
 
   const verificationPendingMessage =
-    'We couldn’t verify your purchase yet. Try again in a moment.';
+    'Your purchase was accepted by the store, but Livra+ is still syncing. Check your connection and tap Verify again.';
 
   useEffect(() => {
     return () => {
@@ -255,31 +258,42 @@ function PaywallScreenContent() {
     };
   }, []);
 
-  const refreshEntitlementWithBackoff = useCallback(async ({ maxMs = 90000 }: { maxMs?: number } = {}): Promise<'unlocked' | 'still_locked' | 'error' | 'aborted'> => {
-    const delays = [0, 800, 1600, 2400, 4000, 9000, 15000, 30000, 60000, 90000].filter((delay) => delay <= maxMs);
-    const token = entitlementRefreshTokenRef.current;
-    try {
-      for (const delay of delays) {
-        if (entitlementRefreshTokenRef.current !== token) {
-          return 'aborted';
+  const refreshEntitlementWithBackoff = useCallback(
+    async ({
+      maxMs = 90000,
+      requireDbConfirmation = true,
+    }: { maxMs?: number; requireDbConfirmation?: boolean } = {}): Promise<
+      'unlocked' | 'still_locked' | 'error' | 'aborted'
+    > => {
+      const delays = [0, 800, 1600, 2400, 4000, 9000, 15000, 30000, 60000, 90000].filter(
+        (delay) => delay <= maxMs
+      );
+      const token = entitlementRefreshTokenRef.current;
+      try {
+        for (const delay of delays) {
+          if (entitlementRefreshTokenRef.current !== token) {
+            return 'aborted';
+          }
+          if (delay > 0) {
+            await new Promise((resolve) => setTimeout(resolve, delay));
+          }
+          if (entitlementRefreshTokenRef.current !== token) {
+            return 'aborted';
+          }
+          const status = await checkProStatus();
+          const ok = requireDbConfirmation ? status.dbUnlocked : status.effectiveUnlocked;
+          if (ok) {
+            return 'unlocked';
+          }
         }
-        if (delay > 0) {
-          await new Promise((resolve) => setTimeout(resolve, delay));
-        }
-        if (entitlementRefreshTokenRef.current !== token) {
-          return 'aborted';
-        }
-        const status = await checkProStatus();
-        if (status.status === 'unlocked') {
-          return 'unlocked';
-        }
+        return 'still_locked';
+      } catch (error) {
+        logger.error('[Paywall] Error refreshing entitlement status:', error);
+        return 'error';
       }
-      return 'still_locked';
-    } catch (error) {
-      logger.error('[Paywall] Error refreshing entitlement status:', error);
-      return 'error';
-    }
-  }, []);
+    },
+    []
+  );
 
   const lastPurchaseUpdatedRef = useRef<string | null>(null);
 
@@ -468,7 +482,10 @@ function PaywallScreenContent() {
         setOperationState('verifying');
         setOperationMessage('Verifying your purchase...');
         setNormalizedError(null);
-        const verificationResult = await refreshEntitlementWithBackoff({ maxMs: 90000 });
+        const verificationResult = await refreshEntitlementWithBackoff({
+          maxMs: 90000,
+          requireDbConfirmation: true,
+        });
         if (verificationResult === 'aborted') {
           return;
         }
@@ -547,10 +564,27 @@ function PaywallScreenContent() {
         setRestoreMessageType('info');
         setOperationState('idle');
         setOperationMessage(null);
+      } else if (result.outcome === 'unsupported_environment') {
+        setRestoreMessage(
+          'Store restore is not available in Expo Go or on the web. Use a development build or TestFlight.'
+        );
+        setRestoreMessageType('info');
+        setOperationState('idle');
+        setOperationMessage(null);
+      } else if (result.outcome === 'unverifiable_receipt') {
+        setRestoreMessage(
+          'A subscription may exist, but the receipt could not be read to verify it. Try again later.'
+        );
+        setRestoreMessageType('info');
+        setOperationState('idle');
+        setOperationMessage(null);
       } else if (result.outcome === 'success') {
         setOperationState('verifying');
         setOperationMessage('Verifying your entitlement…');
-        const verificationResult = await refreshEntitlementWithBackoff({ maxMs: 90000 });
+        const verificationResult = await refreshEntitlementWithBackoff({
+          maxMs: 90000,
+          requireDbConfirmation: false,
+        });
         if (verificationResult === 'aborted') {
           return;
         }
@@ -651,7 +685,10 @@ function PaywallScreenContent() {
       setOperationState('verifying');
       setOperationMessage('Verifying your purchase...');
       await iapService.recoverNow();
-      const verificationResult = await refreshEntitlementWithBackoff({ maxMs: 90000 });
+      const verificationResult = await refreshEntitlementWithBackoff({
+        maxMs: 90000,
+        requireDbConfirmation: true,
+      });
       if (verificationResult === 'aborted') {
         return;
       }
@@ -696,11 +733,15 @@ function PaywallScreenContent() {
 
   useEffect(() => {
     if (isSubscribed) return;
-    if (proStatus.status === 'unknown' && (operationState === 'idle' || operationState === 'info')) {
+    if (
+      proStatus.verification === 'unverified' &&
+      proStatus.status === 'unknown' &&
+      (operationState === 'idle' || operationState === 'info')
+    ) {
       setOperationState('info');
       setOperationMessage('Unable to verify premium status right now.');
     }
-  }, [proStatus.status, isSubscribed, operationState]);
+  }, [proStatus.status, proStatus.verification, isSubscribed, operationState]);
 
   useEffect(() => {
     if (isSubscribed) return;
@@ -735,7 +776,7 @@ function PaywallScreenContent() {
     setOperationState('verifying');
     setOperationMessage('Verifying your purchase...');
     setNormalizedError(null);
-    refreshEntitlementWithBackoff({ maxMs: 90000 })
+    refreshEntitlementWithBackoff({ maxMs: 90000, requireDbConfirmation: true })
       .then((verificationResult) => {
         if (verificationResult === 'aborted') {
           return;
@@ -994,6 +1035,23 @@ function PaywallScreenContent() {
           <Text style={[styles.subtitle, { color: themeColors.textSecondary }]}>
             Unlock unlimited tracking potential
           </Text>
+          {!isNativeStorePurchasesSupported() && (
+            <View
+              style={[
+                styles.devEnvBanner,
+                {
+                  borderColor: themeColors.border,
+                  backgroundColor: themeColors.surface,
+                },
+              ]}
+              accessibilityRole="text"
+            >
+              <AppText variant="body" style={[styles.devEnvBannerText, { color: themeColors.textSecondary }]}>
+                Store purchases and restore work only in a development build or TestFlight, not in Expo Go or
+                the browser.
+              </AppText>
+            </View>
+          )}
         </View>
 
         {/* Features */}
@@ -1018,10 +1076,12 @@ function PaywallScreenContent() {
                 <Ionicons name={feature.ion as any} size={26} color={themeColors.text} />
               </View>
               <View style={styles.featureText}>
-                <Text style={[styles.featureTitle, { color: themeColors.text }]}>{feature.title}</Text>
-                <Text style={[styles.featureDescription, { color: themeColors.textSecondary }]}>
+                <AppText variant="body" style={[styles.featureTitle, { color: themeColors.text }]}>
+                  {feature.title}
+                </AppText>
+                <AppText variant="body" style={[styles.featureDescription, { color: themeColors.textSecondary }]}>
                   {feature.description}
-                </Text>
+                </AppText>
               </View>
             </View>
           ))}
@@ -1123,41 +1183,48 @@ function PaywallScreenContent() {
         )}
 
         {isSubscribed && (
-          <TouchableOpacity
-            style={[
-              styles.purchaseButton,
-              { backgroundColor: themeColors.accent.primary },
-              shadow.lg,
-            ]}
+          <PrimaryButton
             onPress={handleManageSubscription}
-            activeOpacity={0.88}
+            backgroundColor={themeColors.accent.primary}
+            indicatorColor={themeColors.text}
+            shadowVariant="lg"
+            style={{ marginBottom: spacing.md }}
+            accessibilityLabel="Manage Livra+ subscription"
           >
-            <Text style={[styles.purchaseButtonText, { color: themeColors.text }]}>Manage Livra+</Text>
-          </TouchableOpacity>
+            <AppText variant="button" style={{ color: themeColors.text, fontWeight: fontWeight.bold }}>
+              Manage Livra+
+            </AppText>
+          </PrimaryButton>
         )}
 
         {/* Loading State */}
         {isLoadingProducts && (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="small" color={themeColors.primary} />
-            <Text style={[styles.loadingText, { color: themeColors.textSecondary }]}>
+            <AppText variant="body" style={[styles.loadingText, { color: themeColors.textSecondary }]}>
               Loading subscription options...
-            </Text>
+            </AppText>
           </View>
         )}
 
         {/* TASK 7: Preflight health check error - show user-facing error */}
         {healthCheckFailed && !isLoadingProducts && (
-          <View style={[styles.errorContainer, { backgroundColor: themeColors.surface, borderColor: themeColors.error }]}>
-            <Text style={[styles.errorText, { color: themeColors.error, fontWeight: fontWeight.semibold }]}>
+          <Card
+            backgroundColor={themeColors.surface}
+            borderColor={themeColors.error}
+            borderRadiusKey="md"
+            paddingKey="md"
+            style={[styles.noticeCardMargin, { marginTop: spacing.sm }]}
+          >
+            <AppText variant="body" style={[styles.errorText, { color: themeColors.error, fontWeight: fontWeight.semibold }]}>
               Unable to load subscription options
-            </Text>
-            <Text style={[styles.errorHint, { color: themeColors.textSecondary, marginTop: spacing.xs }]}>
+            </AppText>
+            <AppText variant="label" style={[styles.errorHint, { color: themeColors.textSecondary, marginTop: spacing.xs }]}>
               {healthCheckReasons.length > 0 
                 ? healthCheckReasons[0] // Show first reason as user message
                 : 'Please check your connection and try again.'}
-            </Text>
-          </View>
+            </AppText>
+          </Card>
         )}
 
         {/* Error State - Products failed to load */}
@@ -1173,60 +1240,56 @@ function PaywallScreenContent() {
 
         {/* Purchase Button - Only show when products are loaded and connection is ready */}
         {connectionStatus === 'connected' && !isLoadingProducts && products && Array.isArray(products) && products.length > 0 && !isSubscribed && (
-          <TouchableOpacity
-            style={[
-              styles.purchaseButton,
-              { backgroundColor: themeColors.accent.primary },
-              shadow.lg,
-              buttonDisabled && styles.disabledButton,
-            ]}
+          <PrimaryButton
             onPress={handlePurchase}
             disabled={buttonDisabled}
+            loading={purchaseInProgress}
+            backgroundColor={themeColors.accent.primary}
+            indicatorColor={themeColors.text}
+            shadowVariant="lg"
+            style={{ marginBottom: spacing.md }}
             activeOpacity={0.8}
+            accessibilityLabel="Continue with selected subscription plan"
           >
-            {purchaseInProgress ? (
-              <ActivityIndicator color={themeColors.text} />
-            ) : isSubscribed ? (
-              <Text style={[styles.purchaseButtonText, { color: themeColors.text }]}>Subscribed</Text>
-            ) : !isReady ? (
-              <Text style={[styles.purchaseButtonText, { color: themeColors.text }]}>Initializing...</Text>
+            {!isReady ? (
+              <AppText variant="button" style={{ color: themeColors.text, fontWeight: fontWeight.bold }}>Initializing...</AppText>
             ) : connectionStatus !== 'connected' ? (
-              <Text style={[styles.purchaseButtonText, { color: themeColors.text }]}>Store Not Available</Text>
+              <AppText variant="button" style={{ color: themeColors.text, fontWeight: fontWeight.bold }}>Store Not Available</AppText>
             ) : !selectedProduct ? (
-              <Text style={[styles.purchaseButtonText, { color: themeColors.text }]}>Select a Plan</Text>
+              <AppText variant="button" style={{ color: themeColors.text, fontWeight: fontWeight.bold }}>Select a Plan</AppText>
             ) : pricesMissing || (!selectedPrice || selectedPrice.trim() === '') ? (
-              <Text style={[styles.purchaseButtonText, { color: themeColors.text }]}>Loading price...</Text>
+              <AppText variant="button" style={{ color: themeColors.text, fontWeight: fontWeight.bold }}>Loading price...</AppText>
             ) : (
-              <Text style={[styles.purchaseButtonText, { color: themeColors.text }]}>
+              <AppText variant="button" style={{ color: themeColors.text, fontWeight: fontWeight.bold }}>
                 Continue with {selectedPlan === 'monthly' ? 'Monthly' : 'Yearly'} Plan
                 {selectedPrice && selectedPrice.trim() !== '' ? ` - ${selectedPrice}` : ''}
-              </Text>
+              </AppText>
             )}
-          </TouchableOpacity>
+          </PrimaryButton>
         )}
 
         {/* Operation Status / Error Display */}
         {isStrictFailure && operationState === 'error' && (
-          <Text style={[styles.errorText, { color: themeColors.error, textAlign: 'center', marginTop: spacing.sm }]}>
+          <AppText variant="body" style={[styles.errorText, { color: themeColors.error, textAlign: 'center', marginTop: spacing.sm }]}>
             {operationMessage || 'Purchase failed. Please try again.'}
-          </Text>
+          </AppText>
         )}
         {(operationMessage || lastError) && !productsLoadError && !isStrictFailure && (
-          <View
-                style={[
-              styles.errorContainer,
-              {
-                backgroundColor: themeColors.surface,
-                borderColor:
-                  operationState === 'subscribed'
-                    ? themeColors.success
-                    : operationState === 'transient_error' || operationState === 'info'
-                      ? themeColors.accent.primary
-                      : themeColors.error,
-              },
-            ]}
+          <Card
+            backgroundColor={themeColors.surface}
+            borderColor={
+              operationState === 'subscribed'
+                ? themeColors.success
+                : operationState === 'transient_error' || operationState === 'info'
+                  ? themeColors.accent.primary
+                  : themeColors.error
+            }
+            borderRadiusKey="md"
+            paddingKey="md"
+            style={[styles.noticeCardMargin, { marginTop: spacing.sm }]}
           >
-            <Text
+            <AppText
+              variant="body"
               style={[
                 styles.errorText,
                 {
@@ -1241,30 +1304,44 @@ function PaywallScreenContent() {
               ]}
             >
               {operationMessage || lastError}
-            </Text>
+            </AppText>
             {connectionStatus !== 'connected' && (
-              <Text style={[styles.errorHint, { color: themeColors.textSecondary, marginTop: spacing.xs }]}>
+              <AppText variant="label" style={[styles.errorHint, { color: themeColors.textSecondary, marginTop: spacing.xs }]}>
                 Please check your internet connection and try again.
-              </Text>
+              </AppText>
             )}
             {isTransientState && !isAlreadyOwned && (
-              <TouchableOpacity
-                style={[styles.retryButton, { backgroundColor: themeColors.accent.primary, marginTop: spacing.md }]}
+              <PrimaryButton
+                size="compact"
                 onPress={handleRetryVerification}
+                backgroundColor={themeColors.accent.primary}
+                indicatorColor={themeColors.text}
+                shadowVariant="none"
+                style={{ marginTop: spacing.md }}
+                accessibilityLabel="Retry verification"
               >
-                <Text style={[styles.retryButtonText, { color: themeColors.text }]}>Retry Verification</Text>
-              </TouchableOpacity>
+                <AppText variant="body" style={{ color: themeColors.text, fontWeight: fontWeight.semibold }}>
+                  Retry Verification
+                </AppText>
+              </PrimaryButton>
             )}
             {isAlreadyOwned && !isSubscribed && (
-              <TouchableOpacity
-                style={[styles.retryButton, { backgroundColor: themeColors.accent.primary, marginTop: spacing.sm }]}
+              <PrimaryButton
+                size="compact"
                 onPress={handleManageSubscription}
                 disabled={purchaseInProgress}
+                backgroundColor={themeColors.accent.primary}
+                indicatorColor={themeColors.text}
+                shadowVariant="none"
+                style={{ marginTop: spacing.sm }}
+                accessibilityLabel="Manage subscription"
               >
-                <Text style={[styles.retryButtonText, { color: themeColors.text }]}>Manage Subscription</Text>
-              </TouchableOpacity>
+                <AppText variant="body" style={{ color: themeColors.text, fontWeight: fontWeight.semibold }}>
+                  Manage Subscription
+                </AppText>
+              </PrimaryButton>
             )}
-          </View>
+          </Card>
         )}
 
         {/* Restore Button */}
@@ -1274,48 +1351,59 @@ function PaywallScreenContent() {
             onPress={handleRestore}
             disabled={purchaseInProgress || isLoadingProducts}
           >
-            <Text style={[
-              styles.restoreButtonText, 
-              { 
-                color: themeColors.textSecondary,
-                opacity: (purchaseInProgress || isLoadingProducts) ? 0.5 : 1,
-              }
-            ]}>
+            <AppText
+              variant="body"
+              style={[
+                styles.restoreButtonText,
+                {
+                  color: themeColors.textSecondary,
+                  opacity: purchaseInProgress || isLoadingProducts ? 0.5 : 1,
+                },
+              ]}
+            >
               Restore Purchases
-            </Text>
+            </AppText>
           </TouchableOpacity>
         )}
         
         {/* STEP 5: Restore message display */}
         {restoreMessage && (
-          <View style={[
-            styles.restoreMessageContainer,
-            {
-              backgroundColor: restoreMessageType === 'success' 
+          <Card
+            backgroundColor={
+              restoreMessageType === 'success'
                 ? applyOpacity(themeColors.success, 0.15)
                 : restoreMessageType === 'info'
                   ? applyOpacity(themeColors.accent.primary, 0.18)
-                  : applyOpacity(themeColors.error, 0.15),
-              borderColor: restoreMessageType === 'success'
+                  : applyOpacity(themeColors.error, 0.15)
+            }
+            borderColor={
+              restoreMessageType === 'success'
                 ? themeColors.success
                 : restoreMessageType === 'info'
                   ? themeColors.accent.primary
-                  : themeColors.error,
+                  : themeColors.error
             }
-          ]}>
-            <Text style={[
-              styles.restoreMessageText,
-              {
-                color: restoreMessageType === 'success'
-                  ? themeColors.success
-                  : restoreMessageType === 'info'
-                    ? themeColors.accent.primary
-                    : themeColors.error,
-              }
-            ]}>
+            borderRadiusKey="md"
+            paddingKey="md"
+            style={[styles.noticeCardMargin, { marginTop: spacing.sm }]}
+          >
+            <AppText
+              variant="body"
+              style={[
+                styles.restoreMessageText,
+                {
+                  color:
+                    restoreMessageType === 'success'
+                      ? themeColors.success
+                      : restoreMessageType === 'info'
+                        ? themeColors.accent.primary
+                        : themeColors.error,
+                },
+              ]}
+            >
               {restoreMessage}
-            </Text>
-          </View>
+            </AppText>
+          </Card>
         )}
 
 
@@ -1398,16 +1486,29 @@ function ErrorDetails({
   }, [showDiagnostics]);
 
   return (
-    <View style={[styles.errorContainer, { backgroundColor: applyOpacity(themeColors.error, 0.1), borderColor: themeColors.error }]}>
-      <Text style={[styles.errorText, { color: themeColors.error }]}>
+    <Card
+      backgroundColor={applyOpacity(themeColors.error, 0.1)}
+      borderColor={themeColors.error}
+      borderRadiusKey="md"
+      paddingKey="md"
+      style={[styles.noticeCardMargin, { marginTop: spacing.sm }]}
+    >
+      <AppText variant="body" style={[styles.errorText, { color: themeColors.error }]}>
         {error || 'Unable to load subscription options. Please check your connection and try again.'}
-      </Text>
-      <TouchableOpacity
-        style={[styles.retryButton, { backgroundColor: themeColors.accent.primary }]}
+      </AppText>
+      <PrimaryButton
+        size="compact"
         onPress={onRetry}
+        backgroundColor={themeColors.accent.primary}
+        indicatorColor={themeColors.text}
+        shadowVariant="none"
+        style={{ marginTop: spacing.md }}
+        accessibilityLabel="Retry loading subscriptions"
       >
-        <Text style={[styles.retryButtonText, { color: themeColors.text }]}>Retry Loading Subscriptions</Text>
-      </TouchableOpacity>
+        <AppText variant="body" style={{ color: themeColors.text, fontWeight: fontWeight.semibold }}>
+          Retry Loading Subscriptions
+        </AppText>
+      </PrimaryButton>
       
       {/* Expandable Details */}
       {showDiagnostics && (
@@ -1495,7 +1596,7 @@ function ErrorDetails({
           )}
         </View>
       )}
-    </View>
+    </Card>
   );
 }
 
@@ -1539,6 +1640,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingHorizontal: spacing.lg,
     lineHeight: 22,
+  },
+  devEnvBanner: {
+    marginTop: spacing.md,
+    marginHorizontal: spacing.lg,
+    padding: spacing.sm,
+    borderRadius: borderRadius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  devEnvBannerText: {
+    fontSize: fontSize.sm,
+    textAlign: 'center',
+    lineHeight: 20,
   },
   featuresList: {
     marginBottom: spacing.xl,
@@ -1635,7 +1748,7 @@ const styles = StyleSheet.create({
   selectedBadge: {
     width: 24,
     height: 24,
-    borderRadius: 12,
+    borderRadius: borderRadius.lg,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1655,26 +1768,13 @@ const styles = StyleSheet.create({
   planSavings: {
     fontSize: fontSize.sm,
   },
-  purchaseButton: {
-    padding: spacing.lg,
-    borderRadius: borderRadius.lg,
-    alignItems: 'center',
-    marginBottom: spacing.md,
-  },
   purchaseButtonText: {
     fontSize: fontSize.lg,
     fontWeight: fontWeight.bold,
   },
-  disabledButton: {
-    opacity: 0.6,
-  },
-  errorContainer: {
+  /** Margins for `Card` / notice blocks (border + padding live on `Card`) */
+  noticeCardMargin: {
     marginBottom: spacing.md,
-    marginTop: spacing.sm,
-    padding: spacing.md,
-    borderRadius: borderRadius.md,
-    borderWidth: 1,
-    borderStyle: 'solid',
   },
   errorText: {
     fontSize: fontSize.sm,
@@ -1715,13 +1815,6 @@ const styles = StyleSheet.create({
   },
   restoreButtonText: {
     fontSize: fontSize.base,
-  },
-  restoreMessageContainer: {
-    padding: spacing.md,
-    borderRadius: borderRadius.md,
-    borderWidth: 1,
-    marginTop: spacing.sm,
-    marginBottom: spacing.md,
   },
   restoreMessageText: {
     fontSize: fontSize.sm,
@@ -1852,18 +1945,23 @@ function PaywallErrorFallback({ onRetry }: { onRetry: () => void }) {
         </View>
         <View style={styles.loadingBlock}>
           <Image source={LIVRA_APP_ICON} style={styles.loadingLogo} accessibilityIgnoresInvertColors />
-          <Text style={[styles.title, { color: themeColors.text }]}>
+          <AppText variant="headline" style={[styles.title, { color: themeColors.text }]}>
             Unable to load subscription options
-          </Text>
-          <Text style={[styles.loadingText, { color: themeColors.textSecondary }]}>
+          </AppText>
+          <AppText variant="body" style={[styles.loadingText, { color: themeColors.textSecondary }]}>
             Please check your connection and try again.
-          </Text>
-          <TouchableOpacity
-            style={[styles.retryButton, { backgroundColor: themeColors.accent.primary, marginTop: spacing.md }]}
+          </AppText>
+          <PrimaryButton
+            size="compact"
             onPress={onRetry}
+            backgroundColor={themeColors.accent.primary}
+            indicatorColor={themeColors.text}
+            shadowVariant="none"
+            style={{ marginTop: spacing.md, alignSelf: 'stretch' }}
+            accessibilityLabel="Try again"
           >
-            <Text style={[styles.retryButtonText, { color: themeColors.text }]}>Try Again</Text>
-          </TouchableOpacity>
+            <AppText variant="body" style={{ color: themeColors.text, fontWeight: fontWeight.semibold }}>Try Again</AppText>
+          </PrimaryButton>
         </View>
       </ScrollView>
     </SafeAreaView>

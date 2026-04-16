@@ -1,8 +1,9 @@
 /**
  * Single Source of Truth for IAP Product SKUs
- * 
+ *
  * All SKU strings must be imported from this file.
  * DO NOT hardcode SKU strings anywhere else in the codebase.
+ * Entitlement semantics (DB vs cache grace) live in `lib/iap/iap.ts`, not here.
  */
 
 export const MONTHLY_SKU = 'livra_plus_monthly';

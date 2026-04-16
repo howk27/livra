@@ -29,7 +29,12 @@ interface MarksState {
   marks: Mark[];
   loading: boolean;
   error: string | null;
-  
+  /**
+   * Short-lived: optimistic totals during increment/decrement so mergeCounter can prefer in-flight writes.
+   * Cleared after pull reconciliation from lc_events (see useSync pullChanges).
+   */
+  recentUpdates: Map<string, { total: number; timestamp: number }>;
+
   // Actions
   loadMarks: (userId?: string) => Promise<void>;
   addMark: (mark: Omit<Mark, 'id' | 'created_at' | 'updated_at'>) => Promise<Mark>;
@@ -43,6 +48,7 @@ export const useMarksStore = create<MarksState>((set, get) => ({
   marks: [],
   loading: false,
   error: null,
+  recentUpdates: new Map(),
 
   loadMarks: async (userId?: string) => {
     set({ loading: true, error: null });
@@ -203,6 +209,12 @@ export const useMarksStore = create<MarksState>((set, get) => ({
     } catch (error) {
       logger.error('Error persisting mark update to database:', error);
       const userId = mark.user_id;
+      if (userId && updates.total !== undefined) {
+        const { reconcileMarkTotalWithPersistedEvents } = await import('../lib/db/markTotalReconciliation');
+        reconcileMarkTotalWithPersistedEvents(userId, id).catch((reconcileErr) => {
+          logger.error('[MarksSlice] Total reconcile after failed update failed:', reconcileErr);
+        });
+      }
       if (userId) {
         get().loadMarks(userId).catch((err) => {
           logger.error('Error reloading marks after failed update:', err);
@@ -211,6 +223,7 @@ export const useMarksStore = create<MarksState>((set, get) => ({
     }
   },
 
+  // Soft-delete mark only. Events may remain until orphan cleanup; counter row is tombstoned (totals irrelevant).
   deleteMark: async (id) => {
     const now = new Date().toISOString();
     const result = await execute('UPDATE lc_counters SET deleted_at = ?, updated_at = ? WHERE id = ?', [
@@ -248,6 +261,7 @@ export const useMarksStore = create<MarksState>((set, get) => ({
     }
   },
 
+  /** Local-only bump without an lc_events row — breaks total↔events invariant; prefer useCounters increment/decrement. */
   incrementTotal: async (id, amount) => {
     const mark = get().marks.find((m) => m.id === id);
     if (!mark) return;

@@ -31,7 +31,11 @@ async function load<T>(key: string): Promise<T[]> {
   try {
     const raw = await AsyncStorage.getItem(key);
     return raw ? JSON.parse(raw) : [];
-  } catch {
+  } catch (err) {
+    logger.warn('[FeaturesStore] load from AsyncStorage failed; defaulting empty', {
+      key,
+      message: err instanceof Error ? err.message : String(err),
+    });
     return [];
   }
 }

@@ -34,9 +34,9 @@ import {
 import {
   checkProStatus,
   validateReceiptWithServer,
-  unlockPro,
   getIAPErrorMessage,
   normalizeIapError,
+  isNativeStorePurchasesSupported,
 } from '../../iap/iap';
 import {
   getCapabilityDiagnostics,
@@ -1866,7 +1866,8 @@ class IapManagerClass {
             validProductIds,
           });
           await new Promise(resolve => setTimeout(resolve, 1000 + (this.loadProductsAttempts * 500)));
-          return this.loadProducts();
+          await this.loadProducts();
+          return;
         }
 
         return; // Max attempts reached
@@ -1976,7 +1977,8 @@ class IapManagerClass {
           maxAttempts: this.maxLoadAttempts,
         });
         await new Promise(resolve => setTimeout(resolve, 1000 + (this.loadProductsAttempts * 500))); // 1s, 1.5s
-        return this.loadProducts();
+        await this.loadProducts();
+        return;
       }
 
       // Max attempts reached - but DO NOT overwrite products if we had them before
@@ -2002,6 +2004,11 @@ class IapManagerClass {
         error: normalizedError,
         attempts: this.loadProductsAttempts,
       }, duration);
+    } finally {
+      if (this.state.isLoadingProducts) {
+        this.setState({ isLoadingProducts: false });
+        updateDiagnosticsState({ isLoadingProducts: false });
+      }
     }
   }
 
@@ -2200,11 +2207,13 @@ class IapManagerClass {
       throw new Error(`Product not available. Please ensure subscription options are loaded.`);
     }
 
-    // Skip on web/Expo Go
-    if (Platform.OS === 'web' || isExpoGo) {
-      const { setLocalProCache } = await import('../../iap/iap');
-      await setLocalProCache();
-      return;
+    if (!isNativeStorePurchasesSupported()) {
+      const err: any = new Error(
+        'Store purchases are not available in Expo Go or on the web. Use a development build or TestFlight to test subscriptions.'
+      );
+      err.code = 'IAP_UNSUPPORTED_ENV';
+      diagEvent('iap_manager_buy_unsupported_environment', { platform: Platform.OS });
+      throw err;
     }
 
     // TASK B1: Set pendingPurchase and guard BEFORE requestPurchase
@@ -2435,14 +2444,14 @@ class IapManagerClass {
    * Returns confirmed status and number of attempts made
    */
   private async confirmDbEntitlement(): Promise<{ confirmed: boolean; attempts: number }> {
-    const delays = [250, 500, 1000]; // ms backoff delays
+    const delays = [250, 500, 1000, 2000, 4000, 8000]; // ms — deterministic bounded wait for Edge → DB
     let attempts = 0;
 
     for (let i = 0; i < delays.length; i++) {
       attempts++;
       try {
         const proStatus = await checkProStatus();
-        if (proStatus.status === 'unlocked') {
+        if (proStatus.dbUnlocked) {
           logger.log('[IAP Manager] DB entitlement confirmed', {
             attempts,
             delay: delays[i - 1] || 0,
@@ -2456,7 +2465,6 @@ class IapManagerClass {
         });
       }
 
-      // Wait before next attempt (except on last iteration)
       if (i < delays.length - 1) {
         await new Promise(resolve => setTimeout(resolve, delays[i]));
       }
@@ -2473,18 +2481,32 @@ class IapManagerClass {
    * Returns typed outcome to distinguish success, none found, cancelled, and error cases
    */
   async restore(): Promise<{
-    outcome: 'success' | 'none_found' | 'cancelled' | 'error';
+    outcome:
+      | 'success'
+      | 'none_found'
+      | 'unverifiable_receipt'
+      | 'unsupported_environment'
+      | 'cancelled'
+      | 'error';
     foundPurchases: number;
     dbConfirmed?: boolean;
+    /** Entitlement came from account/DB (or cache grace), not from a store receipt this session */
+    accountEntitlementOnly?: boolean;
+    restoreFailureCategory?: 'receipt_unavailable' | 'purchase_token_unavailable';
   }> {
-    if (Platform.OS === 'web' || isExpoGo) {
-      const proStatus = await checkProStatus();
-      return { outcome: proStatus.status === 'unlocked' ? 'success' : 'none_found', foundPurchases: 0 };
+    if (!isNativeStorePurchasesSupported()) {
+      diagEvent('restore_unsupported_environment', { platform: Platform.OS });
+      return { outcome: 'unsupported_environment', foundPurchases: 0 };
     }
 
     if (this.state.connectionStatus !== 'connected') {
       const proStatus = await checkProStatus();
-      return { outcome: proStatus.status === 'unlocked' ? 'success' : 'none_found', foundPurchases: 0 };
+      return {
+        outcome: proStatus.effectiveUnlocked ? 'success' : 'none_found',
+        foundPurchases: 0,
+        dbConfirmed: proStatus.dbUnlocked,
+        accountEntitlementOnly: proStatus.effectiveUnlocked && !proStatus.dbUnlocked,
+      };
     }
 
     const startTime = Date.now();
@@ -2541,10 +2563,14 @@ class IapManagerClass {
       }
 
       if (!restoreMethod) {
-        // No restore API - fall back to DB check without throwing
         const proStatus = await checkProStatus();
         this.lastRestoreMethod = 'none';
-        return { outcome: proStatus.status === 'unlocked' ? 'success' : 'none_found', foundPurchases: 0 };
+        return {
+          outcome: proStatus.effectiveUnlocked ? 'success' : 'none_found',
+          foundPurchases: 0,
+          dbConfirmed: proStatus.dbUnlocked,
+          accountEntitlementOnly: proStatus.effectiveUnlocked && !proStatus.dbUnlocked,
+        };
       }
 
       this.lastRestoreMethod = restoreMethod;
@@ -2608,15 +2634,24 @@ class IapManagerClass {
             }
           }
 
-          // Only validate if we have the required receipt/token
           if (!hasRequiredReceiptToken) {
-            // Cannot validate without required receipt/token - return with none_found
             logger.warn('[IAP Manager] Cannot restore: receipt/token not available for validation', {
               platform: Platform.OS,
               transactionId,
               productId,
             });
-            return { outcome: 'none_found', foundPurchases: purchases?.length || 0 };
+            const category =
+              Platform.OS === 'ios' ? 'receipt_unavailable' : 'purchase_token_unavailable';
+            diagEvent('restore_unverifiable_receipt', {
+              platform: Platform.OS,
+              category,
+              foundSku: productId,
+            });
+            return {
+              outcome: 'unverifiable_receipt',
+              foundPurchases: purchases?.length || 0,
+              restoreFailureCategory: category,
+            };
           }
 
           // Validate receipt
@@ -2658,15 +2693,22 @@ class IapManagerClass {
 
       logger.log('[IAP Manager] Restore completed', {
         foundPurchases: purchases?.length || 0,
-        isUnlocked: proStatus.status === 'unlocked',
+        effectiveUnlocked: proStatus.effectiveUnlocked,
+        dbUnlocked: proStatus.dbUnlocked,
       });
 
       diagEvent('iap_manager_restore_success', {
         foundPurchases: purchases?.length || 0,
-        isUnlocked: proStatus.status === 'unlocked',
+        effectiveUnlocked: proStatus.effectiveUnlocked,
+        dbUnlocked: proStatus.dbUnlocked,
       }, Date.now() - startTime);
-      
-      return { outcome: proStatus.status === 'unlocked' ? 'success' : 'none_found', foundPurchases: purchases?.length || 0 };
+
+      return {
+        outcome: proStatus.effectiveUnlocked ? 'success' : 'none_found',
+        foundPurchases: purchases?.length || 0,
+        dbConfirmed: proStatus.dbUnlocked,
+        accountEntitlementOnly: proStatus.effectiveUnlocked && !proStatus.dbUnlocked,
+      };
     } catch (error: any) {
       const duration = Date.now() - startTime;
       const iapError = getIAPErrorMessage(error);

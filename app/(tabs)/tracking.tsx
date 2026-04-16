@@ -16,6 +16,68 @@ import {
   pickStreakHighlightForWeek,
   pickBestDayForWeek,
 } from '../../lib/topMarkWeekly';
+import type { BestDayResult } from '../../lib/topMarkWeekly';
+
+function hashPickIndex(seed: string, modulo: number): number {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) {
+    h = (h * 31 + seed.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h) % modulo;
+}
+
+function pickConsistencyEncouragement(score: number | null, seed: string): string {
+  const h = hashPickIndex(seed, 2);
+  if (score == null || Number.isNaN(score)) {
+    return h === 0 ? 'Start small — one day at a time.' : 'This is your reset week.';
+  }
+  if (score >= 0.7) {
+    return h === 0
+      ? "You're showing up consistently. That's momentum."
+      : 'This is how habits lock in.';
+  }
+  if (score >= 0.4) {
+    return h === 0
+      ? "You're building rhythm — keep it going."
+      : 'A few more days like this and it sticks.';
+  }
+  return h === 0 ? 'This is your reset week.' : 'Start small — one day at a time.';
+}
+
+function streakMotivationLine(days: number, seed: string): string {
+  if (days <= 0) return '';
+  const h = hashPickIndex(seed, 2);
+  if (days >= 7) {
+    return h === 0 ? `${days} days — this is real now` : `${days} days — you're in the groove`;
+  }
+  if (days >= 3) {
+    return h === 0 ? `${days} day streak — don't break it` : `${days} days strong — keep the chain`;
+  }
+  if (days === 1) {
+    return h === 0 ? '1 day — every streak starts here' : 'Day one logged. Stack another.';
+  }
+  return h === 0 ? `${days} day streak — add today` : `${days} days — protect the run`;
+}
+
+const SHORT_WEEKDAY_TO_LONG: Record<string, string> = {
+  MON: 'Monday',
+  TUE: 'Tuesday',
+  WED: 'Wednesday',
+  THU: 'Thursday',
+  FRI: 'Friday',
+  SAT: 'Saturday',
+  SUN: 'Sunday',
+};
+
+function pickBestDayShortLine(best: BestDayResult | null, seed: string): string {
+  if (!best || best.expectedUnitsDay <= 0) {
+    const h = hashPickIndex(seed, 2);
+    return h === 0 ? 'Hit your targets to find your strongest day.' : 'Log a full day on schedule to spot your peak.';
+  }
+  const day = SHORT_WEEKDAY_TO_LONG[best.dayShortLabel] ?? best.dayShortLabel;
+  const h = hashPickIndex(`${seed}\0${best.dateStr}`, 2);
+  return h === 0 ? `${day} was strong — repeat that` : `You showed up on ${day}. Do it again.`;
+}
 
 function toLocalDateStr(d: Date): string {
   return formatDate(d);
@@ -29,15 +91,6 @@ function getWeekDatesMondayFirst(anchor: Date): string[] {
     d.setDate(today.getDate() - mondayOffset + i);
     return toLocalDateStr(d);
   });
-}
-
-function ordinalDay(n: number): string {
-  const j = n % 10;
-  const k = n % 100;
-  if (j === 1 && k !== 11) return `${n}st`;
-  if (j === 2 && k !== 12) return `${n}nd`;
-  if (j === 3 && k !== 13) return `${n}rd`;
-  return `${n}th`;
 }
 
 const MONTH_NAMES = [
@@ -143,11 +196,14 @@ export default function TrackingScreen() {
       counters,
     });
     const mark = picked ? counters.find(c => c.id === picked.markId) : undefined;
+    const score = picked?.stats?.consistencyScore;
     return {
       name: picked?.name ?? 'No top mark yet',
       color: mark?.color ?? themeColors.primary,
       subtitle: picked?.subtitle ?? 'Start tracking to unlock',
       flavorLine: picked?.flavorLine ?? '',
+      consistencyScore: typeof score === 'number' && !Number.isNaN(score) ? score : null,
+      markId: picked?.markId ?? null,
     };
   }, [weekEvents, counters, themeColors.primary, weekDates, todayStr]);
 
@@ -189,21 +245,31 @@ export default function TrackingScreen() {
     [calYear, calMonth],
   );
 
-  const bestDayLine = useMemo(() => {
-    if (bestDay && bestDay.expectedUnitsDay > 0) {
-      return `${bestDay.dayShortLabel} was your standout—carry that energy into next week.`;
-    }
-    if (activeDaysCount >= 5) return 'Strong week—your rhythm is adding up.';
-    if (activeDaysCount >= 3) return 'You are stacking good days; keep the pace.';
-    if (activeDaysCount >= 1) return 'One real day of effort still counts—build on it.';
-    return 'Pick one mark for today and start a streak you can feel.';
-  }, [bestDay, activeDaysCount]);
+  const consistencyEncouragement = useMemo(
+    () =>
+      pickConsistencyEncouragement(
+        topMark.consistencyScore,
+        `${weekDates[0] ?? ''}\0${topMark.markId ?? 'none'}`,
+      ),
+    [topMark.consistencyScore, topMark.markId, weekDates],
+  );
 
-  const consistencyLine = useMemo(() => {
-    const line = topMark.flavorLine.trim();
-    if (line) return line;
-    return 'Log a few marks this week to see who led the rhythm.';
-  }, [topMark.flavorLine]);
+  const streakLine = useMemo(() => {
+    if (!streakHighlight || streakHighlight.currentStreakDays <= 0) return '';
+    return streakMotivationLine(
+      streakHighlight.currentStreakDays,
+      `${weekDates[0] ?? ''}\0${streakHighlight.markId}`,
+    );
+  }, [streakHighlight, weekDates]);
+
+  const bestDayLine = useMemo(
+    () => pickBestDayShortLine(bestDay, `${weekDates[0] ?? ''}\0bestday`),
+    [bestDay, weekDates],
+  );
+
+  /** Semantic accents: green / warm orange / subtle blue (per card). */
+  const streakWarm = themeColors.counter.orange;
+  const bestDayAccent = themeColors.counter.blue;
 
   const headline = useMemo(() => {
     if (activeDaysCount >= 5) return 'Your momentum is building.';
@@ -269,7 +335,7 @@ export default function TrackingScreen() {
                       },
                     ]}
                   >
-                    {ordinalDay(dayNum)}
+                    {dayNum}
                   </Text>
                 </View>
               </View>
@@ -277,22 +343,82 @@ export default function TrackingScreen() {
           })}
         </View>
 
-        <View style={[styles.card, { backgroundColor: themeColors.surface }]}>
-          <Text style={[styles.cardKicker, { color: topMark.color }]}>BEST CONSISTENCY</Text>
-          <Text style={[styles.cardTitle, { color: themeColors.text }]}>{topMark.name}</Text>
-          <Text style={[styles.cardOneLiner, { color: themeColors.textSecondary }]}>{consistencyLine}</Text>
+        <View
+          style={[
+            styles.card,
+            styles.cardHero,
+            {
+              backgroundColor: themeColors.surface,
+              borderLeftWidth: 3,
+              borderLeftColor: themeColors.success,
+            },
+          ]}
+        >
+          <View style={styles.cardHeaderRow}>
+            <View style={[styles.iconBadgeHero, { backgroundColor: applyOpacity(themeColors.success, isDark ? 0.22 : 0.14) }]}>
+              <Ionicons name="sync-outline" size={20} color={themeColors.success} />
+            </View>
+            <Text style={[styles.cardKickerHero, { color: themeColors.success }]}>BEST CONSISTENCY</Text>
+          </View>
+          <Text style={[styles.heroTitle, { color: themeColors.text }]}>{topMark.name}</Text>
+          <Text style={[styles.heroSupport, { color: themeColors.textSecondary }]}>{consistencyEncouragement}</Text>
         </View>
 
-        <View style={[styles.card, { backgroundColor: themeColors.surface }]}>
-          <Text style={[styles.cardKicker, { color: themeColors.accent.primary }]}>STREAK HIGHLIGHT</Text>
-          <Text style={[styles.cardTitle, { color: themeColors.text }]}>
-            {streakHighlight ? streakHighlight.markName : '—'}
-          </Text>
+        <View
+          style={[
+            styles.card,
+            styles.cardSecondary,
+            {
+              backgroundColor: themeColors.surface,
+              borderLeftWidth: 3,
+              borderLeftColor: streakWarm,
+            },
+          ]}
+        >
+          <View style={styles.cardHeaderRow}>
+            <View style={[styles.iconBadgeSecondary, { backgroundColor: applyOpacity(streakWarm, isDark ? 0.2 : 0.12) }]}>
+              <Ionicons name="flame-outline" size={16} color={streakWarm} />
+            </View>
+            <Text style={[styles.cardKickerSecondary, { color: streakWarm }]}>STREAK HIGHLIGHT</Text>
+          </View>
+          {streakHighlight ? (
+            streakLine ? (
+              <>
+                <Text style={[styles.secondaryMainValue, { color: themeColors.text }]}>{streakLine}</Text>
+                <Text style={[styles.secondarySupport, { color: themeColors.textSecondary }]}>
+                  {streakHighlight.markName}
+                </Text>
+              </>
+            ) : (
+              <Text style={[styles.secondaryMainValue, { color: themeColors.text }]}>
+                {streakHighlight.markName}
+              </Text>
+            )
+          ) : (
+            <Text style={[styles.secondaryMainValueMuted, { color: themeColors.textSecondary }]}>
+              Enable streak on a mark to see your run.
+            </Text>
+          )}
         </View>
 
-        <View style={[styles.card, { backgroundColor: themeColors.surface }]}>
-          <Text style={[styles.cardKicker, { color: themeColors.textTertiary }]}>BEST DAY & RHYTHM</Text>
-          <Text style={[styles.cardOneLinerStrong, { color: themeColors.text }]}>{bestDayLine}</Text>
+        <View
+          style={[
+            styles.card,
+            styles.cardSecondary,
+            {
+              backgroundColor: themeColors.surface,
+              borderLeftWidth: 3,
+              borderLeftColor: bestDayAccent,
+            },
+          ]}
+        >
+          <View style={styles.cardHeaderRow}>
+            <View style={[styles.iconBadgeSecondary, { backgroundColor: applyOpacity(bestDayAccent, isDark ? 0.2 : 0.12) }]}>
+              <Ionicons name="flash-outline" size={16} color={bestDayAccent} />
+            </View>
+            <Text style={[styles.cardKickerSecondary, { color: bestDayAccent }]}>BEST DAY & RHYTHM</Text>
+          </View>
+          <Text style={[styles.secondaryMainValue, { color: themeColors.text }]}>{bestDayLine}</Text>
         </View>
 
         {/* ── Monthly activity calendar ─────────────────────────── */}
@@ -440,14 +566,84 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
   },
   dayPillOrdinal: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: fontWeight.bold,
-    letterSpacing: -0.2,
+    letterSpacing: -0.3,
   },
   card: {
     borderRadius: borderRadius.card,
     padding: spacing.lg,
     gap: spacing.sm,
+  },
+  cardHero: {
+    paddingVertical: spacing.xl,
+    paddingHorizontal: spacing.lg,
+    gap: spacing.md,
+  },
+  cardSecondary: {
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    gap: spacing.xs,
+  },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  iconBadgeHero: {
+    width: 36,
+    height: 36,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconBadgeSecondary: {
+    width: 28,
+    height: 28,
+    borderRadius: borderRadius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardKickerHero: {
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.bold,
+    letterSpacing: 1.4,
+    flex: 1,
+  },
+  cardKickerSecondary: {
+    fontSize: 10,
+    fontWeight: fontWeight.bold,
+    letterSpacing: 1.1,
+    flex: 1,
+  },
+  heroTitle: {
+    fontSize: 34,
+    lineHeight: 40,
+    fontWeight: fontWeight.bold,
+    letterSpacing: -0.8,
+  },
+  heroSupport: {
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.medium,
+    lineHeight: 21,
+  },
+  secondaryMainValue: {
+    fontSize: fontSize.xl,
+    lineHeight: 26,
+    fontWeight: fontWeight.bold,
+    letterSpacing: -0.4,
+    marginTop: 2,
+  },
+  secondaryMainValueMuted: {
+    fontSize: fontSize.base,
+    lineHeight: 22,
+    fontWeight: fontWeight.medium,
+    marginTop: 2,
+  },
+  secondarySupport: {
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.medium,
+    lineHeight: 19,
   },
   /** Extra space below the calendar + clearance above the tab bar when scrolled to end */
   activityCard: {
@@ -458,24 +654,6 @@ const styles = StyleSheet.create({
     fontSize: fontSize.xs,
     fontWeight: fontWeight.bold,
     letterSpacing: 1.2,
-  },
-  cardTitle: {
-    fontSize: 30,
-    lineHeight: 34,
-    fontWeight: fontWeight.bold,
-    letterSpacing: -0.6,
-  },
-  cardOneLiner: {
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
-    lineHeight: 20,
-    marginTop: 2,
-  },
-  cardOneLinerStrong: {
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.semibold,
-    lineHeight: 22,
-    marginTop: 2,
   },
   // ── Monthly calendar styles ──────────────────────────────────────
   calHeader: {

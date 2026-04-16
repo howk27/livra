@@ -1,6 +1,7 @@
 /**
- * Behavior-driven local notifications: low frequency (max 2/day), jittered windows,
- * re-planned on each app foreground — no repeating calendar triggers.
+ * Livra’s only shipped local scheduling model: behavior DATE triggers (max 2/day, jittered windows).
+ * Re-planned via `livraLocalNotificationOwner` on foreground / data changes / tap.
+ * Times and `occurred_local_date` assumptions are device-local (no IANA timezone layer).
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
@@ -12,6 +13,7 @@ import { isMarkActiveOnDate } from '../lib/features';
 import { computeStreak } from '../hooks/useStreaks';
 import type { Counter, CounterEvent } from '../types';
 import { logger } from '../lib/utils/logger';
+import { cancelAllLivraScheduledNotifications } from '../lib/notifications/livraScheduledOwnership';
 
 const ENGAGEMENT_KEY = 'livra_bn_engagement_v1';
 const LAST_FOREGROUND_KEY = 'livra_bn_last_foreground_v1';
@@ -427,23 +429,9 @@ function pickWithMinGap(sorted: PlannedBehaviorNotification[]): PlannedBehaviorN
   return out;
 }
 
+/** @deprecated Use `cancelAllLivraScheduledNotifications` — kept for external imports during refactor. */
 export async function cancelBehaviorNotifications(): Promise<void> {
-  try {
-    const pending = await Notifications.getAllScheduledNotificationsAsync();
-    for (const n of pending) {
-      const id = n.identifier;
-      if (id.startsWith(BEHAVIOR_NOTIF_PREFIX)) {
-        await Notifications.cancelScheduledNotificationAsync(id);
-        continue;
-      }
-      const t = (n.content.data as Record<string, unknown>)?.type;
-      if (typeof t === 'string' && t.startsWith('behavior_')) {
-        await Notifications.cancelScheduledNotificationAsync(id);
-      }
-    }
-  } catch (e) {
-    logger.warn('[BehaviorNotif] cancel failed', e);
-  }
+  await cancelAllLivraScheduledNotifications();
 }
 
 export async function scheduleBehaviorNotifications(
@@ -467,20 +455,20 @@ export async function scheduleBehaviorNotifications(
 
   if (engagement.consecutiveNoTapDays >= 3) {
     logger.log('[BehaviorNotif] skip — consecutive no-tap streak');
-    await cancelBehaviorNotifications();
+    await cancelAllLivraScheduledNotifications();
     return [];
   }
 
   const progress = await computeDayProgress(userId);
   if (!progress || progress.activeMarkCount === 0) {
-    await cancelBehaviorNotifications();
+    await cancelAllLivraScheduledNotifications();
     return [];
   }
 
   const candidates = planCandidates(now, progress, engagement, previousForegroundAt);
   const chosen = pickWithMinGap(candidates);
 
-  await cancelBehaviorNotifications();
+  await cancelAllLivraScheduledNotifications();
 
   const ids: string[] = [];
   let idx = 0;
@@ -497,6 +485,7 @@ export async function scheduleBehaviorNotifications(
           data: {
             type: `behavior_${plan.type}`,
             behavior: true,
+            livraOwner: true,
             planDay: todayStr,
           },
         },
@@ -519,25 +508,4 @@ export async function scheduleBehaviorNotifications(
 
   logger.log(`[BehaviorNotif] scheduled ${ids.length} for ${todayStr}`, ids);
   return ids;
-}
-
-/** Debounced entry from AppState / home — avoids burst cancels. */
-let lastRunAt = 0;
-const DEBOUNCE_MS = 2500;
-
-export async function runBehaviorNotificationScheduler(userId: string | undefined): Promise<void> {
-  const previousFg = await getLastBehaviorForegroundMs();
-  const t = Date.now();
-  if (t - lastRunAt < DEBOUNCE_MS) {
-    await recordBehaviorAppForeground();
-    return;
-  }
-  lastRunAt = t;
-  try {
-    await scheduleBehaviorNotifications(userId, previousFg);
-  } catch (e) {
-    logger.error('[BehaviorNotif] scheduler error', e);
-  } finally {
-    await recordBehaviorAppForeground();
-  }
 }

@@ -4,7 +4,23 @@ import { getSupabaseClient } from '../lib/supabase';
 import { env } from '../lib/env';
 import { Counter, MarkBadge, CounterEvent, CounterStreak } from '../types';
 import { query, execute, queryFirst } from '../lib/db';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  migrateLegacySyncCursor,
+  readPushCursor,
+  readPullCursor,
+  writePushCursor,
+  writePullCursor,
+  readLastFullSyncDisplayAt,
+  writeLastFullSyncDisplayAt,
+} from '../lib/sync/syncCursors';
+import { recomputeStreaksAfterSyncFromSqlite } from '../lib/sync/recomputeStreaksFromSqlite';
+import { detectDuplicateMarkNameGroups } from '../lib/sync/duplicateMarkNames';
+import { readSyncDiagSnapshot, writeSyncDiagSnapshot } from '../lib/sync/syncDiagSnapshot';
+import {
+  prePushChildIntegrityAuditAndCleanup,
+  postUpsertOrphanChildCleanup,
+  isParentMissingSyncError,
+} from '../lib/sync/prePushChildIntegrityAudit';
 
 // Retry queue constants
 const RETRY_QUEUE_KEY = 'sync_retry_queue';
@@ -25,11 +41,27 @@ import { logger } from '../lib/utils/logger';
 import { formatDate } from '../lib/date';
 import { normalizeDailyTargetInput, resolveDailyTarget } from '../lib/markDailyTarget';
 
-interface SyncState {
+/** Stable codes for post-sync maintenance — no PII; surfaced in Diagnostics. */
+export type SyncMaintenanceWarningCode =
+  | 'MAINT_STREAK_RECOMPUTE_FAILED'
+  | 'MAINT_CLEANUP_FAILED'
+  | 'MAINT_ORPHAN_BADGE_CLEANUP_PARTIAL'
+  | 'MAINT_DUPLICATE_NAME_SCAN_FAILED';
+
+export type StreakRecomputeSourceLabel = 'sqlite_full_increment_events' | 'none' | 'error';
+
+export interface SyncState {
   isSyncing: boolean;
+  /** Core cloud sync: push + pull completed successfully (split cursors advanced). */
   lastSyncedAt: string | null;
   error: string | null;
   realtimeConnected: boolean;
+  /** Best-effort maintenance after core sync; empty = all post-steps OK or not run. */
+  maintenanceWarnings: SyncMaintenanceWarningCode[];
+  /** Number of same-name / different-id mark groups (diagnostics; 0 = none). */
+  duplicateMarkNameGroupCount: number;
+  /** How the last post-sync streak pass ran (SQLite full history vs none/error). */
+  lastStreakRecomputeSource: StreakRecomputeSourceLabel;
 }
 
 const isProLimitError = (error: any): boolean => {
@@ -40,6 +72,88 @@ const isProLimitError = (error: any): boolean => {
   );
 };
 
+/** Wall-clock guard so a hung push/pull cannot leave isSyncing true forever. Does not abort in-flight work; cursors only advance inside completed push/pull. */
+const SYNC_EXECUTION_TIMEOUT_MS = 180_000;
+
+function createSyncExecutionTimeoutError(): Error {
+  const e = new Error('Sync exceeded maximum execution time');
+  (e as any).code = 'SYNC_EXECUTION_TIMEOUT';
+  return e;
+}
+
+const UUID_RE_SYNC = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function isValidUUIDForSyncLog(str: string): boolean {
+  return UUID_RE_SYNC.test(str);
+}
+
+/**
+ * Diagnostics only — no secrets. Buckets match sync RCA checklist.
+ * `finalPushActiveParentIds` = active lc_counters ids in the counter upsert payload for this run.
+ * `upsertedActiveParentIds` = ids included in successful upsert batches as non-deleted rows.
+ */
+async function classifyMissingParentsForSyncLog(
+  userId: string,
+  missParentIds: string[],
+  augmentedParentIds: string[],
+  finalPushActiveParentIds: ReadonlySet<string>,
+  upsertedActiveParentIds: ReadonlySet<string>,
+): Promise<{ counts: Record<string, number> }> {
+  const aug = new Set(augmentedParentIds);
+  const counts: Record<string, number> = {
+    invalid_malformed_id: 0,
+    local_missing_parent: 0,
+    local_deleted_parent: 0,
+    local_active_pushable_parent_in_final_counter_set: 0,
+    local_active_not_selected_for_push: 0,
+    // Upsert success as active but still missing from merged child confirmation (RLS/verify gap or merge bug).
+    local_active_pushed_upserted_remote_not_visible: 0,
+    was_augmented_into_push_set: 0,
+  };
+  if (missParentIds.length === 0) return { counts };
+  const chunk = 80;
+  for (let i = 0; i < missParentIds.length; i += chunk) {
+    const slice = missParentIds.slice(i, i + chunk);
+    for (const id of slice) {
+      if (!isValidUUIDForSyncLog(id)) {
+        counts.invalid_malformed_id += 1;
+        continue;
+      }
+      if (aug.has(id)) counts.was_augmented_into_push_set += 1;
+    }
+    const ph = slice.filter((id) => isValidUUIDForSyncLog(id));
+    if (ph.length === 0) continue;
+    const placeholders = ph.map(() => '?').join(',');
+    const rows = await query<{ id: string; deleted_at: string | null }>(
+      `SELECT id, deleted_at FROM lc_counters WHERE user_id = ? AND id IN (${placeholders})`,
+      [userId, ...ph],
+    );
+    const found = new Map(rows.map((r) => [r.id, r]));
+    for (const id of slice) {
+      if (!isValidUUIDForSyncLog(id)) continue;
+      const r = found.get(id);
+      if (!r) {
+        counts.local_missing_parent += 1;
+        continue;
+      }
+      if (r.deleted_at && String(r.deleted_at).trim() !== '') {
+        counts.local_deleted_parent += 1;
+        continue;
+      }
+      // Active local
+      if (upsertedActiveParentIds.has(id)) {
+        counts.local_active_pushed_upserted_remote_not_visible += 1;
+        continue;
+      }
+      if (finalPushActiveParentIds.has(id)) {
+        counts.local_active_pushable_parent_in_final_counter_set += 1;
+        continue;
+      }
+      counts.local_active_not_selected_for_push += 1;
+    }
+  }
+  return { counts };
+}
+
 export const useSync = () => {
   const supabase = getSupabaseClient();
   const [syncState, setSyncState] = useState<SyncState>({
@@ -47,23 +161,36 @@ export const useSync = () => {
     lastSyncedAt: null,
     error: null,
     realtimeConnected: false,
+    maintenanceWarnings: [],
+    duplicateMarkNameGroupCount: 0,
+    lastStreakRecomputeSource: 'none',
   });
 
   // Sync lock to prevent concurrent syncs
   const syncLockRef = useRef<Promise<void> | null>(null);
   // Real-time subscription refs
   const realtimeChannelRef = useRef<any>(null);
+  /** Latest `sync()` including throttle bypass — realtime uses this so subscriptions stay current. */
+  const syncFnRef = useRef<((opts?: { bypassThrottle?: boolean }) => Promise<void>) | null>(null);
 
   useEffect(() => {
-    // Load last sync time
     let mounted = true;
-    AsyncStorage.getItem('last_synced_at').then((value) => {
-      // Only update state if component is still mounted
-      if (mounted && value) {
+    migrateLegacySyncCursor().then(() =>
+      readLastFullSyncDisplayAt().then(async (value) => {
+        if (!mounted || !value) return;
         setSyncState((prev) => ({ ...prev, lastSyncedAt: value }));
-      }
-    });
-    
+        const existingDiag = await readSyncDiagSnapshot();
+        if (!existingDiag) {
+          await writeSyncDiagSnapshot({
+            coreSyncedAtIso: value,
+            maintenanceWarnings: [],
+            duplicateMarkNameGroupCount: 0,
+            lastStreakRecomputeSource: 'none',
+          });
+        }
+      }),
+    );
+
     // Set up real-time sync subscriptions
     const setupRealtimeSync = async () => {
       try {
@@ -99,14 +226,9 @@ export const useSync = () => {
               
               syncDebounceTimeoutRef.current = setTimeout(async () => {
                 try {
-                  // Allow a short delay so local writes flush, but avoid long race windows
-                  await new Promise(resolve => setTimeout(resolve, 500)); // trimmed to 0.5s
-                  
-                  // Pull changes to get updated data
-                  await pullChanges(user.id);
-                  
-                  // Reload stores to reflect changes
-                  // CRITICAL: loadMarks will preserve optimistic updates via recentUpdates tracking
+                  await new Promise((resolve) => setTimeout(resolve, 500));
+                  // Full sync so pull never advances push cursor without pushing first (split-cursor invariant).
+                  await syncFnRef.current?.({ bypassThrottle: true });
                   const { useCountersStore } = await import('../state/countersSlice');
                   const { useEventsStore } = await import('../state/eventsSlice');
                   await useCountersStore.getState().loadMarks(user.id);
@@ -114,7 +236,7 @@ export const useSync = () => {
                 } catch (error) {
                   logger.error('[REALTIME] Error handling counter change:', error);
                 }
-              }, 3000); // 3 second debounce for real-time updates (increased to allow writes to complete)
+              }, 3000);
             }
           )
           .on(
@@ -141,8 +263,10 @@ export const useSync = () => {
               
               syncDebounceTimeoutRef.current = setTimeout(async () => {
                 try {
-                  await pullChanges(user.id);
+                  await syncFnRef.current?.({ bypassThrottle: true });
+                  const { useCountersStore } = await import('../state/countersSlice');
                   const { useEventsStore } = await import('../state/eventsSlice');
+                  await useCountersStore.getState().loadMarks(user.id);
                   useEventsStore.getState().loadEvents(undefined, user.id);
                 } catch (error) {
                   logger.error('[REALTIME] Error handling event change:', error);
@@ -236,36 +360,79 @@ export const useSync = () => {
       await new Promise(resolve => setTimeout(resolve, 500));
     }
 
-    const lastPulledAt = await AsyncStorage.getItem('last_synced_at');
-    
+    const lastPulledAt = await readPullCursor();
+
     try {
-      // If lastPulledAt is null, pull all data (first sync), otherwise pull only changes
-      // IMPORTANT: Only pull non-deleted counters
-      // Select only needed fields to reduce I/O
-      let countersQuery = supabase
-        .from('counters')
-        .select('id, user_id, name, emoji, color, unit, enable_streak, sort_index, total, last_activity_date, deleted_at, created_at, updated_at')
-        .eq('user_id', userId)
-        .is('deleted_at', null); // Only pull counters that haven't been deleted
-      
+      const counterSelect =
+        'id, user_id, name, emoji, color, unit, enable_streak, sort_index, total, last_activity_date, deleted_at, created_at, updated_at';
+
+      let remoteCounterRows: any[] = [];
+
       if (lastPulledAt) {
-        countersQuery = countersQuery.gt('updated_at', lastPulledAt);
-      }
-      
-      const { data: counters, error: countersError } = await countersQuery;
-      if (countersError) {
-        const parsed = parseError(countersError);
-        if (parsed.isNetworkError) {
-          logger.warn('[SYNC] Network error pulling counters:', parsed.message);
-          // For network errors, set counters to empty array and let sync continue
-          // The app will work with local data until network is restored
-        } else {
-          throw countersError;
+        const { data: activeRows, error: activeErr } = await supabase
+          .from('counters')
+          .select(counterSelect)
+          .eq('user_id', userId)
+          .is('deleted_at', null)
+          .gt('updated_at', lastPulledAt);
+
+        if (activeErr) {
+          const parsed = parseError(activeErr);
+          if (parsed.isNetworkError || parsed.shouldRetry) {
+            logger.warn('[SYNC] Pull counters (active) failed:', parsed.message);
+          }
+          throw activeErr;
+        }
+
+        const { data: tombRows, error: tombErr } = await supabase
+          .from('counters')
+          .select(counterSelect)
+          .eq('user_id', userId)
+          .not('deleted_at', 'is', null)
+          .gt('updated_at', lastPulledAt);
+
+        if (tombErr) {
+          const parsed = parseError(tombErr);
+          if (parsed.isNetworkError || parsed.shouldRetry) {
+            logger.warn('[SYNC] Pull counters (tombstones) failed:', parsed.message);
+          }
+          throw tombErr;
+        }
+
+        remoteCounterRows = [...(activeRows || []), ...(tombRows || [])];
+      } else {
+        const PAGE = 500;
+        let offset = 0;
+        for (;;) {
+          const { data: batch, error } = await supabase
+            .from('counters')
+            .select(counterSelect)
+            .eq('user_id', userId)
+            .order('updated_at', { ascending: false })
+            .range(offset, offset + PAGE - 1);
+
+          if (error) {
+            const parsed = parseError(error);
+            if (parsed.isNetworkError || parsed.shouldRetry) {
+              logger.warn('[SYNC] Pull counters (initial page) failed:', parsed.message);
+            }
+            throw error;
+          }
+          const rows = batch || [];
+          remoteCounterRows.push(...rows);
+          if (rows.length < PAGE) break;
+          offset += PAGE;
         }
       }
-      
-      // Ensure counters is defined (default to empty array for network errors)
-      const safeCounters = counters || [];
+
+      const byCounterId = new Map<string, any>();
+      for (const row of remoteCounterRows) {
+        const prev = byCounterId.get(row.id);
+        if (!prev || new Date(row.updated_at).getTime() >= new Date(prev.updated_at).getTime()) {
+          byCounterId.set(row.id, row);
+        }
+      }
+      const dedupedRemoteCounters = Array.from(byCounterId.values()) as Counter[];
 
       // Pull events - for first sync, paginate to get all events
       // For incremental sync, get all changes since last sync
@@ -282,14 +449,12 @@ export const useSync = () => {
         
         if (eventsError) {
           const parsed = parseError(eventsError);
-          if (parsed.isNetworkError) {
-            logger.warn('[SYNC] Network error pulling events:', parsed.message);
-          } else {
-            throw eventsError;
+          if (parsed.isNetworkError || parsed.shouldRetry) {
+            logger.warn('[SYNC] Pull events failed:', parsed.message);
           }
-        } else {
-          allEvents = events || [];
+          throw eventsError;
         }
+        allEvents = events || [];
       } else {
         // First sync - paginate to get all events (not just last 90 days)
         // This ensures complete data recovery after reinstall
@@ -312,13 +477,10 @@ export const useSync = () => {
           
           if (eventsError) {
             const parsed = parseError(eventsError);
-            if (parsed.isNetworkError) {
-              logger.warn('[SYNC] Network error during paginated event sync:', parsed.message);
-              // Continue with what we have so far
-              hasMore = false;
-            } else {
-              throw eventsError;
+            if (parsed.isNetworkError || parsed.shouldRetry) {
+              logger.warn('[SYNC] Paginated event pull failed:', parsed.message);
             }
+            throw eventsError;
           } else {
             const batch = events || [];
             if (batch.length > 0) {
@@ -375,12 +537,10 @@ export const useSync = () => {
       const { data: streaks, error: streaksError } = await streaksQuery;
       if (streaksError) {
         const parsed = parseError(streaksError);
-        if (parsed.isNetworkError) {
-          logger.warn('[SYNC] Network error pulling streaks:', parsed.message);
-          // For network errors, continue with empty streaks
-        } else {
-          throw streaksError;
+        if (parsed.isNetworkError || parsed.shouldRetry) {
+          logger.warn('[SYNC] Pull streaks failed:', parsed.message);
         }
+        throw streaksError;
       }
       
       // Map counter_id from Supabase to mark_id for local types
@@ -441,149 +601,41 @@ export const useSync = () => {
         logger.log(`[SYNC] Protecting ${deletedIdsSet.size} locally deleted counter(s) from reappearing`);
       }
 
-      if (safeCounters && safeCounters.length > 0) {
-        logger.log(`[SYNC] Processing ${safeCounters.length} counter(s) from Supabase`);
-        // Batch merge counters to reduce I/O
-        const mergePromises = safeCounters
-          .filter((counter) => {
-            // CRITICAL: Skip ANY counter that was deleted locally - never allow it to reappear
-            // Even if server has a newer version with deleted_at=null, local deletion takes precedence
-            if (deletedIdsSet.has(counter.id)) {
-              const localDeletionTime = deletedIdsMap.get(counter.id);
-              // Even if server counter has deleted_at=null (somehow), local deletion is authoritative
-              // This prevents any edge case where deleted counters could reappear
-              logger.warn(`[SYNC] 🚫 PERMANENTLY BLOCKED: Counter ${counter.id} (${counter.name}) - deleted locally at ${localDeletionTime}, never restoring`);
-              
-              // CRITICAL: Explicitly ensure this counter is deleted on server too
-              // This prevents the edge case where another device might restore it
-              if (!counter.deleted_at || counter.deleted_at.trim() === '') {
-                // Server thinks it's not deleted, but we know it is - push deletion to server
-                logger.warn(`[SYNC] Server has non-deleted version of locally deleted counter ${counter.id}, pushing deletion`);
-                // This will be handled in pushChanges, but we still block it here
-              }
-              
-              return false;
-            }
-            
-            // Double-check: If counter exists in DB and is marked as deleted, skip it
-            const existing = existingCountersMap.get(counter.id);
-            if (existing && existing.deleted_at && existing.deleted_at.trim() !== '') {
-              logger.log(`[SYNC] ⚠️ BLOCKED: Skipping counter ${counter.id} (${counter.name}) - marked as deleted in local database`);
-              return false;
-            }
-            
-            // TRIPLE-CHECK: If server counter has deleted_at set, skip it (even if not in local deleted set)
-            // This handles the case where counter was deleted on another device
-            if (counter.deleted_at && counter.deleted_at.trim() !== '') {
-              logger.log(`[SYNC] ⚠️ BLOCKED: Skipping counter ${counter.id} (${counter.name}) - marked as deleted on server`);
-              return false;
-            }
-            
-            return true;
-          })
-          .map((counter) => {
-            logger.log(`[SYNC] ✅ Merging counter ${counter.id} (${counter.name}) from Supabase`);
-            return mergeCounter(counter, existingCountersMap);
-          });
-        
-        await Promise.all(mergePromises);
+      if (dedupedRemoteCounters.length > 0) {
+        logger.log(`[SYNC] Merging ${dedupedRemoteCounters.length} counter row(s) from Supabase (active + tombstones)`);
       }
-      
-      // DO NOT reload the store after sync - this prevents deleted counters from being brought back
-      // The store is already correctly managed by individual actions (deleteCounter, addCounter, etc.)
-      // Reloading would potentially bring back counters that were deleted locally but not yet synced
-      
-      // Instead, manually add only genuinely new counters to the store
-      // IMPORTANT: Only update store with counters that were actually merged (not skipped)
-      if (counters && counters.length > 0) {
-        const { useCountersStore } = await import('../state/countersSlice');
-        const store = useCountersStore.getState();
-        const currentCounterIds = new Set(store.marks.map((c) => c.id));
-        
-        // Track which counters were actually merged (not skipped)
-        const mergedCounterIds: string[] = [];
-        
-        // Find counters that are new (not in current store) and weren't skipped due to deletion
-        // Only include counters that passed all the skip checks above
-        for (const counter of counters) {
-          // Skip if it was in the deleted set (we already skipped these above)
-          if (deletedIdsSet.has(counter.id)) {
-            continue;
-          }
-          
-          // Skip if it's already in the store
-          if (currentCounterIds.has(counter.id)) {
-            continue;
-          }
-          
-          // This counter passed all checks and was merged - add it to the list
-          mergedCounterIds.push(counter.id);
-        }
-        
-        if (mergedCounterIds.length > 0) {
-          // Verify these counters exist in the database and aren't deleted
-          const verifiedNewCounters = await query<Counter>(
-            `SELECT * FROM lc_counters WHERE id IN (${mergedCounterIds.map(() => '?').join(',')}) AND deleted_at IS NULL`,
-            mergedCounterIds
+
+      /** Marks whose lc_counters.total may disagree with lc_events until post-pull replay (see markTotalReconciliation). */
+      const markIdsNeedingTotalReconcile = new Set<string>();
+
+      for (const counter of dedupedRemoteCounters) {
+        const isServerTomb =
+          !!counter.deleted_at && String(counter.deleted_at).trim() !== '';
+
+        // Local-delete wins over a live remote row: never resurrect a mark the user deleted here.
+        if (deletedIdsSet.has(counter.id) && !isServerTomb) {
+          logger.warn(
+            `[SYNC] Skipping live remote row for locally deleted counter ${counter.id} — local tombstone wins until server receives delete push`,
           );
-          
-          // Manually add new counters to the store without reloading everything
-          if (verifiedNewCounters.length > 0) {
-            logger.log(`[SYNC] Adding ${verifiedNewCounters.length} new counter(s) to store:`, 
-              verifiedNewCounters.map((c) => c.name).join(', '));
-            
-            // Update store by adding only the new counters
-            // CRITICAL: Filter out any deleted counters from currentCounters first
-            // Also filter out any counters that are in the deletedIdsSet
-            // This ensures deleted counters never come back, even if they somehow got into the store
-            const currentCounters = store.marks.filter(
-              (c) => !c.deleted_at && !deletedIdsSet.has(c.id)
-            );
-            
-            // Also filter verifiedNewCounters to ensure none are deleted
-            // Double-check each counter in the database to ensure it's not deleted
-            const safeNewCounters: Counter[] = [];
-            for (const counter of verifiedNewCounters) {
-              // Skip if in deleted set
-              if (deletedIdsSet.has(counter.id)) {
-                logger.log(`[SYNC] ⚠️ Skipping counter ${counter.id} (${counter.name}) from store update - it's in deleted set`);
-                continue;
-              }
-              
-              // Skip if counter itself has deleted_at set
-              if (counter.deleted_at) {
-                logger.log(`[SYNC] ⚠️ Skipping counter ${counter.id} (${counter.name}) from store update - counter has deleted_at set`);
-                continue;
-              }
-              
-              // Double-check database to ensure it's not deleted
-              const dbCheck = await queryFirst<{ deleted_at: string | null }>(
-                'SELECT deleted_at FROM lc_counters WHERE id = ?',
-                [counter.id]
-              );
-              
-              if (dbCheck && !dbCheck.deleted_at) {
-                safeNewCounters.push(counter);
-              } else if (dbCheck && dbCheck.deleted_at) {
-                logger.log(`[SYNC] ⚠️ Skipping counter ${counter.id} (${counter.name}) from store update - it's marked as deleted in database`);
-              }
-            }
-            
-            const updatedCounters = [...currentCounters, ...safeNewCounters].sort(
-              (a, b) => (a.sort_index || 0) - (b.sort_index || 0) || 
-                       new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-            );
-            
-            // Final safety check: ensure no deleted counters made it through
-            const finalFilteredCounters = updatedCounters.filter(
-              (c) => !c.deleted_at && !deletedIdsSet.has(c.id)
-            );
-            
-            // Use the store's internal set method to update
-            useCountersStore.setState({ counters: finalFilteredCounters });
-            logger.log(`[SYNC] ✅ Store updated with ${finalFilteredCounters.length} total counter(s) (filtered from ${updatedCounters.length})`);
-          }
+          continue;
         }
+
+        if (isServerTomb) {
+          await mergeCounterTombstoneFromRemote(counter as Counter);
+          continue;
+        }
+
+        const existing = existingCountersMap.get(counter.id);
+        if (existing && existing.deleted_at && existing.deleted_at.trim() !== '') {
+          logger.log(
+            `[SYNC] Skipping active remote row for ${counter.id} — already soft-deleted locally`,
+          );
+          continue;
+        }
+
+        logger.log(`[SYNC] Merging active counter ${counter.id} (${counter.name}) from Supabase`);
+        markIdsNeedingTotalReconcile.add(counter.id);
+        await mergeCounter(counter as Counter, existingCountersMap);
       }
 
       if (safeEvents && safeEvents.length > 0) {
@@ -601,6 +653,7 @@ export const useSync = () => {
         }
         
         for (const event of validEvents) {
+          markIdsNeedingTotalReconcile.add(event.mark_id);
           await mergeEvent(event);
         }
       }
@@ -617,10 +670,25 @@ export const useSync = () => {
         }
       }
 
-      // Update last sync time
-      const now = new Date().toISOString();
-      await AsyncStorage.setItem('last_synced_at', now);
-      setSyncState((prev) => ({ ...prev, lastSyncedAt: now }));
+      const { reconcileMarkTotalsAfterPull } = await import('../lib/db/markTotalReconciliation');
+      const totalsRepaired = await reconcileMarkTotalsAfterPull(userId, markIdsNeedingTotalReconcile);
+      if (totalsRepaired > 0) {
+        logger.log(`[SYNC] Totals reconciled from lc_events for ${totalsRepaired} mark(s) after pull`);
+      }
+
+      const { useMarksStore } = await import('../state/countersSlice');
+      useMarksStore.setState((s) => {
+        const ru = new Map(s.recentUpdates || new Map());
+        for (const id of markIdsNeedingTotalReconcile) {
+          ru.delete(id);
+        }
+        return { recentUpdates: ru };
+      });
+
+      await useCountersStore.getState().loadMarks(userId);
+
+      // Pull cursor only — never advances push cursor (split-cursor model).
+      await writePullCursor(new Date().toISOString());
     } catch (error) {
       logger.error('Pull error:', error);
       throw error;
@@ -634,10 +702,18 @@ export const useSync = () => {
       return;
     }
 
-    const lastPushedAt = await AsyncStorage.getItem('last_synced_at');
-    const timestamp = lastPushedAt || new Date(0).toISOString();
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const lastPushedAt = await readPushCursor();
+      const timestamp = lastPushedAt || new Date(0).toISOString();
 
-    try {
+      await prePushChildIntegrityAuditAndCleanup({
+        userId,
+        supabase,
+        pushCursorIso: timestamp,
+        attemptIndex: attempt,
+      });
+
+      try {
       // Get local changes since last push, filtered by user_id
       // This includes deleted counters (they have updated_at set when deleted)
       let counters: Counter[] = [];
@@ -670,7 +746,7 @@ export const useSync = () => {
       } catch (queryError) {
         const parsed = parseError(queryError);
         logger.error('[SYNC] Error querying deleted counters:', parsed.message);
-        // Continue with empty array - will try again on next sync
+        throw queryError;
       }
 
       // Separate deleted and non-deleted counters from regular query
@@ -691,29 +767,10 @@ export const useSync = () => {
       uniqueDeletedCounters.forEach((c) => {
         countersMap.set(c.id, c); // Overwrite with deleted version if it exists
       });
-      
-      // Filter out any counters with invalid user_id and log security events
-      const allCounters = Array.from(countersMap.values()).filter((c) => {
-        if (!c.user_id || !isValidUUID(c.user_id)) {
-          logger.warn('[SECURITY] Attempted sync with invalid user_id', {
-            counterId: c.id,
-            invalidUserId: c.user_id,
-            timestamp: new Date().toISOString(),
-          });
-          return false;
-        }
-        return true;
-      });
 
-      // Log what we're about to push
-      if (allCounters.length > 0) {
-        const deletedCount = allCounters.filter((c) => c.deleted_at).length;
-        logger.log(`[SYNC] Pushing ${allCounters.length} counter(s) (${deletedCount} deleted) since ${timestamp}`);
-        if (deletedCount > 0) {
-          logger.log(`[SYNC] Deleted counters to push:`, 
-            allCounters.filter((c) => c.deleted_at).map((c) => `${c.name} (deleted_at: ${c.deleted_at})`).join(', '));
-        }
-      }
+      // `allCounters` is built after we load dirty events/streaks/badges so we can include active
+      // local parents referenced by those rows even when parent.updated_at <= push cursor (root fix
+      // for SYNC_*_PARENT_MISSING divergence).
 
       let events: CounterEvent[] = [];
       try {
@@ -732,6 +789,10 @@ export const useSync = () => {
         // CRITICAL: Filter out events with invalid data and validate dates
         // This prevents trying to push invalid data to Supabase
         events = eventsWithMarkId.filter((e) => {
+          // Soft-deleted rows (undo, orphan self-heal, etc.) must not enter the push parent check or upsert path.
+          if ((e as any).deleted_at && String((e as any).deleted_at).trim() !== '') {
+            return false;
+          }
           // Validate user_id
           if (!e.user_id || !isValidUUID(e.user_id)) {
             logger.warn(`[SYNC] Filtering out event ${e.id} with invalid user_id: ${e.user_id}`);
@@ -791,6 +852,9 @@ export const useSync = () => {
         // CRITICAL: Filter out any streaks with invalid user_id
         streaks = streaksRaw
           .filter((s) => {
+            if ((s as any).deleted_at && String((s as any).deleted_at).trim() !== '') {
+              return false;
+            }
             if (!s.user_id || !isValidUUID(s.user_id)) {
               logger.warn(`[SYNC] Filtering out streak ${s.id} with invalid user_id: ${s.user_id}`);
               return false;
@@ -804,8 +868,7 @@ export const useSync = () => {
       } catch (queryError) {
         const parsed = parseError(queryError);
         logger.error('[SYNC] Error querying streaks:', parsed.message);
-        // Don't throw - continue with empty array, streaks will be synced on next attempt
-        streaks = [];
+        throw queryError;
       }
 
       let badges: MarkBadge[] = [];
@@ -819,6 +882,9 @@ export const useSync = () => {
         // CRITICAL: Filter out any badges with invalid user_id (silently - no logging)
         badges = badgesRaw
           .filter((b) => {
+            if ((b as any).deleted_at && String((b as any).deleted_at).trim() !== '') {
+              return false;
+            }
             // Silently filter out badges with invalid user_id (like "local-user")
             return b.user_id && isValidUUID(b.user_id);
           })
@@ -829,12 +895,80 @@ export const useSync = () => {
       } catch (queryError) {
         const parsed = parseError(queryError);
         logger.error('[SYNC] Error querying badges:', parsed.message);
-        // Don't throw - continue with empty array, badges will be synced on next attempt
-        badges = [];
+        throw queryError;
+      }
+
+      const dirtyChildParentMarkIds = new Set<string>();
+      for (const e of events) {
+        const pid = (e as any).mark_id || (e as any).counter_id;
+        if (pid && typeof pid === 'string' && isValidUUID(pid)) dirtyChildParentMarkIds.add(pid);
+      }
+      for (const s of streaks) {
+        const pid = (s as any).mark_id || (s as any).counter_id;
+        if (pid && typeof pid === 'string' && isValidUUID(pid)) dirtyChildParentMarkIds.add(pid);
+      }
+      for (const b of badges) {
+        const pid = (b as any).mark_id || (b as any).counter_id;
+        if (pid && typeof pid === 'string' && isValidUUID(pid)) dirtyChildParentMarkIds.add(pid);
+      }
+
+      const parentsMissingFromPushSet = [...dirtyChildParentMarkIds].filter((id) => !countersMap.has(id));
+      if (parentsMissingFromPushSet.length > 0) {
+        const chunk = 80;
+        for (let i = 0; i < parentsMissingFromPushSet.length; i += chunk) {
+          const slice = parentsMissingFromPushSet.slice(i, i + chunk);
+          const ph = slice.map(() => '?').join(',');
+          const rows = await query<Counter>(
+            `SELECT * FROM lc_counters WHERE user_id = ? AND id IN (${ph}) AND (deleted_at IS NULL OR deleted_at = '')`,
+            [userId, ...slice],
+          );
+          for (const r of rows) {
+            countersMap.set(r.id, r);
+          }
+        }
+        logger.log('[SYNC] Augmented counter push set with active parents required by dirty children', {
+          dirtyChildParentCount: dirtyChildParentMarkIds.size,
+          addedActiveParentsNotInDirtyCounterQuery: parentsMissingFromPushSet.filter((id) =>
+            countersMap.has(id),
+          ).length,
+          sampleAddedParentIds: parentsMissingFromPushSet.filter((id) => countersMap.has(id)).slice(0, 5),
+        });
+      }
+
+      const allCounters = Array.from(countersMap.values()).filter((c) => {
+        if (!c.user_id || !isValidUUID(c.user_id)) {
+          logger.warn('[SECURITY] Attempted sync with invalid user_id', {
+            counterId: c.id,
+            invalidUserId: c.user_id,
+            timestamp: new Date().toISOString(),
+          });
+          return false;
+        }
+        return true;
+      });
+
+      const finalPushActiveParentIds = new Set(
+        allCounters
+          .filter((c) => !c.deleted_at || String(c.deleted_at).trim() === '')
+          .map((c) => c.id),
+      );
+
+      if (allCounters.length > 0) {
+        const deletedCount = allCounters.filter((c) => c.deleted_at).length;
+        logger.log(`[SYNC] Pushing ${allCounters.length} counter(s) (${deletedCount} deleted) since ${timestamp}`);
+        if (deletedCount > 0) {
+          logger.log(
+            `[SYNC] Deleted counters to push:`,
+            allCounters.filter((c) => c.deleted_at).map((c) => `${c.name} (deleted_at: ${c.deleted_at})`).join(', '),
+          );
+        }
       }
 
       // Push counters FIRST (most critical - includes deletions)
       // This ensures deletions are synced before other operations
+      let limitBlocked = false;
+      /** Active counter ids included in successful upsert batches (deleted_at null in payload). */
+      const activeParentIdsUpsertedThisRun = new Set<string>();
       if (allCounters.length > 0) {
         // Log deleted counters being pushed (use the uniqueDeletedCounters we already computed)
         const deletedInAllCounters = allCounters.filter((c) => c.deleted_at);
@@ -887,8 +1021,7 @@ export const useSync = () => {
         // Batch large upserts to prevent timeout errors
         const BATCH_SIZE = 100;
         const counterBatches = batchArray(countersToPush, BATCH_SIZE);
-        
-        let limitBlocked = false;
+
         let supportsRemoteDailyTarget = true;
         for (let i = 0; i < counterBatches.length; i++) {
           const batch = counterBatches[i];
@@ -937,6 +1070,11 @@ export const useSync = () => {
             logger.error(`[SYNC] Failed counters in batch:`, batch.map((c) => ({ id: c.id, name: c.name, deleted_at: c.deleted_at })));
             throw countersError;
           } else {
+            for (const row of batch) {
+              if (row.deleted_at == null || String(row.deleted_at).trim() === '') {
+                activeParentIdsUpsertedThisRun.add(row.id);
+              }
+            }
             logger.log(`[SYNC] ✅ Successfully pushed batch ${i + 1}/${counterBatches.length}`);
           }
         }
@@ -948,6 +1086,74 @@ export const useSync = () => {
             logger.log(`[SYNC] ✅ Successfully pushed ${countersToPush.length} counter(s) to Supabase`);
           }
         }
+      }
+
+      if (limitBlocked) {
+        throw new Error('SYNC_PRO_COUNTER_LIMIT');
+      }
+
+      /** Parents allowed for child upsert this run: successful active upserts ∪ remote active read (chunked). */
+      const confirmedRemoteActiveParentsForChildren = new Set<string>(activeParentIdsUpsertedThisRun);
+      const remoteVerifyReturnedIds = new Set<string>();
+      let postCounterVerifyCompletedAllChunks = true;
+      const unionParentIds = [...dirtyChildParentMarkIds];
+      if (unionParentIds.length > 0) {
+        const CHUNK = 100;
+        for (let i = 0; i < unionParentIds.length; i += CHUNK) {
+          const slice = unionParentIds.slice(i, i + CHUNK);
+          const { data: verifyRows, error: verifyErr } = await supabase
+            .from('counters')
+            .select('id')
+            .eq('user_id', userId)
+            .in('id', slice)
+            .is('deleted_at', null);
+          if (verifyErr) {
+            postCounterVerifyCompletedAllChunks = false;
+            logger.warn('[SYNC] Post-counter parent verify query failed; child checks use upsert-union only', {
+              message: verifyErr.message,
+            });
+            break;
+          }
+          (verifyRows || []).forEach((r: { id: string }) => {
+            remoteVerifyReturnedIds.add(r.id);
+            confirmedRemoteActiveParentsForChildren.add(r.id);
+          });
+        }
+      }
+      let upsertedActiveMissingFromVerifySelect = 0;
+      if (postCounterVerifyCompletedAllChunks) {
+        for (const id of activeParentIdsUpsertedThisRun) {
+          if (dirtyChildParentMarkIds.has(id) && !remoteVerifyReturnedIds.has(id)) {
+            upsertedActiveMissingFromVerifySelect += 1;
+          }
+        }
+      }
+      logger.log('[SYNC] parent confirmation for dirty children (post-counter-upsert)', {
+        distinctParentsFromDirtyChildren: unionParentIds.length,
+        finalPushActiveParentCount: finalPushActiveParentIds.size,
+        upsertedActiveParentIdsCount: activeParentIdsUpsertedThisRun.size,
+        mergedConfirmedParentCount: confirmedRemoteActiveParentsForChildren.size,
+        postVerifySelectReturnedCount: remoteVerifyReturnedIds.size,
+        upsertedActiveMissingFromVerifySelect,
+        sampleConfirmedParentIds: [...confirmedRemoteActiveParentsForChildren].slice(0, 5),
+      });
+
+      const postOrphan = await postUpsertOrphanChildCleanup({
+        userId,
+        confirmedRemoteActiveParentIds: confirmedRemoteActiveParentsForChildren,
+        events,
+        streaks,
+        badges,
+      });
+      if (postOrphan.tombstonedEvents + postOrphan.tombstonedStreaks + postOrphan.tombstonedBadges > 0) {
+        logger.warn('[SYNC] post-upsert orphan cleanup summary', {
+          tombstonedEvents: postOrphan.tombstonedEvents,
+          tombstonedStreaks: postOrphan.tombstonedStreaks,
+          tombstonedBadges: postOrphan.tombstonedBadges,
+          remainingDirtyEvents: events.length,
+          remainingDirtyStreaks: streaks.length,
+          remainingDirtyBadges: badges.length,
+        });
       }
 
       // Push events, streaks, and badges in parallel for better performance
@@ -981,63 +1187,42 @@ export const useSync = () => {
               );
               
               if (validEvents.length !== events.length) {
-                const invalidCount = events.length - validEvents.length;
-                const invalidEvents = events.filter(e => !e.mark_id || !isValidUUID(e.mark_id));
-                logger.warn(`[SYNC] Filtered out ${invalidCount} event(s) with invalid or missing mark_id:`, {
-                  invalidSample: invalidEvents.slice(0, 3).map(e => ({
-                    id: e.id,
-                    mark_id: e.mark_id,
-                    counter_id: (e as any).counter_id,
-                  })),
-                });
+                logger.error('[SYNC] Dirty local events include invalid mark_id — refusing to advance push cursor');
+                throw new Error('SYNC_DIRTY_EVENTS_INVALID_MARK_ID');
               }
 
-              // Match streaks/badges: only push events whose counter exists on Supabase with deleted_at null.
-              // Otherwise RLS on counter_events rejects the upsert (42501) when the parent mark is deleted or absent.
-              let eventsToPush = validEvents;
               const eventMarkIds = [...new Set(validEvents.map((e) => e.mark_id).filter(Boolean) as string[])];
+              let eventsToPush = validEvents;
               if (eventMarkIds.length > 0) {
-                try {
-                  const { data: existingCounters, error: counterCheckError } = await supabase
-                    .from('counters')
-                    .select('id')
-                    .in('id', eventMarkIds)
-                    .is('deleted_at', null);
-
-                  if (counterCheckError) {
-                    logger.error(
-                      '[SYNC] Cannot validate counters for event push — aborting sync to avoid advancing last_synced_at while events are unsent',
-                      counterCheckError,
-                    );
-                    throw counterCheckError;
-                  } else {
-                    const existingCounterIds = new Set((existingCounters || []).map((c) => c.id));
-                    const before = validEvents.length;
-                    eventsToPush = validEvents.filter((e) => e.mark_id && existingCounterIds.has(e.mark_id));
-                    if (eventsToPush.length !== before) {
-                      logger.log(
-                        `[SYNC] Filtered events: ${before} -> ${eventsToPush.length} (skipped events for missing or deleted counters)`,
-                      );
-                    }
-                    for (const id of eventMarkIds) {
-                      if (!existingCounterIds.has(id)) {
-                        logger.warn(
-                          `[SYNC] Skipping event(s) for counter ${id} - counter doesn't exist in Supabase or is deleted`,
-                        );
-                      }
-                    }
-                  }
-                } catch (checkError) {
-                  logger.error(
-                    '[SYNC] Event pre-push counter validation threw — aborting sync so unsent events are not skipped past cursor',
-                    checkError,
+                const missingParent = validEvents.filter(
+                  (e) => !e.mark_id || !confirmedRemoteActiveParentsForChildren.has(e.mark_id),
+                );
+                if (missingParent.length > 0) {
+                  const missParentIds = [...new Set(missingParent.map((e) => e.mark_id as string))];
+                  const diag = await classifyMissingParentsForSyncLog(
+                    userId,
+                    missParentIds,
+                    parentsMissingFromPushSet,
+                    finalPushActiveParentIds,
+                    activeParentIdsUpsertedThisRun,
                   );
-                  throw checkError;
+                  const missingWithParentInFinalPush = missingParent.filter(
+                    (e) => e.mark_id && finalPushActiveParentIds.has(e.mark_id),
+                  ).length;
+                  logger.error('[SYNC] Dirty events reference parent not confirmed active remotely after counter upsert', {
+                    missingEventRows: missingParent.length,
+                    distinctMissingParentIds: missParentIds.length,
+                    missingChildrenWithParentInFinalCounterPush: missingWithParentInFinalPush,
+                    classification: diag.counts,
+                    sampleParentIds: missParentIds.slice(0, 5),
+                    sampleEventIds: missingParent.slice(0, 5).map((e) => e.id),
+                  });
+                  throw new Error('SYNC_EVENT_PARENT_MISSING');
                 }
+                eventsToPush = validEvents;
               }
-              
+
               if (eventsToPush.length === 0) {
-                logger.log('[SYNC] No valid events to push (all filtered out due to invalid mark_id or missing counter on server)');
                 return;
               }
               
@@ -1102,8 +1287,6 @@ export const useSync = () => {
       }
 
       if (streaks.length > 0) {
-        // Deduplicate streaks by mark_id (unique constraint)
-        // Keep the most recent version based on updated_at
         const streaksMap = new Map<string, CounterStreak>();
         for (const streak of streaks) {
           const existing = streaksMap.get(streak.mark_id);
@@ -1112,194 +1295,70 @@ export const useSync = () => {
           }
         }
         const uniqueStreaks = Array.from(streaksMap.values());
-        
-        if (uniqueStreaks.length !== streaks.length) {
-          logger.log(`[SYNC] Deduplicated streaks: ${streaks.length} -> ${uniqueStreaks.length}`);
-        }
 
-        // CRITICAL: Filter out streaks for counters that don't exist in Supabase
-        // This prevents foreign key constraint violations
-        // First, filter out streaks with invalid mark_id (undefined, null, or empty)
-        const streaksWithValidIds = uniqueStreaks.filter(s => 
-          s.mark_id && 
-          typeof s.mark_id === 'string' && 
-          s.mark_id.trim() !== '' &&
-          isValidUUID(s.mark_id)
+        const streaksWithValidIds = uniqueStreaks.filter(
+          (s) =>
+            s.mark_id &&
+            typeof s.mark_id === 'string' &&
+            s.mark_id.trim() !== '' &&
+            isValidUUID(s.mark_id),
         );
-        
+
         if (streaksWithValidIds.length !== uniqueStreaks.length) {
-          const invalidCount = uniqueStreaks.length - streaksWithValidIds.length;
-          logger.warn(`[SYNC] Filtered out ${invalidCount} streak(s) with invalid mark_id`);
-        }
-        
-        const validStreaks: CounterStreak[] = [];
-        const counterIds = streaksWithValidIds.map(s => s.mark_id).filter((id): id is string => Boolean(id)); // mark_id maps to counter_id in Supabase
-        
-        if (counterIds.length > 0) {
-          try {
-            // Check which counters exist in Supabase (and are not deleted)
-            const { data: existingCounters, error: counterCheckError } = await supabase
-              .from('counters')
-              .select('id')
-              .in('id', counterIds)
-              .is('deleted_at', null);
-            
-            if (counterCheckError) {
-              logger.warn('[SYNC] Error checking counter existence for streaks:', counterCheckError);
-              // If we can't check, skip all streaks to be safe
-            } else {
-              const existingCounterIds = new Set((existingCounters || []).map(c => c.id));
-              
-              // Only include streaks whose counter exists in Supabase
-              for (const streak of streaksWithValidIds) {
-                if (streak.mark_id && existingCounterIds.has(streak.mark_id)) {
-                  validStreaks.push(streak);
-                } else {
-                  logger.warn(`[SYNC] Skipping streak for counter ${streak.mark_id} - counter doesn't exist in Supabase or is deleted`);
-                }
-              }
-              
-              if (validStreaks.length !== uniqueStreaks.length) {
-                logger.log(`[SYNC] Filtered streaks: ${uniqueStreaks.length} -> ${validStreaks.length} (removed streaks for non-existent counters)`);
-              }
-            }
-          } catch (checkError) {
-            logger.warn('[SYNC] Error validating streaks against counters:', checkError);
-            // If validation fails, skip all streaks to prevent foreign key errors
-          }
+          throw new Error('SYNC_DIRTY_STREAKS_INVALID_MARK_ID');
         }
 
-        if (validStreaks.length > 0) {
-          pushPromises.push(
-            (async () => {
-              try {
-                // Batch large upserts to prevent timeout errors
-                const BATCH_SIZE = 100;
-                // Map mark_id to counter_id for Supabase using type-safe mapper
-                // This ensures we never accidentally send mark_id to Supabase
-                const streaksForSupabase = mapStreaksToSupabase(validStreaks);
-                const streakBatches = batchArray(streaksForSupabase, BATCH_SIZE);
-                
-                for (let i = 0; i < streakBatches.length; i++) {
-                  const batch = streakBatches[i];
-                  
-                  try {
-                    const { error } = await supabase
-                      .from('counter_streaks')
-                      .upsert(batch, {
-                        // Use onConflict with column name for unique constraint on counter_id
-                        // If records have id (primary key), Supabase will use that; otherwise use counter_id
-                        onConflict: batch[0]?.id ? 'id' : 'counter_id',
-                        ignoreDuplicates: false,
-                      });
-                    
-                    if (error) {
-                      // Handle foreign key constraint violation (23503)
-                      if (error.code === '23503') {
-                        logger.warn(`[SYNC] Foreign key violation pushing streaks batch ${i + 1} - some counters may not exist. Skipping batch.`);
-                        // Filter out the problematic streaks and try individual inserts
-                        for (const streak of batch) {
-                          try {
-                            const { error: singleError } = await supabase
-                              .from('counter_streaks')
-                              .upsert(streak, {
-                                onConflict: streak.id ? 'id' : 'counter_id',
-                                ignoreDuplicates: false,
-                              });
-                            
-                            if (singleError && singleError.code !== '23503') {
-                              const parsed = parseError(singleError);
-                              if (!parsed.isNetworkError && !parsed.shouldRetry) {
-                                logger.warn(`[SYNC] Error pushing individual streak ${streak.counter_id || streak.id}:`, singleError.message);
-                              }
-                            }
-                          } catch (singleError) {
-                            // Skip individual streak if it fails
-                            logger.warn(`[SYNC] Error pushing individual streak ${streak.counter_id || streak.id}:`, singleError);
-                          }
-                        }
-                        continue;
-                      }
-                      
-                      // If error is about conflict specification (42P10), try alternative approach
-                      if (error.code === '42P10') {
-                        // If all streaks have IDs, try with id only
-                        if (batch.every(s => s.id)) {
-                          const { error: retryError } = await supabase
-                            .from('counter_streaks')
-                            .upsert(batch, {
-                              onConflict: 'id',
-                              ignoreDuplicates: false,
-                            });
-                          
-                          if (retryError) {
-                            const parsed = parseError(retryError);
-                            if (parsed.isNetworkError || parsed.shouldRetry) {
-                              logger.error(
-                                `[SYNC] Streaks batch ${i + 1}/${streakBatches.length} failed (network/timeout) — aborting push to keep cursor safe`,
-                                parsed.message,
-                              );
-                            }
-                            throw retryError;
-                          }
-                          continue;
-                        }
-                        // Otherwise, log warning and continue (streaks might already exist)
-                        logger.warn(`[SYNC] Streak upsert conflict (handled) batch ${i + 1}:`, error.message);
-                        continue;
-                      }
-                      // Check for timeout errors
-                      const parsed = parseError(error);
-                      if (parsed.isNetworkError || parsed.shouldRetry) {
-                        logger.error(
-                          `[SYNC] Streaks batch ${i + 1}/${streakBatches.length} failed (network/timeout) — aborting push`,
-                          parsed.message,
-                        );
-                      }
-                      throw error;
-                    }
-                  } catch (batchError) {
-                    const parsed = parseError(batchError);
-                    if (parsed.isNetworkError || parsed.shouldRetry) {
-                      logger.error(
-                        `[SYNC] Streaks batch ${i + 1}/${streakBatches.length} failed (network/timeout) — aborting push`,
-                        parsed.message,
-                      );
-                    }
-                    // If it's a foreign key error, log and continue
-                    if (batchError && typeof batchError === 'object' && 'code' in batchError && batchError.code === '23503') {
-                      logger.warn(`[SYNC] Foreign key violation in batch ${i + 1} - skipping batch`);
-                      continue;
-                    }
-                    throw batchError;
-                  }
-                }
-              } catch (error) {
-                const parsed = parseError(error);
-                if (parsed.isNetworkError || parsed.shouldRetry) {
-                  logger.error(
-                    '[SYNC] Streak push failed (network/timeout) — failing sync so last_synced_at is not advanced',
-                    parsed.message,
-                  );
-                  throw error;
-                }
-                // If it's a foreign key error, log and return (don't throw)
-                if (error && typeof error === 'object' && 'code' in error && error.code === '23503') {
-                  logger.warn('[SYNC] Foreign key violation pushing streaks - some counters may not exist');
-                  return;
-                }
-                throw error;
-              }
-            })()
+        const streakMissing = streaksWithValidIds.filter(
+          (s) => s.mark_id && !confirmedRemoteActiveParentsForChildren.has(s.mark_id),
+        );
+        if (streakMissing.length > 0) {
+          const missParentIds = [...new Set(streakMissing.map((s) => s.mark_id as string))];
+          const diag = await classifyMissingParentsForSyncLog(
+            userId,
+            missParentIds,
+            parentsMissingFromPushSet,
+            finalPushActiveParentIds,
+            activeParentIdsUpsertedThisRun,
           );
-        } else {
-          logger.log('[SYNC] No valid streaks to push (all filtered out due to missing counters)');
+          const missingWithParentInFinalPush = streakMissing.filter(
+            (s) => s.mark_id && finalPushActiveParentIds.has(s.mark_id),
+          ).length;
+          logger.error('[SYNC] Dirty streak rows reference parent not confirmed active remotely after counter upsert', {
+            missingStreakRows: streakMissing.length,
+            distinctMissingParentIds: missParentIds.length,
+            missingChildrenWithParentInFinalCounterPush: missingWithParentInFinalPush,
+            classification: diag.counts,
+            sampleParentIds: missParentIds.slice(0, 5),
+            sampleStreakIds: streakMissing.slice(0, 5).map((s) => s.id),
+          });
+          throw new Error('SYNC_STREAK_PARENT_MISSING');
         }
+
+        pushPromises.push(
+          (async () => {
+            const BATCH_SIZE = 100;
+            const streaksForSupabase = mapStreaksToSupabase(streaksWithValidIds);
+            const streakBatches = batchArray(streaksForSupabase, BATCH_SIZE);
+            for (let i = 0; i < streakBatches.length; i++) {
+              const batch = streakBatches[i];
+              let { error } = await supabase.from('counter_streaks').upsert(batch, {
+                onConflict: batch[0]?.id ? 'id' : 'counter_id',
+                ignoreDuplicates: false,
+              });
+              if (error?.code === '42P10' && batch.every((s) => s.id)) {
+                const retry = await supabase.from('counter_streaks').upsert(batch, {
+                  onConflict: 'id',
+                  ignoreDuplicates: false,
+                });
+                error = retry.error;
+              }
+              if (error) throw error;
+            }
+          })(),
+        );
       }
 
       if (badges.length > 0) {
-        // Deduplicate badges by counter_id + badge_code (unique constraint)
-        // Keep the most recent version based on updated_at
         const badgesMap = new Map<string, MarkBadge>();
         for (const badge of badges) {
           const key = `${badge.mark_id}:${badge.badge_code}`;
@@ -1309,176 +1368,91 @@ export const useSync = () => {
           }
         }
         const uniqueBadges = Array.from(badgesMap.values());
-        
-        if (uniqueBadges.length !== badges.length) {
-          logger.log(`[SYNC] Deduplicated badges: ${badges.length} -> ${uniqueBadges.length}`);
-        }
 
-        // CRITICAL: Filter out badges with invalid mark_id (undefined, null, or empty)
-        // This prevents null constraint violations
-        const badgesWithValidIds = uniqueBadges.filter(b => 
-          b.mark_id && 
-          typeof b.mark_id === 'string' && 
-          b.mark_id.trim() !== '' &&
-          isValidUUID(b.mark_id) &&
-          b.badge_code // Also ensure badge_code is present
+        const badgesWithValidIds = uniqueBadges.filter(
+          (b) =>
+            b.mark_id &&
+            typeof b.mark_id === 'string' &&
+            b.mark_id.trim() !== '' &&
+            isValidUUID(b.mark_id) &&
+            b.badge_code,
         );
-        
+
         if (badgesWithValidIds.length !== uniqueBadges.length) {
-          const invalidCount = uniqueBadges.length - badgesWithValidIds.length;
-          logger.warn(`[SYNC] Filtered out ${invalidCount} badge(s) with invalid mark_id or badge_code`);
+          throw new Error('SYNC_DIRTY_BADGES_INVALID_IDS');
         }
 
-        // CRITICAL: Filter out badges for counters that don't exist in Supabase
-        // This prevents foreign key constraint violations
-        const validBadges: MarkBadge[] = [];
-        const counterIds = badgesWithValidIds.map(b => b.mark_id).filter((id): id is string => Boolean(id)); // mark_id maps to counter_id in Supabase
-        
-        if (counterIds.length > 0) {
-          try {
-            // Check which counters exist in Supabase (and are not deleted)
-            const { data: existingCounters, error: counterCheckError } = await supabase
-              .from('counters')
-              .select('id')
-              .in('id', counterIds)
-              .is('deleted_at', null);
-            
-            if (counterCheckError) {
-              logger.warn('[SYNC] Error checking counter existence for badges:', counterCheckError);
-              // If we can't check, skip all badges to be safe
-            } else {
-              const existingCounterIds = new Set((existingCounters || []).map(c => c.id));
-              const skippedCounterIds = new Set<string>();
-              
-              // Only include badges whose counter exists in Supabase
-              for (const badge of badgesWithValidIds) {
-                if (badge.mark_id && existingCounterIds.has(badge.mark_id)) {
-                  validBadges.push(badge);
-                } else {
-                  // Track skipped counter IDs for summary logging
-                  if (badge.mark_id) {
-                    skippedCounterIds.add(badge.mark_id);
-                  }
-                }
-              }
-              
-              if (validBadges.length !== badgesWithValidIds.length) {
-                const skippedCount = badgesWithValidIds.length - validBadges.length;
-                const uniqueSkippedCounters = skippedCounterIds.size;
-                logger.log(`[SYNC] Filtered badges: ${badgesWithValidIds.length} -> ${validBadges.length} (removed ${skippedCount} badge(s) for ${uniqueSkippedCounters} non-existent counter(s))`);
-              }
-            }
-          } catch (checkError) {
-            logger.warn('[SYNC] Error validating badges against counters:', checkError);
-            // If validation fails, skip all badges to prevent foreign key errors
-          }
-        }
-
-        if (validBadges.length > 0) {
-          pushPromises.push(
-            (async () => {
-              try {
-                // Batch large upserts to prevent timeout errors
-                const BATCH_SIZE = 100;
-                // Map mark_id to counter_id for Supabase using type-safe mapper
-                // This ensures we never accidentally send mark_id to Supabase
-                // CRITICAL: Ensure all badges have user_id set to the current user
-                const badgesForSupabase = mapBadgesToSupabase(validBadges).map(badge => ({
-                  ...badge,
-                  user_id: userId, // Ensure user_id is set to the authenticated user
-                }));
-              const badgeBatches = batchArray(badgesForSupabase, BATCH_SIZE);
-              
-              for (let i = 0; i < badgeBatches.length; i++) {
-                const batch = badgeBatches[i];
-                
-                const { error } = await supabase
-                  .from('counter_badges')
-                  .upsert(batch, {
-                    onConflict: 'counter_id,badge_code', // Handle conflicts on unique constraint (Supabase uses counter_id)
-                    ignoreDuplicates: false, // Update existing records instead of ignoring
-                  });
-                
-                if (error && !isMissingSupabaseTable(error, 'counter_badges')) {
-                  // If it's a duplicate key error, log it but don't throw (badge already exists)
-                  if (error.code === '23505' || error.code === '21000') {
-                    logger.warn(`[SYNC] Badge conflict error (handled) batch ${i + 1}:`, error.message);
-                    continue;
-                  }
-                  // If it's a foreign key constraint violation, log warning and skip
-                  if (error.code === '23503' || error.message?.includes('foreign key constraint')) {
-                    logger.warn(`[SYNC] Foreign key violation pushing badges batch ${i + 1} - some counters may not exist. Skipping batch.`);
-                    // Try individual inserts to identify problematic badges
-                    for (const badge of batch) {
-                      try {
-                        const { error: singleError } = await supabase
-                          .from('counter_badges')
-                          .upsert(badge, {
-                            onConflict: 'counter_id,badge_code',
-                            ignoreDuplicates: false,
-                          });
-                        
-                        if (singleError && singleError.code !== '23503') {
-                          const parsed = parseError(singleError);
-                          if (!parsed.isNetworkError && !parsed.shouldRetry) {
-                            logger.warn(`[SYNC] Error pushing individual badge ${badge.counter_id || badge.id}:`, singleError.message);
-                          }
-                        }
-                      } catch (singleError) {
-                        // Skip individual badge if it fails
-                        logger.warn(`[SYNC] Error pushing individual badge ${badge.counter_id || badge.id}:`, singleError);
-                      }
-                    }
-                    continue;
-                  }
-                  // If it's an RLS policy violation, log warning and skip (badges might not have proper permissions)
-                  if (error.code === '42501' || error.message?.includes('row-level security')) {
-                    logger.warn(`[SYNC] RLS policy violation pushing badges batch ${i + 1} - skipping batch. This may happen if badges don't have proper user_id or permissions.`);
-                    continue;
-                  }
-                  // Check for timeout errors
-                  const parsed = parseError(error);
-                  if (parsed.isNetworkError || parsed.shouldRetry) {
-                    logger.error(
-                      `[SYNC] Badges batch ${i + 1}/${badgeBatches.length} failed (network/timeout) — aborting push`,
-                      parsed.message,
-                    );
-                  }
-                  throw error;
-                }
-              }
-            } catch (error) {
-              const parsed = parseError(error);
-              // Handle foreign key constraint violations gracefully
-              if (error && typeof error === 'object' && 'code' in error && error.code === '23503') {
-                logger.warn('[SYNC] Foreign key violation pushing badges - some counters may not exist. Skipping badges.');
-                return; // Don't throw - let other operations continue
-              }
-              // Handle RLS policy violations gracefully
-              if (error && typeof error === 'object' && 'code' in error && error.code === '42501') {
-                logger.warn('[SYNC] RLS policy violation pushing badges - skipping. Badges may not have proper permissions.');
-                return; // Don't throw - let other operations continue
-              }
-              if (parsed.isNetworkError || parsed.shouldRetry) {
-                logger.error(
-                  '[SYNC] Badge push failed (network/timeout) — failing sync so last_synced_at is not advanced',
-                  parsed.message,
-                );
-              }
-              throw error;
-            }
-          })()
+        const badgeMissing = badgesWithValidIds.filter(
+          (b) => b.mark_id && !confirmedRemoteActiveParentsForChildren.has(b.mark_id),
         );
-        } else {
-          logger.log('[SYNC] No valid badges to push (all filtered out due to invalid mark_id, badge_code, or missing counters)');
+        if (badgeMissing.length > 0) {
+          const missParentIds = [...new Set(badgeMissing.map((b) => b.mark_id as string))];
+          const diag = await classifyMissingParentsForSyncLog(
+            userId,
+            missParentIds,
+            parentsMissingFromPushSet,
+            finalPushActiveParentIds,
+            activeParentIdsUpsertedThisRun,
+          );
+          const missingWithParentInFinalPush = badgeMissing.filter(
+            (b) => b.mark_id && finalPushActiveParentIds.has(b.mark_id),
+          ).length;
+          logger.error('[SYNC] Dirty badge rows reference parent not confirmed active remotely after counter upsert', {
+            missingBadgeRows: badgeMissing.length,
+            distinctMissingParentIds: missParentIds.length,
+            missingChildrenWithParentInFinalCounterPush: missingWithParentInFinalPush,
+            classification: diag.counts,
+            sampleParentIds: missParentIds.slice(0, 5),
+            sampleBadgeIds: badgeMissing.slice(0, 5).map((b) => b.id),
+            sampleBadgeKeys: badgeMissing.slice(0, 5).map((b) => `${b.mark_id}:${b.badge_code}`),
+          });
+          throw new Error('SYNC_BADGE_PARENT_MISSING');
         }
+
+        pushPromises.push(
+          (async () => {
+            const BATCH_SIZE = 100;
+            const badgesForSupabase = mapBadgesToSupabase(badgesWithValidIds).map((badge) => ({
+              ...badge,
+              user_id: userId,
+            }));
+            const badgeBatches = batchArray(badgesForSupabase, BATCH_SIZE);
+            for (let i = 0; i < badgeBatches.length; i++) {
+              const batch = badgeBatches[i];
+              const { error } = await supabase.from('counter_badges').upsert(batch, {
+                onConflict: 'counter_id,badge_code',
+                ignoreDuplicates: false,
+              });
+              if (error) {
+                if (isMissingSupabaseTable(error, 'counter_badges')) {
+                  throw new Error('SYNC_COUNTER_BADGES_TABLE_MISSING');
+                }
+                throw error;
+              }
+            }
+          })(),
+        );
       }
 
-      // Wait for remaining pushes to complete
       if (pushPromises.length > 0) {
         await Promise.all(pushPromises);
       }
+
+      await writePushCursor(new Date().toISOString());
+      logger.log('[SYNC] integrity: push attempt completed successfully', { attemptIndex: attempt });
+      return;
     } catch (error) {
+      if (attempt === 0 && isParentMissingSyncError(error)) {
+        logger.warn('[SYNC] pushChanges: parent-missing — retrying full push once after audit/cleanup', {
+          code: error instanceof Error ? error.message : String(error),
+        });
+        continue;
+      }
+      if (attempt === 1 && isParentMissingSyncError(error)) {
+        logger.error('[SYNC] integrity: push still failing after retry (parent-missing)', {
+          code: error instanceof Error ? error.message : String(error),
+        });
+      }
       const parsed = parseError(error || 'Unknown error occurred during push');
       if (parsed.isNetworkError || parsed.shouldRetry) {
         logger.error(
@@ -1519,6 +1493,7 @@ export const useSync = () => {
       }
       throw error instanceof Error ? error : new Error(errorMsg);
     }
+    }
   }, []);
 
   // Throttle sync to prevent excessive I/O - minimum 30 seconds between syncs
@@ -1528,55 +1503,8 @@ export const useSync = () => {
   
   // Debounce ref for rapid sync requests
   const syncDebounceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingSyncRef = useRef<((value: void | PromiseLike<void>) => void) | null>(null);
-
-  const sync = useCallback(async () => {
-    // Debounce rapid sync requests (e.g., multiple button taps)
-    return new Promise<void>((resolve) => {
-      // Clear any existing debounce timeout
-      if (syncDebounceTimeoutRef.current) {
-        clearTimeout(syncDebounceTimeoutRef.current);
-      }
-      
-      // Store the resolve function to call after debounce
-      pendingSyncRef.current = resolve;
-      
-      // Set new debounce timeout
-      syncDebounceTimeoutRef.current = setTimeout(async () => {
-        syncDebounceTimeoutRef.current = null;
-        const resolveFn = pendingSyncRef.current;
-        pendingSyncRef.current = null;
-        
-        // Throttle sync requests
-        const now = Date.now();
-        const timeSinceLastSync = now - lastSyncTimeRef.current;
-        if (timeSinceLastSync < SYNC_THROTTLE_MS && lastSyncTimeRef.current > 0) {
-          logger.log(`[SYNC] Throttling sync request (${Math.round((SYNC_THROTTLE_MS - timeSinceLastSync) / 1000)}s remaining)`);
-          resolveFn?.();
-          return syncLockRef.current || Promise.resolve();
-        }
-        
-        // If a sync is already in progress, wait for it to complete
-        if (syncLockRef.current) {
-          await syncLockRef.current;
-          resolveFn?.();
-          return;
-        }
-        
-        // Execute sync
-        try {
-          syncLockRef.current = executeSync();
-          await syncLockRef.current;
-          resolveFn?.();
-        } catch (error) {
-          resolveFn?.();
-          throw error;
-        } finally {
-          syncLockRef.current = null;
-        }
-      }, SYNC_DEBOUNCE_MS);
-    });
-  }, []);
+  type PendingSyncSettle = { resolve: () => void; reject: (reason: unknown) => void };
+  const pendingSyncRef = useRef<PendingSyncSettle | null>(null);
 
   const executeSync = useCallback(async () => {
     const {
@@ -1591,6 +1519,10 @@ export const useSync = () => {
     setSyncState((prev) => ({ ...prev, isSyncing: true, error: null }));
 
       try {
+        await Promise.race([
+          (async () => {
+        await migrateLegacySyncCursor();
+
         // Push first, then pull - this ensures deletions are synced to Supabase
         // before pulling, preventing deleted counters from being restored
         await pushChanges(user.id);
@@ -1600,122 +1532,147 @@ export const useSync = () => {
         await new Promise(resolve => setTimeout(resolve, 100));
         
         await pullChanges(user.id);
-        
-        // CRITICAL: Recalculate streaks after sync completes
-        // This ensures streaks are accurate after syncing events from server
-        // Streaks calculated optimistically during local operations may differ from server
-        try {
-          const { useCountersStore } = await import('../state/countersSlice');
-          const { useEventsStore } = await import('../state/eventsSlice');
-          const { computeStreak, updateStreakInDB } = await import('./useStreaks');
-          const { getAppDate } = await import('../lib/appDate');
 
-          const counters = useCountersStore.getState().marks.filter(m => !m.deleted_at && m.enable_streak);
-          const allEvents = useEventsStore.getState().events.filter(e => !e.deleted_at);
+        const maintenanceWarnings: SyncMaintenanceWarningCode[] = [];
+        let duplicateMarkNameGroupCount = 0;
+        let lastStreakRecomputeSource: StreakRecomputeSourceLabel = 'none';
 
-          // Recalculate streaks for all counters with streaks enabled (same “today” as UI)
-          const streakUpdates = counters.map(async (counter) => {
-            const counterEvents = allEvents.filter(e => e.mark_id === counter.id);
-            const streakData = computeStreak(counterEvents, getAppDate());
-            await updateStreakInDB(counter.id, user.id, streakData);
-          });
-          
-          await Promise.all(streakUpdates);
-          logger.log(`[SYNC] Recalculated streaks for ${counters.length} counter(s) after sync`);
-        } catch (streakError) {
-          logger.error('[SYNC] Error recalculating streaks after sync:', streakError);
-          // Don't fail sync if streak recalculation fails
+        const { getAppDate } = await import('../lib/appDate');
+        const streakResult = await recomputeStreaksAfterSyncFromSqlite(user.id, getAppDate());
+        lastStreakRecomputeSource = streakResult.source;
+        if (!streakResult.ok) {
+          maintenanceWarnings.push('MAINT_STREAK_RECOMPUTE_FAILED');
+          logger.warn('[SYNC] Post-sync streak recompute from SQLite failed');
+        } else {
+          logger.log(
+            `[SYNC] Streak recompute source=sqlite marks=${streakResult.marksProcessed} source=${streakResult.source}`,
+          );
         }
-        
-        // CRITICAL: Run cleanup after sync to remove any duplicates and orphaned records
-        // This ensures duplicates and orphaned streaks/badges/events are removed immediately after sync completes
+
         try {
           const [counterCleanup, orphanCleanup, eventCleanup] = await Promise.all([
             cleanupDuplicateCounters(user.id),
             cleanupOrphanedStreaksAndBadges(user.id),
             cleanupOrphanedEvents(user.id),
           ]);
-          
+
           if (counterCleanup.duplicatesByID + counterCleanup.duplicatesByName > 0) {
-            logger.log(`[SYNC] Cleaned up ${counterCleanup.duplicatesByID + counterCleanup.duplicatesByName} duplicate counter(s) after sync`);
+            logger.log(
+              `[SYNC] Cleaned up ${counterCleanup.duplicatesByID + counterCleanup.duplicatesByName} duplicate counter(s) after sync`,
+            );
           }
-          
+
           if (orphanCleanup.deletedStreaks > 0 || orphanCleanup.deletedBadges > 0) {
-            logger.log(`[SYNC] Cleaned up ${orphanCleanup.deletedStreaks} orphaned streak(s) and ${orphanCleanup.deletedBadges} orphaned badge(s) after sync`);
+            logger.log(
+              `[SYNC] Cleaned up ${orphanCleanup.deletedStreaks} orphaned streak(s) and ${orphanCleanup.deletedBadges} orphaned badge(s) after sync`,
+            );
           }
-          
+
           if (eventCleanup.deletedEvents > 0) {
             logger.log(`[SYNC] Cleaned up ${eventCleanup.deletedEvents} orphaned event(s) after sync`);
           }
-          
-          // CRITICAL: After sync, clean up badges for counters that don't exist in Supabase
-          // This handles the case where badges exist locally but their counters were never synced or were deleted
-          // We do this after push to ensure we know which counters actually exist in Supabase
+
+          let orphanBadgeCleanupPartial = false;
           try {
-            // Get all counter IDs that exist in Supabase
             const { data: supabaseCounters, error: supabaseError } = await supabase
               .from('counters')
               .select('id')
               .eq('user_id', user.id)
               .is('deleted_at', null);
-            
+
             if (!supabaseError && supabaseCounters) {
-              const supabaseCounterIds = new Set(supabaseCounters.map(c => c.id));
-              
-              // Get all local badges
+              const supabaseCounterIds = new Set(supabaseCounters.map((c) => c.id));
+
               const allLocalBadges = await query<{ id: string; counter_id: string }>(
                 'SELECT id, counter_id FROM lc_badges WHERE user_id = ? AND deleted_at IS NULL',
-                [user.id]
+                [user.id],
               );
-              
-              // Find badges whose counters don't exist in Supabase
-              const orphanedBadges = allLocalBadges.filter(b => 
-                !supabaseCounterIds.has(b.counter_id)
-              );
-              
+
+              const orphanedBadges = allLocalBadges.filter((b) => !supabaseCounterIds.has(b.counter_id));
+
               if (orphanedBadges.length > 0) {
-                const now = new Date().toISOString();
+                const t = new Date().toISOString();
                 let deletedCount = 0;
-                
+
                 for (const badge of orphanedBadges) {
                   try {
                     await execute(
                       'UPDATE lc_badges SET deleted_at = ?, updated_at = ? WHERE id = ?',
-                      [now, now, badge.id]
+                      [t, t, badge.id],
                     );
                     deletedCount++;
                   } catch (error) {
-                    logger.warn(`[SYNC] Error cleaning up orphaned badge ${badge.id}:`, error);
+                    logger.warn('[SYNC] Orphan badge cleanup row failed');
+                    orphanBadgeCleanupPartial = true;
                   }
                 }
-                
+
                 if (deletedCount > 0) {
-                  logger.log(`[SYNC] Cleaned up ${deletedCount} orphaned badge(s) for counters that don't exist in Supabase`);
+                  logger.log(`[SYNC] Cleaned up ${deletedCount} orphaned badge(s) (remote missing counter)`);
                 }
               }
             }
           } catch (badgeCleanupError) {
-            logger.warn('[SYNC] Error cleaning up orphaned badges after sync:', badgeCleanupError);
-            // Don't fail sync if badge cleanup fails
+            logger.warn('[SYNC] Orphan badge cleanup batch failed');
+            orphanBadgeCleanupPartial = true;
+          }
+
+          if (orphanBadgeCleanupPartial) {
+            maintenanceWarnings.push('MAINT_ORPHAN_BADGE_CLEANUP_PARTIAL');
           }
         } catch (cleanupError) {
           logger.error('[SYNC] Error during post-sync cleanup:', cleanupError);
-          // Don't fail the sync if cleanup fails, but log the error
+          maintenanceWarnings.push('MAINT_CLEANUP_FAILED');
         }
 
+        try {
+          const dupGroups = await detectDuplicateMarkNameGroups(user.id);
+          duplicateMarkNameGroupCount = dupGroups.length;
+          if (dupGroups.length > 0) {
+            logger.log('[SYNC] Duplicate mark names (different ids)', {
+              groupCount: dupGroups.length,
+              totalExtraMarks: dupGroups.reduce((s, g) => s + g.markCount, 0),
+            });
+          }
+        } catch {
+          maintenanceWarnings.push('MAINT_DUPLICATE_NAME_SCAN_FAILED');
+          duplicateMarkNameGroupCount = 0;
+        }
+
+        logger.log('[SYNC_HEALTH]', {
+          streakSource: lastStreakRecomputeSource,
+          duplicateNameGroups: duplicateMarkNameGroupCount,
+          maintenanceWarningCount: maintenanceWarnings.length,
+        });
+
         const now = new Date().toISOString();
-        await AsyncStorage.setItem('last_synced_at', now);
+        await writeLastFullSyncDisplayAt(now);
+        await writeSyncDiagSnapshot({
+          coreSyncedAtIso: now,
+          maintenanceWarnings,
+          duplicateMarkNameGroupCount,
+          lastStreakRecomputeSource,
+        });
         lastSyncTimeRef.current = Date.now();
-        
+
         setSyncState((prev) => ({
           ...prev,
           isSyncing: false,
           lastSyncedAt: now,
+          error: null,
+          maintenanceWarnings,
+          duplicateMarkNameGroupCount,
+          lastStreakRecomputeSource,
         }));
         
         // Don't reload counters here - the store is already managed correctly
         // Reloading could bring back deleted counters if there's a timing issue
         // Instead, only reload counters that were actually merged during pullChanges
+          })(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(createSyncExecutionTimeoutError()), SYNC_EXECUTION_TIMEOUT_MS),
+          ),
+        ]);
       } catch (error) {
         const parsedError = parseError(error || 'Unknown error occurred during sync');
         const errorMessage = (parsedError.isNetworkError || parsedError.shouldRetry)
@@ -1726,6 +1683,7 @@ export const useSync = () => {
           ...prev,
           isSyncing: false,
           error: errorMessage,
+          maintenanceWarnings: [],
         }));
         
         // Log the error with context (but don't log full HTML responses)
@@ -1776,6 +1734,62 @@ export const useSync = () => {
       }
   }, [pullChanges, pushChanges]);
 
+  const sync = useCallback(
+    async (opts?: { bypassThrottle?: boolean }) => {
+      return new Promise<void>((resolve, reject) => {
+        if (syncDebounceTimeoutRef.current) {
+          clearTimeout(syncDebounceTimeoutRef.current);
+        }
+
+        pendingSyncRef.current = { resolve, reject };
+
+        syncDebounceTimeoutRef.current = setTimeout(async () => {
+          syncDebounceTimeoutRef.current = null;
+          const settle = pendingSyncRef.current;
+          pendingSyncRef.current = null;
+          if (!settle) return;
+
+          const nowMs = Date.now();
+          const timeSinceLastSync = nowMs - lastSyncTimeRef.current;
+          if (
+            !opts?.bypassThrottle &&
+            timeSinceLastSync < SYNC_THROTTLE_MS &&
+            lastSyncTimeRef.current > 0
+          ) {
+            logger.log(
+              `[SYNC] Throttling sync request (${Math.round((SYNC_THROTTLE_MS - timeSinceLastSync) / 1000)}s remaining)`,
+            );
+            settle.resolve();
+            return;
+          }
+
+          if (syncLockRef.current) {
+            try {
+              await syncLockRef.current;
+              settle.resolve();
+            } catch (error) {
+              settle.reject(error instanceof Error ? error : new Error(String(error)));
+            }
+            return;
+          }
+
+          try {
+            syncLockRef.current = executeSync();
+            await syncLockRef.current;
+            settle.resolve();
+          } catch (error) {
+            settle.reject(error instanceof Error ? error : new Error(String(error)));
+          } finally {
+            syncLockRef.current = null;
+          }
+        }, SYNC_DEBOUNCE_MS);
+      });
+    },
+    [executeSync],
+  );
+
+  syncFnRef.current = sync;
+
   // Listen for app state changes to trigger sync when coming back online
   useEffect(() => {
     let mounted = true;
@@ -1818,6 +1832,34 @@ export const useSync = () => {
 };
 
 // Helper functions for merging data with conflict resolution
+
+/** Remote delete wins over an active local row when server updated_at is newer (same counter id only). */
+const mergeCounterTombstoneFromRemote = async (counter: Counter): Promise<void> => {
+  const serverDeleted = counter.deleted_at && String(counter.deleted_at).trim() !== '';
+  if (!serverDeleted) return;
+
+  const existing = await queryFirst<Counter>('SELECT * FROM lc_counters WHERE id = ?', [counter.id]);
+  if (!existing) return;
+
+  const remoteTime = new Date(counter.updated_at).getTime();
+  const localTime = new Date(existing.updated_at).getTime();
+
+  if (existing.deleted_at && existing.deleted_at.trim() !== '') {
+    if (remoteTime > localTime) {
+      await execute('UPDATE lc_counters SET updated_at = ? WHERE id = ?', [counter.updated_at, counter.id]);
+    }
+    return;
+  }
+
+  if (remoteTime > localTime) {
+    await execute(
+      'UPDATE lc_counters SET deleted_at = ?, updated_at = ? WHERE id = ?',
+      [counter.deleted_at, counter.updated_at, counter.id],
+    );
+    logger.log(`[SYNC] Applied remote tombstone for counter ${counter.id}`);
+  }
+};
+
 const mergeCounter = async (counter: Counter, existingCountersMap?: Map<string, { id: string; deleted_at: string | null; updated_at: string }>): Promise<boolean> => {
   // Skip deleted counters from remote - don't merge them into local database
   if (counter.deleted_at) {
@@ -1891,42 +1933,11 @@ const mergeCounter = async (counter: Counter, existingCountersMap?: Map<string, 
     );
     
     if (duplicateByName) {
-      // A counter with the same name already exists (and is not deleted)
-      // Keep the existing one, don't insert the duplicate
-      logger.log(`[SYNC] mergeCounter: ⚠️ Skipping duplicate counter ${counter.id} (${counter.name}) - counter with same name already exists (${duplicateByName.id})`);
-      
-      // If the incoming counter is newer, update the existing one instead
-      const incomingTime = new Date(counter.updated_at).getTime();
-      const existingTime = new Date(duplicateByName.updated_at).getTime();
-      
-      if (incomingTime > existingTime) {
-        logger.log(`[SYNC] mergeCounter: Updating existing counter ${duplicateByName.id} with newer data from ${counter.id}`);
-        const mergedDupDaily =
-          typeof (counter as any).dailyTarget === 'number' && (counter as any).dailyTarget > 0
-            ? normalizeDailyTargetInput((counter as any).dailyTarget)
-            : resolveDailyTarget(duplicateByName as Counter);
-        await execute(
-          `UPDATE lc_counters SET 
-            emoji = ?, color = ?, unit = ?, enable_streak = ?,
-            sort_index = ?, total = ?, last_activity_date = ?, dailyTarget = ?, updated_at = ?
-          WHERE id = ?`,
-          [
-            counter.emoji,
-            counter.color,
-            counter.unit,
-            counter.enable_streak ? 1 : 0,
-            counter.sort_index,
-            counter.total,
-            counter.last_activity_date,
-            mergedDupDaily,
-            counter.updated_at,
-            duplicateByName.id,
-          ]
-        );
-        return true;
-      }
-      
-      return false; // Don't insert duplicate
+      // Never merge two different UUIDs by display name — would orphan events/streaks keyed by id.
+      logger.warn(
+        `[SYNC] mergeCounter: skipping insert — same-name mark exists with different id (local ${duplicateByName.id}, remote ${counter.id}). Resolve manually if needed.`,
+      );
+      return false;
     }
     
     // Insert new counter only if it's not deleted and not a duplicate
@@ -1984,6 +1995,10 @@ const mergeCounter = async (counter: Counter, existingCountersMap?: Map<string, 
 
     const remoteTime = new Date(counter.updated_at).getTime();
     const localTime = new Date(existing.updated_at).getTime();
+
+    // INVARIANT: lc_counters.total is a denormalized cache. Canonical local history is lc_events (see markTotalReconciliation).
+    // During merge we still use max/pending rules to avoid wiping in-flight taps; after each pull, pullChanges replays
+    // events for touched marks and overwrites total when it differs from replay(events).
 
     // CRITICAL: Preserve higher total to prevent overwriting local increments
     // Check for pending writes that might not be reflected in current DB state
@@ -2338,6 +2353,15 @@ export const parseError = (error: any): { message: string; isNetworkError: boole
   if (error?.name === 'AbortError' || errorString.includes('aborted')) {
     return {
       message: 'Request was cancelled. Will retry on next sync.',
+      isNetworkError: true,
+      shouldRetry: true,
+    };
+  }
+
+  if (error?.code === 'SYNC_EXECUTION_TIMEOUT') {
+    return {
+      message:
+        'Sync timed out before completion. Local data is unchanged; sync will retry when the connection responds.',
       isNetworkError: true,
       shouldRetry: true,
     };

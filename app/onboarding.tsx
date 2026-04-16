@@ -12,6 +12,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  LAST_PUSHED_AT_KEY,
+  LAST_PULLED_AT_KEY,
+  LEGACY_LAST_SYNCED_AT_KEY,
+} from '../lib/sync/syncCursors';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { colors } from '../theme/colors';
@@ -54,7 +59,7 @@ export default function OnboardingScreen() {
 
   const { completeOnboarding } = useUIStore();
   const { createCounter, incrementCounter } = useCounters();
-  const { requestPermissions } = useNotifications();
+  const { requestPermissions, updateSmartNotifications } = useNotifications();
   const { user } = useAuth();
   const { showError, showSuccess, showWarning } = useNotification();
 
@@ -134,7 +139,11 @@ export default function OnboardingScreen() {
     setCreatingMarks(true);
     try {
       const onboardingStartTime = new Date().toISOString();
-      await AsyncStorage.setItem('last_synced_at', onboardingStartTime);
+      await AsyncStorage.multiSet([
+        [LAST_PUSHED_AT_KEY, onboardingStartTime],
+        [LAST_PULLED_AT_KEY, onboardingStartTime],
+        [LEGACY_LAST_SYNCED_AT_KEY, onboardingStartTime],
+      ]);
 
       const ordered = [...selectedIndices].sort((a, b) => a - b);
       const created: ActivationMark[] = [];
@@ -208,6 +217,11 @@ export default function OnboardingScreen() {
       logger.warn('[Onboarding] Notification permission:', e);
     }
     try {
+      await updateSmartNotifications(user?.id);
+    } catch (e) {
+      logger.warn('[Onboarding] Notification reschedule:', e);
+    }
+    try {
       const remoteOk = await completeOnboarding(user?.id);
       if (user?.id && !remoteOk) {
         showWarning(
@@ -219,7 +233,7 @@ export default function OnboardingScreen() {
       logger.error('[Onboarding] Error finishing onboarding:', error);
       showError('Could not finish setup. Please try again.');
     }
-  }, [completeOnboarding, requestPermissions, router, user?.id, showWarning, showError]);
+  }, [completeOnboarding, requestPermissions, updateSmartNotifications, router, user?.id, showWarning, showError]);
 
   const handleFirstCompletion = async () => {
     if (!activationMark || !user?.id || incrementing || celebrated) return;

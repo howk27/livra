@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -16,7 +16,7 @@ import {
   Share,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter, type Href } from 'expo-router';
+import { useRouter, useFocusEffect, type Href } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as MailComposer from 'expo-mail-composer';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -39,8 +39,12 @@ import { useCounters } from '../../hooks/useCounters';
 import { useEventsStore } from '../../state/eventsSlice';
 import { GradientBackground } from '../../components/GradientBackground';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { clearSyncCursors } from '../../lib/sync/syncCursors';
+import { readSyncDiagSnapshot, type SyncDiagSnapshotV1 } from '../../lib/sync/syncDiagSnapshot';
 import { AppText } from '../../components/Typography';
+import { Card, PrimaryButton } from '../../components/ui';
 import { useNotification } from '../../contexts/NotificationContext';
+import { LIVRA_REMINDERS_ENABLED_KEY } from '../../lib/notifications/livraReminderPrefs';
 import { useCountersStore } from '../../state/countersSlice';
 import { logger } from '../../lib/utils/logger';
 import { BackupRestoreSection } from '../../components/BackupRestoreSection';
@@ -50,9 +54,24 @@ import { diagEvent } from '../../lib/debug/iapDiagnostics';
 import { setDiagnosticsUnlockedPersisted } from '../../lib/dev/diagnosticsUnlock';
 import Constants from 'expo-constants';
 import { applyOpacity } from '@/src/components/icons/color';
+import type { User } from '@supabase/supabase-js';
+import {
+  userHasEmailPasswordIdentity,
+  passwordCredentialNotApplicableMessage,
+} from '../../lib/auth/providerHints';
 
 /** Matches `tabBarStyle.height` in `app/(tabs)/_layout.tsx` (64 + safe area); tab bar is absolute so content must pad past it. */
 const TAB_BAR_CONTENT_HEIGHT = 64;
+
+function displayNameFromUserMetadata(user: User): string | null {
+  const meta = user.user_metadata as Record<string, unknown> | undefined;
+  if (!meta) return null;
+  for (const key of ['full_name', 'name', 'display_name'] as const) {
+    const v = meta[key];
+    if (typeof v === 'string' && v.trim()) return v.trim();
+  }
+  return null;
+}
 
 export default function SettingsScreen() {
   const theme = useEffectiveTheme();
@@ -84,6 +103,23 @@ export default function SettingsScreen() {
   const [showEmailInput, setShowEmailInput] = useState(false);
   const [changePasswordModalVisible, setChangePasswordModalVisible] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [profileDisplayName, setProfileDisplayName] = useState<string | null>(null);
+  /** Last successful core sync + maintenance metadata (AsyncStorage); not tied to this screen's `useSync` instance. */
+  const [persistedSyncDiag, setPersistedSyncDiag] = useState<SyncDiagSnapshotV1 | null>(null);
+
+  const refreshPersistedSyncDiag = useCallback(async () => {
+    setPersistedSyncDiag(await readSyncDiagSnapshot());
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshPersistedSyncDiag();
+    }, [refreshPersistedSyncDiag]),
+  );
+
+  useEffect(() => {
+    void refreshPersistedSyncDiag();
+  }, [syncState.lastSyncedAt, refreshPersistedSyncDiag]);
 
   // Hidden gesture for diagnostics (tap version 7 times within 1.5 seconds)
   const versionTapCount = useRef(0);
@@ -122,7 +158,44 @@ export default function SettingsScreen() {
     }, 1500);
   };
   
-  const profileName = user?.email ?? 'Guest user';
+  useEffect(() => {
+    if (!user?.id) {
+      setProfileDisplayName(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('display_name')
+          .eq('id', user.id)
+          .maybeSingle();
+        if (cancelled) return;
+        if (error) {
+          logger.warn('[Profile] Could not load display_name:', error.message);
+          setProfileDisplayName(null);
+          return;
+        }
+        const n = data?.display_name?.trim();
+        setProfileDisplayName(n || null);
+      } catch {
+        if (!cancelled) setProfileDisplayName(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, supabase]);
+
+  const profileName = useMemo(() => {
+    if (!user) return 'Guest user';
+    if (profileDisplayName) return profileDisplayName;
+    const fromMeta = displayNameFromUserMetadata(user);
+    if (fromMeta) return fromMeta;
+    return user.email ?? 'Guest user';
+  }, [user, profileDisplayName]);
+
   const profileHint = user
     ? 'Signed in and ready to sync.'
     : 'Sign in to sync safely across devices.';
@@ -219,7 +292,7 @@ export default function SettingsScreen() {
     };
 
     checkEmailVerification();
-  }, [user]);
+  }, [user?.id, user?.email_confirmed_at, user?.confirmed_at, supabase]);
 
   // Automatic polling for email verification status when unverified
   useEffect(() => {
@@ -253,19 +326,22 @@ export default function SettingsScreen() {
     };
   }, [isEmailVerified, user]);
 
-  // Listen for auth state changes to update verification status
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'USER_UPDATED' && session?.user) {
-        const isVerified = !!(session.user.email_confirmed_at || session.user.confirmed_at);
-        setIsEmailVerified(isVerified);
-      }
-    });
+  const canUsePasswordChange = useMemo(() => userHasEmailPasswordIdentity(user), [user]);
 
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, []);
+  const openChangePasswordUi = () => {
+    if (!canUsePasswordChange) {
+      Alert.alert('Password change unavailable', passwordCredentialNotApplicableMessage());
+      return;
+    }
+    if (!user?.email?.trim()) {
+      Alert.alert(
+        'Email required',
+        'We could not find an email address for password verification. Sign out and use Sign in with Apple, or contact support if you use email and this persists.',
+      );
+      return;
+    }
+    setChangePasswordModalVisible(true);
+  };
 
   const handleSignIn = () => {
     router.push('/auth/signin');
@@ -419,8 +495,8 @@ export default function SettingsScreen() {
           onPress: async () => {
             try {
               // Clear sync timestamp so next login pulls all data fresh
-              await AsyncStorage.removeItem('last_synced_at');
-              
+              await clearSyncCursors();
+
               // CRITICAL: Clear pro_unlocked to prevent next user from inheriting premium status
               // Premium status should be re-verified from database on next login
               await AsyncStorage.removeItem('pro_unlocked');
@@ -594,8 +670,7 @@ export default function SettingsScreen() {
   };
 
   const handleExportCSV = async () => {
-    // Check if user has premium
-    if (proStatus.status === 'unknown') {
+    if (!isProUnlocked && proStatus.verification === 'unverified' && proStatus.status === 'unknown') {
       Alert.alert(
         'Unable to Verify Subscription',
         'We could not verify your subscription status right now. Please check your connection and try again.',
@@ -743,42 +818,57 @@ export default function SettingsScreen() {
   }, [syncState.error, showError]);
 
   const handleChangePassword = async () => {
+    if (!canUsePasswordChange) {
+      showError(passwordCredentialNotApplicableMessage());
+      return;
+    }
+
+    const email = user?.email?.trim();
+    if (!email) {
+      showError(
+        'No email is available for this account, so we cannot verify a password. Use Sign in with Apple or contact support.',
+      );
+      return;
+    }
+
     if (!currentPassword.trim()) {
-        showError('Please enter your current password');
+      showError('Please enter your current password');
       return;
     }
 
     if (!newPassword.trim()) {
-        showError('Please enter a new password');
+      showError('Please enter a new password');
       return;
     }
 
     if (newPassword.length < 6) {
-        showError('Password must be at least 6 characters');
+      showError('Password must be at least 6 characters');
       return;
     }
 
     if (newPassword !== confirmPassword) {
-        showError('New passwords do not match');
+      showError('New passwords do not match');
       return;
     }
 
     setIsChangingPassword(true);
 
     try {
-      // Verify current password by attempting to sign in
       const { error: verifyError } = await supabase.auth.signInWithPassword({
-        email: user?.email || '',
+        email,
         password: currentPassword,
       });
 
       if (verifyError) {
-        showError('Current password is incorrect');
-        setIsChangingPassword(false);
+        const msg = verifyError.message?.toLowerCase() ?? '';
+        if (msg.includes('invalid login') || msg.includes('invalid credentials')) {
+          showError('Current password is incorrect.');
+        } else {
+          showError(toUserMessage(verifyError, 'Could not verify your current password. Try again.'));
+        }
         return;
       }
 
-      // Update password
       const { error: updateError } = await supabase.auth.updateUser({
         password: newPassword,
       });
@@ -786,14 +876,14 @@ export default function SettingsScreen() {
       if (updateError) {
         showError(toUserMessage(updateError, 'Failed to update password'));
       } else {
-        showSuccess('Password updated successfully!');
+        showSuccess('Password updated. Use your new password next time you sign in with email.');
         setCurrentPassword('');
         setNewPassword('');
         setConfirmPassword('');
         setIsProfileExpanded(false);
         setChangePasswordModalVisible(false);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       showError(toUserMessage(error, 'Failed to change password'));
     } finally {
       setIsChangingPassword(false);
@@ -879,6 +969,12 @@ export default function SettingsScreen() {
     setIsDeletingAccount(true);
 
     try {
+      try {
+        const { disableLivraLocalNotificationsNow } = await import('../../services/livraLocalNotificationOwner');
+        await disableLivraLocalNotificationsNow();
+      } catch {
+        /* ignore */
+      }
       // Delete all user data
       await deleteAllUserData(user.id);
       
@@ -999,9 +1095,8 @@ export default function SettingsScreen() {
 
       // 3. Clear all AsyncStorage data related to this user
       try {
-        // Clear sync timestamp
-        await AsyncStorage.removeItem('last_synced_at');
-        
+        await clearSyncCursors();
+
         // Clear profile image (only if it's the current user's)
         try {
           const currentProfileImage = await AsyncStorage.getItem('profile_image_uri');
@@ -1030,11 +1125,14 @@ export default function SettingsScreen() {
           logger.error('[Delete Account] Error clearing database storage keys:', error);
         }
 
-        // Reset onboarding flags (modern + legacy key)
+        // Reset onboarding flags (modern + legacy key) + Livra reminder prefs / engagement
         await AsyncStorage.multiRemove([
           ONBOARDING_COMPLETED_STORAGE_KEY,
           'is_onboarded',
           ONBOARDING_REMOTE_PENDING_KEY,
+          LIVRA_REMINDERS_ENABLED_KEY,
+          'livra_bn_engagement_v1',
+          'livra_bn_last_foreground_v1',
         ]);
       } catch (error) {
         logger.error('[Delete Account] Error clearing AsyncStorage:', error);
@@ -1044,7 +1142,7 @@ export default function SettingsScreen() {
       // Clear UI state (do this last to avoid hook errors)
       try {
         // Clear counters and events stores
-        useCountersStore.setState({ marks: [], loading: false, error: null });
+        useCountersStore.setState({ marks: [], loading: false, error: null, recentUpdates: new Map() });
         useEventsStore.setState({ events: [], loading: false, error: null });
       } catch (error) {
         logger.error('[Delete Account] Error clearing stores:', error);
@@ -1138,7 +1236,7 @@ export default function SettingsScreen() {
             >
               {profileName}
             </AppText>
-            {user && isProfileExpanded && user.email ? (
+            {user && isProfileExpanded && user.email && profileName !== user.email ? (
               <AppText variant="caption" style={[styles.identityEmail, { color: themeColors.textSecondary }]}>
                 {user.email}
               </AppText>
@@ -1179,23 +1277,37 @@ export default function SettingsScreen() {
               </TouchableOpacity>
             ) : null}
           </View>
-          {user && syncState.lastSyncedAt ? (
-            <AppText variant="caption" style={[styles.lastSyncedText, { color: themeColors.textTertiary }]}>
-              Last synced {new Date(syncState.lastSyncedAt).toLocaleTimeString()}
-            </AppText>
+          {user &&
+          (persistedSyncDiag?.coreSyncedAtIso || syncState.lastSyncedAt) ? (
+            <View>
+              <AppText variant="caption" style={[styles.lastSyncedText, { color: themeColors.textTertiary }]}>
+                Last synced{' '}
+                {new Date(
+                  persistedSyncDiag?.coreSyncedAtIso ?? syncState.lastSyncedAt ?? '',
+                ).toLocaleTimeString()}{' '}
+                (marks & events)
+              </AppText>
+              {(persistedSyncDiag?.maintenanceWarnings?.length ?? syncState.maintenanceWarnings.length) > 0 ? (
+                <AppText variant="caption" style={[styles.lastSyncedText, { color: themeColors.textTertiary }]}>
+                  Background maintenance incomplete — try syncing again later
+                </AppText>
+              ) : null}
+            </View>
           ) : null}
         </View>
 
         {!user ? (
-          <TouchableOpacity
-            style={[styles.primaryCta, { backgroundColor: themeColors.accent.primary }, shadow.sm]}
+          <PrimaryButton
             onPress={handleSignIn}
-            activeOpacity={0.88}
+            backgroundColor={themeColors.accent.primary}
+            indicatorColor={themeColors.text}
+            shadowVariant="sm"
+            accessibilityLabel="Sign in"
           >
             <AppText variant="button" style={{ color: themeColors.text, fontWeight: fontWeight.bold }}>
               Sign In
             </AppText>
-          </TouchableOpacity>
+          </PrimaryButton>
         ) : null}
 
         {/* Email Verification Banner - Only show when email is not verified */}
@@ -1253,106 +1365,114 @@ export default function SettingsScreen() {
           >
             <View style={[styles.expandedSection, { backgroundColor: themeColors.surface }]}>
               <AppText variant="caption" style={[styles.sectionTitle, { color: themeColors.textSecondary, marginBottom: spacing.md }]}>
-                Change Password
+                {canUsePasswordChange ? 'Change password' : 'Sign-in method'}
               </AppText>
-              
-              <View style={styles.inputContainer}>
-                <AppText variant="body" style={[styles.inputLabel, { color: themeColors.textSecondary }]}>
-                  Current Password
-                </AppText>
-                <TextInput
-                  style={[
-                    styles.input,
-                    {
-                      backgroundColor: themeColors.background,
-                      color: themeColors.text,
-                      borderColor: themeColors.border,
-                    },
-                  ]}
-                  placeholder="Enter current password"
-                  placeholderTextColor={themeColors.textTertiary}
-                  value={currentPassword}
-                  onChangeText={setCurrentPassword}
-                  secureTextEntry
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  editable={!isChangingPassword}
-                />
-              </View>
+              {canUsePasswordChange ? (
+                <>
+                  <View style={styles.inputContainer}>
+                    <AppText variant="body" style={[styles.inputLabel, { color: themeColors.textSecondary }]}>
+                      Current password
+                    </AppText>
+                    <TextInput
+                      style={[
+                        styles.input,
+                        {
+                          backgroundColor: themeColors.background,
+                          color: themeColors.text,
+                          borderColor: themeColors.border,
+                        },
+                      ]}
+                      placeholder="Enter current password"
+                      placeholderTextColor={themeColors.textTertiary}
+                      value={currentPassword}
+                      onChangeText={setCurrentPassword}
+                      secureTextEntry
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      editable={!isChangingPassword}
+                    />
+                  </View>
 
-              <View style={styles.inputContainer}>
-                <AppText variant="body" style={[styles.inputLabel, { color: themeColors.textSecondary }]}>
-                  New Password
-                </AppText>
-                <TextInput
-                  style={[
-                    styles.input,
-                    {
-                      backgroundColor: themeColors.background,
-                      color: themeColors.text,
-                      borderColor: themeColors.border,
-                    },
-                  ]}
-                  placeholder="Enter new password (min 6 characters)"
-                  placeholderTextColor={themeColors.textTertiary}
-                  value={newPassword}
-                  onChangeText={setNewPassword}
-                  secureTextEntry
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  editable={!isChangingPassword}
-                />
-              </View>
+                  <View style={styles.inputContainer}>
+                    <AppText variant="body" style={[styles.inputLabel, { color: themeColors.textSecondary }]}>
+                      New password
+                    </AppText>
+                    <TextInput
+                      style={[
+                        styles.input,
+                        {
+                          backgroundColor: themeColors.background,
+                          color: themeColors.text,
+                          borderColor: themeColors.border,
+                        },
+                      ]}
+                      placeholder="At least 6 characters"
+                      placeholderTextColor={themeColors.textTertiary}
+                      value={newPassword}
+                      onChangeText={setNewPassword}
+                      secureTextEntry
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      editable={!isChangingPassword}
+                    />
+                  </View>
 
-              <View style={styles.inputContainer}>
-                <AppText variant="body" style={[styles.inputLabel, { color: themeColors.textSecondary }]}>
-                  Confirm New Password
-                </AppText>
-                <TextInput
-                  style={[
-                    styles.input,
-                    {
-                      backgroundColor: themeColors.background,
-                      color: themeColors.text,
-                      borderColor: themeColors.border,
-                    },
-                  ]}
-                  placeholder="Confirm new password"
-                  placeholderTextColor={themeColors.textTertiary}
-                  value={confirmPassword}
-                  onChangeText={setConfirmPassword}
-                  secureTextEntry
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  editable={!isChangingPassword}
-                />
-              </View>
+                  <View style={styles.inputContainer}>
+                    <AppText variant="body" style={[styles.inputLabel, { color: themeColors.textSecondary }]}>
+                      Confirm new password
+                    </AppText>
+                    <TextInput
+                      style={[
+                        styles.input,
+                        {
+                          backgroundColor: themeColors.background,
+                          color: themeColors.text,
+                          borderColor: themeColors.border,
+                        },
+                      ]}
+                      placeholder="Confirm new password"
+                      placeholderTextColor={themeColors.textTertiary}
+                      value={confirmPassword}
+                      onChangeText={setConfirmPassword}
+                      secureTextEntry
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      editable={!isChangingPassword}
+                    />
+                  </View>
 
-              <TouchableOpacity
-                style={[
-                  styles.changePasswordButton,
-                  { backgroundColor: themeColors.accent.primary },
-                  isChangingPassword && styles.changePasswordButtonDisabled,
-                ]}
-                onPress={handleChangePassword}
-                disabled={isChangingPassword}
-              >
-                <AppText variant="button" style={[styles.changePasswordButtonText, { color: themeColors.text }]}>
-                  {isChangingPassword ? 'Changing Password...' : 'Change Password'}
+                  <TouchableOpacity
+                    style={[
+                      styles.changePasswordButton,
+                      { backgroundColor: themeColors.accent.primary },
+                      isChangingPassword && styles.changePasswordButtonDisabled,
+                    ]}
+                    onPress={handleChangePassword}
+                    disabled={isChangingPassword}
+                  >
+                    <AppText variant="button" style={[styles.changePasswordButtonText, { color: themeColors.text }]}>
+                      {isChangingPassword ? 'Updating…' : 'Update password'}
+                    </AppText>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <AppText variant="body" style={{ color: themeColors.textSecondary, lineHeight: 22 }}>
+                  {passwordCredentialNotApplicableMessage()}
                 </AppText>
-              </TouchableOpacity>
+              )}
             </View>
           </KeyboardAvoidingView>
         )}
 
         {/* Appearance */}
         <View style={styles.section}>
-          <Text style={[styles.sectionKicker, { color: themeColors.textTertiary }]}>Appearance</Text>
-          <View
-            style={[
-              styles.settingsCard,
-              { backgroundColor: themeColors.surface, borderColor: themeColors.border },
-            ]}
+          <AppText variant="caption" style={[styles.sectionKicker, { color: themeColors.textTertiary }]}>
+            Appearance
+          </AppText>
+          <Card
+            backgroundColor={themeColors.surface}
+            borderColor={themeColors.border}
+            borderRadiusKey="card"
           >
             <View style={styles.settingRowTall}>
               <View
@@ -1379,11 +1499,6 @@ export default function SettingsScreen() {
                 >
                   Dark Mode
                 </AppText>
-                <AppText variant="caption" style={{ color: themeColors.textSecondary, marginTop: 2 }}>
-                  {themeMode === 'dark'
-                    ? 'Optimal for nocturnal focus'
-                    : 'Warm surfaces for daytime'}
-                </AppText>
               </View>
               <Switch
                 value={themeMode === 'dark'}
@@ -1392,63 +1507,70 @@ export default function SettingsScreen() {
                 thumbColor={themeColors.surface}
               />
             </View>
-          </View>
+          </Card>
         </View>
 
         {/* Subscription */}
         <View style={styles.section}>
-          <Text style={[styles.sectionKicker, { color: themeColors.textTertiary }]}>Subscription</Text>
-          <View
-            style={[
-              styles.settingsCard,
-              { backgroundColor: themeColors.surface, borderColor: themeColors.border },
-            ]}
+          <AppText variant="caption" style={[styles.sectionKicker, { color: themeColors.textTertiary }]}>
+            Subscription
+          </AppText>
+          <Card
+            backgroundColor={themeColors.surface}
+            borderColor={themeColors.border}
+            borderRadiusKey="card"
           >
             <View style={styles.subscriptionBlock}>
               <View style={styles.subscriptionTitleRow}>
-                <View style={{ flex: 1 }}>
+                <View style={styles.subscriptionTitleSide} />
+                <View style={styles.subscriptionTitleCenter}>
                   <AppText
                     variant="body"
-                    style={{ color: themeColors.accent.primary, fontWeight: fontWeight.bold }}
+                    style={{
+                      color: themeColors.accent.primary,
+                      fontWeight: fontWeight.bold,
+                      textAlign: 'center',
+                    }}
                   >
                     {isProUnlocked ? 'Livra+ Unlocked' : 'Livra+'}
                   </AppText>
-                  <AppText variant="caption" style={{ color: themeColors.textSecondary, marginTop: 2 }}>
-                    {isProUnlocked
-                      ? 'Unlimited cloud backup and advanced analytics active.'
-                      : 'Unlimited marks, CSV export, and more.'}
-                  </AppText>
                 </View>
-                {isProUnlocked ? (
-                  <Ionicons name="checkmark-circle" size={24} color={themeColors.accent.primary} />
-                ) : null}
+                <View style={styles.subscriptionTitleSide}>
+                  {isProUnlocked ? (
+                    <Ionicons name="checkmark-circle" size={24} color={themeColors.accent.primary} />
+                  ) : null}
+                </View>
               </View>
-              <TouchableOpacity
-                style={[styles.primaryCta, { backgroundColor: themeColors.accent.primary }, shadow.sm]}
+              <PrimaryButton
                 onPress={() => router.push('/paywall')}
-                activeOpacity={0.88}
+                backgroundColor={themeColors.accent.primary}
+                indicatorColor={themeColors.text}
+                shadowVariant="sm"
+                accessibilityLabel={isProUnlocked ? 'Manage Livra+' : 'Unlock Livra+'}
               >
                 <AppText variant="button" style={{ color: themeColors.text, fontWeight: fontWeight.bold }}>
                   {isProUnlocked ? 'Manage Livra+' : 'Unlock Livra+'}
                 </AppText>
-              </TouchableOpacity>
+              </PrimaryButton>
             </View>
-          </View>
+          </Card>
         </View>
 
         {/* Data & Privacy */}
         <View style={styles.section}>
-          <Text style={[styles.sectionKicker, { color: themeColors.textTertiary }]}>Data & Privacy</Text>
+          <AppText variant="caption" style={[styles.sectionKicker, { color: themeColors.textTertiary }]}>
+            Data & Privacy
+          </AppText>
           {user ? (
-            <View
-              style={[
-                styles.settingsCard,
-                { backgroundColor: themeColors.surface, borderColor: themeColors.border, marginBottom: spacing.sm },
-              ]}
+            <Card
+              backgroundColor={themeColors.surface}
+              borderColor={themeColors.border}
+              borderRadiusKey="card"
+              style={{ marginBottom: spacing.sm }}
             >
               <TouchableOpacity
                 style={styles.settingRowTall}
-                onPress={() => setChangePasswordModalVisible(true)}
+                onPress={openChangePasswordUi}
                 activeOpacity={0.75}
               >
                 <View
@@ -1466,15 +1588,12 @@ export default function SettingsScreen() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <AppText variant="body" style={{ color: themeColors.text, fontWeight: fontWeight.semibold }}>
-                    Change Password
-                  </AppText>
-                  <AppText variant="caption" style={{ color: themeColors.textSecondary, marginTop: 2 }}>
-                    For accounts that sign in with email and password
+                    {canUsePasswordChange ? 'Change password' : 'Password & sign-in'}
                   </AppText>
                 </View>
                 <Ionicons name="chevron-forward-outline" size={18} color={themeColors.textTertiary} />
               </TouchableOpacity>
-            </View>
+            </Card>
           ) : null}
           <TouchableOpacity
             style={[
@@ -1657,118 +1776,131 @@ export default function SettingsScreen() {
         <SafeAreaView style={{ flex: 1, backgroundColor: themeColors.background }}>
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={{ flex: 1 }}
+            style={styles.changePasswordModalKeyboard}
             keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
           >
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                paddingHorizontal: spacing.lg,
-                paddingVertical: spacing.md,
-              }}
-            >
-              <TouchableOpacity
-                onPress={() => {
-                  if (!isChangingPassword) setChangePasswordModalVisible(false);
-                }}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            <View style={styles.changePasswordModalBody}>
+              <View style={styles.changePasswordModalHeader}>
+                <View style={[styles.changePasswordModalHeaderSide, styles.changePasswordModalHeaderSideStart]}>
+                  <TouchableOpacity
+                    onPress={() => {
+                      if (!isChangingPassword) setChangePasswordModalVisible(false);
+                    }}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <AppText style={{ color: themeColors.textSecondary }}>Cancel</AppText>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.changePasswordModalHeaderTitleWrap}>
+                  <AppText variant="headline" style={[styles.changePasswordModalTitle, { color: themeColors.text }]}>
+                    Change password
+                  </AppText>
+                </View>
+                <View style={styles.changePasswordModalHeaderSide} />
+              </View>
+              <ScrollView
+                contentContainerStyle={styles.changePasswordModalScrollContent}
+                keyboardShouldPersistTaps="handled"
               >
-                <AppText style={{ color: themeColors.textSecondary }}>Cancel</AppText>
-              </TouchableOpacity>
-              <AppText variant="headline" style={{ color: themeColors.text }}>
-                Change Password
-              </AppText>
-              <View style={{ width: 56 }} />
+                <View style={styles.changePasswordModalForm}>
+                  <View style={styles.inputContainer}>
+                    <AppText
+                      variant="body"
+                      style={[styles.inputLabel, styles.changePasswordModalLabel, { color: themeColors.textSecondary }]}
+                    >
+                      Current password
+                    </AppText>
+                    <TextInput
+                      style={[
+                        styles.input,
+                        styles.changePasswordModalInput,
+                        {
+                          backgroundColor: themeColors.surface,
+                          color: themeColors.text,
+                          borderColor: themeColors.border,
+                        },
+                      ]}
+                      placeholder="Enter current password"
+                      placeholderTextColor={themeColors.textTertiary}
+                      value={currentPassword}
+                      onChangeText={setCurrentPassword}
+                      secureTextEntry
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      editable={!isChangingPassword}
+                    />
+                  </View>
+                  <View style={styles.inputContainer}>
+                    <AppText
+                      variant="body"
+                      style={[styles.inputLabel, styles.changePasswordModalLabel, { color: themeColors.textSecondary }]}
+                    >
+                      New Password
+                    </AppText>
+                    <TextInput
+                      style={[
+                        styles.input,
+                        styles.changePasswordModalInput,
+                        {
+                          backgroundColor: themeColors.surface,
+                          color: themeColors.text,
+                          borderColor: themeColors.border,
+                        },
+                      ]}
+                      placeholder="Enter new password (min 6 characters)"
+                      placeholderTextColor={themeColors.textTertiary}
+                      value={newPassword}
+                      onChangeText={setNewPassword}
+                      secureTextEntry
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      editable={!isChangingPassword}
+                    />
+                  </View>
+                  <View style={styles.inputContainer}>
+                    <AppText
+                      variant="body"
+                      style={[styles.inputLabel, styles.changePasswordModalLabel, { color: themeColors.textSecondary }]}
+                    >
+                      Confirm New Password
+                    </AppText>
+                    <TextInput
+                      style={[
+                        styles.input,
+                        styles.changePasswordModalInput,
+                        {
+                          backgroundColor: themeColors.surface,
+                          color: themeColors.text,
+                          borderColor: themeColors.border,
+                        },
+                      ]}
+                      placeholder="Confirm new password"
+                      placeholderTextColor={themeColors.textTertiary}
+                      value={confirmPassword}
+                      onChangeText={setConfirmPassword}
+                      secureTextEntry
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      editable={!isChangingPassword}
+                    />
+                  </View>
+                  <TouchableOpacity
+                    style={[
+                      styles.changePasswordButton,
+                      styles.changePasswordModalButton,
+                      { backgroundColor: themeColors.accent.primary },
+                      isChangingPassword && styles.changePasswordButtonDisabled,
+                    ]}
+                    onPress={handleChangePassword}
+                    disabled={isChangingPassword}
+                  >
+                    <AppText variant="button" style={[styles.changePasswordButtonText, { color: themeColors.text }]}>
+                      {isChangingPassword ? 'Changing Password...' : 'Change Password'}
+                    </AppText>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
             </View>
-            <ScrollView
-              contentContainerStyle={{ padding: spacing.lg, paddingBottom: spacing['3xl'] }}
-              keyboardShouldPersistTaps="handled"
-            >
-              <View style={styles.inputContainer}>
-                <AppText variant="body" style={[styles.inputLabel, { color: themeColors.textSecondary }]}>
-                  Current Password
-                </AppText>
-                <TextInput
-                  style={[
-                    styles.input,
-                    {
-                      backgroundColor: themeColors.surface,
-                      color: themeColors.text,
-                      borderColor: themeColors.border,
-                    },
-                  ]}
-                  placeholder="Enter current password"
-                  placeholderTextColor={themeColors.textTertiary}
-                  value={currentPassword}
-                  onChangeText={setCurrentPassword}
-                  secureTextEntry
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  editable={!isChangingPassword}
-                />
-              </View>
-              <View style={styles.inputContainer}>
-                <AppText variant="body" style={[styles.inputLabel, { color: themeColors.textSecondary }]}>
-                  New Password
-                </AppText>
-                <TextInput
-                  style={[
-                    styles.input,
-                    {
-                      backgroundColor: themeColors.surface,
-                      color: themeColors.text,
-                      borderColor: themeColors.border,
-                    },
-                  ]}
-                  placeholder="Enter new password (min 6 characters)"
-                  placeholderTextColor={themeColors.textTertiary}
-                  value={newPassword}
-                  onChangeText={setNewPassword}
-                  secureTextEntry
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  editable={!isChangingPassword}
-                />
-              </View>
-              <View style={styles.inputContainer}>
-                <AppText variant="body" style={[styles.inputLabel, { color: themeColors.textSecondary }]}>
-                  Confirm New Password
-                </AppText>
-                <TextInput
-                  style={[
-                    styles.input,
-                    {
-                      backgroundColor: themeColors.surface,
-                      color: themeColors.text,
-                      borderColor: themeColors.border,
-                    },
-                  ]}
-                  placeholder="Confirm new password"
-                  placeholderTextColor={themeColors.textTertiary}
-                  value={confirmPassword}
-                  onChangeText={setConfirmPassword}
-                  secureTextEntry
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  editable={!isChangingPassword}
-                />
-              </View>
-              <TouchableOpacity
-                style={[
-                  styles.changePasswordButton,
-                  { backgroundColor: themeColors.accent.primary },
-                  isChangingPassword && styles.changePasswordButtonDisabled,
-                ]}
-                onPress={handleChangePassword}
-                disabled={isChangingPassword}
-              >
-                <AppText variant="button" style={[styles.changePasswordButtonText, { color: themeColors.text }]}>
-                  {isChangingPassword ? 'Changing Password...' : 'Change Password'}
-                </AppText>
-              </TouchableOpacity>
-            </ScrollView>
           </KeyboardAvoidingView>
         </SafeAreaView>
       </Modal>
@@ -1843,7 +1975,7 @@ const styles = StyleSheet.create({
   syncDot: {
     width: 8,
     height: 8,
-    borderRadius: 4,
+    borderRadius: borderRadius.sm,
   },
   syncPill: {
     paddingHorizontal: spacing.sm,
@@ -1859,11 +1991,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1.6,
     marginBottom: spacing.sm,
     textTransform: 'uppercase',
-  },
-  settingsCard: {
-    borderRadius: borderRadius.card,
-    borderWidth: StyleSheet.hairlineWidth,
-    overflow: 'hidden',
   },
   settingRowTall: {
     flexDirection: 'row',
@@ -1885,15 +2012,19 @@ const styles = StyleSheet.create({
   },
   subscriptionTitleRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.md,
-  },
-  primaryCta: {
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    borderRadius: borderRadius.lg,
     alignItems: 'center',
-    width: '100%',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  subscriptionTitleCenter: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  subscriptionTitleSide: {
+    width: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   csvButton: {
     flexDirection: 'row',
@@ -1920,7 +2051,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   versionCaps: {
-    fontSize: 10,
+    fontSize: fontSize.xs,
     letterSpacing: 1.2,
     textAlign: 'center',
     textTransform: 'uppercase',
@@ -1973,12 +2104,12 @@ const styles = StyleSheet.create({
   },
   resendButtonText: {
     fontWeight: '600',
-    fontSize: 13,
+    fontSize: fontSize.sm,
   },
   avatarContainer: {
     width: 56,
     height: 56,
-    borderRadius: 28,
+    borderRadius: borderRadius.full,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
@@ -1987,7 +2118,7 @@ const styles = StyleSheet.create({
   avatarImage: {
     width: 56,
     height: 56,
-    borderRadius: 28,
+    borderRadius: borderRadius.full,
   },
   avatarText: {
     textTransform: 'uppercase',
@@ -1998,7 +2129,7 @@ const styles = StyleSheet.create({
     right: -6,
     width: 24,
     height: 24,
-    borderRadius: 12,
+    borderRadius: borderRadius.lg,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
@@ -2089,6 +2220,60 @@ const styles = StyleSheet.create({
   },
   changePasswordButtonText: {
     textAlign: 'center',
+  },
+  changePasswordModalKeyboard: {
+    flex: 1,
+  },
+  changePasswordModalBody: {
+    flex: 1,
+    paddingTop: spacing['3xl'],
+  },
+  changePasswordModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.lg,
+  },
+  changePasswordModalHeaderSide: {
+    width: 88,
+    justifyContent: 'center',
+  },
+  changePasswordModalHeaderSideStart: {
+    alignItems: 'flex-start',
+  },
+  changePasswordModalHeaderTitleWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 0,
+  },
+  changePasswordModalTitle: {
+    textAlign: 'center',
+    alignSelf: 'stretch',
+  },
+  changePasswordModalScrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing['3xl'],
+    alignItems: 'center',
+  },
+  changePasswordModalForm: {
+    width: '100%',
+    maxWidth: 400,
+    alignSelf: 'center',
+  },
+  changePasswordModalLabel: {
+    textAlign: 'center',
+    alignSelf: 'stretch',
+  },
+  changePasswordModalInput: {
+    width: '100%',
+    alignSelf: 'center',
+  },
+  changePasswordModalButton: {
+    alignSelf: 'stretch',
+    width: '100%',
   },
   signOutButton: {
     borderWidth: 1,
