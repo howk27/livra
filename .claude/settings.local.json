@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx jest *)",
+      "Bash(npm run *)",
+      "Bash(npm install *)",
+      "Bash(Read /tmp/claude-1000/-mnt-c-Users-DEIVI-Desktop-Livra/44d8ecb9-812a-40df-a5de-d5637a7a94a3/tasks/br67xebd2.output)",
+      "Bash(node_modules/.bin/tsc --noEmit --skipLibCheck)",
+      "Bash(node_modules/.bin/jest *)"
+    ]
+  }
+}

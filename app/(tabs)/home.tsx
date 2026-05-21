@@ -46,8 +46,9 @@ import { useAppDateStore } from '../../state/appDateSlice';
 import { getAppDate } from '../../lib/appDate';
 import { formatDate } from '../../lib/date';
 import { subDays } from 'date-fns';
-import { DailyProgressCard } from '../../components/DailyProgressCard';
+import { HomeHeader } from '../../components/HomeHeader';
 import { WeeklySummaryStrip } from '../../components/WeeklySummaryStrip';
+import type { HeaderState, WeekArcState, PostLogState } from '../../lib/copy';
 import { deriveStreakForMark } from '../../hooks/useStreaks';
 
 const APP_BRAND_LOGO_LIGHT = require('../../assets/branding/Logo NoBG.png');
@@ -306,6 +307,94 @@ export default function HomeScreen() {
     }
     prevOverallStreakRef.current = overallStreakDays;
   }, [overallStreakDays]);
+
+  // ── 3/3 ceremony token ───────────────────────────────────────────────
+  const [ceremonyToken, setCeremonyToken] = useState(0);
+  const prevCompletedRef = useRef(0);
+  useEffect(() => {
+    if (completedMarksToday >= activeMarkCount && activeMarkCount > 0 && completedMarksToday > prevCompletedRef.current) {
+      setCeremonyToken(t => t + 1);
+    }
+    prevCompletedRef.current = completedMarksToday;
+  }, [completedMarksToday, activeMarkCount]);
+
+  // ── Days since last log (for MarkCard State 5) ────────────────────────
+  const daysSinceLastLogByMark = useMemo(() => {
+    const map = new Map<string, number>();
+    const today = getAppDate();
+    uniqueCounters.forEach(c => {
+      if (c.deleted_at) return;
+      const markEvents = allEvents.filter(e => e.mark_id === c.id && !e.deleted_at && e.event_type === 'increment');
+      if (markEvents.length === 0) { map.set(c.id, -1); return; }
+      const lastDate = markEvents.reduce((latest, e) => e.occurred_local_date > latest ? e.occurred_local_date : latest, '');
+      const diff = Math.floor((today.getTime() - new Date(lastDate).getTime()) / 86400000);
+      map.set(c.id, diff);
+    });
+    return map;
+  }, [uniqueCounters, allEvents, appDateKey]);
+
+  // ── Mark colors for header segments ──────────────────────────────────
+  const markColorsOrdered = useMemo(
+    () => localCounters.filter(c => !c.deleted_at).map(c => c.color || themeColors.primary),
+    [localCounters, themeColors.primary],
+  );
+
+  // ── Header + week arc state objects for HomeHeader ───────────────────
+  const headerState: HeaderState = useMemo(() => {
+    const lastLogDate = allEvents
+      .filter(e => !e.deleted_at && e.event_type === 'increment')
+      .reduce((latest, e) => e.occurred_local_date > latest ? e.occurred_local_date : latest, '');
+    const daysSinceLastLog = lastLogDate
+      ? Math.floor((getAppDate().getTime() - new Date(lastLogDate).getTime()) / 86400000)
+      : -1;
+    return {
+      completedToday: completedMarksToday,
+      totalMarks: activeMarkCount,
+      streakDays: overallStreakDays,
+      now: getAppDate(),
+      daysSinceLastLog,
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [completedMarksToday, activeMarkCount, overallStreakDays, allEvents, appDateKey]);
+
+  const weekLoggedDays = useMemo(() => {
+    const anchor = getAppDate();
+    const dow = anchor.getDay();
+    const monday = new Date(anchor);
+    monday.setDate(anchor.getDate() - ((dow + 6) % 7));
+    monday.setHours(0, 0, 0, 0);
+    const dates = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(monday); d.setDate(monday.getDate() + i);
+      return formatDate(d);
+    });
+    const active = new Set(allEvents.filter(e => !e.deleted_at && e.event_type === 'increment' && dates.includes(e.occurred_local_date)).map(e => e.occurred_local_date));
+    return active.size;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allEvents, appDateKey]);
+
+  const weekArcState: WeekArcState = useMemo(() => {
+    const now = getAppDate();
+    const dow = now.getDay();
+    const anchor = now;
+    const monday = new Date(anchor);
+    monday.setDate(anchor.getDate() - ((dow + 6) % 7));
+    monday.setHours(0, 0, 0, 0);
+    const dates = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(monday); d.setDate(monday.getDate() + i); return formatDate(d);
+    });
+    const todayIdx = (dow + 6) % 7;
+    const active = new Set(allEvents.filter(e => !e.deleted_at && e.event_type === 'increment' && dates.includes(e.occurred_local_date)).map(e => e.occurred_local_date));
+    const isPerfectWeekSoFar = dates.slice(0, todayIdx + 1).every(d => active.has(d));
+    return { now, weekLoggedDays: active.size, isPerfectWeekSoFar };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allEvents, appDateKey]);
+
+  const postLogState: PostLogState = useMemo(() => ({
+    streakDays: overallStreakDays,
+    isReturning: (headerState.daysSinceLastLog ?? 0) >= 3,
+    isCompleting3of3: completedMarksToday >= activeMarkCount && activeMarkCount > 0,
+    isNearMiss: false,
+  }), [overallStreakDays, headerState.daysSinceLastLog, completedMarksToday, activeMarkCount]);
 
   const [momentumHighlight, setMomentumHighlight] = useState(false);
   useEffect(() => {
@@ -899,6 +988,11 @@ export default function HomeScreen() {
     ({ item, section }: { item: Counter; section: { key: string } }) => {
       const isCompleted = section.key === 'done-today';
       const goalMet = (todayCountsMap.get(item.id) ?? 0) >= resolveDailyTarget(item);
+      const willCompleteAll =
+        !goalMet &&
+        ((todayCountsMap.get(item.id) ?? 0) + 1 >= resolveDailyTarget(item)) &&
+        completedMarksToday + 1 >= activeMarkCount;
+
       return (
         <HabitRowCounter
           counter={item}
@@ -917,9 +1011,11 @@ export default function HomeScreen() {
           isActive={!isCompleted && item.id === activeMarkId}
           nearCompletion={nearCompletionMap.get(item.id) ?? null}
           hasNote={noteMarkIdsToday.has(item.id)}
+          daysSinceLastLog={daysSinceLastLogByMark.get(item.id) ?? 0}
           weekCompletedDays={weekCompletionMap.get(item.id)}
           onPress={() => handleCounterPress(item.id)}
           onIncrement={() => handleQuickIncrement(item.id)}
+          onAllComplete={willCompleteAll ? () => setCeremonyToken(t => t + 1) : undefined}
           iconType={resolveCounterIconType(item)}
         />
       );
@@ -1004,42 +1100,23 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* ── Inline progress (flat, no card) — hidden in edit mode ── */}
+        {/* ── Living header + progress segments — hidden in edit mode ── */}
         {!isEditMode && activeMarkCount > 0 && (
           <>
-            <DailyProgressCard
-              completedToday={completedMarksToday}
+            <HomeHeader
+              headerState={headerState}
+              weekArcState={weekArcState}
+              postLogState={postLogState}
+              markColors={markColorsOrdered}
               totalMarks={activeMarkCount}
-              directionalMessage={directionalMessage}
-              streakDays={overallStreakDays}
-              streakPulseToken={streakPulseToken}
-              allMarksComplete={completedMarksToday >= activeMarkCount}
-              momentumHighlight={momentumHighlight}
-              flat
+              completedToday={completedMarksToday}
+              ceremonyToken={ceremonyToken}
             />
             <WeeklySummaryStrip
               onPress={() => router.navigate('/(tabs)/tracking')}
               incompleteMarksToday={incompleteMarksToday}
               hasPartialProgressToday={hasPartialProgressToday}
             />
-            {multiHintLoaded && hasMultiTargetMark && !multiHintDismissed && (
-              <TouchableOpacity
-                style={[styles.inlineHint, { borderColor: themeColors.border, backgroundColor: themeColors.surfaceVariant }]}
-                activeOpacity={0.85}
-                onPress={async () => {
-                  setMultiHintDismissed(true);
-                  try {
-                    await AsyncStorage.setItem('@livra_hint_multi_target_dismissed', '1');
-                  } catch {
-                    /* ignore */
-                  }
-                }}
-              >
-                <AppText style={[styles.inlineHintText, { color: themeColors.textSecondary }]}>
-                  Multi-tap marks fill segments until the daily target is met. Tap to dismiss.
-                </AppText>
-              </TouchableOpacity>
-            )}
           </>
         )}
 

@@ -1,143 +1,114 @@
+/**
+ * WeeklySummaryStrip — Livra 2.0
+ * Week arc copy from lib/copy.ts. Tappable → tracking screen.
+ */
 import React, { useMemo } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { colors } from '../theme/colors';
-import { spacing, borderRadius, fontWeight } from '../theme/tokens';
+import { spacing, borderRadius, fontWeight, fontSize } from '../theme/tokens';
 import { useEventsStore } from '../state/eventsSlice';
 import { getAppDate } from '../lib/appDate';
 import { useAppDateStore } from '../state/appDateSlice';
+import { formatDate } from '../lib/date';
+import { subDays } from 'date-fns';
+import { getWeekArc } from '../lib/copy';
+import { AppText } from './Typography';
 
 function getWeekDates(anchor: Date): string[] {
-  const today = anchor;
-  const dayOfWeek = today.getDay();
-  const monday = new Date(today);
-  monday.setDate(today.getDate() - ((dayOfWeek + 6) % 7));
+  const dayOfWeek = anchor.getDay();
+  const monday = new Date(anchor);
+  monday.setDate(anchor.getDate() - ((dayOfWeek + 6) % 7));
   monday.setHours(0, 0, 0, 0);
-  const dates: string[] = [];
-  for (let i = 0; i < 7; i++) {
+  return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(monday);
     d.setDate(monday.getDate() + i);
-    dates.push(
-      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
-    );
-  }
-  return dates;
-}
-
-function getWeeklyMessage(activeDays: number): string {
-  if (activeDays >= 7) return 'perfect week locked in';
-  if (activeDays >= 5) return "don't break the streak";
-  if (activeDays >= 3) return 'building momentum';
-  if (activeDays >= 1) return 'keep the week alive';
-  return 'start strong';
+    return formatDate(d);
+  });
 }
 
 interface WeeklySummaryStripProps {
   onPress: () => void;
-  /** Marks not yet completed today (0 = all done) */
   incompleteMarksToday?: number;
-  /** Any mark has progress but is not complete */
   hasPartialProgressToday?: boolean;
 }
 
-export const WeeklySummaryStrip: React.FC<WeeklySummaryStripProps> = ({
-  onPress,
-  incompleteMarksToday,
-  hasPartialProgressToday,
-}) => {
+export const WeeklySummaryStrip: React.FC<WeeklySummaryStripProps> = ({ onPress }) => {
   const theme = useEffectiveTheme();
   const themeColors = colors[theme];
   const isDark = theme === 'dark';
   const appDateKey = useAppDateStore((s) => s.debugDateOverride ?? '');
   const allEvents = useEventsStore(s => s.events);
+  const now = getAppDate();
 
-  const activeDays = useMemo(() => {
-    const dates = getWeekDates(getAppDate());
+  const { weekLoggedDays, isPerfectWeekSoFar } = useMemo(() => {
+    const dates = getWeekDates(now);
+    const todayIndex = ((now.getDay() + 6) % 7); // Mon=0
     const activeDatesSet = new Set<string>();
     allEvents.forEach(e => {
-      if (e.deleted_at) return;
-      if (e.event_type !== 'increment') return;
-      if (dates.includes(e.occurred_local_date)) {
-        activeDatesSet.add(e.occurred_local_date);
-      }
+      if (e.deleted_at || e.event_type !== 'increment') return;
+      if (dates.includes(e.occurred_local_date)) activeDatesSet.add(e.occurred_local_date);
     });
-    return activeDatesSet.size;
+    const weekLoggedDays = activeDatesSet.size;
+    // Perfect so far: every day from Mon up to today has activity
+    const daysToCheck = dates.slice(0, todayIndex + 1);
+    const isPerfectWeekSoFar = daysToCheck.length > 0 && daysToCheck.every(d => activeDatesSet.has(d));
+    return { weekLoggedDays, isPerfectWeekSoFar };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allEvents, appDateKey]);
 
-  let message = `${activeDays}/7 - ${getWeeklyMessage(activeDays)}`;
-  if (
-    typeof incompleteMarksToday === 'number' &&
-    incompleteMarksToday === 1 &&
-    hasPartialProgressToday
-  ) {
-    message = `${activeDays}/7 - one more to close today`;
-  } else if (
-    typeof incompleteMarksToday === 'number' &&
-    incompleteMarksToday >= 2 &&
-    hasPartialProgressToday
-  ) {
-    message = `${activeDays}/7 - finish today's marks`;
-  }
-  const ctaAccent = activeDays >= 5 ? themeColors.accent.primary : themeColors.counter.teal;
+  const message = getWeekArc({ now, weekLoggedDays, isPerfectWeekSoFar });
+  const accentColor = weekLoggedDays >= 5 ? themeColors.accent.primary : themeColors.textTertiary;
 
   return (
     <TouchableOpacity
       style={[
         styles.container,
         {
-          backgroundColor: themeColors.surfaceVariant,
-          borderColor: isDark ? 'rgba(255,255,255,0.10)' : themeColors.border,
+          backgroundColor: 'transparent',
+          borderColor: isDark ? 'rgba(255,255,255,0.08)' : applyOpacity(themeColors.border, 0.5),
         },
       ]}
       onPress={onPress}
-      activeOpacity={0.78}
+      activeOpacity={0.70}
     >
       <View style={styles.row}>
-        <Text style={[styles.title, { color: themeColors.textSecondary }]}>
-          <Text style={{ color: ctaAccent, fontWeight: fontWeight.semibold }}>{message.split(' - ')[0]}</Text>
-          <Text style={{ color: themeColors.text }}> - {message.split(' - ')[1]}</Text>
-        </Text>
-        <View style={styles.ctaRow}>
-          <Text style={[styles.ctaText, { color: ctaAccent }]}>Review</Text>
-          <Ionicons name="chevron-forward-outline" size={14} color={ctaAccent} />
-        </View>
+        <AppText style={[styles.message, { color: themeColors.textSecondary }]}>
+          {message}
+        </AppText>
+        <Ionicons name="chevron-forward-outline" size={13} color={accentColor} />
       </View>
     </TouchableOpacity>
   );
 };
 
+function applyOpacity(hex: string, opacity: number): string {
+  const alpha = Math.round(opacity * 255).toString(16).padStart(2, '0');
+  return hex.replace('#', '#') + alpha;
+}
+
 const styles = StyleSheet.create({
   container: {
     marginHorizontal: spacing.lg,
-    marginBottom: spacing.md,
-    marginTop: spacing.xs,
+    marginBottom: spacing.sm,
+    marginTop: spacing.xxs,
     borderRadius: borderRadius.md,
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.md,
-    minHeight: 44,
+    minHeight: 36,
     justifyContent: 'center',
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
+    justifyContent: 'space-between',
   },
-  title: {
-    fontSize: 12,
+  message: {
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.medium,
+    letterSpacing: 0.1,
     flex: 1,
-    lineHeight: 16,
-  },
-  ctaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xxs,
-    paddingLeft: spacing.xs,
-  },
-  ctaText: {
-    fontSize: 12,
-    fontWeight: fontWeight.semibold,
-    letterSpacing: 0.2,
   },
 });
