@@ -29,7 +29,7 @@ import {
   recordBehaviorNotificationTap,
   recordBehaviorAppForeground,
 } from '../services/behaviorNotifications';
-import { requestLivraLocalNotificationReschedule } from '../services/livraLocalNotificationOwner';
+import { scheduleContextualDailyNotification } from '../lib/notificationSystem';
 import { getSupabaseClient } from '../lib/supabase';
 
 const queryClient = new QueryClient();
@@ -78,7 +78,7 @@ export default function RootLayout() {
     const responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
       handleBehaviorResponse(response);
       void recordBehaviorAppForeground();
-      requestLivraLocalNotificationReschedule(user?.id);
+      if (user?.id) scheduleContextualDailyNotification(user.id).catch(() => {});
     });
 
     const onAppState = (next: AppStateStatus) => {
@@ -87,7 +87,7 @@ export default function RootLayout() {
       appStateRef.current = next;
       if (next === 'active' && wasBackground) {
         void recordBehaviorAppForeground();
-        requestLivraLocalNotificationReschedule(user?.id);
+        if (user?.id) scheduleContextualDailyNotification(user.id).catch(() => {});
       }
     };
     const appSub = AppState.addEventListener('change', onAppState);

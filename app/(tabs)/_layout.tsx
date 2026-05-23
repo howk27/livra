@@ -242,12 +242,16 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="settings"
+        name="profile"
         options={{
           title: 'Profile',
           tabBarIcon: createTabBarIcon({ focused: 'person', unfocused: 'person-outline' }, themeColors),
           tabBarLabel: createTabBarLabel('Profile', themeColors),
         }}
+      />
+      <Tabs.Screen
+        name="settings"
+        options={{ href: null }}
       />
         </Tabs>
         <FloatingActionButton />

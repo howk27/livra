@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
 import * as Notifications from 'expo-notifications';
-import { analyzeCountersForNotifications, updateNotifications, NotificationAnalysis } from '../services/notificationService';
+import { analyzeCountersForNotifications, NotificationAnalysis } from '../services/notificationService';
 import {
   getLivraRemindersEnabled,
   setLivraRemindersEnabled as persistLivraRemindersEnabledPref,
 } from '../lib/notifications/livraReminderPrefs';
 import { applyLivraRemindersPreference } from '../services/livraLocalNotificationOwner';
+import { scheduleContextualDailyNotification } from '../lib/notificationSystem';
 
 // Configure notification behavior (banners for delivered push/local notifications)
 Notifications.setNotificationHandler({
@@ -71,14 +72,16 @@ export const useNotifications = () => {
     return await analyzeCountersForNotifications(userId);
   }, []);
 
-  /** Coalesced reschedule via `livraLocalNotificationOwner` (behavior DATE model only). */
+  /** Schedule contextual daily notification using the 5-tier system. */
   const updateSmartNotifications = useCallback(
     async (userId?: string) => {
       if (!state.permissionGranted) {
         const granted = await requestPermissions();
         if (!granted) return;
       }
-      await updateNotifications(userId);
+      if (userId) {
+        await scheduleContextualDailyNotification(userId);
+      }
     },
     [state.permissionGranted, requestPermissions],
   );

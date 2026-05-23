@@ -1,26 +1,35 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
   ActivityIndicator,
-  Animated,
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  withDelay,
+  withRepeat,
+  withSequence,
+  Easing,
+  interpolate,
+} from 'react-native-reanimated';
+import { Ionicons } from '@expo/vector-icons';
 import {
   LAST_PUSHED_AT_KEY,
   LAST_PULLED_AT_KEY,
   LEGACY_LAST_SYNCED_AT_KEY,
 } from '../lib/sync/syncCursors';
-import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { colors } from '../theme/colors';
-import { spacing, borderRadius, fontSize, fontWeight, shadow } from '../theme/tokens';
+import { spacing, borderRadius, fontSize, fontWeight } from '../theme/tokens';
 import { useEffectiveTheme, useUIStore } from '../state/uiSlice';
 import { useCounters } from '../hooks/useCounters';
 import { useNotifications } from '../hooks/useNotifications';
@@ -29,17 +38,20 @@ import { DuplicateCounterError, DuplicateMarkError } from '../state/countersSlic
 import { query } from '../lib/db';
 import { useNotification } from '../contexts/NotificationContext';
 import { logger } from '../lib/utils/logger';
-import CounterIcon from '@/src/components/icons/CounterIcon';
-import { resolveCounterIconType } from '@/src/components/icons/IconResolver';
-import { applyOpacity } from '@/src/components/icons/color';
-import { BigIncrementButton } from '../components/BigIncrementButton';
 
-const SAMPLE_COUNTERS = [
-  { name: 'Gym Sessions', emoji: '🏋️', color: '#3B82F6', unit: 'sessions' as const },
-  { name: 'Books Read', emoji: '📖', color: '#10B981', unit: 'items' as const },
-  { name: 'Meditation Days', emoji: '🧘', color: '#A855F7', unit: 'days' as const },
-  { name: 'Water Bottles', emoji: '💧', color: '#06B6D4', unit: 'items' as const },
-  { name: 'Study Hours', emoji: '📚', color: '#F97316', unit: 'sessions' as const },
+const ONBOARDING_MARKS = [
+  { name: 'Workout', emoji: '💪', color: '#3B82F6', unit: 'sessions' as const },
+  { name: 'Steps', emoji: '👟', color: '#F97316', unit: 'items' as const },
+  { name: 'Sleep', emoji: '🌙', color: '#10B981', unit: 'days' as const },
+];
+
+const QUESTION_WORDS = 'What do you keep meaning to do?'.split(' ');
+
+const FRAME_LINES = [
+  'Most people quit by day 4.',
+  'You probably will too.',
+  'But if you come back on day 5...',
+  '...something starts to change.',
 ];
 
 type ActivationMark = {
@@ -50,7 +62,124 @@ type ActivationMark = {
   unit?: string | null;
 };
 
-type Phase = 'loading' | 'select' | 'activate';
+type Phase = 'loading' | 'intro' | 'frame' | 'activate';
+
+function AnimatedWord({ word, delay }: { word: string; delay: number }) {
+  const progress = useSharedValue(0);
+
+  useEffect(() => {
+    progress.value = withDelay(delay, withTiming(1, { duration: 300, easing: Easing.out(Easing.quad) }));
+  }, [delay, progress]);
+
+  const animStyle = useAnimatedStyle(() => ({
+    opacity: progress.value,
+    transform: [{ translateY: interpolate(progress.value, [0, 1], [8, 0]) }],
+  }));
+
+  return <Animated.Text style={[wordStyles.word, animStyle]}>{word} </Animated.Text>;
+}
+
+const wordStyles = StyleSheet.create({
+  word: {
+    fontSize: fontSize['2xl'],
+    fontWeight: fontWeight.bold,
+    color: '#FFFFFF',
+    lineHeight: fontSize['2xl'] * 1.45,
+  },
+});
+
+function MarkCard({
+  mark,
+  selected,
+  index,
+  onPress,
+}: {
+  mark: (typeof ONBOARDING_MARKS)[0];
+  selected: boolean;
+  index: number;
+  onPress: () => void;
+}) {
+  const slideY = useSharedValue(60);
+  const opacity = useSharedValue(0);
+  const scale = useSharedValue(1);
+
+  useEffect(() => {
+    const entryDelay = 900 + index * 140;
+    slideY.value = withDelay(entryDelay, withSpring(0, { damping: 18, stiffness: 160 }));
+    opacity.value = withDelay(entryDelay, withTiming(1, { duration: 220 }));
+  }, [index, slideY, opacity]);
+
+  useEffect(() => {
+    scale.value = withSpring(selected ? 1.03 : 1, { damping: 14, stiffness: 220 });
+  }, [selected, scale]);
+
+  const containerStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ translateY: slideY.value }, { scale: scale.value }],
+  }));
+
+  return (
+    <Animated.View style={containerStyle}>
+      <TouchableOpacity
+        style={[
+          markCardStyles.card,
+          selected
+            ? { borderColor: mark.color, borderWidth: 2 }
+            : { borderColor: 'rgba(255,255,255,0.08)', borderWidth: 1 },
+        ]}
+        onPress={onPress}
+        activeOpacity={0.72}
+      >
+        <Text style={markCardStyles.emoji}>{mark.emoji}</Text>
+        <Text style={markCardStyles.name}>{mark.name}</Text>
+        {selected && <View style={[markCardStyles.dot, { backgroundColor: mark.color }]} />}
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
+const markCardStyles = StyleSheet.create({
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: borderRadius.lg,
+    padding: spacing.lg,
+    marginBottom: spacing.sm,
+    gap: spacing.md,
+  },
+  emoji: { fontSize: 28 },
+  name: {
+    flex: 1,
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.semibold,
+    color: '#FFFFFF',
+  },
+  dot: { width: 10, height: 10, borderRadius: 5 },
+});
+
+function BouncingArrow({ color }: { color: string }) {
+  const ty = useSharedValue(0);
+
+  useEffect(() => {
+    ty.value = withRepeat(
+      withSequence(
+        withTiming(10, { duration: 700, easing: Easing.inOut(Easing.quad) }),
+        withTiming(0, { duration: 700, easing: Easing.inOut(Easing.quad) }),
+      ),
+      -1,
+      false,
+    );
+  }, [ty]);
+
+  const animStyle = useAnimatedStyle(() => ({ transform: [{ translateY: ty.value }] }));
+
+  return (
+    <Animated.View style={animStyle}>
+      <Ionicons name="chevron-down" size={26} color={color} />
+    </Animated.View>
+  );
+}
 
 export default function OnboardingScreen() {
   const theme = useEffectiveTheme();
@@ -61,81 +190,74 @@ export default function OnboardingScreen() {
   const { createCounter, incrementCounter } = useCounters();
   const { requestPermissions, updateSmartNotifications } = useNotifications();
   const { user } = useAuth();
-  const { showError, showSuccess, showWarning } = useNotification();
+  const { showError, showWarning } = useNotification();
 
   const [phase, setPhase] = useState<Phase>('loading');
   const [selectedIndices, setSelectedIndices] = useState<number[]>([]);
   const [activationMark, setActivationMark] = useState<ActivationMark | null>(null);
   const [creatingMarks, setCreatingMarks] = useState(false);
-  const [incrementing, setIncrementing] = useState(false);
-  const [celebrated, setCelebrated] = useState(false);
+  const [tapped, setTapped] = useState(false);
 
-  const scaleAnims = useRef(SAMPLE_COUNTERS.map(() => new Animated.Value(1))).current;
+  // Frame phase: sequential line reveals
+  const [visibleLines, setVisibleLines] = useState(0);
+  const [showFrameButton, setShowFrameButton] = useState(false);
 
-  const pulseSelect = useCallback((index: number, selected: boolean) => {
-    Animated.spring(scaleAnims[index], {
-      toValue: selected ? 1.03 : 1,
-      friction: 7,
-      tension: 140,
-      useNativeDriver: true,
-    }).start();
-  }, [scaleAnims]);
+  // Activate phase animations
+  const cardOpacity = useSharedValue(0.6);
+  const overlayOpacity = useSharedValue(1);
+  const iconScale = useSharedValue(1);
+  const cardScale = useSharedValue(1);
+  const [activateHeader, setActivateHeader] = useState('Your first mark is waiting.');
 
   useEffect(() => {
     let cancelled = false;
-
-    const resolveEntryPhase = async () => {
+    const resolve = async () => {
       if (!user?.id) {
-        if (!cancelled) setPhase('select');
+        if (!cancelled) setPhase('intro');
         return;
       }
-
       try {
         const rows = await query<ActivationMark>(
           `SELECT id, name, emoji, color, unit FROM lc_counters WHERE user_id = ? AND deleted_at IS NULL ORDER BY sort_index ASC, created_at ASC LIMIT 1`,
           [user.id],
         );
-
         if (cancelled) return;
-
         if (rows?.length) {
           setActivationMark(rows[0]);
           setPhase('activate');
         } else {
-          setPhase('select');
+          setPhase('intro');
         }
-      } catch (error) {
-        logger.error('[Onboarding] Error resolving entry phase:', error);
-        if (!cancelled) setPhase('select');
+      } catch (err) {
+        logger.error('[Onboarding] Entry phase error:', err);
+        if (!cancelled) setPhase('intro');
       }
     };
-
-    resolveEntryPhase();
-    return () => {
-      cancelled = true;
-    };
+    resolve();
+    return () => { cancelled = true; };
   }, [user?.id]);
 
-  const handleCounterToggle = (index: number) => {
-    if (selectedIndices.includes(index)) {
-      setSelectedIndices(selectedIndices.filter((i) => i !== index));
-      pulseSelect(index, false);
-      return;
-    }
-    if (selectedIndices.length >= 2) {
-      const [first, second] = selectedIndices;
-      setSelectedIndices([second, index]);
-      pulseSelect(first, false);
-      pulseSelect(index, true);
-      return;
-    }
-    setSelectedIndices([...selectedIndices, index]);
-    pulseSelect(index, true);
+  useEffect(() => {
+    if (phase !== 'frame') return;
+    setVisibleLines(0);
+    setShowFrameButton(false);
+    const timers = [0, 800, 1600, 2400, 3200].map((delay, i) =>
+      setTimeout(() => {
+        if (i < 4) setVisibleLines(i + 1);
+        else setShowFrameButton(true);
+      }, delay),
+    );
+    return () => timers.forEach(clearTimeout);
+  }, [phase]);
+
+  const handleMarkToggle = (index: number) => {
+    setSelectedIndices(prev =>
+      prev.includes(index) ? prev.filter(i => i !== index) : [...prev, index],
+    );
   };
 
-  const handleContinueFromSelect = async () => {
-    if (selectedIndices.length < 1 || !user?.id) return;
-
+  const handleStartAnyway = async () => {
+    if (!user?.id || creatingMarks) return;
     setCreatingMarks(true);
     try {
       const onboardingStartTime = new Date().toISOString();
@@ -145,13 +267,9 @@ export default function OnboardingScreen() {
         [LEGACY_LAST_SYNCED_AT_KEY, onboardingStartTime],
       ]);
 
-      const ordered = [...selectedIndices].sort((a, b) => a - b);
       const created: ActivationMark[] = [];
-      const duplicateNames: string[] = [];
-      const failedNames: string[] = [];
-
-      for (const index of ordered) {
-        const sample = SAMPLE_COUNTERS[index];
+      for (const index of [...selectedIndices].sort((a, b) => a - b)) {
+        const sample = ONBOARDING_MARKS[index];
         try {
           const mark = await createCounter({
             name: sample.name,
@@ -169,41 +287,24 @@ export default function OnboardingScreen() {
             color: mark.color ?? sample.color,
             unit: mark.unit,
           });
-        } catch (counterError) {
-          if (counterError instanceof DuplicateCounterError || counterError instanceof DuplicateMarkError) {
-            const counterName =
-              counterError instanceof DuplicateCounterError
-                ? counterError.counterName
-                : counterError.markName;
-            duplicateNames.push(counterName);
+        } catch (err) {
+          if (err instanceof DuplicateCounterError || err instanceof DuplicateMarkError) {
+            // skip duplicates silently
           } else {
-            logger.error(`[Onboarding] Error creating mark "${sample.name}":`, counterError);
-            failedNames.push(sample.name);
+            logger.error(`[Onboarding] Failed to create "${sample.name}":`, err);
           }
         }
       }
 
-      if (duplicateNames.length > 0) {
-        showWarning(
-          `${duplicateNames.length > 1 ? 'Some marks' : 'A mark'} already exist (${duplicateNames.join(', ')}). Skipped.`,
-        );
-      }
-      if (failedNames.length > 0) {
-        showError(`Could not create: ${failedNames.join(', ')}.`);
-      }
-
       if (created.length === 0) {
-        showError('Add at least one new mark to continue.');
+        showError('Could not create marks. Please try again.');
         return;
       }
 
       setActivationMark(created[0]);
       setPhase('activate');
-      if (created.length > 1) {
-        showSuccess(`${created.length} marks added. Log your first one below.`);
-      }
-    } catch (error) {
-      logger.error('[Onboarding] Error creating marks:', error);
+    } catch (err) {
+      logger.error('[Onboarding] handleStartAnyway error:', err);
       showError('Something went wrong. Please try again.');
     } finally {
       setCreatingMarks(false);
@@ -211,321 +312,270 @@ export default function OnboardingScreen() {
   };
 
   const finishOnboarding = useCallback(async () => {
-    try {
-      await requestPermissions();
-    } catch (e) {
-      logger.warn('[Onboarding] Notification permission:', e);
-    }
-    try {
-      await updateSmartNotifications(user?.id);
-    } catch (e) {
-      logger.warn('[Onboarding] Notification reschedule:', e);
-    }
+    try { await requestPermissions(); } catch (e) { logger.warn('[Onboarding] requestPermissions:', e); }
+    try { await updateSmartNotifications(user?.id); } catch (e) { logger.warn('[Onboarding] updateSmartNotifications:', e); }
     try {
       const remoteOk = await completeOnboarding(user?.id);
       if (user?.id && !remoteOk) {
-        showWarning(
-          'You are set up on this device. Syncing completion to your account failed — stay online and open the app again so other devices pick it up.',
-        );
+        showWarning('Set up on this device. Sync to account failed — open again online.');
       }
       router.replace('/(tabs)/home');
-    } catch (error) {
-      logger.error('[Onboarding] Error finishing onboarding:', error);
+    } catch (err) {
+      logger.error('[Onboarding] finishOnboarding error:', err);
       showError('Could not finish setup. Please try again.');
     }
   }, [completeOnboarding, requestPermissions, updateSmartNotifications, router, user?.id, showWarning, showError]);
 
-  const handleFirstCompletion = async () => {
-    if (!activationMark || !user?.id || incrementing || celebrated) return;
+  const handleFirstTap = async () => {
+    if (tapped || !activationMark || !user?.id) return;
+    setTapped(true);
 
-    setIncrementing(true);
+    cardScale.value = withSpring(0.97, { damping: 20, stiffness: 320 });
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    }
+
+    iconScale.value = withSequence(
+      withSpring(1.18, { damping: 12, stiffness: 280 }),
+      withSpring(1.0, { damping: 16, stiffness: 200 }),
+    );
+    cardOpacity.value = withSpring(1.0, { damping: 18, stiffness: 120 });
+    overlayOpacity.value = withSpring(0, { damping: 18, stiffness: 140 });
+    cardScale.value = withSpring(1.0, { damping: 18, stiffness: 200 });
+    setActivateHeader('One down.');
+
     try {
       await incrementCounter(activationMark.id, user.id, 1);
       if (Platform.OS !== 'web') {
-        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
-      setCelebrated(true);
-      setTimeout(() => {
-        finishOnboarding();
-      }, 900);
-    } catch (error) {
-      logger.error('[Onboarding] First completion increment failed:', error);
-      showError('Could not log completion. Try again.');
-      setIncrementing(false);
+    } catch (err) {
+      logger.error('[Onboarding] First tap increment failed:', err);
     }
+
+    setTimeout(() => finishOnboarding(), 900);
   };
 
-  const canContinueSelect = selectedIndices.length >= 1 && selectedIndices.length <= 2;
-  const ctaLabel = 'Continue';
+  const cardAnimStyle = useAnimatedStyle(() => ({
+    opacity: cardOpacity.value,
+    transform: [{ scale: cardScale.value }],
+  }));
+  const overlayAnimStyle = useAnimatedStyle(() => ({ opacity: overlayOpacity.value }));
+  const iconAnimStyle = useAnimatedStyle(() => ({ transform: [{ scale: iconScale.value }] }));
 
+  // Loading
   if (phase === 'loading') {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={themeColors.accent.primary} />
+      <View style={[styles.center, { backgroundColor: '#000000' }]}>
+        <ActivityIndicator size="large" color={themeColors.accent.primary} />
+      </View>
+    );
+  }
+
+  // Screen 1 — The question
+  if (phase === 'intro') {
+    return (
+      <SafeAreaView style={[styles.fill, { backgroundColor: '#000000' }]}>
+        <View style={styles.introContent}>
+          <View style={styles.questionRow}>
+            {QUESTION_WORDS.map((word, i) => (
+              <AnimatedWord key={i} word={word} delay={i * 110} />
+            ))}
+          </View>
+
+          <View style={styles.markList}>
+            {ONBOARDING_MARKS.map((mark, i) => (
+              <MarkCard
+                key={mark.name}
+                mark={mark}
+                selected={selectedIndices.includes(i)}
+                index={i}
+                onPress={() => handleMarkToggle(i)}
+              />
+            ))}
+          </View>
+
+          {selectedIndices.length >= 1 && (
+            <TouchableOpacity
+              style={styles.continueBtn}
+              onPress={() => setPhase('frame')}
+              activeOpacity={0.82}
+            >
+              <Text style={styles.continueBtnText}>Continue</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </SafeAreaView>
     );
   }
 
-  const markColor = activationMark?.color || themeColors.accent.primary;
-  const activationIconType =
-    activationMark &&
-    resolveCounterIconType({
-      name: activationMark.name,
-      emoji: activationMark.emoji || '📊',
-      color: activationMark.color || markColor,
-      unit: (activationMark.unit as 'sessions') || 'sessions',
-    });
+  // Screen 2 — The honest frame
+  if (phase === 'frame') {
+    return (
+      <SafeAreaView style={[styles.fill, { backgroundColor: '#000000' }]}>
+        <View style={styles.frameContent}>
+          {FRAME_LINES.map((line, i) => (
+            <Text
+              key={i}
+              style={[
+                styles.frameLine,
+                { opacity: visibleLines > i ? 1 : 0 },
+              ]}
+            >
+              {line}
+            </Text>
+          ))}
+
+          {showFrameButton && (
+            <TouchableOpacity
+              style={styles.startBtn}
+              onPress={handleStartAnyway}
+              disabled={creatingMarks}
+              activeOpacity={0.82}
+            >
+              {creatingMarks
+                ? <ActivityIndicator color="#000000" />
+                : <Text style={styles.startBtnText}>Start anyway.</Text>}
+            </TouchableOpacity>
+          )}
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Screen 3 — First mark tap
+  const markColor = activationMark?.color ?? themeColors.accent.primary;
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        {phase === 'select' && (
-          <View style={styles.stepContent}>
-            <Text style={[styles.stepTitle, { color: themeColors.text }]}>Choose your first marks</Text>
-            <Text style={[styles.stepDescription, { color: themeColors.textSecondary }]}>
-              Pick 1–2 to start. You can add more anytime from the home screen.
-            </Text>
+    <SafeAreaView style={[styles.fill, { backgroundColor: themeColors.background }]}>
+      <View style={styles.activateContent}>
+        <Text style={[styles.activateHeader, { color: themeColors.text }]}>
+          {activateHeader}
+        </Text>
 
-            <View style={styles.counterOptions}>
-              {SAMPLE_COUNTERS.map((counter, index) => {
-                const iconType = resolveCounterIconType(counter);
-                const isSelected = selectedIndices.includes(index);
-
-                return (
-                  <Animated.View
-                    key={counter.name}
-                    style={{ transform: [{ scale: scaleAnims[index] }] }}
-                  >
-                    <TouchableOpacity
-                      style={[
-                        styles.counterOption,
-                        {
-                          backgroundColor: isSelected
-                            ? applyOpacity(themeColors.accent.primary, theme === 'dark' ? 0.22 : 0.14)
-                            : themeColors.surface,
-                          borderColor: isSelected ? themeColors.accent.primary : themeColors.border,
-                          borderWidth: isSelected ? 2 : StyleSheet.hairlineWidth,
-                        },
-                        isSelected && shadow.md,
-                      ]}
-                      onPress={() => handleCounterToggle(index)}
-                      activeOpacity={0.75}
-                    >
-                      <View
-                        style={[
-                          styles.iconContainer,
-                          isSelected && {
-                            backgroundColor: applyOpacity(counter.color, 0.2),
-                            borderRadius: borderRadius.md,
-                            padding: spacing.xs,
-                          },
-                        ]}
-                      >
-                        {iconType ? (
-                          <CounterIcon
-                            type={iconType}
-                            size={isSelected ? 36 : 32}
-                            variant="withBackground"
-                            fallbackEmoji={counter.emoji}
-                            ariaLabel={`${counter.name} mark icon`}
-                            color={counter.color}
-                          />
-                        ) : (
-                          <Text style={[styles.counterEmoji, isSelected && { fontSize: fontSize['3xl'] }]}>
-                            {counter.emoji}
-                          </Text>
-                        )}
-                      </View>
-                      <Text style={[styles.counterName, { color: themeColors.text }]}>{counter.name}</Text>
-                      {isSelected ? (
-                        <View style={[styles.checkmark, { backgroundColor: themeColors.accent.primary }]}>
-                          <Ionicons name="checkmark" size={18} color={themeColors.text} />
-                        </View>
-                      ) : null}
-                    </TouchableOpacity>
-                  </Animated.View>
-                );
-              })}
-            </View>
-
-            <TouchableOpacity
-              style={[
-                styles.primaryCta,
-                { backgroundColor: themeColors.accent.primary },
-                (!canContinueSelect || creatingMarks) && styles.primaryCtaDisabled,
-                shadow.md,
-              ]}
-              onPress={handleContinueFromSelect}
-              disabled={!canContinueSelect || creatingMarks}
-              activeOpacity={0.88}
-            >
-              {creatingMarks ? (
-                <ActivityIndicator color={themeColors.text} />
-              ) : (
-                <Text style={[styles.primaryCtaText, { color: themeColors.text }]}>{ctaLabel}</Text>
-              )}
-            </TouchableOpacity>
-
-            <View style={styles.indicators}>
-              <View style={[styles.indicator, { backgroundColor: themeColors.accent.primary }]} />
-              <View style={[styles.indicator, { backgroundColor: themeColors.border }]} />
-            </View>
-          </View>
-        )}
-
-        {phase === 'activate' && activationMark && (
-          <View style={styles.stepContent}>
-            <Text style={[styles.stepTitle, { color: themeColors.text }]}>Log your first completion</Text>
-            <Text style={[styles.stepDescription, { color: themeColors.textSecondary }]}>
-              Tap +1 on <Text style={{ fontWeight: fontWeight.semibold }}>{activationMark.name}</Text> to see how
-              Livra works.
-            </Text>
-
-            <View
+        {activationMark && (
+          <View style={styles.cardWrap}>
+            <Animated.View
               style={[
                 styles.activateCard,
                 {
                   backgroundColor: themeColors.surface,
                   borderColor: themeColors.border,
                 },
-                celebrated && { borderColor: themeColors.success, borderWidth: 2 },
+                cardAnimStyle,
               ]}
             >
-              <View style={[styles.activateIconWrap, { backgroundColor: applyOpacity(markColor, 0.15) }]}>
-                {activationIconType ? (
-                  <CounterIcon
-                    type={activationIconType}
-                    size={44}
-                    variant="withBackground"
-                    fallbackEmoji={activationMark.emoji || '📊'}
-                    ariaLabel={`${activationMark.name} icon`}
-                    color={activationMark.color || markColor}
-                  />
-                ) : (
-                  <Text style={styles.activateEmoji}>{activationMark.emoji || '📊'}</Text>
-                )}
-              </View>
-              <Text style={[styles.activateName, { color: themeColors.text }]}>{activationMark.name}</Text>
+              <Animated.Text style={[styles.activateEmoji, iconAnimStyle]}>
+                {activationMark.emoji ?? '📊'}
+              </Animated.Text>
 
-              {celebrated ? (
-                <View style={styles.celebrateBlock}>
-                  <Ionicons name="checkmark-circle" size={56} color={themeColors.success} />
-                  <Text style={[styles.celebrateTitle, { color: themeColors.text }]}>Nice work!</Text>
-                  <Text style={[styles.celebrateSub, { color: themeColors.textSecondary }]}>
-                    Taking you to your marks…
-                  </Text>
-                </View>
+              <Text style={[styles.activateName, { color: themeColors.text }]}>
+                {activationMark.name}
+              </Text>
+
+              {tapped ? (
+                <Ionicons name="checkmark-circle" size={52} color={markColor} />
               ) : (
-                <BigIncrementButton
-                  onPress={handleFirstCompletion}
-                  disabled={incrementing}
-                  label="+1"
-                />
+                <View style={styles.arrowAndBtn}>
+                  <BouncingArrow color={markColor} />
+                  <TouchableOpacity
+                    style={[styles.plusBtn, { backgroundColor: markColor }]}
+                    onPress={handleFirstTap}
+                    activeOpacity={0.82}
+                  >
+                    <Text style={styles.plusBtnText}>+</Text>
+                  </TouchableOpacity>
+                </View>
               )}
-            </View>
+            </Animated.View>
 
-            <View style={styles.indicators}>
-              <View style={[styles.indicator, { backgroundColor: themeColors.border }]} />
-              <View style={[styles.indicator, { backgroundColor: themeColors.accent.primary }]} />
-            </View>
+            {!tapped && (
+              <Animated.View
+                pointerEvents="none"
+                style={[StyleSheet.absoluteFillObject, styles.blurOverlay, overlayAnimStyle]}
+              />
+            )}
           </View>
         )}
-      </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  fill: { flex: 1 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+
+  // Screen 1
+  introContent: {
     flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xl,
   },
-  loadingContainer: {
+  questionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: spacing['3xl'],
+  },
+  markList: { width: '100%', marginBottom: spacing.xl },
+  continueBtn: {
+    alignSelf: 'center',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing['3xl'],
+    borderRadius: borderRadius.lg,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  continueBtnText: {
+    color: '#FFFFFF',
+    fontSize: fontSize.base,
+    fontWeight: fontWeight.semibold,
+  },
+
+  // Screen 2
+  frameContent: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: spacing['3xl'],
+    gap: spacing['3xl'],
+  },
+  frameLine: {
+    fontSize: fontSize.xl,
+    color: '#FFFFFF',
+    fontWeight: fontWeight.medium,
+    lineHeight: fontSize.xl * 1.55,
+  },
+  startBtn: {
+    marginTop: spacing.xl,
+    alignSelf: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing['3xl'],
+    borderRadius: borderRadius.lg,
+    minWidth: 160,
+    alignItems: 'center',
+    minHeight: 48,
+    justifyContent: 'center',
+  },
+  startBtnText: {
+    color: '#000000',
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.semibold,
+  },
+
+  // Screen 3
+  activateContent: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: spacing.xl,
+    gap: spacing.xl,
   },
-  content: {
-    flexGrow: 1,
-    padding: spacing.xl,
-    justifyContent: 'center',
-  },
-  stepContent: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    minHeight: 420,
-  },
-  stepTitle: {
+  activateHeader: {
     fontSize: fontSize['2xl'],
     fontWeight: fontWeight.bold,
     textAlign: 'center',
-    marginBottom: spacing.md,
   },
-  stepDescription: {
-    fontSize: fontSize.base,
-    textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: spacing.xl,
-    paddingHorizontal: spacing.sm,
-  },
-  counterOptions: {
-    width: '100%',
-  },
-  counterOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: spacing.md,
-    borderRadius: borderRadius.lg,
-    marginBottom: spacing.sm,
-    position: 'relative',
-  },
-  iconContainer: {
-    marginRight: spacing.md,
-  },
-  counterEmoji: {
-    fontSize: fontSize['2xl'],
-  },
-  counterName: {
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.semibold,
-    flex: 1,
-  },
-  checkmark: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  primaryCta: {
-    width: '100%',
-    marginTop: spacing.xl,
-    paddingVertical: spacing.md,
-    borderRadius: borderRadius.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 52,
-  },
-  primaryCtaDisabled: {
-    opacity: 0.45,
-  },
-  primaryCtaText: {
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.semibold,
-  },
-  indicators: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    marginTop: spacing['3xl'],
-  },
-  indicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
+  cardWrap: { width: '100%', position: 'relative' },
   activateCard: {
     width: '100%',
     alignItems: 'center',
@@ -534,31 +584,27 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     gap: spacing.lg,
   },
-  activateIconWrap: {
-    padding: spacing.md,
-    borderRadius: borderRadius.xl,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  activateEmoji: {
-    fontSize: 44,
-  },
+  activateEmoji: { fontSize: 56 },
   activateName: {
     fontSize: fontSize.xl,
     fontWeight: fontWeight.bold,
-    textAlign: 'center',
   },
-  celebrateBlock: {
+  arrowAndBtn: { alignItems: 'center', gap: spacing.sm },
+  plusBtn: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     alignItems: 'center',
-    gap: spacing.sm,
-    paddingVertical: spacing.md,
+    justifyContent: 'center',
   },
-  celebrateTitle: {
-    fontSize: fontSize.xl,
+  plusBtnText: {
+    color: '#FFFFFF',
+    fontSize: 28,
     fontWeight: fontWeight.bold,
+    lineHeight: 32,
   },
-  celebrateSub: {
-    fontSize: fontSize.sm,
-    textAlign: 'center',
+  blurOverlay: {
+    backgroundColor: 'rgba(0,0,0,0.22)',
+    borderRadius: borderRadius.card,
   },
 });
