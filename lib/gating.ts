@@ -1,7 +1,10 @@
-/**
- * Livra 2.0 — increment frequency gating is not enforced (release honesty).
- * Schedule fields and daily targets describe intent only; the engine does not block taps.
- * Legacy SQLite columns (gated, gate_type, min_interval_minutes, max_per_day) may exist and are ignored.
- */
+export const FREE_GOAL_LIMIT = 3;
+export const FREE_MARK_LIMIT = 3;
 
-export {};
+export function canAddGoal(isPro: boolean, totalGoalCount: number): boolean {
+  return isPro || totalGoalCount < FREE_GOAL_LIMIT;
+}
+
+export function canAddMark(isPro: boolean, totalMarkCount: number): boolean {
+  return isPro || totalMarkCount < FREE_MARK_LIMIT;
+}
