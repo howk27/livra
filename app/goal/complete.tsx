@@ -43,7 +43,7 @@ export default function GoalCompleteScreen() {
     scale.value = withSpring(1, { damping: 14, stiffness: 90 });
     opacity.value = withTiming(1, { duration: 500 });
     subtitleOpacity.value = withDelay(400, withTiming(1, { duration: 400 }));
-  }, []);
+  }, [scale, opacity, subtitleOpacity]);
 
   const handleNext = () => {
     router.replace('/(tabs)/home');
