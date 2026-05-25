@@ -1194,7 +1194,11 @@ export default function SettingsScreen() {
       const url = Platform.OS === 'ios'
         ? 'https://apps.apple.com/account/subscriptions'
         : 'https://play.google.com/store/account/subscriptions';
-      await Linking.openURL(url);
+      try {
+        await Linking.openURL(url);
+      } catch {
+        Alert.alert('Could not open subscriptions', 'Visit Settings → Apple ID → Subscriptions to manage your plan.');
+      }
     } else {
       router.push('/paywall');
     }

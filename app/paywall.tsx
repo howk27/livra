@@ -724,7 +724,11 @@ function PaywallScreenContent() {
 
   useEffect(() => {
     if (isProUnlocked) {
-      router.back();
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/(tabs)/home');
+      }
     }
   }, [isProUnlocked, router]);
 
