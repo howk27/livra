@@ -6,10 +6,14 @@ import {
   ScrollView,
   StyleSheet,
   Alert,
+  Modal,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { format, parseISO } from 'date-fns';
 import { colors } from '../../theme/colors';
 import { spacing, fontSize, fontWeight, borderRadius } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
@@ -23,7 +27,10 @@ export default function GoalQueueScreen() {
   const goals = useGoalsStore(s => s.goals);
   const completeGoal = useGoalsStore(s => s.completeGoal);
   const deleteGoal = useGoalsStore(s => s.deleteGoal);
+  const updateGoalTargetDate = useGoalsStore(s => s.updateGoalTargetDate);
   const [showCompleted, setShowCompleted] = useState(false);
+  const [showTargetPicker, setShowTargetPicker] = useState(false);
+  const [targetPickerDate, setTargetPickerDate] = useState(new Date());
 
   const active = useMemo(() => goals.find(g => g.status === 'active'), [goals]);
   const queued = useMemo(
@@ -79,6 +86,24 @@ export default function GoalQueueScreen() {
     );
   };
 
+  const handleSaveTargetDate = async (date: Date) => {
+    if (!active) return;
+    await updateGoalTargetDate(active.id, format(date, 'yyyy-MM-dd'));
+    setShowTargetPicker(false);
+  };
+
+  const handleOpenTargetPicker = () => {
+    if (!active) return;
+    const initial = active.target_date ? parseISO(active.target_date) : new Date();
+    setTargetPickerDate(initial);
+    setShowTargetPicker(true);
+  };
+
+  const handleClearTargetDate = async () => {
+    if (!active) return;
+    await updateGoalTargetDate(active.id, null);
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
       <View style={styles.header}>
@@ -104,6 +129,21 @@ export default function GoalQueueScreen() {
                   {active.description}
                 </Text>
               ) : null}
+              {/* Target date row */}
+              <TouchableOpacity
+                style={[styles.targetDateRow, { borderTopColor: themeColors.border }]}
+                onPress={handleOpenTargetPicker}
+                activeOpacity={0.75}
+              >
+                <Text style={[styles.targetDateLabel, { color: themeColors.textSecondary }]}>
+                  Target date
+                </Text>
+                <Text style={[styles.targetDateValue, { color: active?.target_date ? themeColors.text : themeColors.textSecondary }]}>
+                  {active?.target_date
+                    ? format(parseISO(active.target_date), 'MMM d, yyyy')
+                    : 'Not set'}
+                </Text>
+              </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.completeBtn, { borderColor: themeColors.primary }]}
                 onPress={() => handleComplete(active)}
@@ -192,6 +232,53 @@ export default function GoalQueueScreen() {
           </View>
         )}
       </ScrollView>
+
+      <Modal
+        visible={showTargetPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowTargetPicker(false)}
+      >
+        <TouchableOpacity
+          style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' }}
+          activeOpacity={1}
+          onPress={() => setShowTargetPicker(false)}
+        >
+          <TouchableOpacity
+            style={{ backgroundColor: themeColors.surface, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: spacing.xl }}
+            activeOpacity={1}
+          >
+            <Text style={{ color: themeColors.textSecondary, fontSize: fontSize.sm, fontWeight: fontWeight.medium, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.md }}>
+              Target date
+            </Text>
+            {Platform.OS === 'ios' && (
+              <DateTimePicker
+                value={targetPickerDate}
+                mode="date"
+                display="spinner"
+                minimumDate={new Date()}
+                onChange={(_, date) => { if (date) setTargetPickerDate(date); }}
+                style={{ width: '100%' }}
+              />
+            )}
+            <TouchableOpacity
+              style={{ backgroundColor: themeColors.accent.primary, borderRadius: borderRadius.md, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.md }}
+              onPress={() => handleSaveTargetDate(targetPickerDate)}
+            >
+              <Text style={{ color: '#FFFFFF', fontSize: fontSize.md, fontWeight: fontWeight.semibold }}>
+                Set date
+              </Text>
+            </TouchableOpacity>
+            {active?.target_date && (
+              <TouchableOpacity onPress={handleClearTargetDate} style={{ alignItems: 'center', marginTop: spacing.sm }}>
+                <Text style={{ color: themeColors.textSecondary, fontSize: fontSize.sm, textDecorationLine: 'underline' }}>
+                  Clear target date
+                </Text>
+              </TouchableOpacity>
+            )}
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -233,4 +320,19 @@ const styles = StyleSheet.create({
   emptyStateMsg: { fontSize: fontSize.md, textAlign: 'center', maxWidth: 280 },
   addBtn: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: borderRadius.lg },
   addBtnText: { color: '#FFFFFF', fontWeight: fontWeight.semibold, fontSize: fontSize.md },
+  targetDateRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: spacing.sm,
+    marginTop: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  targetDateLabel: {
+    fontSize: fontSize.sm,
+  },
+  targetDateValue: {
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.medium,
+  },
 });
