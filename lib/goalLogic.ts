@@ -1,10 +1,6 @@
 import type { Goal } from '../types/goal';
 
-export const FREE_GOAL_LIMIT = 3;
-
-export function canAddGoal(isPro: boolean, totalGoalCount: number): boolean {
-  return isPro || totalGoalCount < FREE_GOAL_LIMIT;
-}
+export { FREE_GOAL_LIMIT, canAddGoal } from './gating';
 
 export function getActiveGoal(goals: Goal[]): Goal | undefined {
   return goals.find(g => g.status === 'active');

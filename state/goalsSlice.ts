@@ -2,8 +2,8 @@ import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 import type { Goal } from '../types/goal';
 import { loadGoalsForUser, upsertGoal, removeGoal } from '../lib/db/goalsDb';
+import { canAddGoal } from '../lib/gating';
 import {
-  canAddGoal,
   getActiveGoal,
   getQueuedGoals,
   getCompletedGoals,
