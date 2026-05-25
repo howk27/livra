@@ -48,10 +48,10 @@ const ONBOARDING_MARKS = [
 const QUESTION_WORDS = 'What do you keep meaning to do?'.split(' ');
 
 const FRAME_LINES = [
-  'Most people quit by day 4.',
-  'You probably will too.',
-  'But if you come back on day 5...',
-  '...something starts to change.',
+  'Most people have a graveyard of abandoned goals.',
+  'Not because they gave up.',
+  'Because they tried to do everything at once.',
+  "Livra is one goal at a time. Until it's done.",
 ];
 
 type ActivationMark = {
