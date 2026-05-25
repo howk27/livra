@@ -27,7 +27,8 @@ function randomTimeInWindow(win: PaceWindow): { hour: number; minute: number } {
 
 export async function getPaceNotifWindow(): Promise<PaceWindow> {
   const stored = await AsyncStorage.getItem(PACE_WINDOW_KEY);
-  return (stored as PaceWindow) ?? 'morning';
+  if (stored === 'morning' || stored === 'midday' || stored === 'evening') return stored;
+  return 'morning';
 }
 
 export async function setPaceNotifWindow(win: PaceWindow): Promise<void> {
@@ -36,7 +37,12 @@ export async function setPaceNotifWindow(win: PaceWindow): Promise<void> {
 
 export async function getPaceNotifState(goalId: string): Promise<PaceNotifState> {
   const raw = await AsyncStorage.getItem(`${PACE_NOTIF_STATE_PREFIX}${goalId}`);
-  return raw ? (JSON.parse(raw) as PaceNotifState) : { firedAt: null, followUpFiredAt: null };
+  if (!raw) return { firedAt: null, followUpFiredAt: null };
+  try {
+    return JSON.parse(raw) as PaceNotifState;
+  } catch {
+    return { firedAt: null, followUpFiredAt: null };
+  }
 }
 
 export async function setPaceNotifState(
