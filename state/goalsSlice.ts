@@ -30,6 +30,7 @@ interface GoalsState {
   completeGoal: (id: string) => Promise<void>;
   deleteGoal: (id: string) => Promise<void>;
   reorderQueue: (orderedIds: string[]) => Promise<void>;
+  updateGoalTargetDate: (id: string, date: string | null) => Promise<void>;
   getActiveGoal: () => Goal | undefined;
   getQueuedGoals: () => Goal[];
   getCompletedGoals: () => Goal[];
@@ -129,6 +130,15 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
     await upsertGoals(updates);
     const map = new Map(updates.map(g => [g.id, g]));
     set(s => ({ goals: s.goals.map(g => map.get(g.id) ?? g) }));
+  },
+
+  updateGoalTargetDate: async (id, date) => {
+    const now = new Date().toISOString();
+    const goal = get().goals.find(g => g.id === id);
+    if (!goal) return;
+    const updated: Goal = { ...goal, target_date: date, updated_at: now };
+    await upsertGoal(updated);
+    set(s => ({ goals: s.goals.map(g => (g.id === id ? updated : g)) }));
   },
 
   getActiveGoal: () => getActiveGoal(get().goals),

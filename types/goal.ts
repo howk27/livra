@@ -7,6 +7,7 @@ export type Goal = {
   description?: string;
   status: GoalStatus;
   sort_index: number;
+  target_date?: string | null; // ISO 'YYYY-MM-DD', optional
   created_at: string;
   updated_at: string;
   completed_at?: string | null;
