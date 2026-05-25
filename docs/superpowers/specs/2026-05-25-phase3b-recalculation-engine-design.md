@@ -1,6 +1,6 @@
 # Phase 3B — Recalculation Engine Design
 **Date:** 2026-05-25
-**Status:** Approved
+**Status:** Draft — pending review
 **Author:** Deivi Sierra / Sierra Link LLC
 
 ---
@@ -19,10 +19,11 @@ Goals can have an optional target completion date. The recalculation engine moni
 | Pace definition | Aggregate mark completions / (markCount × daysElapsed) | Per-mark granularity is noise; one number is actionable |
 | Lookback window | 14 days | Enough signal; not punitive for one bad week |
 | Minimum age before alert | 7 days | Avoid firing on brand-new goals |
-| Alert threshold | pace < 0.5 (< 50% of possible check-ins completed) | Mid-point; below this the gap is meaningful |
-| Alert surfaces | In-app banner + daily notification | Banner = persistent visibility; notification = re-engagement |
+| Alert threshold | Projected miss ≥ 7 days at current pace | Actionable gap; ignores minor slippage |
+| Alert surfaces | In-app banner + pace notification (max 2 per slump) | Banner = persistent visibility; notification = re-engagement |
 | Recalibrate action | App suggests new date; user accepts or picks manually | Removes cognitive load, fits Livra voice |
-| Notification time | 9am daily (fixed, v1) | Simple; no user config needed at launch |
+| Notification frequency | Once on first drop below threshold; once again if not recovered after 7 days | Avoids nagging; max 2 per slump |
+| Notification timing | User-configurable window (Morning/Midday/Evening); random time within window | Flexibility without overwhelming options |
 
 ---
 
@@ -83,7 +84,16 @@ export function suggestNewTargetDate(
   pace: number,
 ): string // ISO date
 
-export function isPaceBehind(pace: number): boolean // pace < 0.5
+/**
+ * Returns how many days late the user will finish at current pace.
+ * Returns 0 if on track or ahead.
+ */
+export function computeProjectedMiss(
+  targetDate: string,
+  pace: number,
+): number // days late (0 = on track)
+
+export function isPaceBehind(projectedMiss: number): boolean // projectedMiss >= 7
 ```
 
 **`computePace` logic:**
@@ -92,9 +102,14 @@ export function isPaceBehind(pace: number): boolean // pace < 0.5
 - pace = count / (markCount × window)
 - Returns 1.0 if markCount is 0 or window is 0 (no alert)
 
+**`computeProjectedMiss` logic:**
+- remainingDays = diff(targetDate, today) in days, min 0
+- projectedDays = ceil(remainingDays / pace) (pace=0 → today + 30 as floor)
+- miss = projectedDays − remainingDays, min 0
+
 **`suggestNewTargetDate` logic:**
 - remainingDays = diff(targetDate, today) in days, min 0
-- projectedDays = ceil(remainingDays / pace)
+- projectedDays = ceil(remainingDays / pace) (pace=0 → today + 30 as floor)
 - return today + projectedDays days
 
 ---
@@ -107,6 +122,7 @@ Reads active goal, counters (marks), and events from store. Computes:
 ```typescript
 export function usePaceAlert(): {
   isBehind: boolean;
+  projectedMiss: number; // days late at current pace
   suggestedDate: string | null; // null if no target_date or goal < 7 days old
   goalTitle: string;
   goalId: string;
@@ -115,7 +131,8 @@ export function usePaceAlert(): {
 
 - No alert if goal has no `target_date`
 - No alert if goal is < 7 days old
-- Schedules/cancels `paceNotification` reactively when `isBehind` changes
+- Schedules pace notification on first `isBehind` transition; schedules follow-up if still behind after 7 days; cancels when pace recovers or target date is updated
+- Tracks notification state in AsyncStorage: `@livra_pace_notif_state:{goalId}` — stores `{ firedAt: ISO date | null, followUpFiredAt: ISO date | null }`
 
 ---
 
@@ -127,14 +144,13 @@ Props: `{ isBehind, goalTitle, goalId, suggestedDate }`
 
 - Hidden when not behind
 - Dismiss stored in AsyncStorage: `@livra_pace_banner_dismissed:{goalId}:{YYYY-MM-DD}` — resets daily
-- Copy: *"You're running behind on [goal title]. Still doable."*
+- Copy: *"At this pace, [goal title] finishes about [N] days late. Still fixable."*
 - **Recalibrate** button → bottom sheet modal
 - **×** → dismiss for today
 
-**Recalibrate modal:**
-- Shows current target date and suggested new date
-- **Accept** → calls `updateGoalTargetDate(goalId, suggestedDate)`, closes modal
-- **Pick a date** → native date picker, then same update call
+**Recalibrate modal (single bottom sheet):**
+- Primary action: **"Yes, update it"** → calls `updateGoalTargetDate(goalId, suggestedDate)`, closes modal
+- Secondary: small text link below — **"Pick a different date"** → opens native date picker, then same update call
 
 Rendered in `app/(tabs)/home.tsx` above the mark list, below the active goal header.
 
@@ -148,16 +164,32 @@ Rendered in `app/(tabs)/home.tsx` above the mark list, below the active goal hea
 export async function schedulePaceNotification(
   goalId: string,
   goalTitle: string,
+  projectedMiss: number,
+  window: 'morning' | 'midday' | 'evening',
 ): Promise<void>
 
 export async function cancelPaceNotification(goalId: string): Promise<void>
 ```
 
-- Identifier: `livra-pace-{goalId}`
-- DAILY trigger at 09:00
-- Copy: *"At your current pace, you're running behind on [goal title]. Still doable."*
-- Tapping opens the app to the home screen (banner handles recalibrate CTA)
-- `cancelPaceNotification` called when pace recovers or target date is updated
+**Frequency:**
+- Fires once when pace first drops below threshold (projected miss ≥ 7 days)
+- Fires a second time (follow-up) if pace hasn't recovered after 7 days
+- Maximum 2 notifications per goal per slump; resets when pace recovers or target date is updated
+
+**Timing:**
+- User-configurable window stored in AsyncStorage: `@livra_pace_notification_window`
+  - `morning` → random time between 7:00–9:00am (default)
+  - `midday` → random time between 11:00am–1:00pm
+  - `evening` → random time between 6:00–8:00pm
+- Random minute within window selected at schedule time
+
+**Identifiers:** `livra-pace-{goalId}-1` (first), `livra-pace-{goalId}-2` (follow-up)
+
+**Copy:** *"At your current pace, [goal title] finishes about [N] days late. Still fixable."*
+
+Tapping opens the app to the home screen (banner handles recalibrate CTA).
+
+**Settings surface:** Settings → Notifications gains a **"Pace alerts"** row with three options (Morning / Midday / Evening).
 
 ---
 
@@ -174,6 +206,5 @@ The goal detail/settings screen gains a **Target date** row:
 
 - Per-mark pace breakdown
 - User-configurable alert threshold
-- User-configurable notification time (v1 fixed at 9am)
 - Android (iOS only at launch)
 - Progress % displayed on goal card
