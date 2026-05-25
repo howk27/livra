@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -20,13 +20,23 @@ export default function GoalQueueScreen() {
   const theme = useEffectiveTheme();
   const themeColors = colors[theme];
   const router = useRouter();
-  const { goals, completeGoal, deleteGoal, getActiveGoal, getQueuedGoals, getCompletedGoals } =
-    useGoalsStore();
+  const goals = useGoalsStore(s => s.goals);
+  const completeGoal = useGoalsStore(s => s.completeGoal);
+  const deleteGoal = useGoalsStore(s => s.deleteGoal);
   const [showCompleted, setShowCompleted] = useState(false);
 
-  const active = getActiveGoal();
-  const queued = getQueuedGoals();
-  const completed = getCompletedGoals();
+  const active = useMemo(() => goals.find(g => g.status === 'active'), [goals]);
+  const queued = useMemo(
+    () => goals.filter(g => g.status === 'queued').sort((a, b) => a.sort_index - b.sort_index),
+    [goals],
+  );
+  const completed = useMemo(
+    () =>
+      goals
+        .filter(g => g.status === 'completed')
+        .sort((a, b) => (b.completed_at ?? '').localeCompare(a.completed_at ?? '')),
+    [goals],
+  );
 
   const handleComplete = (goal: Goal) => {
     Alert.alert(
@@ -36,9 +46,14 @@ export default function GoalQueueScreen() {
         { text: 'Not yet', style: 'cancel' },
         {
           text: "Done — it's mine",
-          onPress: async () => {
-            await completeGoal(goal.id);
-            router.push({ pathname: '/goal/complete', params: { goalTitle: goal.title } });
+          onPress: () => {
+            completeGoal(goal.id)
+              .then(() => {
+                router.push({ pathname: '/goal/complete', params: { goalTitle: goal.title } });
+              })
+              .catch(() => {
+                Alert.alert('Error', 'Could not complete goal. Please try again.');
+              });
           },
         },
       ],
@@ -54,7 +69,11 @@ export default function GoalQueueScreen() {
         {
           text: 'Remove',
           style: 'destructive',
-          onPress: () => deleteGoal(goal.id),
+          onPress: () => {
+            deleteGoal(goal.id).catch(() => {
+              Alert.alert('Error', 'Could not remove goal. Please try again.');
+            });
+          },
         },
       ],
     );
@@ -213,5 +232,5 @@ const styles = StyleSheet.create({
   emptyStateTitle: { fontSize: fontSize.lg, fontWeight: fontWeight.semibold },
   emptyStateMsg: { fontSize: fontSize.md, textAlign: 'center', maxWidth: 280 },
   addBtn: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: borderRadius.lg },
-  addBtnText: { color: '#fff', fontWeight: fontWeight.semibold, fontSize: fontSize.md },
+  addBtnText: { color: '#FFFFFF', fontWeight: fontWeight.semibold, fontSize: fontSize.md },
 });
