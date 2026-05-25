@@ -226,7 +226,7 @@ export function buildCopy(
   switch (type) {
     case 'momentum': {
       // Single incomplete mark — name it directly for a personal, goal-anchored nudge
-      if (rem === 1 && p.incompleteNames[0]) {
+      if (rem === 1 && p.incompleteNames[0]?.trim()) {
         return {
           title: p.incompleteNames[0],
           body: "You said you'd do this today. There's still time.",
