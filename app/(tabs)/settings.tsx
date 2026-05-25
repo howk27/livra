@@ -14,6 +14,7 @@ import {
   KeyboardAvoidingView,
   Modal,
   Share,
+  Linking,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect, type Href } from 'expo-router';
@@ -1188,6 +1189,17 @@ export default function SettingsScreen() {
   const scrollContentBottomPad =
     spacing['3xl'] + TAB_BAR_CONTENT_HEIGHT + insets.bottom + spacing.lg;
 
+  const handleSubscriptionPress = async () => {
+    if (isProUnlocked) {
+      const url = Platform.OS === 'ios'
+        ? 'https://apps.apple.com/account/subscriptions'
+        : 'https://play.google.com/store/account/subscriptions';
+      await Linking.openURL(url);
+    } else {
+      router.push('/paywall');
+    }
+  };
+
   return (
     <GradientBackground children={
       <>
@@ -1542,7 +1554,7 @@ export default function SettingsScreen() {
                 </View>
               </View>
               <PrimaryButton
-                onPress={() => router.push('/paywall')}
+                onPress={handleSubscriptionPress}
                 backgroundColor={themeColors.accent.primary}
                 indicatorColor={themeColors.text}
                 shadowVariant="sm"
