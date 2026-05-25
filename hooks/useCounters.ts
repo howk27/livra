@@ -13,8 +13,7 @@ import { logger } from '../lib/utils/logger';
 import { getAppDate, getAppDateTime, isDebugAppDateActive } from '../lib/appDate';
 import { useAppDateStore } from '../state/appDateSlice';
 import { scheduleContextualDailyNotification } from '../lib/notificationSystem';
-
-const FREE_COUNTER_LIMIT = 3;
+import { canAddMark } from '../lib/gating';
 
 // Helper function to validate UUID
 const isValidUUID = (str: string): boolean => {
@@ -91,8 +90,8 @@ export const useMarks = () => {
         }
         // Count only active (non-deleted) counters
         const activeCounters = marks.filter((m) => !m.deleted_at);
-        if (activeCounters.length >= FREE_COUNTER_LIMIT) {
-          throw new Error(`FREE_COUNTER_LIMIT_REACHED: Upgrade to Livra+ to create more than ${FREE_COUNTER_LIMIT} counters`);
+        if (!canAddMark(isProUnlocked, activeCounters.length)) {
+          throw new Error('FREE_COUNTER_LIMIT_REACHED: Upgrade to Livra+ to create more than 3 marks');
         }
       }
 
