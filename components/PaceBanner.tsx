@@ -127,12 +127,14 @@ export function PaceBanner({
 
             {!showDatePicker && (
               <>
-                <TouchableOpacity
-                  style={[styles.acceptBtn, { backgroundColor: themeColors.accent.primary }]}
-                  onPress={handleAccept}
-                >
-                  <Text style={styles.acceptBtnText}>Yes, update it</Text>
-                </TouchableOpacity>
+                {suggestedDate && (
+                  <TouchableOpacity
+                    style={[styles.acceptBtn, { backgroundColor: themeColors.accent.primary }]}
+                    onPress={handleAccept}
+                  >
+                    <Text style={styles.acceptBtnText}>Yes, update it</Text>
+                  </TouchableOpacity>
+                )}
                 <TouchableOpacity onPress={() => setShowDatePicker(true)}>
                   <Text style={[styles.pickLink, { color: themeColors.textSecondary }]}>
                     Pick a different date
