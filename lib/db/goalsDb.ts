@@ -32,6 +32,15 @@ export async function upsertGoal(goal: Goal): Promise<void> {
   await writeAll(all);
 }
 
+export async function upsertGoals(updatedGoals: Goal[]): Promise<void> {
+  const all = await readAll();
+  const map = new Map(all.map(g => [g.id, g]));
+  for (const goal of updatedGoals) {
+    map.set(goal.id, goal);
+  }
+  await writeAll(Array.from(map.values()));
+}
+
 export async function removeGoal(id: string): Promise<void> {
   const all = await readAll();
   await writeAll(all.filter(g => g.id !== id));

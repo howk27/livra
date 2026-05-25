@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 import type { Goal } from '../types/goal';
-import { loadGoalsForUser, upsertGoal, removeGoal } from '../lib/db/goalsDb';
+import { loadGoalsForUser, upsertGoal, upsertGoals, removeGoal } from '../lib/db/goalsDb';
 import { canAddGoal } from '../lib/gating';
 import {
   getActiveGoal,
@@ -51,7 +51,8 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
 
   addGoal: async ({ title, description, userId, isPro }) => {
     const current = get().goals.filter(g => g.user_id === userId);
-    if (!canAddGoal(isPro, current.length)) {
+    const nonCompleted = current.filter(g => g.status !== 'completed');
+    if (!canAddGoal(isPro, nonCompleted.length)) {
       throw new GoalLimitError();
     }
 
@@ -89,19 +90,23 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
       completed_at: now,
       updated_at: now,
     };
-    await upsertGoal(completed);
 
     const remaining = goals.filter(g => g.id !== id);
     const next = nextGoalToActivate(remaining);
-    let updated = goals.map(g => (g.id === id ? completed : g));
+    const activated: Goal | undefined = next
+      ? { ...next, status: 'active', updated_at: now }
+      : undefined;
 
-    if (next) {
-      const activated: Goal = { ...next, status: 'active', updated_at: now };
-      await upsertGoal(activated);
-      updated = updated.map(g => (g.id === next.id ? activated : g));
-    }
+    const writes = [completed, ...(activated ? [activated] : [])];
+    await upsertGoals(writes);
 
-    set({ goals: updated });
+    set(s => ({
+      goals: s.goals.map(g => {
+        if (g.id === completed.id) return completed;
+        if (activated && g.id === activated.id) return activated;
+        return g;
+      }),
+    }));
   },
 
   deleteGoal: async (id) => {
@@ -121,7 +126,7 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
       }
     });
 
-    await Promise.all(updates.map(upsertGoal));
+    await upsertGoals(updates);
     const map = new Map(updates.map(g => [g.id, g]));
     set(s => ({ goals: s.goals.map(g => map.get(g.id) ?? g) }));
   },
