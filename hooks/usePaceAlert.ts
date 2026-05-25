@@ -45,7 +45,7 @@ export function usePaceAlert(): PaceAlertResult {
   const pace =
     activeGoal && hasSufficientHistory
       ? computePace(events, markCount, daysElapsed)
-      : 1;
+      : 1; // neutral — behind guard prevents alert from firing
 
   const projectedMiss =
     activeGoal?.target_date && hasSufficientHistory
@@ -67,6 +67,7 @@ export function usePaceAlert(): PaceAlertResult {
     const goalId = activeGoal.id;
     const goalTitle = activeGoal.title;
     const today = format(new Date(), 'yyyy-MM-dd');
+    let cancelled = false;
 
     async function syncNotifications() {
       if (!behind) {
@@ -74,13 +75,15 @@ export function usePaceAlert(): PaceAlertResult {
         if (prevBehindRef.current === true) {
           await cancelPaceNotifications(goalId);
         }
-        prevBehindRef.current = false;
+        if (!cancelled) prevBehindRef.current = false;
         return;
       }
 
       // behind === true: schedule up to 2 notifications per slump
       const win = await getPaceNotifWindow();
+      if (cancelled) return;
       const state = await getPaceNotifState(goalId);
+      if (cancelled) return;
 
       if (!state.firedAt) {
         // First notification — fires immediately (scheduled as DAILY at a random time)
@@ -91,7 +94,10 @@ export function usePaceAlert(): PaceAlertResult {
           win,
           `livra-pace-${goalId}-1`,
         );
-        await setPaceNotifState(goalId, { firedAt: today, followUpFiredAt: null });
+        if (!cancelled) {
+          await setPaceNotifState(goalId, { firedAt: today, followUpFiredAt: null });
+          prevBehindRef.current = true;
+        }
       } else if (!state.followUpFiredAt && daysSince(state.firedAt) >= 7) {
         // Follow-up after 7 days of no recovery
         await schedulePaceNotification(
@@ -101,14 +107,20 @@ export function usePaceAlert(): PaceAlertResult {
           win,
           `livra-pace-${goalId}-2`,
         );
-        await setPaceNotifState(goalId, { ...state, followUpFiredAt: today });
+        if (!cancelled) {
+          await setPaceNotifState(goalId, { ...state, followUpFiredAt: today });
+          prevBehindRef.current = true;
+        }
+      } else if (!cancelled) {
+        prevBehindRef.current = true;
       }
-      // Both fired — nothing more to schedule
-
-      prevBehindRef.current = true;
     }
 
     syncNotifications().catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
   }, [behind, activeGoal?.id, activeGoal?.title, projectedMiss]);
 
   return {
