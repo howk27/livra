@@ -24,6 +24,7 @@ import { DevToolsProvider } from '../providers/DevToolsProvider';
 import { ExperimentsProvider } from '../providers/ExperimentsProvider';
 import { useFeaturesStore } from '../state/featuresSlice';
 import { useGoalsStore } from '../state/goalsSlice';
+import { useCheckinsStore } from '../state/checkinsSlice';
 import { useDailyTrackingStore } from '../state/dailyTrackingSlice';
 import { useAppDateStore } from '../state/appDateSlice';
 import {
@@ -282,6 +283,7 @@ export default function RootLayout() {
           await useCountersStore.getState().loadMarks(user.id);
           useEventsStore.getState().loadEvents(undefined, user.id);
           await useGoalsStore.getState().loadGoals(user.id);
+          await useCheckinsStore.getState().loadCheckins(user.id);
           logger.log('[App] Local marks loaded, now syncing...');
           
           // CRITICAL: Run cleanup before sync to remove any duplicates first
@@ -372,6 +374,7 @@ function RootNavigator() {
         <Stack.Screen name="iap-dashboard" options={{ presentation: 'modal' }} />
         <Stack.Screen name="goal/new" options={{ presentation: 'modal', title: 'New Goal', headerShown: false }} />
         <Stack.Screen name="goal/queue" options={{ title: 'Goals', headerShown: false }} />
+        <Stack.Screen name="checkin" options={{ presentation: 'modal', headerShown: false }} />
       </Stack>
       <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
     </>
