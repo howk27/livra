@@ -115,7 +115,7 @@ export default function SettingsScreen() {
   const [paceWindow, setPaceWindowState] = useState<PaceWindow>('morning');
 
   useEffect(() => {
-    getPaceNotifWindow().then((win) => setPaceWindowState(win));
+    void getPaceNotifWindow().then((win) => setPaceWindowState(win));
   }, []);
 
   const handlePaceWindowChange = async (win: PaceWindow) => {
@@ -2120,6 +2120,7 @@ const styles = StyleSheet.create({
   windowChip: {
     flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: spacing.sm,
     borderRadius: borderRadius.sm,
     borderWidth: StyleSheet.hairlineWidth,
