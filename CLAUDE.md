@@ -1,6 +1,9 @@
 ## Project
 
-Livra — habit/mark tracking mobile app. React Native + Expo. State: Zustand + AsyncStorage. Goal: production App Store + Play Store. Visual identity: dark green, established — do not redesign.
+Livra — goal execution app. React Native + Expo. State: Zustand + AsyncStorage. Goal: production App Store release (iOS first).\
+
+Source of truth for all product 
+decisions: @docs/livra-plan-final.md — read it before acting or just ask
 
 Architecture: `app/` file-based routes (expo-router). Root `app/_layout.tsx`: `Stack` + providers (`QueryClientProvider`, gesture root, notifications, dev/experiments). Main UX under `app/(tabs)/` (`Tabs`: home, tracking, settings; `stats` tab hidden). Modals/stack screens: `counter/[id]`, `onboarding`, `paywall`, `auth`, `iap-dashboard`. Business logic in `lib/` (SQLite `expo-sqlite`, sync, Supabase client), `hooks/`, `services/`, `state/*Slice.ts`, `components/`, `theme/` (`colors`, `tokens`).
 
@@ -20,6 +23,4 @@ Import `react-native-get-random-values` before any `uuid` (root `app/_layout.tsx
 
 ## Key Docs
 
-@docs/architecture.md  
-@docs/product-context.md  
-@docs/roadmap.md
+@docs/livra-plan-final.md
