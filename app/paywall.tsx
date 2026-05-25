@@ -39,12 +39,12 @@ const PRO_FEATURES = [
   {
     ion: 'infinite-outline',
     title: 'Unlimited Marks',
-    description: 'Track every milestone without artificial caps.',
+    description: 'Every mark, every goal. No ceiling on what you can build.',
   },
   {
     ion: 'bar-chart-outline',
     title: 'CSV Export',
-    description: 'Export your history for analysis anytime.',
+    description: 'Your history is yours. Export it whenever you want.',
   },
 ];
 
@@ -1033,7 +1033,7 @@ function PaywallScreenContent() {
             <Text style={[styles.title, { color: themeColors.text }]}>Livra+</Text>
           </TouchableOpacity>
           <Text style={[styles.subtitle, { color: themeColors.textSecondary }]}>
-            Unlock unlimited tracking potential
+            More goals. More marks. No limits.
           </Text>
           {!isNativeStorePurchasesSupported() && (
             <View
