@@ -375,6 +375,14 @@ function RootNavigator() {
         <Stack.Screen name="goal/new" options={{ presentation: 'modal', title: 'New Goal', headerShown: false }} />
         <Stack.Screen name="goal/queue" options={{ title: 'Goals', headerShown: false }} />
         <Stack.Screen name="checkin" options={{ presentation: 'modal', headerShown: false }} />
+        <Stack.Screen
+          name="goal/complete"
+          options={{
+            presentation: 'fullScreenModal',
+            headerShown: false,
+            gestureEnabled: false,
+          }}
+        />
       </Stack>
       <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
     </>
