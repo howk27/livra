@@ -215,7 +215,7 @@ export async function computeDayProgress(userId: string): Promise<DayProgressSna
   };
 }
 
-function buildCopy(
+export function buildCopy(
   type: BehaviorNotifType,
   p: DayProgressSnapshot,
 ): { title: string; body: string } {
