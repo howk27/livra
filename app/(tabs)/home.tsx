@@ -49,6 +49,8 @@ import { subDays } from 'date-fns';
 import { HomeHeader } from '../../components/HomeHeader';
 import { WeeklySummaryStrip } from '../../components/WeeklySummaryStrip';
 import { ActiveGoalBanner } from '../../components/ActiveGoalBanner';
+import { PaceBanner } from '../../components/PaceBanner';
+import { usePaceAlert } from '../../hooks/usePaceAlert';
 import { CheckinButton } from '../../components/CheckinButton';
 import type { HeaderState, WeekArcState, PostLogState } from '../../lib/copy';
 import { deriveStreakForMark } from '../../hooks/useStreaks';
@@ -79,6 +81,7 @@ export default function HomeScreen() {
   const { counters, loading, incrementCounter, deleteCounter } = useCounters();
   const { sync } = useSync();
   const { updateSmartNotifications, permissionGranted } = useNotifications();
+  const paceAlert = usePaceAlert();
   const [localCounters, setLocalCounters] = useState<Counter[]>([]);
   const [scrollEnabled, setScrollEnabled] = useState(true);
   const [profileImageUri, setProfileImageUri] = useState<string | null>(null);
@@ -1124,6 +1127,15 @@ export default function HomeScreen() {
 
         {/* ── Active goal banner — always visible (not gated on marks) ── */}
         {!isEditMode && <ActiveGoalBanner />}
+        {!isEditMode && (
+          <PaceBanner
+            isBehind={paceAlert.isBehind}
+            projectedMiss={paceAlert.projectedMiss}
+            goalTitle={paceAlert.goalTitle}
+            goalId={paceAlert.goalId}
+            suggestedDate={paceAlert.suggestedDate}
+          />
+        )}
         {!isEditMode && <CheckinButton />}
 
         {/* ── Edit mode hint ────────────────────────────────────── */}
