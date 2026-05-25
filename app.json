@@ -31,7 +31,12 @@
         "NSFaceIDUsageDescription": "Livra uses Face ID to securely lock your app.",
         "NSPhotoLibraryUsageDescription": "Livra needs access to your photo library to set a profile picture.",
         "NSPhotoLibraryAddUsageDescription": "Livra needs access to save photos to your library.",
-        "NSCameraUsageDescription": "Livra needs access to your camera to take a profile picture."
+        "NSCameraUsageDescription": "Livra needs access to your camera to take a profile picture.",
+        "NSHealthShareUsageDescription": "Livra reads your workout, sleep, and activity data to power your weekly reflection. Your health data is never stored on our servers."
+      },
+      "entitlements": {
+        "com.apple.developer.healthkit": true,
+        "com.apple.developer.healthkit.access": []
       },
       "config": {
         "usesNonExemptEncryption": false
@@ -100,6 +105,13 @@
               "extraPodsInstallArgs": ["--repo-update"]
             }
           }
+        }
+      ],
+
+      [
+        "react-native-health",
+        {
+          "NSHealthShareUsageDescription": "Livra reads your workout, sleep, and activity data to power your weekly reflection."
         }
       ]
     ],

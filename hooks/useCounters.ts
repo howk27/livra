@@ -601,6 +601,10 @@ export const useCounters = () => {
     getMark: getCounter,
   } = useMarks();
 
+  const updateMark = async (id: string, updates: Partial<Mark>) => {
+    await useMarksStore.getState().updateMark(id, updates);
+  };
+
   return {
     counters,
     loading,
@@ -610,6 +614,7 @@ export const useCounters = () => {
     decrementCounter,
     resetCounter,
     updateCounter,
+    updateMark,
     deleteCounter,
     getCounter,
   };

@@ -18,8 +18,7 @@ import {
 } from '../../lib/topMarkWeekly';
 import type { BestDayResult } from '../../lib/topMarkWeekly';
 import { WeeklyReflectionCard } from '../../components/WeeklyReflectionCard';
-import { classifyMarkTier, isMarkFirstWeek } from '../../lib/weeklyReflectionLogic';
-import { getReflectionCopy } from '../../lib/weeklyReflectionCopy';
+import { buildReflectionItems, type ReflectionItem } from '../../lib/weeklyReflectionLogic';
 
 function hashPickIndex(seed: string, modulo: number): number {
   let h = 0;
@@ -270,14 +269,15 @@ export default function TrackingScreen() {
     [bestDay, weekDates],
   );
 
-  const weeklyReflectionItems = useMemo(() => {
+  const [weeklyReflectionItems, setWeeklyReflectionItems] = useState<ReflectionItem[]>([]);
+
+  useEffect(() => {
     const weekStart = weekDates[0]!;
-    return counters.map(mark => {
-      const firstWeek = isMarkFirstWeek(mark.created_at, weekStart);
-      const tier = classifyMarkTier(mark.id, allEvents, weekDates, firstWeek);
-      const copy = getReflectionCopy(tier, mark.id, weekStart);
-      return { mark, tier, title: copy.title, body: copy.body };
-    });
+    buildReflectionItems(counters, allEvents, weekDates, weekStart)
+      .then(setWeeklyReflectionItems)
+      .catch(() => {
+        // fall back to empty on unexpected error
+      });
   }, [counters, allEvents, weekDates]);
 
   /** Semantic accents: green / warm orange / subtle blue (per card). */

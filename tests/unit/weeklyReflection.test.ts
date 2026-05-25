@@ -1,6 +1,9 @@
-import { classifyMarkTier, isMarkFirstWeek } from '../../lib/weeklyReflectionLogic';
+jest.mock('../../lib/health/healthReader');
+
+import { classifyMarkTier, isMarkFirstWeek, buildReflectionItems } from '../../lib/weeklyReflectionLogic';
 import { getReflectionCopy } from '../../lib/weeklyReflectionCopy';
-import type { MarkEvent } from '../../types';
+import { readHealthDays } from '../../lib/health/healthReader';
+import type { MarkEvent, Mark } from '../../types';
 
 const WEEK_DATES = ['2026-05-18','2026-05-19','2026-05-20','2026-05-21','2026-05-22','2026-05-23','2026-05-24'];
 const WEEK_START = '2026-05-18';
@@ -79,6 +82,42 @@ describe('isMarkFirstWeek', () => {
   });
 });
 
+describe('classifyMarkTier — healthDays override', () => {
+  test('healthDays replaces events — 5 active days → strong', () => {
+    const healthDays = new Set(['2026-05-18','2026-05-19','2026-05-20','2026-05-21','2026-05-22']);
+    expect(classifyMarkTier(MARK_ID, [], WEEK_DATES, false, healthDays)).toBe('strong');
+  });
+
+  test('healthDays replaces events — 3 active days → solid', () => {
+    const healthDays = new Set(['2026-05-18','2026-05-19','2026-05-20']);
+    expect(classifyMarkTier(MARK_ID, [], WEEK_DATES, false, healthDays)).toBe('solid');
+  });
+
+  test('healthDays replaces events — 1 active day → inconsistent', () => {
+    const healthDays = new Set(['2026-05-18']);
+    expect(classifyMarkTier(MARK_ID, [], WEEK_DATES, false, healthDays)).toBe('inconsistent');
+  });
+
+  test('healthDays replaces events — 0 active days → missing', () => {
+    expect(classifyMarkTier(MARK_ID, [], WEEK_DATES, false, new Set())).toBe('missing');
+  });
+
+  test('empty healthDays falls back to events', () => {
+    const events = WEEK_DATES.map(makeEvent);
+    expect(classifyMarkTier(MARK_ID, events, WEEK_DATES, false, new Set())).toBe('strong');
+  });
+
+  test('undefined healthDays falls back to events', () => {
+    const events = WEEK_DATES.map(makeEvent);
+    expect(classifyMarkTier(MARK_ID, events, WEEK_DATES, false, undefined)).toBe('strong');
+  });
+
+  test('first_week still overrides even with healthDays', () => {
+    const healthDays = new Set(WEEK_DATES);
+    expect(classifyMarkTier(MARK_ID, [], WEEK_DATES, true, healthDays)).toBe('first_week');
+  });
+});
+
 describe('getReflectionCopy', () => {
   const tiers = ['strong','solid','inconsistent','missing','first_week'] as const;
   test.each(tiers)('%s returns non-empty title and body', (tier) => {
@@ -96,5 +135,62 @@ describe('getReflectionCopy', () => {
       id => getReflectionCopy('strong', id, WEEK_START).title
     ));
     expect(results.size).toBeGreaterThan(1);
+  });
+});
+
+const BASE_MARK: Mark = {
+  id: MARK_ID,
+  user_id: 'u1',
+  name: 'Workout',
+  unit: 'sessions',
+  enable_streak: false,
+  sort_index: 0,
+  total: 0,
+  created_at: '2026-01-01T00:00:00Z',
+  updated_at: '2026-01-01T00:00:00Z',
+};
+
+describe('buildReflectionItems', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (readHealthDays as jest.Mock).mockResolvedValue(new Set<string>());
+  });
+
+  test('returns one item per mark', async () => {
+    const items = await buildReflectionItems([BASE_MARK], [], WEEK_DATES, WEEK_START);
+    expect(items).toHaveLength(1);
+    expect(items[0]!.mark).toBe(BASE_MARK);
+  });
+
+  test('uses healthDays when mark has health_kit_type', async () => {
+    const healthMark: Mark = { ...BASE_MARK, health_kit_type: 'workout' as any };
+    const activeDays = new Set(['2026-05-18','2026-05-19','2026-05-20','2026-05-21','2026-05-22']);
+    (readHealthDays as jest.Mock).mockResolvedValue(activeDays);
+
+    const items = await buildReflectionItems([healthMark], [], WEEK_DATES, WEEK_START);
+    expect(items[0]!.tier).toBe('strong');
+    expect(readHealthDays).toHaveBeenCalledWith('workout', WEEK_DATES, undefined);
+  });
+
+  test('falls back to events when health read fails', async () => {
+    const healthMark: Mark = { ...BASE_MARK, health_kit_type: 'workout' as any };
+    (readHealthDays as jest.Mock).mockRejectedValue(new Error('HealthKit unavailable'));
+    const events = WEEK_DATES.map(makeEvent);
+
+    const items = await buildReflectionItems([healthMark], events, WEEK_DATES, WEEK_START);
+    expect(items[0]!.tier).toBe('strong');
+  });
+
+  test('unconnected mark uses events', async () => {
+    const events = [makeEvent('2026-05-18')];
+    const items = await buildReflectionItems([BASE_MARK], events, WEEK_DATES, WEEK_START);
+    expect(items[0]!.tier).toBe('inconsistent');
+    expect(readHealthDays).not.toHaveBeenCalled();
+  });
+
+  test('items contain non-empty title and body', async () => {
+    const items = await buildReflectionItems([BASE_MARK], [], WEEK_DATES, WEEK_START);
+    expect(items[0]!.title.length).toBeGreaterThan(0);
+    expect(items[0]!.body.length).toBeGreaterThan(0);
   });
 });

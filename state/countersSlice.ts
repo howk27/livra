@@ -84,7 +84,13 @@ export const useMarksStore = create<MarksState>((set, get) => ({
         });
       }
       
-      set({ marks: uniqueMarks, loading: false });
+      const parsedMarks = uniqueMarks.map(m => ({
+        ...m,
+        health_kit_config: typeof m.health_kit_config === 'string'
+          ? (JSON.parse(m.health_kit_config) as { stepGoal?: number })
+          : (m.health_kit_config ?? null),
+      }));
+      set({ marks: parsedMarks, loading: false });
     } catch (error) {
       set({ error: (error as Error).message, loading: false });
     }
@@ -182,10 +188,11 @@ export const useMarksStore = create<MarksState>((set, get) => ({
     // Await persistence so sync / loadMarks read the same values (avoids stale UI after edits)
     try {
       await execute(
-        `UPDATE lc_counters SET 
+        `UPDATE lc_counters SET
         name = ?, emoji = ?, color = ?, unit = ?, enable_streak = ?,
         sort_index = ?, total = ?, last_activity_date = ?, dailyTarget = ?,
         schedule_type = ?, schedule_days = ?, goal_value = ?, goal_period = ?,
+        health_kit_type = ?, health_kit_config = ?,
         updated_at = ?
       WHERE id = ?`,
         [
@@ -202,6 +209,8 @@ export const useMarksStore = create<MarksState>((set, get) => ({
           updated.schedule_days ?? null,
           updated.goal_value ?? null,
           updated.goal_period ?? null,
+          updated.health_kit_type ?? null,
+          updated.health_kit_config ? JSON.stringify(updated.health_kit_config) : null,
           updated.updated_at,
           id,
         ]

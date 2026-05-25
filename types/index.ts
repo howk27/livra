@@ -1,3 +1,5 @@
+import type { HealthKitType } from '../lib/health/healthTypes';
+
 // Goal & schedule types must be declared before Mark
 export type GoalPeriod = 'day' | 'week' | 'month';
 export type ScheduleType = 'daily' | 'weekly' | 'custom';
@@ -28,6 +30,8 @@ export type Mark = {
   // Feature 3: Skip Tokens
   skip_tokens_remaining?: number;  // default 2, reset monthly
   skip_tokens_month?: string;      // "YYYY-MM" of last reset
+  health_kit_type?: HealthKitType | null;
+  health_kit_config?: { stepGoal?: number } | null;
 };
 
 export type MarkEvent = {

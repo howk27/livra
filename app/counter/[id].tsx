@@ -11,7 +11,18 @@ import {
   TextInput,
   ActivityIndicator,
   KeyboardAvoidingView,
+  Modal,
 } from 'react-native';
+import { checkProStatus } from '../../lib/iap/iap';
+import { requestPermissions } from '../../lib/health/healthPermissions';
+import { suggestStepGoal, suggestWakeTime } from '../../lib/health/healthLearner';
+import type { HealthKitType } from '../../lib/health/healthTypes';
+import {
+  scheduleSleepNotification,
+  cancelSleepNotification,
+  getSleepNotifTime,
+  setSleepNotifTime,
+} from '../../lib/notifications/sleepNotification';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -34,6 +45,7 @@ import { getAppDate } from '../../lib/appDate';
 import { formatDate } from '../../lib/date';
 import { useAppDateStore } from '../../state/appDateSlice';
 import { deriveStreakForMark } from '../../hooks/useStreaks';
+import { HealthConnectBanner } from '../../components/HealthConnectBanner';
 
 function toLocalDateStr(d: Date): string {
   return formatDate(d);
@@ -51,7 +63,7 @@ export default function CounterDetailScreen() {
   const params = useLocalSearchParams<{ id: string }>();
   const id = typeof params.id === 'string' ? params.id : params.id?.[0];
 
-  const { counters, loading, incrementCounter, decrementCounter, resetCounter, deleteCounter } = useCounters();
+  const { counters, loading, incrementCounter, decrementCounter, resetCounter, deleteCounter, updateMark } = useCounters();
   const allEvents = useEventsStore((state) => state.events || []);
   const counter = id ? counters.find((c) => c.id === id) : null;
   const iconType = counter ? resolveCounterIconType(counter) : undefined;
@@ -67,6 +79,11 @@ export default function CounterDetailScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const noteSectionYRef = useRef(0);
   const appDateKey = useAppDateStore((s) => s.debugDateOverride ?? '');
+
+  const [healthModalVisible, setHealthModalVisible] = useState(false);
+  const [healthStepGoal, setHealthStepGoal] = useState<string>('');
+  const [healthPendingType, setHealthPendingType] = useState<HealthKitType | null>(null);
+  const [healthConnecting, setHealthConnecting] = useState(false);
 
   const todayStr = useMemo(() => toLocalDateStr(getAppDate()), [appDateKey]);
 
@@ -314,6 +331,71 @@ export default function CounterDetailScreen() {
             } finally {
               setDeletingNote(false);
             }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleConnectHealth = async () => {
+    const status = await checkProStatus();
+    if (!status.effectiveUnlocked) {
+      router.push('/paywall');
+      return;
+    }
+    setHealthModalVisible(true);
+  };
+
+  const handleHealthTypeSelect = async (type: HealthKitType) => {
+    if (type === 'steps') {
+      setHealthPendingType(type);
+      const suggested = await suggestStepGoal();
+      setHealthStepGoal(suggested !== null ? String(suggested) : '');
+      return;
+    }
+    await confirmHealthConnection(type, undefined);
+  };
+
+  const confirmHealthConnection = async (type: HealthKitType, stepGoal: number | undefined) => {
+    if (!id) return;
+    setHealthConnecting(true);
+    try {
+      await requestPermissions([type]);
+      const config = type === 'steps' && stepGoal !== undefined ? { stepGoal } : null;
+      await updateMark(id, { health_kit_type: type, health_kit_config: config });
+
+      if (type === 'sleep') {
+        let wakeTime = await getSleepNotifTime(id);
+        if (!wakeTime) {
+          wakeTime = await suggestWakeTime();
+        }
+        if (wakeTime) {
+          await setSleepNotifTime(id, wakeTime);
+          await scheduleSleepNotification(id, wakeTime);
+        }
+      }
+    } catch (err) {
+      Alert.alert('Could not connect', 'Health permissions could not be requested. Try again from Settings → Privacy → Health.');
+    } finally {
+      setHealthConnecting(false);
+      setHealthModalVisible(false);
+      setHealthPendingType(null);
+    }
+  };
+
+  const handleDisconnectHealth = async () => {
+    if (!id) return;
+    Alert.alert(
+      'Disconnect Apple Health?',
+      'Your weekly reflection will return to using manual check-ins.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Disconnect',
+          style: 'destructive',
+          onPress: async () => {
+            await updateMark(id, { health_kit_type: null, health_kit_config: null });
+            await cancelSleepNotification(id);
           },
         },
       ],
@@ -669,6 +751,122 @@ export default function CounterDetailScreen() {
             })}
           </View>
         )}
+        <HealthConnectBanner
+          markId={id ?? ''}
+          markName={counter.name}
+          alreadyConnected={!!counter.health_kit_type}
+        />
+
+        {/* Apple Health connection */}
+        <View style={[styles.noteCard, { backgroundColor: themeColors.surface, marginTop: spacing.md }]}>
+          <LinearGradient
+            pointerEvents="none"
+            colors={cardSheenColors}
+            start={{ x: 0.15, y: 0 }}
+            end={{ x: 0.85, y: 1 }}
+            style={styles.cardSheen}
+          />
+          <View style={{ padding: spacing.md }}>
+            <Text style={[styles.noteTitle, { color: themeColors.text, marginBottom: spacing.xs }]}>
+              Apple Health
+            </Text>
+            {counter.health_kit_type ? (
+              <View>
+                <Text style={{ color: themeColors.textSecondary, fontSize: fontSize.sm, marginBottom: spacing.sm }}>
+                  Connected — weekly reflection powered by Health data.
+                </Text>
+                <TouchableOpacity onPress={handleDisconnectHealth}>
+                  <Text style={{ color: themeColors.error, fontSize: fontSize.sm }}>Disconnect</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={{ backgroundColor: themeColors.primary, borderRadius: borderRadius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, alignSelf: 'flex-start' }}
+                onPress={handleConnectHealth}
+              >
+                <Text style={{ color: '#FFFFFF', fontSize: fontSize.sm, fontWeight: fontWeight.semibold }}>
+                  Connect to Apple Health
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
+        {/* Health type picker modal */}
+        <Modal
+          visible={healthModalVisible}
+          transparent
+          animationType="slide"
+          onRequestClose={() => { setHealthModalVisible(false); setHealthPendingType(null); }}
+        >
+          <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' }}>
+            <View style={{ backgroundColor: themeColors.surface, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: spacing.lg }}>
+              <Text style={{ color: themeColors.text, fontSize: fontSize.lg, fontWeight: fontWeight.bold, marginBottom: spacing.md }}>
+                Connect to Apple Health
+              </Text>
+
+              {healthPendingType === 'steps' ? (
+                <View>
+                  <Text style={{ color: themeColors.textSecondary, fontSize: fontSize.sm, marginBottom: spacing.sm }}>
+                    How many steps counts as an active day?
+                  </Text>
+                  <TextInput
+                    value={healthStepGoal}
+                    onChangeText={setHealthStepGoal}
+                    keyboardType="number-pad"
+                    placeholder="e.g. 8000"
+                    placeholderTextColor={themeColors.textSecondary}
+                    style={{
+                      borderWidth: 1,
+                      borderColor: themeColors.border,
+                      borderRadius: borderRadius.md,
+                      padding: spacing.sm,
+                      color: themeColors.text,
+                      fontSize: fontSize.md,
+                      marginBottom: spacing.md,
+                    }}
+                  />
+                  <TouchableOpacity
+                    style={{ backgroundColor: themeColors.primary, borderRadius: borderRadius.md, padding: spacing.md, alignItems: 'center' }}
+                    disabled={healthConnecting}
+                    onPress={() => {
+                      const goal = parseInt(healthStepGoal, 10);
+                      if (isNaN(goal) || goal <= 0) {
+                        Alert.alert('Invalid goal', 'Enter a number greater than 0.');
+                        return;
+                      }
+                      void confirmHealthConnection('steps', goal);
+                    }}
+                  >
+                    <Text style={{ color: '#FFFFFF', fontWeight: fontWeight.semibold }}>
+                      {healthConnecting ? 'Connecting…' : 'Save & Connect'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View>
+                  {(['workout', 'sleep', 'hydration', 'mindful', 'steps', 'running'] as HealthKitType[]).map(type => (
+                    <TouchableOpacity
+                      key={type}
+                      style={{ paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: themeColors.border }}
+                      onPress={() => void handleHealthTypeSelect(type)}
+                    >
+                      <Text style={{ color: themeColors.text, fontSize: fontSize.md, textTransform: 'capitalize' }}>
+                        {type}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                  <TouchableOpacity
+                    style={{ paddingVertical: spacing.sm, marginTop: spacing.xs }}
+                    onPress={() => { setHealthModalVisible(false); setHealthPendingType(null); }}
+                  >
+                    <Text style={{ color: themeColors.textSecondary, fontSize: fontSize.sm, textAlign: 'center' }}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          </View>
+        </Modal>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
