@@ -11,6 +11,7 @@ function todayISO(): string {
 interface CheckinsState {
   checkins: DailyCheckin[];
   loading: boolean;
+  error: string | null;
   loadCheckins: (userId: string) => Promise<void>;
   recordCheckin: (userId: string, goalId: string, showedUp: boolean) => Promise<DailyCheckin>;
   getTodayCheckin: (goalId: string) => DailyCheckin | undefined;
@@ -21,6 +22,7 @@ interface CheckinsState {
 export const useCheckinsStore = create<CheckinsState>((set, get) => ({
   checkins: [],
   loading: false,
+  error: null,
 
   loadCheckins: async (userId) => {
     set({ loading: true });
@@ -28,7 +30,7 @@ export const useCheckinsStore = create<CheckinsState>((set, get) => ({
       const checkins = await loadCheckinsForUser(userId);
       set({ checkins, loading: false });
     } catch {
-      set({ loading: false });
+      set({ loading: false, error: 'Failed to load check-ins' });
     }
   },
 
@@ -41,12 +43,18 @@ export const useCheckinsStore = create<CheckinsState>((set, get) => ({
       ? { ...existing, showed_up: showedUp }
       : { id: uuidv4(), user_id: userId, goal_id: goalId, date: today, showed_up: showedUp, created_at: now };
 
-    await upsertCheckin(checkin);
+    try {
+      await upsertCheckin(checkin);
+    } catch (err) {
+      set(s => ({ ...s, error: 'Failed to save check-in' }));
+      throw err;
+    }
+
     set(s => {
       const without = s.checkins.filter(
         c => !(c.user_id === userId && c.goal_id === goalId && c.date === today),
       );
-      return { checkins: [...without, checkin] };
+      return { checkins: [...without, checkin], error: null };
     });
 
     return checkin;

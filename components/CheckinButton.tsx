@@ -13,13 +13,12 @@ export function CheckinButton() {
   const themeColors = colors[theme];
   const router = useRouter();
   const goals = useGoalsStore(s => s.goals);
-  const checkins = useCheckinsStore(s => s.checkins);
+  const hasCheckedInToday = useCheckinsStore(s => s.hasCheckedInToday);
 
   const activeGoal = goals.find(g => g.status === 'active');
   if (!activeGoal) return null;
 
-  const today = new Date().toISOString().slice(0, 10);
-  const done = checkins.some(c => c.goal_id === activeGoal.id && c.date === today);
+  const done = hasCheckedInToday(activeGoal.id);
 
   return (
     <TouchableOpacity

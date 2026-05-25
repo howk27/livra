@@ -13,7 +13,11 @@ async function readAll(): Promise<DailyCheckin[]> {
 }
 
 async function writeAll(checkins: DailyCheckin[]): Promise<void> {
-  await AsyncStorage.setItem(CHECKINS_KEY, JSON.stringify(checkins));
+  try {
+    await AsyncStorage.setItem(CHECKINS_KEY, JSON.stringify(checkins));
+  } catch (err) {
+    throw new Error(`Failed to persist checkins: ${String(err)}`);
+  }
 }
 
 export async function loadCheckinsForUser(userId: string): Promise<DailyCheckin[]> {

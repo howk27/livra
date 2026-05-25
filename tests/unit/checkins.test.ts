@@ -76,4 +76,9 @@ describe('getCheckinStreak', () => {
     const checkins = [makeCheckin({ date: '2026-05-25', showed_up: false })];
     expect(getCheckinStreak(checkins, 'g1', '2026-05-25')).toBe(0);
   });
+
+  test('0 when only yesterday checkin (not today)', () => {
+    const checkins = [makeCheckin({ date: '2026-05-24' })]; // yesterday, not today
+    expect(getCheckinStreak(checkins, 'g1', '2026-05-25')).toBe(0);
+  });
 });

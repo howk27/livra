@@ -5,6 +5,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   Platform,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -23,42 +24,29 @@ export default function CheckinScreen() {
   const { user } = useAuth();
   const goals = useGoalsStore(s => s.goals);
   const activeGoal = goals.find(g => g.status === 'active');
-  const recordCheckin = useCheckinsStore(s => s.recordCheckin);
-  const checkins = useCheckinsStore(s => s.checkins);
-  const [answered, setAnswered] = useState(false);
-  const [response, setResponse] = useState<boolean | null>(null);
-
   const goalId = activeGoal?.id ?? '';
-  // Derive check-in state from checkins array directly
-  const today = new Date().toISOString().slice(0, 10);
-  const alreadyCheckedIn = checkins.some(c => c.goal_id === goalId && c.date === today);
-  const streak = (() => {
-    const positives = checkins
-      .filter(c => c.goal_id === goalId && c.showed_up)
-      .sort((a, b) => b.date.localeCompare(a.date));
-    if (positives.length === 0) return 0;
-    let s = 0;
-    let cursor = new Date(`${today}T00:00:00`);
-    for (const entry of positives) {
-      const cursorStr = cursor.toISOString().slice(0, 10);
-      if (entry.date === cursorStr) {
-        s++;
-        cursor.setDate(cursor.getDate() - 1);
-      } else if (entry.date < cursorStr) {
-        break;
-      }
-    }
-    return s;
-  })();
+  const getTodayCheckin = useCheckinsStore(s => s.getTodayCheckin);
+  const getCheckinStreak = useCheckinsStore(s => s.getCheckinStreak);
+  const recordCheckin = useCheckinsStore(s => s.recordCheckin);
+
+  const existingCheckin = getTodayCheckin(goalId);
+  const streak = getCheckinStreak(goalId);
+
+  const [answered, setAnswered] = useState(existingCheckin !== undefined);
+  const [response, setResponse] = useState<boolean | null>(existingCheckin?.showed_up ?? null);
 
   const handleAnswer = async (showedUp: boolean) => {
     if (!user?.id || !goalId) return;
     if (Platform.OS !== 'web') {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
-    await recordCheckin(user.id, goalId, showedUp);
-    setResponse(showedUp);
-    setAnswered(true);
+    try {
+      await recordCheckin(user.id, goalId, showedUp);
+      setResponse(showedUp);
+      setAnswered(true);
+    } catch {
+      Alert.alert('Error', 'Could not save your check-in. Please try again.');
+    }
   };
 
   if (!activeGoal) {
@@ -156,7 +144,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   question: {
-    fontSize: 28,
+    fontSize: fontSize['2xl'],
     fontWeight: fontWeight.bold,
     textAlign: 'center',
     lineHeight: 36,
@@ -178,7 +166,7 @@ const styles = StyleSheet.create({
   },
   noBtnText: { fontSize: fontSize.md },
   responseTitle: {
-    fontSize: 32,
+    fontSize: fontSize['3xl'],
     fontWeight: fontWeight.bold,
     textAlign: 'center',
   },
