@@ -17,6 +17,10 @@ import {
   pickBestDayForWeek,
 } from '../../lib/topMarkWeekly';
 import type { BestDayResult } from '../../lib/topMarkWeekly';
+import { WeeklyReflectionCard } from '../../components/WeeklyReflectionCard';
+import { classifyMarkTier, isMarkFirstWeek } from '../../lib/weeklyReflectionLogic';
+import { getReflectionCopy } from '../../lib/weeklyReflectionCopy';
+import { buildWeekDates, getWeekRange } from '../../lib/review/weeklyReview';
 
 function hashPickIndex(seed: string, modulo: number): number {
   let h = 0;
@@ -267,6 +271,17 @@ export default function TrackingScreen() {
     [bestDay, weekDates],
   );
 
+  const weeklyReflectionItems = useMemo(() => {
+    const { weekStart } = getWeekRange(getAppDate());
+    const weekDatesReflection = buildWeekDates(weekStart);
+    return counters.map(mark => {
+      const firstWeek = isMarkFirstWeek(mark.created_at, weekStart);
+      const tier = classifyMarkTier(mark.id, allEvents, weekDatesReflection, firstWeek);
+      const copy = getReflectionCopy(tier, mark.id, weekStart);
+      return { mark, tier, title: copy.title, body: copy.body };
+    });
+  }, [counters, allEvents, appDateKey]);
+
   /** Semantic accents: green / warm orange / subtle blue (per card). */
   const streakWarm = themeColors.counter.orange;
   const bestDayAccent = themeColors.counter.blue;
@@ -286,6 +301,22 @@ export default function TrackingScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
+        {weeklyReflectionItems.length > 0 && (
+          <View style={{ paddingTop: spacing.xs }}>
+            <Text style={[styles.sectionHeader, { color: themeColors.textSecondary }]}>
+              THIS WEEK
+            </Text>
+            {weeklyReflectionItems.map(({ mark, tier, title, body }) => (
+              <WeeklyReflectionCard
+                key={mark.id}
+                markName={mark.name}
+                tier={tier}
+                title={title}
+                body={body}
+              />
+            ))}
+          </View>
+        )}
         <Text style={[styles.weekKicker, { color: themeColors.success }]}>
           WEEK {activeDaysCount}/7 COMPLETE
         </Text>
@@ -644,6 +675,12 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     fontWeight: fontWeight.medium,
     lineHeight: 19,
+  },
+  sectionHeader: {
+    fontSize: 11,
+    fontWeight: '600' as const,
+    letterSpacing: 1,
+    marginBottom: spacing.sm,
   },
   /** Extra space below the calendar + clearance above the tab bar when scrolled to end */
   activityCard: {
