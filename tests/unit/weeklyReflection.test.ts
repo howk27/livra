@@ -65,11 +65,14 @@ describe('classifyMarkTier', () => {
 });
 
 describe('isMarkFirstWeek', () => {
-  test('true if created 3 days before weekStart', () => {
-    expect(isMarkFirstWeek('2026-05-15T00:00:00Z', WEEK_START)).toBe(true);
+  test('false if created 3 days before weekStart', () => {
+    expect(isMarkFirstWeek('2026-05-15T00:00:00Z', WEEK_START)).toBe(false);
   });
   test('true if created on weekStart', () => {
     expect(isMarkFirstWeek('2026-05-18T00:00:00Z', WEEK_START)).toBe(true);
+  });
+  test('true if created after weekStart (mid-week)', () => {
+    expect(isMarkFirstWeek('2026-05-20T00:00:00Z', WEEK_START)).toBe(true);
   });
   test('false if created 7 or more days before weekStart', () => {
     expect(isMarkFirstWeek('2026-05-11T00:00:00Z', WEEK_START)).toBe(false);

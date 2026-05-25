@@ -33,7 +33,5 @@ export function classifyMarkTier(
 export function isMarkFirstWeek(markCreatedAt: string, weekStart: string): boolean {
   const created = new Date(`${markCreatedAt.slice(0, 10)}T00:00:00`);
   const week = new Date(`${weekStart}T00:00:00`);
-  const diffMs = week.getTime() - created.getTime();
-  const diffDays = diffMs / (1000 * 60 * 60 * 24);
-  return diffDays < 7;
+  return created >= week;
 }

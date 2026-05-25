@@ -20,7 +20,6 @@ import type { BestDayResult } from '../../lib/topMarkWeekly';
 import { WeeklyReflectionCard } from '../../components/WeeklyReflectionCard';
 import { classifyMarkTier, isMarkFirstWeek } from '../../lib/weeklyReflectionLogic';
 import { getReflectionCopy } from '../../lib/weeklyReflectionCopy';
-import { buildWeekDates, getWeekRange } from '../../lib/review/weeklyReview';
 
 function hashPickIndex(seed: string, modulo: number): number {
   let h = 0;
@@ -272,15 +271,14 @@ export default function TrackingScreen() {
   );
 
   const weeklyReflectionItems = useMemo(() => {
-    const { weekStart } = getWeekRange(getAppDate());
-    const weekDatesReflection = buildWeekDates(weekStart);
+    const weekStart = weekDates[0]!;
     return counters.map(mark => {
       const firstWeek = isMarkFirstWeek(mark.created_at, weekStart);
-      const tier = classifyMarkTier(mark.id, allEvents, weekDatesReflection, firstWeek);
+      const tier = classifyMarkTier(mark.id, allEvents, weekDates, firstWeek);
       const copy = getReflectionCopy(tier, mark.id, weekStart);
       return { mark, tier, title: copy.title, body: copy.body };
     });
-  }, [counters, allEvents, appDateKey]);
+  }, [counters, allEvents, weekDates]);
 
   /** Semantic accents: green / warm orange / subtle blue (per card). */
   const streakWarm = themeColors.counter.orange;
@@ -302,7 +300,7 @@ export default function TrackingScreen() {
         showsVerticalScrollIndicator={false}
       >
         {weeklyReflectionItems.length > 0 && (
-          <View style={{ paddingTop: spacing.xs }}>
+          <View style={styles.reflectionSection}>
             <Text style={[styles.sectionHeader, { color: themeColors.textSecondary }]}>
               THIS WEEK
             </Text>
@@ -677,10 +675,13 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
   sectionHeader: {
-    fontSize: 11,
-    fontWeight: '600' as const,
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.semibold,
     letterSpacing: 1,
     marginBottom: spacing.sm,
+  },
+  reflectionSection: {
+    paddingTop: spacing.xs,
   },
   /** Extra space below the calendar + clearance above the tab bar when scrolled to end */
   activityCard: {
