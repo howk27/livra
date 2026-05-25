@@ -49,6 +49,7 @@ import { subDays } from 'date-fns';
 import { HomeHeader } from '../../components/HomeHeader';
 import { WeeklySummaryStrip } from '../../components/WeeklySummaryStrip';
 import { ActiveGoalBanner } from '../../components/ActiveGoalBanner';
+import { CheckinButton } from '../../components/CheckinButton';
 import type { HeaderState, WeekArcState, PostLogState } from '../../lib/copy';
 import { deriveStreakForMark } from '../../hooks/useStreaks';
 
@@ -1123,6 +1124,7 @@ export default function HomeScreen() {
 
         {/* ── Active goal banner — always visible (not gated on marks) ── */}
         {!isEditMode && <ActiveGoalBanner />}
+        {!isEditMode && <CheckinButton />}
 
         {/* ── Edit mode hint ────────────────────────────────────── */}
         {isEditMode && (
