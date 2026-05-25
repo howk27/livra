@@ -1132,8 +1132,8 @@ export default function HomeScreen() {
 
         {localCounters.length === 0 ? (
           <EmptyState
-            title={loading ? "Loading marks" : "Start Your Journey"}
-            message={loading ? "Please wait while we load your marks..." : "Create your first mark to start tracking your progress and building momentum!"}
+            title={loading ? "Loading marks" : "Add your first mark."}
+            message={loading ? "Please wait..." : "Marks are the daily actions that move your goal forward. Pick something you've been putting off and start there."}
             iconElement={
               loading ? (
                 <ActivityIndicator size="large" color={themeColors.textSecondary} />
