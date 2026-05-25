@@ -37,9 +37,14 @@ import { Card, PrimaryButton } from '../components/ui';
 
 const PRO_FEATURES = [
   {
+    ion: 'flag-outline',
+    title: 'Unlimited Goals',
+    description: 'Queue as many goals as you have. Work through them one at a time.',
+  },
+  {
     ion: 'infinite-outline',
     title: 'Unlimited Marks',
-    description: 'Every mark, every goal. No ceiling on what you can build.',
+    description: 'Every daily action, tracked. No ceiling on what you can build.',
   },
   {
     ion: 'bar-chart-outline',
@@ -48,7 +53,7 @@ const PRO_FEATURES = [
   },
 ];
 
-const SHIPPED_PREMIUM_FEATURE_TITLES = ['Unlimited Marks', 'CSV Export'];
+const SHIPPED_PREMIUM_FEATURE_TITLES = ['Unlimited Goals', 'Unlimited Marks', 'CSV Export'];
 
 /** App store icon — same asset as `expo.icon` in app.json */
 const LIVRA_APP_ICON = require('../assets/icon.png');
@@ -716,6 +721,12 @@ function PaywallScreenContent() {
       });
     }
   };
+
+  useEffect(() => {
+    if (isProUnlocked) {
+      router.back();
+    }
+  }, [isProUnlocked, router]);
 
   useEffect(() => {
     if (isSubscribed) {
