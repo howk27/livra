@@ -12,13 +12,17 @@ export function ActiveGoalBanner() {
   const themeColors = colors[theme];
   const router = useRouter();
   const goals = useGoalsStore(s => s.goals);
+  const loading = useGoalsStore(s => s.loading);
   const activeGoal = goals.find(g => g.status === 'active');
+
+  if (loading) return null;
 
   if (!activeGoal) {
     return (
       <TouchableOpacity
         style={[styles.emptyBanner, { borderColor: themeColors.border }]}
         onPress={() => router.push('/goal/new')}
+        activeOpacity={0.75}
       >
         <Text style={[styles.emptyText, { color: themeColors.textSecondary }]}>
           Add a goal to get started →

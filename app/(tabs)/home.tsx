@@ -1118,9 +1118,11 @@ export default function HomeScreen() {
               incompleteMarksToday={incompleteMarksToday}
               hasPartialProgressToday={hasPartialProgressToday}
             />
-            <ActiveGoalBanner />
           </>
         )}
+
+        {/* ── Active goal banner — always visible (not gated on marks) ── */}
+        {!isEditMode && <ActiveGoalBanner />}
 
         {/* ── Edit mode hint ────────────────────────────────────── */}
         {isEditMode && (
