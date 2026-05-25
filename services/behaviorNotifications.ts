@@ -1,5 +1,5 @@
 /**
- * Livra’s only shipped local scheduling model: behavior DATE triggers (max 2/day, jittered windows).
+ * Livra's only shipped local scheduling model: behavior DATE triggers (max 2/day, jittered windows).
  * Re-planned via `livraLocalNotificationOwner` on foreground / data changes / tap.
  * Times and `occurred_local_date` assumptions are device-local (no IANA timezone layer).
  */
@@ -222,66 +222,60 @@ export function buildCopy(
   const rem = p.incompleteCount;
   const done = p.completedCount;
   const total = p.activeMarkCount;
-  const streak = p.maxCurrentStreak;
 
   switch (type) {
     case 'momentum': {
-      const titles = ['Start your day in Livra', 'Room for a quick win', 'Your marks are waiting'];
-      const t = titles[Math.floor(Math.random() * titles.length)]!;
-      let body: string;
-      if (rem === total) {
-        body =
-          total === 1
-            ? `You have 1 mark to log today — one tap starts the streak.`
-            : `You have ${total} marks to touch today. Pick the easiest first.`;
-      } else {
-        body =
-          rem === 1
-            ? `1 mark still open today — knock it off whenever you have a minute.`
-            : `${rem} marks still open — even one completion moves the day forward.`;
+      // Single incomplete mark — name it directly for a personal, goal-anchored nudge
+      if (rem === 1 && p.incompleteNames[0]) {
+        return {
+          title: p.incompleteNames[0],
+          body: "You said you'd do this today. There's still time.",
+        };
       }
-      if (streak > 0 && p.anyStreakAtRisk) {
-        body += ` Keep your ${streak}-day momentum going.`;
-      }
-      return { title: t, body };
-    }
-    case 'midday': {
-      const titles = ['Halfway through the day', 'Still time to finish strong', 'Midday check-in'];
+      const titles = ['Your marks are waiting', 'Time to show up', "Today's on you"];
       const t = titles[Math.floor(Math.random() * titles.length)]!;
-      const ratio = total > 0 ? done / total : 0;
       const body =
-        ratio >= 0.5
-          ? `You're over halfway (${done}/${total} today). Finish the rest before the day slips away.`
-          : `${done} of ${total} done — close the gap this afternoon.`;
+        rem === total
+          ? total === 1
+            ? 'You have one mark today. One tap is all it takes.'
+            : `You have ${total} marks today. Pick the easiest one first.`
+          : `${rem} marks still open. Even one moves the day forward.`;
       return { title: t, body };
     }
-    case 'end_of_day': {
-      const titles = ['Save today’s progress', 'Before the day ends', 'Don’t lose the streak'];
+
+    case 'midday': {
+      const titles = ['Halfway through', 'Still time today', 'Pick up where you left off'];
       const t = titles[Math.floor(Math.random() * titles.length)]!;
-      let body: string;
-      if (rem === 1) {
-        body = `1 more mark to complete today — quick log keeps everything honest.`;
-      } else {
-        body = `${rem} marks still open — a few taps now beat starting from zero tomorrow.`;
-      }
-      if (p.anyStreakAtRisk) {
-        body += ` Keep your streak alive.`;
-      }
+      const body =
+        done > 0
+          ? `${done} of ${total} done. Finish the rest this afternoon.`
+          : `${total} marks waiting. A few minutes now is all it takes.`;
       return { title: t, body };
     }
+
+    case 'end_of_day': {
+      const titles = ['Before the day ends', 'One more thing', "Today isn't done yet"];
+      const t = titles[Math.floor(Math.random() * titles.length)]!;
+      const body =
+        rem === 1
+          ? '1 mark left. Close it out before midnight.'
+          : `${rem} marks still open. A few taps now beat starting over tomorrow.`;
+      return { title: t, body };
+    }
+
     case 'win': {
-      const allDoneHere = p.completedCount >= p.activeMarkCount;
+      const allDoneHere = done >= total;
       const titles = allDoneHere
-        ? ['You crushed today', 'Full board — nice', 'That’s how consistency looks']
-        : ['Almost a full sweep', 'Strong progress today', 'You’re in the zone'];
+        ? ['You showed up today', "That's the work", 'Full day — done']
+        : ['Strong progress today', 'Almost there', "You're close"];
       const t = titles[Math.floor(Math.random() * titles.length)]!;
       const body = allDoneHere
         ? total <= 1
-          ? `Every mark for today is done. See you tomorrow.`
-          : `All ${total} marks complete today. Carry that energy forward.`
+          ? 'Every mark for today is done. See you tomorrow.'
+          : `All ${total} marks complete. That's what showing up looks like.`
         : rem === 1
-          ? `1 mark left today — you’re already ${done} of ${total}. Finish the set.`
-          : `${done} of ${total} done — close it out and make today a full win.`;
+          ? `1 mark left — you're ${done} of ${total}. Finish the set.`
+          : `${done} of ${total} done. Close it out and make today a full win.`;
       return { title: t, body };
     }
   }
