@@ -139,3 +139,5 @@ export function getNextMilestone(streak: number): Milestone | null {
 export type Counter = Mark;
 export type CounterEvent = MarkEvent;
 export type CounterStreak = MarkStreak;
+
+export type { Goal, GoalStatus } from './goal';
