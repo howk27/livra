@@ -60,6 +60,11 @@ import {
   userHasEmailPasswordIdentity,
   passwordCredentialNotApplicableMessage,
 } from '../../lib/auth/providerHints';
+import {
+  getPaceNotifWindow,
+  setPaceNotifWindow,
+  type PaceWindow,
+} from '../../lib/notifications/paceNotification';
 
 /** Matches `tabBarStyle.height` in `app/(tabs)/_layout.tsx` (64 + safe area); tab bar is absolute so content must pad past it. */
 const TAB_BAR_CONTENT_HEIGHT = 64;
@@ -107,6 +112,16 @@ export default function SettingsScreen() {
   const [profileDisplayName, setProfileDisplayName] = useState<string | null>(null);
   /** Last successful core sync + maintenance metadata (AsyncStorage); not tied to this screen's `useSync` instance. */
   const [persistedSyncDiag, setPersistedSyncDiag] = useState<SyncDiagSnapshotV1 | null>(null);
+  const [paceWindow, setPaceWindowState] = useState<PaceWindow>('morning');
+
+  useEffect(() => {
+    getPaceNotifWindow().then((win) => setPaceWindowState(win));
+  }, []);
+
+  const handlePaceWindowChange = async (win: PaceWindow) => {
+    await setPaceNotifWindow(win);
+    setPaceWindowState(win);
+  };
 
   const refreshPersistedSyncDiag = useCallback(async () => {
     setPersistedSyncDiag(await readSyncDiagSnapshot());
@@ -1480,6 +1495,55 @@ export default function SettingsScreen() {
           </KeyboardAvoidingView>
         )}
 
+        {/* Notifications */}
+        <View style={styles.section}>
+          <AppText variant="caption" style={[styles.sectionKicker, { color: themeColors.textTertiary }]}>
+            Notifications
+          </AppText>
+          <Card
+            backgroundColor={themeColors.surface}
+            borderColor={themeColors.border}
+            borderRadiusKey="card"
+          >
+            <View style={{ padding: spacing.md, gap: spacing.md }}>
+              <View>
+                <AppText variant="body" style={{ color: themeColors.text, fontWeight: fontWeight.semibold }}>
+                  Pace alerts
+                </AppText>
+                <AppText variant="caption" style={{ color: themeColors.textSecondary, marginTop: spacing.xxs }}>
+                  When to send pace alert notifications
+                </AppText>
+              </View>
+              <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+                {(['morning', 'midday', 'evening'] as PaceWindow[]).map((win) => {
+                  const selected = paceWindow === win;
+                  const label = win === 'morning' ? 'Morning' : win === 'midday' ? 'Midday' : 'Evening';
+                  return (
+                    <TouchableOpacity
+                      key={win}
+                      style={[
+                        styles.windowChip,
+                        {
+                          backgroundColor: selected ? themeColors.accent.primary : themeColors.surface,
+                          borderColor: selected ? themeColors.accent.primary : themeColors.border,
+                        },
+                      ]}
+                      onPress={() => handlePaceWindowChange(win)}
+                    >
+                      <AppText
+                        variant="caption"
+                        style={{ color: selected ? '#FFFFFF' : themeColors.textSecondary, fontWeight: fontWeight.semibold }}
+                      >
+                        {label}
+                      </AppText>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          </Card>
+        </View>
+
         {/* Appearance */}
         <View style={styles.section}>
           <AppText variant="caption" style={[styles.sectionKicker, { color: themeColors.textTertiary }]}>
@@ -2052,6 +2116,13 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.lg,
     borderWidth: StyleSheet.hairlineWidth,
     marginBottom: spacing.sm,
+  },
+  windowChip: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
   },
   footerLegal: {
     alignItems: 'center',
