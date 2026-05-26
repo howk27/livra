@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -14,9 +14,13 @@ export default function GoalHistoryScreen() {
   const theme = useEffectiveTheme();
   const themeColors = colors[theme];
   const router = useRouter();
-  const getCompletedGoals = useGoalsStore(s => s.getCompletedGoals);
-  const completed = getCompletedGoals().sort((a, b) =>
-    (b.completed_at ?? '').localeCompare(a.completed_at ?? ''),
+  const goals = useGoalsStore(s => s.goals);
+  const completed = useMemo(
+    () =>
+      goals
+        .filter(g => g.status === 'completed')
+        .sort((a, b) => (b.completed_at ?? '').localeCompare(a.completed_at ?? '')),
+    [goals],
   );
 
   const count = completed.length;
