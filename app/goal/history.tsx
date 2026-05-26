@@ -64,7 +64,7 @@ export default function GoalHistoryScreen() {
               <View style={styles.meta}>
                 {goal.completed_at ? (
                   <Text style={[styles.metaText, { color: themeColors.textSecondary }]}>
-                    {'Finished ' + format(parseISO(goal.completed_at), 'MMM d, yyyy')}
+                    {'Finished ' + format(parseISO(goal.completed_at), 'MMM d')}
                   </Text>
                 ) : null}
                 {goal.completed_at ? (

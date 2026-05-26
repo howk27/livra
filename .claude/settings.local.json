@@ -6,7 +6,13 @@
       "Bash(npm install *)",
       "Bash(Read /tmp/claude-1000/-mnt-c-Users-DEIVI-Desktop-Livra/44d8ecb9-812a-40df-a5de-d5637a7a94a3/tasks/br67xebd2.output)",
       "Bash(node_modules/.bin/tsc --noEmit --skipLibCheck)",
-      "Bash(node_modules/.bin/jest *)"
+      "Bash(node_modules/.bin/jest *)",
+      "Bash(git fetch *)",
+      "Bash(git commit-tree 0cbe2dc335d2ee5cd15c004c615787d5eba24e6c -p e6ac7f596c7b95cf4841cfa16a2864ee0e41a7de -m ' *)",
+      "Bash(git config *)",
+      "Bash(git update-ref *)",
+      "Bash(git push *)",
+      "Bash(gh auth *)"
     ]
   }
 }

@@ -36,13 +36,7 @@ export default function GoalQueueScreen() {
     () => goals.filter(g => g.status === 'queued').sort((a, b) => a.sort_index - b.sort_index),
     [goals],
   );
-  const completed = useMemo(
-    () =>
-      goals
-        .filter(g => g.status === 'completed')
-        .sort((a, b) => (b.completed_at ?? '').localeCompare(a.completed_at ?? '')),
-    [goals],
-  );
+  const completed = useMemo(() => goals.filter(g => g.status === 'completed'), [goals]);
 
   const handleComplete = (goal: Goal) => {
     Alert.alert(
