@@ -383,6 +383,7 @@ function RootNavigator() {
             gestureEnabled: false,
           }}
         />
+        <Stack.Screen name="goal/history" options={{ headerShown: false }} />
       </Stack>
       <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
     </>
