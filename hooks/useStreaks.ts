@@ -65,25 +65,24 @@ export const computeStreak = (events: CounterEvent[], today?: Date): StreakData 
   const sortedDates = Array.from(activityDates).sort();
   const lastDate = sortedDates[sortedDates.length - 1];
 
+  // Parse a YYYY-MM-DD string as local noon to avoid UTC-midnight timezone boundary issues.
+  const localNoon = (dateStr: string) => new Date(dateStr + 'T12:00:00');
+
   // Calculate current streak (counting backwards from today)
   let currentStreak = 0;
-  let checkDate = new Date(todayStr);
-  
+
   // Check if there's activity today or yesterday (allow 1-day gap)
   const daysSinceLastActivity = Math.floor(
-    (new Date(todayStr).getTime() - new Date(lastDate).getTime()) / (1000 * 60 * 60 * 24)
+    (localNoon(todayStr).getTime() - localNoon(lastDate).getTime()) / (1000 * 60 * 60 * 24)
   );
-  
+
   if (daysSinceLastActivity > 1) {
-    // Streak is broken
     currentStreak = 0;
   } else {
-    // Count backwards from the last activity date
-    // Add safety limit to prevent infinite loops
-    checkDate = new Date(lastDate);
+    let checkDate = localNoon(lastDate);
     let safetyCounter = 0;
-    const MAX_STREAK_DAYS = 1000; // Safety limit
-    
+    const MAX_STREAK_DAYS = 1000;
+
     while (activityDates.has(formatDate(checkDate)) && safetyCounter < MAX_STREAK_DAYS) {
       currentStreak++;
       checkDate = addDays(checkDate, -1);
@@ -97,15 +96,15 @@ export const computeStreak = (events: CounterEvent[], today?: Date): StreakData 
   let prevDate: Date | null = null;
 
   sortedDates.forEach((dateStr) => {
-    const currentDate = new Date(dateStr);
-    
+    const currentDate = localNoon(dateStr);
+
     if (!prevDate) {
       tempStreak = 1;
     } else {
       const daysDiff = Math.floor(
         (currentDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24)
       );
-      
+
       if (daysDiff === 1) {
         tempStreak++;
       } else {
@@ -113,7 +112,7 @@ export const computeStreak = (events: CounterEvent[], today?: Date): StreakData 
         tempStreak = 1;
       }
     }
-    
+
     prevDate = currentDate;
   });
   

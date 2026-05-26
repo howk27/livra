@@ -71,7 +71,7 @@ const summarizeHistory = (history: WeeklyHistoryEntry[], currentTotal: number): 
   const recent = history.slice(-4);
   if (recent.length < 3) return false;
   const previousTotals = recent.map(entry => entry.totalActivity);
-  return currentTotal > Math.max(...previousTotals);
+  return currentTotal >= Math.max(...previousTotals);
 };
 
 const getInsight = (params: {
@@ -133,6 +133,7 @@ export const computeWeeklyReview = (params: {
   weekDates.forEach(date => dayTotals.set(date, 0));
 
   const counterTotals = new Map<string, number>();
+  const counterLastActive = new Map<string, string>();
   events.forEach(event => {
     if (event.event_type !== 'increment') return;
     const normalizedDate = normalizeLocalDateKey(event.occurred_local_date);
@@ -141,6 +142,8 @@ export const computeWeeklyReview = (params: {
     if (!Number.isFinite(amount) || amount <= 0) return;
     dayTotals.set(normalizedDate, (dayTotals.get(normalizedDate) || 0) + amount);
     counterTotals.set(event.counter_id, (counterTotals.get(event.counter_id) || 0) + amount);
+    const prev = counterLastActive.get(event.counter_id) || '';
+    if (normalizedDate > prev) counterLastActive.set(event.counter_id, normalizedDate);
   });
 
   const totalsArray = weekDates.map(date => ({
@@ -174,7 +177,12 @@ export const computeWeeklyReview = (params: {
         total,
       };
     })
-    .sort((a, b) => b.total - a.total)
+    .sort((a, b) => {
+      if (b.total !== a.total) return b.total - a.total;
+      const aLast = counterLastActive.get(a.id) || '';
+      const bLast = counterLastActive.get(b.id) || '';
+      return bLast > aLast ? 1 : bLast < aLast ? -1 : 0;
+    })
     .slice(0, 3);
 
   const streaksActive: WeeklyReviewStreakHighlight[] = streaks
