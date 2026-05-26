@@ -28,7 +28,6 @@ export default function GoalQueueScreen() {
   const completeGoal = useGoalsStore(s => s.completeGoal);
   const deleteGoal = useGoalsStore(s => s.deleteGoal);
   const updateGoalTargetDate = useGoalsStore(s => s.updateGoalTargetDate);
-  const [showCompleted, setShowCompleted] = useState(false);
   const [showTargetPicker, setShowTargetPicker] = useState(false);
   const [targetPickerDate, setTargetPickerDate] = useState(new Date());
 
@@ -190,28 +189,13 @@ export default function GoalQueueScreen() {
           <View style={styles.section}>
             <TouchableOpacity
               style={styles.completedToggle}
-              onPress={() => setShowCompleted(v => !v)}
+              onPress={() => router.push('/goal/history')}
             >
               <Text style={[styles.sectionLabel, { color: themeColors.textSecondary }]}>
                 COMPLETED ({completed.length})
               </Text>
-              <Ionicons
-                name={showCompleted ? 'chevron-up' : 'chevron-down'}
-                size={14}
-                color={themeColors.textSecondary}
-              />
+              <Ionicons name="chevron-forward" size={14} color={themeColors.textSecondary} />
             </TouchableOpacity>
-            {showCompleted &&
-              completed.map(goal => (
-                <View
-                  key={goal.id}
-                  style={[styles.card, { backgroundColor: themeColors.surface, borderColor: themeColors.border, opacity: 0.6 }]}
-                >
-                  <Text style={[styles.goalTitle, { color: themeColors.text }]}>
-                    ✓ {goal.title}
-                  </Text>
-                </View>
-              ))}
           </View>
         )}
 
