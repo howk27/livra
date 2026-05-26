@@ -56,6 +56,10 @@ export function PaceBanner({
     });
   }, [isBehind, goalId]);
 
+  useEffect(() => {
+    if (suggestedDate) setPickedDate(parseISO(suggestedDate));
+  }, [suggestedDate]);
+
   if (!isBehind || dismissed) return null;
 
   const handleDismiss = async () => {

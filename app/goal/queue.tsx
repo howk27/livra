@@ -252,23 +252,25 @@ export default function GoalQueueScreen() {
               Target date
             </Text>
             {Platform.OS === 'ios' && (
-              <DateTimePicker
-                value={targetPickerDate}
-                mode="date"
-                display="spinner"
-                minimumDate={new Date()}
-                onChange={(_, date) => { if (date) setTargetPickerDate(date); }}
-                style={{ width: '100%' }}
-              />
+              <>
+                <DateTimePicker
+                  value={targetPickerDate}
+                  mode="date"
+                  display="spinner"
+                  minimumDate={new Date()}
+                  onChange={(_, date) => { if (date) setTargetPickerDate(date); }}
+                  style={{ width: '100%' }}
+                />
+                <TouchableOpacity
+                  style={{ backgroundColor: themeColors.accent.primary, borderRadius: borderRadius.md, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.md }}
+                  onPress={() => handleSaveTargetDate(targetPickerDate)}
+                >
+                  <Text style={{ color: '#FFFFFF', fontSize: fontSize.md, fontWeight: fontWeight.semibold }}>
+                    Set date
+                  </Text>
+                </TouchableOpacity>
+              </>
             )}
-            <TouchableOpacity
-              style={{ backgroundColor: themeColors.accent.primary, borderRadius: borderRadius.md, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.md }}
-              onPress={() => handleSaveTargetDate(targetPickerDate)}
-            >
-              <Text style={{ color: '#FFFFFF', fontSize: fontSize.md, fontWeight: fontWeight.semibold }}>
-                Set date
-              </Text>
-            </TouchableOpacity>
             {active?.target_date && (
               <TouchableOpacity onPress={handleClearTargetDate} style={{ alignItems: 'center', marginTop: spacing.sm }}>
                 <Text style={{ color: themeColors.textSecondary, fontSize: fontSize.sm, textDecorationLine: 'underline' }}>
