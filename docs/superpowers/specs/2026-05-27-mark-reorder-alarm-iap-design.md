@@ -137,33 +137,103 @@ Button calls `Linking.openURL('clock:')`.
 
 **Execution order: Edge Function audit → Legacy cleanup → Paywall UI refresh**
 
-### Workstream A: Subscription lapse enforcement (do first)
+### Workstream A: Edge function update + subscription lapse enforcement (do first)
 
-**What exists (`docs/Validate-iap-receipt.md` — never committed):**  
-The edge function at `supabase/functions/validate-iap-receipt` is a **receipt validation endpoint** — the client calls it after a purchase to unlock pro. It is NOT an Apple Server Notification (S2S webhook) handler.
+**What exists (`docs/Validate-iap-receipt.md` — gitignored, never commit):**  
+The edge function is a **receipt validation endpoint** — the client calls it after a purchase to unlock pro. It is NOT an Apple Server Notification (S2S webhook) handler.
 
-**Audit result — what's correct:**
+**What's correct (do not change):**
 - Receipt validated with Apple prod → sandbox fallback on status `21007` ✓
-- `ALLOWED_PRODUCT_IDS` matches client SKUs (`livra_plus_monthly`, `livra_plus_yearly`) ✓  
+- `ALLOWED_PRODUCT_IDS` matches client SKUs (`livra_plus_monthly`, `livra_plus_yearly`) ✓
 - `extractActiveEntitlement` checks `expiresDateMs > nowMs` and filters cancelled transactions ✓
 - Uses `APPLE_SHARED_SECRET` (required for auto-renewable subscriptions) ✓
 - `SECURITY DEFINER` RPC `update_pro_status` for safe DB write ✓
 - Android returns `501` cleanly ✓
 
-**Critical gap — `pro_unlocked` is never set to `false`:**  
-`update_pro_status` is only ever called with `pro_unlocked_param = true`. When a user cancels their subscription, Apple never notifies this endpoint — `pro_unlocked` stays `true` in the DB permanently and the user retains access indefinitely.
+---
 
-**Fix: re-verify receipt on app launch (client-side, no new server infrastructure)**
+**Required edge function changes:**
 
-1. On app launch (in `_layout.tsx` provider), after `checkProStatus` returns `unlocked`, silently re-call the receipt validation endpoint with the stored receipt.
-2. Store the receipt in AsyncStorage after initial purchase (already partially done via `iapService`).
-3. If the validation endpoint returns `400 "No active subscription entitlement found"`, call a new RPC `revoke_pro_status(userId)` (or reuse `update_pro_status(userId, false, '')`) to flip `pro_unlocked = false`.
-4. Gate the re-verify to once per 24 hours (AsyncStorage timestamp) to avoid hammering Apple's API.
+**🔴 Fix 1 — Add revocation path (critical)**
 
-**New Supabase RPC needed:** `revoke_pro_status(user_id_param uuid)` — sets `pro_unlocked = false` with `SECURITY DEFINER`. Alternatively, extend the existing `update_pro_status` to accept `false` (it already takes a boolean — just needs to be called that way).
+`update_pro_status` is only ever called with `pro_unlocked_param = true`. A cancelled or expired subscription never triggers a revocation. Fix: when the receipt is valid (Apple status 0) but `extractActiveEntitlement` returns `null`, check if the user currently has `pro_unlocked = true` and flip it to `false`.
 
-**Do not touch `IapManager.ts`, `useIapSubscriptions.ts`, or `rniapAdapter.ts` for this work.**  
-Changes touch: `_layout.tsx` (launch re-verify), `lib/iap/iap.ts` (re-verify helper), Supabase dashboard (RPC if needed).
+```
+// After extractActiveEntitlement returns null:
+const { data: profile } = await supabase
+  .from('profiles')
+  .select('pro_unlocked')
+  .eq('id', userId)
+  .single();
+
+if (profile?.pro_unlocked) {
+  await supabase.rpc('update_pro_status', {
+    user_id_param: userId,
+    pro_unlocked_param: false,
+    receipt_id_param: '',
+  });
+}
+return json(200, { success: true, unlocked: false, reason: 'subscription_lapsed' });
+```
+
+Return `200` (not `400`) — the receipt was valid, the subscription is just no longer active. The client uses the `unlocked: false` field to update local state.
+
+**🔴 Fix 2 — Handle Apple status 21006 correctly (critical)**
+
+Status `21006` means "receipt is valid but subscription has expired." Current code returns `400 { error: "Invalid receipt" }` — misleading and wrong. This should also trigger revocation, same as Fix 1.
+
+```
+if (appleResponse.status === 21006) {
+  // Revoke if currently unlocked, same logic as Fix 1
+  // Return 200 { unlocked: false, reason: 'subscription_expired' }
+}
+```
+
+**🟡 Fix 3 — Respect Apple billing grace period (recommended)**
+
+`pending_renewal_info` is typed but never read. Apple retries billing for up to 16 days — during this window access should NOT be revoked. Check before revoking:
+
+```
+const isInGracePeriod = (appleResponse.pending_renewal_info ?? []).some(
+  (r) => ALLOWED_PRODUCT_IDS.has(r.product_id ?? '') && r.auto_renew_status === '1'
+);
+if (isInGracePeriod) {
+  // Keep pro_unlocked = true, return { unlocked: true, grace: true }
+}
+```
+
+**🟡 Fix 4 — Store subscription expiry date (recommended)**
+
+The function returns `expiresDateMs` but never persists it. Add `subscription_expires_at` to the `update_pro_status` RPC so the DB knows when the subscription is due. This allows a cheap on-launch check without calling Apple every time.
+
+Requires a Supabase migration: add `subscription_expires_at timestamptz` to `profiles`, update `update_pro_status` RPC signature.
+
+---
+
+**Safety rule — never revoke on Apple API errors:**
+
+Only call `update_pro_status(false)` when Apple returns a confirmed lapsed/expired state (status 0 with no active entitlement, or status 21006). A network error, Apple 500, or missing `APPLE_SHARED_SECRET` must never trigger a revocation — fail open, not closed.
+
+---
+
+**Client-side: re-verify on app launch**
+
+After the edge function is updated, wire the client:
+
+1. On app launch, after `checkProStatus` returns `unlocked: true`, silently re-call the validation endpoint with the stored receipt (AsyncStorage key: `@livra_iap_receipt`).
+2. Store the receipt in AsyncStorage when `IapManager` processes a successful purchase (in the `purchaseUpdatedListener`).
+3. Gate re-verify to once per 24 hours (AsyncStorage timestamp `@livra_iap_last_verify`).
+4. If response is `{ unlocked: false }`, call `refreshProStatus()` from the hook to re-read from DB.
+
+Changes touch: edge function (Supabase dashboard), `lib/services/iap/IapManager.ts` (receipt storage only — no purchase flow changes), `lib/iap/iap.ts` (re-verify helper), `app/_layout.tsx` (launch trigger).
+
+**Do not touch `useIapSubscriptions.ts`, `rniapAdapter.ts`, or any purchase call sites.**
+
+---
+
+**Note on Apple API deprecation:**
+
+`verifyReceipt` is deprecated in favour of the App Store Server API (StoreKit 2). It still works and Apple has not announced a shutdown date. Acceptable for v1. Flag for v2 migration.
 
 ### Workstream B: Legacy one-time purchase audit
 
