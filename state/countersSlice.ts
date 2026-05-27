@@ -268,6 +268,12 @@ export const useMarksStore = create<MarksState>((set, get) => ({
     } catch (err) {
       logger.error('[MarksSlice] Failed to clean up skip tokens for deleted mark:', err);
     }
+    try {
+      const { cancelMarkReminder } = await import('../lib/notifications/markReminder');
+      await cancelMarkReminder(id);
+    } catch (err) {
+      logger.error('[MarksSlice] Failed to cancel reminder for deleted mark:', err);
+    }
   },
 
   /** Local-only bump without an lc_events row — breaks total↔events invariant; prefer useCounters increment/decrement. */
