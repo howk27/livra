@@ -44,6 +44,7 @@ import {
   validateIapCapabilities,
   type CapabilityDiagnostics,
 } from './rniapAdapter';
+import { storeReceipt } from '../../iap/iapReVerify';
 
 const isExpoGo = Constants.appOwnership === 'expo';
 
@@ -1222,6 +1223,13 @@ class IapManagerClass {
           tokenMissingError.code = 'TRANSIENT_PURCHASE_TOKEN_MISSING';
           throw tokenMissingError;
         }
+      }
+
+      // Store the receipt for background re-verify on future launches
+      if (receipt) {
+        storeReceipt(receipt).catch((err) => {
+          logger.warn('[IapManager] Failed to store receipt for re-verify', err);
+        });
       }
 
       // Validate receipt server-side BEFORE unlocking
