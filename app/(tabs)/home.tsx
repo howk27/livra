@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { DraggableGrid, IDraggableGridProps } from 'react-native-draggable-grid';
+import { SortableMarkList } from '../../components/SortableMarkList';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { colors } from '../../theme/colors';
@@ -30,7 +30,6 @@ import { LoadingScreen } from '../../components/LoadingScreen';
 import { execute } from '../../lib/db';
 import { Counter } from '../../types';
 import { resolveCounterIconType } from '@/src/components/icons/IconResolver';
-import MarkIcon from '@/src/components/icons/CounterIcon';
 import { applyOpacity } from '@/src/components/icons/color';
 import { useAuth } from '../../hooks/useAuth';
 import { useSync } from '../../hooks/useSync';
@@ -65,12 +64,6 @@ const GRID_ROW_GAP = spacing.sm;
 const GRID_ITEM_HEIGHT = 178;
 const GRID_AVAILABLE_WIDTH = SCREEN_WIDTH - GRID_OUTER_PADDING * 2;
 const GRID_BLOCK_WIDTH = GRID_AVAILABLE_WIDTH / 2;
-const EDIT_ROW_HEIGHT = 58;
-const EDIT_ROW_GAP = spacing.xs;
-/** Edit-mode list only: mark title + symbol icon scale vs normal grid tiles */
-const EDIT_MODE_MARK_TITLE_ICON_SCALE = 1.2;
-const EDIT_MODE_MARK_ICON_SIZE = Math.round(16 * EDIT_MODE_MARK_TITLE_ICON_SCALE);
-const EDIT_MODE_MARK_ICON_WRAP = Math.round(22 * EDIT_MODE_MARK_TITLE_ICON_SCALE);
 
 export default function HomeScreen() {
   const theme = useEffectiveTheme();
@@ -83,13 +76,11 @@ export default function HomeScreen() {
   const { updateSmartNotifications, permissionGranted } = useNotifications();
   const paceAlert = usePaceAlert();
   const [localCounters, setLocalCounters] = useState<Counter[]>([]);
-  const [scrollEnabled, setScrollEnabled] = useState(true);
   const [profileImageUri, setProfileImageUri] = useState<string | null>(null);
   const [doneCollapsed, setDoneCollapsed] = useState(true);
   const { isEditMode, setIsEditMode } = useFABContext();
   const appDateKey = useAppDateStore((s) => s.debugDateOverride ?? '');
   const scrollViewRef = useRef<ScrollView>(null);
-  const scrollViewYRef = useRef<number>(0);
 
   // Sync local state with counters from store
   // Deduplicate by ID to prevent React key errors
@@ -117,10 +108,10 @@ export default function HomeScreen() {
     }, [uniqueCounters, isEditMode])
   );
 
-  // Reset grid data when entering edit mode to ensure DraggableGrid initializes properly
+  // Reset local counters when entering edit mode to ensure fresh data
   useEffect(() => {
     if (isEditMode) {
-      // Force a small delay to ensure the grid re-renders with fresh data
+      // Force a small delay to ensure SortableMarkList re-initializes with fresh data
       // Deduplicate counters to prevent duplicate key errors
       const timer = setTimeout(() => {
         const countersMap = new Map<string, Counter>();
@@ -705,8 +696,6 @@ export default function HomeScreen() {
     [counters, sync, user]
   );
 
-  type GridCounter = Counter & { key: string };
-
   // Handle delete with confirmation for marks that have a value
   const handleDeleteCounter = useCallback(
     (counter: Counter) => {
@@ -739,254 +728,6 @@ export default function HomeScreen() {
     },
     [deleteCounter]
   );
-
-  const gridData: GridCounter[] = useMemo(() => {
-    // Ensure unique keys by deduplicating counters
-    const seen = new Set<string>();
-    return localCounters
-      .filter((counter) => {
-        if (seen.has(counter.id)) {
-          logger.warn(`[HomeScreen] Duplicate counter ID detected: ${counter.id}, skipping`);
-          return false;
-        }
-        seen.add(counter.id);
-        return true;
-      })
-      .map((counter) => ({
-        ...counter,
-        key: counter.id,
-      }));
-  }, [localCounters]);
-
-  const renderGridItem: IDraggableGridProps<GridCounter>['renderItem'] = useCallback(
-    (item) => {
-      const isDark = theme === 'dark';
-      const themeC = colors[theme];
-      const markColor = item.color || themeC.primary;
-      const rowBg = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.025)';
-      const borderC = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)';
-      const iconType = resolveCounterIconType(item);
-
-      return (
-        <View style={styles.editItemWrapper}>
-          <View
-            style={[
-              styles.editItemInner,
-              { backgroundColor: rowBg, borderColor: borderC },
-            ]}
-          >
-            {/* Drag handle */}
-            <Ionicons
-              name="reorder-two-outline"
-              size={20}
-              color={themeC.textSecondary}
-              style={styles.dragHandle}
-            />
-
-            {/* Identity: icon + name */}
-            <View style={styles.editIdentity}>
-              <View
-                style={[
-                  styles.editIconWrap,
-                  {
-                    width: EDIT_MODE_MARK_ICON_WRAP,
-                    height: EDIT_MODE_MARK_ICON_WRAP,
-                    backgroundColor: applyOpacity(markColor, 0.15),
-                  },
-                ]}
-              >
-                <MarkIcon
-                  type={iconType ?? 'focus'}
-                  size={EDIT_MODE_MARK_ICON_SIZE}
-                  variant="symbol"
-                  animate="none"
-                  ariaLabel={`${item.name} icon`}
-                  color={markColor}
-                />
-              </View>
-              <Text
-                numberOfLines={1}
-                style={[
-                  styles.editRowName,
-                  {
-                    color: themeC.text,
-                    fontSize: fontSize.sm * EDIT_MODE_MARK_TITLE_ICON_SCALE,
-                  },
-                ]}
-              >
-                {item.name}
-              </Text>
-            </View>
-
-            {/* Spacer — keeps delete button right-aligned without progress clutter */}
-            <View style={{ flex: 1 }} />
-
-            {/* Delete */}
-            {user && (
-              <TouchableOpacity
-                onPress={() => handleDeleteCounter(item)}
-                style={styles.deleteBtn}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Ionicons name="trash-outline" size={16} color={themeC.textSecondary} />
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-      );
-    },
-    [theme, user, handleDeleteCounter],
-  );
-
-  // Auto-scroll during drag
-  const scrollOffsetRef = useRef(0);
-  const autoScrollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const isDraggingRef = useRef(false);
-  const dragStartTimeRef = useRef<number | null>(null);
-  const touchStartTimeRef = useRef<number | null>(null);
-  const touchYPositionRef = useRef<number | null>(null);
-  const lastTouchYRef = useRef<number | null>(null);
-  const scrollStartDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Track scroll position
-  const handleScroll = useCallback((event: any) => {
-    scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
-  }, []);
-
-  // Auto-scroll logic when dragging - improved proximity-based scrolling with easing
-  const startAutoScroll = useCallback(() => {
-    if (autoScrollIntervalRef.current) {
-      clearInterval(autoScrollIntervalRef.current);
-    }
-
-    const SCROLL_INTERVAL = 16; // ~60fps for smoother scrolling
-    const EDGE_THRESHOLD = 80; // Reduced threshold - only scroll when very close to edge (pixels)
-    const MAX_SCROLL_SPEED = 4; // Reduced max speed for better control (pixels per interval)
-    const MIN_SCROLL_SPEED = 0.5; // Slower minimum speed for fine control
-    const EASING_POWER = 2.5; // Easing curve power (higher = more gradual acceleration)
-
-    autoScrollIntervalRef.current = setInterval(() => {
-      if (!isDraggingRef.current || !scrollViewRef.current || touchYPositionRef.current === null) {
-        return;
-      }
-
-      // Check if user is actively moving (not just holding still)
-      // If they're moving significantly, reduce scroll speed to give them more control
-      const isActivelyMoving = lastTouchYRef.current !== null && 
-                               touchYPositionRef.current !== null &&
-                               Math.abs(touchYPositionRef.current - lastTouchYRef.current) > 3;
-
-      // Get scroll metrics
-      const scrollMetrics = (scrollViewRef.current as any)._scrollMetrics;
-      if (!scrollMetrics) return;
-
-      const currentOffset = scrollOffsetRef.current;
-      const contentHeight = scrollMetrics.contentLength || 0;
-      const viewportHeight = scrollMetrics.visibleLength || Dimensions.get('window').height;
-      const maxScroll = Math.max(0, contentHeight - viewportHeight);
-      const touchY = touchYPositionRef.current;
-      
-      // touchY is already relative to the ScrollView viewport (either locationY or pageY - offset)
-      // Calculate distance from top and bottom edges of the ScrollView viewport
-      const distanceFromTop = Math.max(0, touchY);
-      const distanceFromBottom = Math.max(0, viewportHeight - touchY);
-      
-      // Determine scroll direction and speed based on proximity to edges with easing
-      let scrollDelta = 0;
-      
-      // Scroll down if finger is near bottom edge
-      if (distanceFromBottom < EDGE_THRESHOLD && currentOffset < maxScroll) {
-        const proximity = Math.max(0, EDGE_THRESHOLD - distanceFromBottom);
-        // Use easing function for smoother acceleration (ease-in-out curve)
-        const normalizedProximity = proximity / EDGE_THRESHOLD; // 0 to 1
-        const easedFactor = Math.pow(normalizedProximity, EASING_POWER); // Apply easing
-        let speed = MIN_SCROLL_SPEED + (MAX_SCROLL_SPEED - MIN_SCROLL_SPEED) * easedFactor;
-        // Reduce speed if user is actively moving to give them more control
-        if (isActivelyMoving) {
-          speed *= 0.5; // Cut speed in half when actively dragging
-        }
-        scrollDelta = speed;
-      }
-      // Scroll up if finger is near top edge
-      else if (distanceFromTop < EDGE_THRESHOLD && currentOffset > 0) {
-        const proximity = Math.max(0, EDGE_THRESHOLD - distanceFromTop);
-        // Use easing function for smoother acceleration (ease-in-out curve)
-        const normalizedProximity = proximity / EDGE_THRESHOLD; // 0 to 1
-        const easedFactor = Math.pow(normalizedProximity, EASING_POWER); // Apply easing
-        let speed = MIN_SCROLL_SPEED + (MAX_SCROLL_SPEED - MIN_SCROLL_SPEED) * easedFactor;
-        // Reduce speed if user is actively moving to give them more control
-        if (isActivelyMoving) {
-          speed *= 0.5; // Cut speed in half when actively dragging
-        }
-        scrollDelta = -speed;
-      }
-      
-      // Apply scroll if there's a delta (only if significant enough to avoid jitter)
-      if (Math.abs(scrollDelta) > 0.1) {
-        const newOffset = Math.max(0, Math.min(maxScroll, currentOffset + scrollDelta));
-        scrollOffsetRef.current = newOffset;
-        scrollViewRef.current.scrollTo({
-          y: newOffset,
-          animated: false,
-        });
-      }
-    }, SCROLL_INTERVAL);
-  }, []);
-
-  const stopAutoScroll = useCallback(() => {
-    if (autoScrollIntervalRef.current) {
-      clearInterval(autoScrollIntervalRef.current);
-      autoScrollIntervalRef.current = null;
-    }
-    if (scrollStartDelayRef.current) {
-      clearTimeout(scrollStartDelayRef.current);
-      scrollStartDelayRef.current = null;
-    }
-    isDraggingRef.current = false;
-    dragStartTimeRef.current = null;
-    touchStartTimeRef.current = null;
-    touchYPositionRef.current = null;
-    lastTouchYRef.current = null;
-    // Re-enable ScrollView scrolling when drag ends
-    setScrollEnabled(true);
-  }, []);
-
-  // Reset scroll state when exiting edit mode
-  useEffect(() => {
-    if (!isEditMode) {
-      setScrollEnabled(true);
-      stopAutoScroll();
-    }
-  }, [isEditMode, stopAutoScroll]);
-
-  const handleGridDragRelease = useCallback(
-    async (newData: GridCounter[]) => {
-      stopAutoScroll();
-      
-      const orderedCounters = newData.map(({ key: _key, ...rest }) => rest as Counter);
-
-      const hasChanged =
-        orderedCounters.length !== localCounters.length ||
-        orderedCounters.some((counter, index) => counter.id !== localCounters[index]?.id);
-
-      if (!hasChanged) {
-        return;
-      }
-
-      await persistReorderedCounters(orderedCounters);
-    },
-    [localCounters, persistReorderedCounters, stopAutoScroll]
-  );
-
-  // Cleanup on unmount or when exiting edit mode
-  useEffect(() => {
-    if (!isEditMode) {
-      stopAutoScroll();
-    }
-    return () => {
-      stopAutoScroll();
-    };
-  }, [isEditMode, stopAutoScroll]);
 
   // ── List-mode render callbacks ──────────────────────────────────
   const renderHabitRow = useCallback(
@@ -1163,98 +904,19 @@ export default function HomeScreen() {
             onAction={loading ? undefined : handleCreateCounter}
           />
         ) : isEditMode ? (
-          <ScrollView 
+          <ScrollView
             ref={scrollViewRef}
             style={styles.scrollView}
-            contentContainerStyle={styles.gridContainer}
+            contentContainerStyle={[styles.gridContainer, { paddingBottom: 24 }]}
             showsVerticalScrollIndicator={false}
-            nestedScrollEnabled={true}
-            scrollEnabled={scrollEnabled}
-            scrollEventThrottle={16}
-            onScroll={handleScroll}
-            onLayout={() => {
-              // Measure ScrollView's position on screen for touch position calculation
-              if (scrollViewRef.current) {
-                (scrollViewRef.current as any).measureInWindow((x: number, y: number) => {
-                  scrollViewYRef.current = y;
-                });
-              }
-            }}
-            onTouchStart={(event) => {
-              // Track when touch starts
-              if (isEditMode) {
-                touchStartTimeRef.current = Date.now();
-                isDraggingRef.current = false;
-                const touch = event.nativeEvent.touches[0];
-                if (touch) {
-                  // Prefer locationY (relative to ScrollView), fallback to pageY (absolute, needs offset)
-                  const locationY = (touch as any).locationY;
-                  touchYPositionRef.current = locationY !== undefined ? locationY : touch.pageY - scrollViewYRef.current;
-                }
-              }
-            }}
-            onTouchMove={(event) => {
-              // Update touch position for proximity-based scrolling
-              if (isEditMode) {
-                const touch = event.nativeEvent.touches[0];
-                if (touch) {
-                  // Prefer locationY (relative to ScrollView), fallback to pageY (absolute, needs offset)
-                  const locationY = (touch as any).locationY;
-                  touchYPositionRef.current = locationY !== undefined ? locationY : touch.pageY - scrollViewYRef.current;
-                }
-                
-                // Detect drag: if touch moves after long press delay, it's likely a drag
-                if (!isDraggingRef.current && touchStartTimeRef.current) {
-                  const touchDuration = Date.now() - touchStartTimeRef.current;
-                  // DraggableGrid uses 180ms delayLongPress, so after 250ms if still moving, it's a drag
-                  // Added extra delay to ensure drag is intentional
-                  if (touchDuration > 250) {
-                    isDraggingRef.current = true;
-                    dragStartTimeRef.current = Date.now();
-                    lastTouchYRef.current = touchYPositionRef.current;
-                    
-                    // Disable ScrollView scrolling when dragging starts to prevent conflicts
-                    setScrollEnabled(false);
-                    
-                    // Add a small delay before starting auto-scroll to avoid immediate scrolling
-                    // This gives user time to position the card before auto-scroll kicks in
-                    if (scrollStartDelayRef.current) {
-                      clearTimeout(scrollStartDelayRef.current);
-                    }
-                    scrollStartDelayRef.current = setTimeout(() => {
-                      startAutoScroll();
-                    }, 300); // 300ms delay before auto-scroll starts
-                  }
-                }
-                
-                // Track touch movement to detect if user is actively dragging (not just holding)
-                if (isDraggingRef.current && lastTouchYRef.current !== null && touchYPositionRef.current !== null) {
-                  const movement = Math.abs(touchYPositionRef.current - lastTouchYRef.current);
-                  // If user is moving finger significantly, they're actively dragging
-                  // Only update last position if movement is significant to avoid jitter
-                  if (movement > 5) {
-                    lastTouchYRef.current = touchYPositionRef.current;
-                  }
-                }
-              }
-            }}
-            onTouchEnd={() => {
-              stopAutoScroll();
-            }}
-            onTouchCancel={() => {
-              stopAutoScroll();
-            }}
           >
-            <DraggableGrid
-              key={`draggable-grid-${isEditMode}-${localCounters.length}`}
-              data={gridData}
-              numColumns={1}
-              renderItem={renderGridItem}
-              onDragRelease={handleGridDragRelease}
-              delayLongPress={180}
-              itemHeight={EDIT_ROW_HEIGHT + EDIT_ROW_GAP}
-              style={styles.draggableGrid}
-              dragStartAnimation={styles.dragStartAnimation}
+            <SortableMarkList
+              marks={localCounters.filter((c) => !c.deleted_at)}
+              onReorder={persistReorderedCounters}
+              onDelete={handleDeleteCounter}
+              showDelete={!!user}
+              theme={theme}
+              scrollViewRef={scrollViewRef}
             />
           </ScrollView>
         ) : (
@@ -1307,46 +969,6 @@ const styles = StyleSheet.create({
   editHintText: {
     fontSize: fontSize.xs,
     fontWeight: fontWeight.medium,
-  },
-  // ── Edit-mode list row ─────────────────────────────────────────
-  editItemWrapper: {
-    width: GRID_AVAILABLE_WIDTH,
-    height: EDIT_ROW_HEIGHT + EDIT_ROW_GAP,
-    paddingBottom: EDIT_ROW_GAP,
-  },
-  editItemInner: {
-    height: EDIT_ROW_HEIGHT,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    gap: spacing.sm,
-    borderRadius: borderRadius.sm,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  dragHandle: {
-    paddingRight: spacing.xxs,
-  },
-  editIdentity: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    flex: 1,
-    minWidth: 120,
-  },
-  editIconWrap: {
-    width: 22,
-    height: 22,
-    borderRadius: borderRadius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  editRowName: {
-    flex: 1,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
-  },
-  deleteBtn: {
-    padding: spacing.xs,
   },
   // ── Legacy header refs (onboarding is index-gated; no home hint) ──
   brandLogo: {
@@ -1409,9 +1031,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexGrow: 1,
   },
-  draggableGrid: {
-    width: GRID_AVAILABLE_WIDTH,
-  },
   row: {
     width: GRID_BLOCK_WIDTH * 2,
     justifyContent: 'flex-start',
@@ -1426,12 +1045,6 @@ const styles = StyleSheet.create({
   gridItemInner: {
     flex: 1,
     height: GRID_ITEM_HEIGHT,
-  },
-  dragStartAnimation: {
-    transform: [{ scale: 1 }],
-    shadowOpacity: 0,
-    shadowRadius: 0,
-    shadowOffset: { width: 0, height: 0 },
   },
 });
 
