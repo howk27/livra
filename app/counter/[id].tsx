@@ -12,7 +12,17 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Modal,
+  Switch,
+  Linking,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import {
+  getMarkReminderTime,
+  setMarkReminderTime,
+  scheduleMarkReminder,
+  cancelMarkReminder,
+  clearMarkReminderTime,
+} from '../../lib/notifications/markReminder';
 import { checkProStatus } from '../../lib/iap/iap';
 import { requestPermissions } from '../../lib/health/healthPermissions';
 import { suggestStepGoal, suggestWakeTime } from '../../lib/health/healthLearner';
@@ -84,6 +94,15 @@ export default function CounterDetailScreen() {
   const [healthStepGoal, setHealthStepGoal] = useState<string>('');
   const [healthPendingType, setHealthPendingType] = useState<HealthKitType | null>(null);
   const [healthConnecting, setHealthConnecting] = useState(false);
+
+  const [reminderEnabled, setReminderEnabled] = useState(false);
+  const [reminderTime, setReminderTime] = useState<Date>(() => {
+    const d = new Date();
+    d.setHours(8, 0, 0, 0);
+    return d;
+  });
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [reminderLoading, setReminderLoading] = useState(true);
 
   const todayStr = useMemo(() => toLocalDateStr(getAppDate()), [appDateKey]);
 
@@ -178,6 +197,25 @@ export default function CounterDetailScreen() {
       Animated.timing(morphAnim, { toValue: 1, duration: 110, useNativeDriver: true }).start();
     });
   }, [completedToday, morphAnim]);
+
+  // Load saved reminder preference
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    (async () => {
+      const stored = await getMarkReminderTime(id);
+      if (cancelled) return;
+      if (stored) {
+        const [h = '8', m = '0'] = stored.split(':');
+        const d = new Date();
+        d.setHours(parseInt(h, 10), parseInt(m, 10), 0, 0);
+        setReminderTime(d);
+        setReminderEnabled(true);
+      }
+      setReminderLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [id]);
 
   const scrollNoteIntoView = useCallback(() => {
     requestAnimationFrame(() => {
@@ -401,6 +439,29 @@ export default function CounterDetailScreen() {
       ],
     );
   };
+
+  const handleReminderToggle = useCallback(async (value: boolean) => {
+    if (!id || !counter) return;
+    setReminderEnabled(value);
+    if (value) {
+      setShowTimePicker(true);
+      const hhmm = `${reminderTime.getHours()}:${String(reminderTime.getMinutes()).padStart(2, '0')}`;
+      await setMarkReminderTime(id, hhmm);
+      await scheduleMarkReminder(id, counter.name, hhmm);
+    } else {
+      setShowTimePicker(false);
+      await cancelMarkReminder(id);
+      await clearMarkReminderTime(id);
+    }
+  }, [id, counter, reminderTime]);
+
+  const handleReminderTimeChange = useCallback(async (_: any, selected?: Date) => {
+    if (!selected || !id || !counter) return;
+    setReminderTime(selected);
+    const hhmm = `${selected.getHours()}:${String(selected.getMinutes()).padStart(2, '0')}`;
+    await setMarkReminderTime(id, hhmm);
+    await scheduleMarkReminder(id, counter.name, hhmm);
+  }, [id, counter]);
 
   const primaryActionFg = foregroundForHexBackground(markColor, isDark);
 
@@ -867,6 +928,73 @@ export default function CounterDetailScreen() {
             </View>
           </View>
         </Modal>
+        {/* ── Daily Reminder ─────────────────────────────────────── */}
+        {!reminderLoading && (
+          <View style={[styles.section, { backgroundColor: themeColors.surface, borderRadius: borderRadius.xl, padding: spacing.lg, marginTop: spacing.lg }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                <Ionicons name="notifications-outline" size={18} color={themeColors.textSecondary} />
+                <Text style={{ color: themeColors.text, fontSize: fontSize.base, fontWeight: '600' }}>
+                  Daily Reminder
+                </Text>
+              </View>
+              <Switch
+                value={reminderEnabled}
+                onValueChange={handleReminderToggle}
+                trackColor={{ false: themeColors.border, true: themeColors.primary }}
+                thumbColor="#fff"
+              />
+            </View>
+
+            {reminderEnabled && (
+              <View style={{ marginTop: spacing.md }}>
+                <TouchableOpacity
+                  onPress={() => setShowTimePicker((v) => !v)}
+                  style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
+                >
+                  <Text style={{ color: themeColors.textSecondary, fontSize: fontSize.sm }}>
+                    {reminderTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </Text>
+                  <Ionicons name="chevron-forward-outline" size={16} color={themeColors.textSecondary} />
+                </TouchableOpacity>
+
+                {showTimePicker && (
+                  <DateTimePicker
+                    value={reminderTime}
+                    mode="time"
+                    display="spinner"
+                    onChange={handleReminderTimeChange}
+                    style={{ marginTop: spacing.sm }}
+                  />
+                )}
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* ── Wake-Up Alarm (Sleep marks only) ────────────────────── */}
+        {counter?.health_kit_type === 'sleep' && (
+          <View style={[styles.section, { backgroundColor: themeColors.surface, borderRadius: borderRadius.xl, padding: spacing.lg, marginTop: spacing.lg }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm }}>
+              <Ionicons name="alarm-outline" size={18} color={themeColors.textSecondary} />
+              <Text style={{ color: themeColors.text, fontSize: fontSize.base, fontWeight: '600' }}>
+                Wake-Up Alarm
+              </Text>
+            </View>
+            <Text style={{ color: themeColors.textSecondary, fontSize: fontSize.sm, marginBottom: spacing.md }}>
+              Set your alarm in the Clock app.
+            </Text>
+            <TouchableOpacity
+              onPress={() => Linking.openURL('clock:')}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}
+            >
+              <Text style={{ color: themeColors.primary, fontSize: fontSize.base, fontWeight: '500' }}>
+                Open Clock App
+              </Text>
+              <Ionicons name="arrow-forward-outline" size={16} color={themeColors.primary} />
+            </TouchableOpacity>
+          </View>
+        )}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -1119,4 +1247,5 @@ const styles = StyleSheet.create({
   cardSheen: {
     ...StyleSheet.absoluteFillObject,
   },
+  section: {},
 });

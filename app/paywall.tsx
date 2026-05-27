@@ -36,24 +36,22 @@ import { AppText } from '../components/Typography';
 import { Card, PrimaryButton } from '../components/ui';
 
 const PRO_FEATURES = [
-  {
-    ion: 'flag-outline',
-    title: 'Unlimited Goals',
-    description: 'Queue as many goals as you have. Work through them one at a time.',
-  },
-  {
-    ion: 'infinite-outline',
-    title: 'Unlimited Marks',
-    description: 'Every daily action, tracked. No ceiling on what you can build.',
-  },
-  {
-    ion: 'bar-chart-outline',
-    title: 'CSV Export',
-    description: 'Your history is yours. Export it whenever you want.',
-  },
+  { ion: 'flag-outline',           title: 'Unlimited Goals',      description: 'Queue as many goals as you have.' },
+  { ion: 'infinite-outline',       title: 'Unlimited Marks',      description: 'No ceiling on what you can build.' },
+  { ion: 'swap-vertical-outline',  title: 'Mark Reordering',      description: 'Put your most important marks first.' },
+  { ion: 'heart-outline',          title: 'Health Integrations',  description: 'Sleep, Workout, Steps — synced automatically.' },
+  { ion: 'notifications-outline',  title: 'Custom Reminders',     description: 'Daily reminders for any mark, any time.' },
+  { ion: 'bar-chart-outline',      title: 'CSV Export',           description: 'Your history is yours. Export anytime.' },
 ];
 
-const SHIPPED_PREMIUM_FEATURE_TITLES = ['Unlimited Goals', 'Unlimited Marks', 'CSV Export'];
+const SHIPPED_PREMIUM_FEATURE_TITLES = [
+  'Unlimited Goals',
+  'Unlimited Marks',
+  'Mark Reordering',
+  'Health Integrations',
+  'Custom Reminders',
+  'CSV Export',
+];
 
 /** App store icon — same asset as `expo.icon` in app.json */
 const LIVRA_APP_ICON = require('../assets/icon.png');
@@ -1048,7 +1046,7 @@ function PaywallScreenContent() {
             <Text style={[styles.title, { color: themeColors.text }]}>Livra+</Text>
           </TouchableOpacity>
           <Text style={[styles.subtitle, { color: themeColors.textSecondary }]}>
-            More goals. More marks. No limits.
+            Everything you need to finish what you start.
           </Text>
           {!isNativeStorePurchasesSupported() && (
             <View
@@ -1276,8 +1274,8 @@ function PaywallScreenContent() {
               <AppText variant="button" style={{ color: themeColors.text, fontWeight: fontWeight.bold }}>Loading price...</AppText>
             ) : (
               <AppText variant="button" style={{ color: themeColors.text, fontWeight: fontWeight.bold }}>
-                Continue with {selectedPlan === 'monthly' ? 'Monthly' : 'Yearly'} Plan
-                {selectedPrice && selectedPrice.trim() !== '' ? ` - ${selectedPrice}` : ''}
+                Start Livra+
+                {selectedPrice && selectedPrice.trim() !== '' ? ` — ${selectedPrice}` : ''}
               </AppText>
             )}
           </PrimaryButton>
