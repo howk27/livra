@@ -1,160 +1,222 @@
 # Livra
 
-A minimalist, habit-free progress tracker built with React Native and Expo.
+**Goal execution for iOS.** Not a habit tracker. Not a counter.
+
+> *"Most people have a graveyard of abandoned goals. Livra is where goals actually get done — one at a time, in sequence."*
+
+---
+
+## What It Is
+
+Livra is a goal execution app built around a simple idea: finish one thing before starting the next. Users queue goals, track daily marks, and build momentum through a system that believes in them — not one that shames them for missing a day.
+
+**App Store category:** Productivity
+**Platform:** iOS (Android planned post-launch)
+
+---
+
+## Core Concepts
+
+### Goals
+- Users queue up to 3 goals (free) or unlimited (Livra+), one active at a time
+- Completing a goal auto-activates the next
+- Completion history is permanent and visible
+
+### Marks
+- Daily actions that move a goal forward (Sleep, Workout, Deep Work, Read, etc.)
+- Marks live at the user level — they persist across goals
+- Users can reorder marks freely; native integrations auto-log from Apple Health
+
+### Daily Check-in
+- Single focused interaction, one tap, tied to the active goal
+
+### Weekly Reflection
+- Rule-based copy library across 5 performance tiers (strong / solid / inconsistent / missing / first week)
+- Human voice throughout — no AI cost at launch
+
+---
 
 ## Features
 
-- ✅ **Simple Counter Tracking**: Create counters for anything - gym visits, books read, meditation days
-- 🔥 **Automatic Streaks**: Track consecutive days of activity
-- 📊 **7-Day Charts**: Visual progress tracking
-- 📱 **Offline-First**: Works perfectly without internet
-- ☁️ **Cloud Sync**: Optional Supabase sync across devices
-- 🔔 **Reminders**: Local notifications to stay on track
-- 💎 **Pro Features**: Unlimited counters, export, themes (one-time purchase)
+### Free Tier
+- Up to 3 goals in queue (1 active)
+- Up to 3 marks
+- Daily check-in
+- Weekly reflection
+- Goal completion moment
+- Basic notifications
+
+### Livra+ ($4.99/mo)
+- Unlimited goals and marks
+- Mark reordering
+- Apple Health integrations (Sleep, Workout, Steps, Hydration)
+- Custom daily reminders for any mark
+- Wake-up alarm deep-link (Sleep mark)
+- CSV export
+- Cloud backup / restore
+
+---
 
 ## Tech Stack
 
-- **Framework**: React Native + Expo
-- **Language**: TypeScript
-- **Navigation**: Expo Router
-- **State Management**: Zustand
-- **Data Fetching**: React Query
-- **Local Storage**: SQLite (expo-sqlite)
-- **Backend**: Supabase
-- **UI**: React Native Paper / NativeWind
-- **Animations**: React Native Reanimated
-- **Charts**: Victory Native / react-native-svg-charts
-- **IAP**: react-native-iap
-- **Testing**: Jest + React Native Testing Library
+| Layer | Technology |
+|-------|-----------|
+| Framework | React Native 0.85 + Expo SDK 56 |
+| Language | TypeScript 6.0 (strict) |
+| Navigation | Expo Router 4 (file-based) |
+| State | Zustand + AsyncStorage |
+| Data Fetching | TanStack Query |
+| Local DB | SQLite (expo-sqlite) — offline-first |
+| Backend | Supabase (auth + DB + Edge Functions) |
+| Animations | React Native Reanimated 4.x |
+| Gestures | React Native Gesture Handler |
+| IAP | react-native-iap + Supabase Edge Function (receipt validation) |
+| Health | HealthKit via expo-health |
+| Notifications | expo-notifications |
+| Testing | Jest + jest-expo |
+| Build | EAS Build + EAS Submit |
+
+---
 
 ## Getting Started
 
 ### Prerequisites
 
-- Node.js 18+ and npm
-- Expo CLI: `npm install -g expo-cli`
-- iOS Simulator (Mac) or Android Studio
+- Node.js 18+
+- Expo CLI (installed via `npx`)
+- iOS Simulator (Mac) or physical device with Expo Go / dev build
 
 ### Installation
 
-1. Clone the repository
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
+```bash
+git clone <repo>
+cd Livra
+npm install
+```
 
-3. Create a `.env` file in the root directory:
-   ```
-   EXPO_PUBLIC_SUPABASE_URL=your-supabase-url
-   EXPO_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
-   ```
+Create a `.env` file:
+```
+EXPO_PUBLIC_SUPABASE_URL=your-supabase-url
+EXPO_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+```
 
-4. Start the development server:
-   ```bash
-   npm start
-   ```
+Start the dev server:
+```bash
+npm start
+```
 
-5. Run on your preferred platform:
-   - Press `i` for iOS
-   - Press `a` for Android
-   - Press `w` for Web
+Then press `i` for iOS, `a` for Android, or `w` for web.
 
 ### Supabase Setup
 
-1. Create a Supabase project at [supabase.com](https://supabase.com)
-2. Apply RLS policies from `SUPABASE_RLS_POLICIES.sql` for security
-3. Copy your project URL and anon key to `.env`
+1. Create a project at [supabase.com](https://supabase.com)
+2. Apply the RLS policies from `SUPABASE_RLS_POLICIES.sql`
+3. Deploy the `validate-iap-receipt` Edge Function for subscription validation
+4. Copy your project URL and anon key to `.env`
+
+---
 
 ## Project Structure
 
 ```
-├── app/                    # Expo Router screens
-│   ├── (tabs)/            # Tab navigation
-│   │   ├── home.tsx       # Counters list
-│   │   ├── stats.tsx      # Statistics
-│   │   └── settings.tsx   # App settings
-│   ├── counter/           # Counter detail screens
-│   ├── onboarding.tsx     # First-run experience
-│   └── paywall.tsx        # Pro upgrade
-├── components/            # Reusable UI components
-├── hooks/                 # Custom React hooks
-├── lib/                   # Utilities and services
-│   ├── db/               # SQLite database
-│   ├── supabase.ts       # Supabase client
-│   ├── date.ts           # Date utilities
-│   ├── csv.ts            # CSV export
-├── state/                 # Zustand stores
-├── theme/                 # Colors and design tokens
-└── types/                 # TypeScript definitions
+app/
+├── (tabs)/
+│   ├── home.tsx          # Mark list, edit mode, pace banner
+│   ├── tracking.tsx      # Daily tracking view
+│   ├── profile.tsx       # User profile + momentum
+│   └── settings.tsx      # Preferences, theme, account
+├── counter/[id].tsx       # Mark detail (health, reminders, history)
+├── goal/
+│   ├── queue.tsx          # Goal queue management
+│   ├── complete.tsx       # Goal completion moment
+│   ├── history.tsx        # Completed goals list
+│   └── milestone.tsx      # Milestone notification screen
+├── checkin.tsx            # Daily check-in flow
+├── weekly-review.tsx      # Weekly reflection
+├── paywall.tsx            # Livra+ subscription screen
+└── onboarding.tsx         # First-run experience
+
+components/
+├── SortableMarkList.tsx   # Reanimated v4 drag-and-drop list
+├── SortableMarkRow.tsx    # Per-row animated drag row
+├── ActiveGoalBanner.tsx   # Home screen goal context
+├── PaceBanner.tsx         # Behind-pace recalibration prompt
+└── ...
+
+lib/
+├── iap/
+│   ├── iap.ts             # Pro status, receipt validation
+│   ├── iapReVerify.ts     # Silent 24h re-verify on launch
+│   └── skus.ts            # Product IDs (single source of truth)
+├── notifications/
+│   ├── markReminder.ts    # Per-mark daily reminder scheduling
+│   └── sleepNotification.ts
+├── health/                # HealthKit read + permissions
+├── db/                    # SQLite schema + migrations
+└── paceEngine.ts          # Goal pace calculation + recalibration
+
+state/
+├── countersSlice.ts       # Marks (user-level, persistent)
+├── goalsSlice.ts          # Goal queue + active goal
+├── eventsSlice.ts         # Increment events (offline-first)
+└── ...
+
+tests/unit/               # Jest unit tests (251 tests)
 ```
 
-## Available Scripts
+---
 
-- `npm start` - Start Expo dev server
-- `npm run android` - Run on Android
-- `npm run ios` - Run on iOS
-- `npm run web` - Run on web
-- `npm test` - Run tests
-- `npm run lint` - Lint code
-- `npm run format` - Format code with Prettier
-
-## Key Features
-
-### Free Tier
-- Up to 3 counters
-- Basic streak tracking
-- 7-day charts
-- Local notifications
-- Offline functionality
-
-### Pro (One-Time Purchase)
-- Unlimited counters
-- CSV & PDF export
-- Premium themes
-- Multiple reminders per counter
-- Cloud backup
-
-## Development
-
-### Adding a New Counter Type
-
-1. Update the `Counter` type in `types/index.ts`
-2. Add migration in `lib/db/migrations/`
-3. Update UI components as needed
-
-### Testing
+## Commands
 
 ```bash
-npm test
+npm start              # Expo dev server
+npm run ios            # iOS simulator
+npm run android        # Android emulator
+npm run web            # Web (limited)
+npm test               # Jest
+npm run type-check     # TypeScript (tsc --noEmit)
+npm run lint           # ESLint
+npm run format         # Prettier
+
+# EAS builds
+npm run build:ios      # Production iOS build
+npm run build:android  # Production Android build
+npm run build:preview:ios  # Preview / TestFlight build
 ```
 
-### Building for Production
+---
 
-**⚠️ IMPORTANT: Before building for production, ensure:**
+## Architecture Notes
 
-1. **Supabase Configuration**: Set `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` in your `.env` file
-2. **EAS Project ID**: Update `app.json` with your actual EAS project ID (run `eas init` to get it)
-3. **RLS Policies**: Apply `SUPABASE_RLS_POLICIES.sql` to ensure proper security
+**Marks are user-level, not goal-level.** Marks persist across goals — only the context (why this mark matters now) changes. Do not architect marks as children of goals.
 
-The build process will automatically validate production configuration using `scripts/validate-production-config.js`.
+**Offline-first.** All writes go to SQLite first. Supabase sync runs on reconnect. The app is fully functional without a network connection.
+
+**IAP is subscription-only.** No one-time purchase paths remain. Subscription validation runs through a Supabase Edge Function that validates Apple receipts server-side and enforces lapse. Client re-verifies on launch (24h gate) using the stored receipt.
+
+**Reanimated v4.** The mark reorder uses `useSharedValue` / `useAnimatedStyle` / `Gesture.Pan` — no third-party grid libraries. The `babel.config.js` must keep `react-native-reanimated/plugin` last.
+
+---
+
+## Production Build Checklist
+
+Before building for the App Store:
+
+- [ ] `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` set in `.env`
+- [ ] EAS project ID configured in `app.json` (`eas init` if needed)
+- [ ] Supabase RLS policies applied
+- [ ] `validate-iap-receipt` Edge Function deployed and tested
+- [ ] Edge function revocation path active (lapsed subscriptions → `pro_unlocked = false`)
+- [ ] Apple Health entitlements configured in EAS credentials
+- [ ] Push notification certificate configured
 
 ```bash
-# iOS
 eas build --platform ios --profile production
-
-# Android
-eas build --platform android --profile production
+eas submit --platform ios
 ```
 
-## Contributing
-
-This is a showcase project built from the developer handoff spec. Feel free to fork and customize!
+---
 
 ## License
 
-MIT
-
-## Acknowledgments
-
-Built following the Livra Developer Handoff specification.
-
+MIT — Sierra Link LLC
