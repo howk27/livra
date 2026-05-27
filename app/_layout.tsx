@@ -35,6 +35,8 @@ import { scheduleContextualDailyNotification } from '../lib/notificationSystem';
 import { getSupabaseClient } from '../lib/supabase';
 import { getMilestonesToFire, MILESTONE_COPY } from '../lib/goalMilestones';
 import { getAppDate } from '../lib/appDate';
+import { checkProStatus } from '../lib/iap/iap';
+import { reVerifyProOnLaunch } from '../lib/iap/iapReVerify';
 
 const queryClient = new QueryClient();
 
@@ -325,6 +327,25 @@ export default function RootLayout() {
       });
     }
   }, [initialized, user?.id, loadUIState]);
+
+  // Silently re-verify subscription receipt once per 24h on launch.
+  // Only runs when the user is known to be pro — skips for free users.
+  useEffect(() => {
+    if (!initialized || !user?.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const status = await checkProStatus();
+        if (cancelled) return;
+        if (status.effectiveUnlocked) {
+          await reVerifyProOnLaunch();
+        }
+      } catch {
+        // Fail open — never block app launch
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [initialized, user?.id]);
 
   // Auto-sync when user logs in
   useEffect(() => {
