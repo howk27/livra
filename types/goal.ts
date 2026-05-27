@@ -11,4 +11,5 @@ export type Goal = {
   created_at: string;
   updated_at: string;
   completed_at?: string | null;
+  milestones_fired?: string[];
 };

@@ -3,7 +3,7 @@ import 'react-native-get-random-values';
 import { useEffect, useRef } from 'react';
 import { AppState, AppStateStatus, View } from 'react-native';
 import * as Notifications from 'expo-notifications';
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -33,8 +33,54 @@ import {
 } from '../services/behaviorNotifications';
 import { scheduleContextualDailyNotification } from '../lib/notificationSystem';
 import { getSupabaseClient } from '../lib/supabase';
+import { getMilestonesToFire, MILESTONE_COPY } from '../lib/goalMilestones';
+import { getAppDate } from '../lib/appDate';
 
 const queryClient = new QueryClient();
+
+Notifications.setNotificationHandler({
+  handleNotification: async (notification) => {
+    const data = notification.request.content.data as Record<string, unknown>;
+    const isMilestone = data?.type === 'milestone';
+    return {
+      shouldShowAlert: isMilestone,
+      shouldShowBanner: isMilestone,
+      shouldShowList: isMilestone,
+      shouldPlaySound: false,
+      shouldSetBadge: false,
+    };
+  },
+});
+
+let milestonesChecking = false;
+
+async function checkAndFireMilestones(): Promise<void> {
+  if (milestonesChecking) return;
+  milestonesChecking = true;
+  try {
+    const { goals, markMilestonesFired } = useGoalsStore.getState();
+    const today = getAppDate();
+    const activeGoals = goals.filter(g => g.status === 'active');
+    for (const goal of activeGoals) {
+      const due = getMilestonesToFire(goal, today);
+      if (due.length === 0) continue;
+      // Highest-priority (furthest-along) milestone only — avoids notification spam; all due keys are marked fired.
+      const toNotify = due[due.length - 1];
+      await Notifications.scheduleNotificationAsync({
+        identifier: `livra-milestone-${goal.id}-${toNotify}`,
+        content: {
+          title: goal.title,
+          body: MILESTONE_COPY[toNotify],
+          data: { type: 'milestone', goalTitle: goal.title, milestoneKey: toNotify, livraOwner: true },
+        },
+        trigger: null,
+      });
+      await markMilestonesFired(goal.id, due);
+    }
+  } finally {
+    milestonesChecking = false;
+  }
+}
 
 // Global error handlers to catch unhandled promise rejections and errors
 if (typeof ErrorUtils !== 'undefined') {
@@ -73,12 +119,32 @@ export default function RootLayout() {
       }
     };
 
+    const handleMilestoneResponse = (response: Notifications.NotificationResponse | null) => {
+      if (!response) return;
+      const data = response.notification.request.content.data as Record<string, unknown>;
+      if (
+        data?.type === 'milestone' &&
+        typeof data.goalTitle === 'string' &&
+        typeof data.milestoneKey === 'string'
+      ) {
+        router.replace({
+          pathname: '/goal/milestone',
+          params: { goalTitle: data.goalTitle, milestoneKey: data.milestoneKey },
+        });
+      }
+    };
+
     Notifications.getLastNotificationResponseAsync()
-      .then(handleBehaviorResponse)
+      .then((response) => {
+        handleBehaviorResponse(response);
+        handleMilestoneResponse(response);
+        void Notifications.clearLastNotificationResponse();
+      })
       .catch(() => {});
 
     const responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
       handleBehaviorResponse(response);
+      handleMilestoneResponse(response);
       void recordBehaviorAppForeground();
       if (user?.id) scheduleContextualDailyNotification(user.id).catch(() => {});
     });
@@ -90,6 +156,7 @@ export default function RootLayout() {
       if (next === 'active' && wasBackground) {
         void recordBehaviorAppForeground();
         if (user?.id) scheduleContextualDailyNotification(user.id).catch(() => {});
+        checkAndFireMilestones().catch(() => {});
       }
     };
     const appSub = AppState.addEventListener('change', onAppState);
@@ -283,6 +350,7 @@ export default function RootLayout() {
           await useCountersStore.getState().loadMarks(user.id);
           useEventsStore.getState().loadEvents(undefined, user.id);
           await useGoalsStore.getState().loadGoals(user.id);
+          checkAndFireMilestones().catch(() => {});
           await useCheckinsStore.getState().loadCheckins(user.id);
           logger.log('[App] Local marks loaded, now syncing...');
           
@@ -384,6 +452,14 @@ function RootNavigator() {
           }}
         />
         <Stack.Screen name="goal/history" options={{ headerShown: false }} />
+        <Stack.Screen
+          name="goal/milestone"
+          options={{
+            presentation: 'fullScreenModal',
+            headerShown: false,
+            gestureEnabled: false,
+          }}
+        />
       </Stack>
       <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
     </>
