@@ -126,7 +126,7 @@ No back button. No skip. Two parts on one screen.
 
 - Header: `"Here's what we'd suggest for you."`
 - Show 2–3 mark cards from `getRecommendedMarks(identitySelections, focusArea)`
-- If `identitySelections` is empty (all skipped): show no cards, omit this section
+- If `identitySelections` is empty (all skipped): omit cards, show quiet fallback line instead: `"You can add marks anytime from home."`
 - Each card: icon, mark name, identity label
 - User can deselect any card. Cannot add more here.
 
@@ -147,6 +147,8 @@ On tap:
 5. Navigate to `/(tabs)/home`
 
 If goal input is empty on tap: create marks only, skip goal creation. User can add a goal from home.
+
+**Error handling:** If any creation step fails (network error, Supabase timeout, etc.), surface a single retry toast. Do not navigate to home until all steps complete successfully or are explicitly skipped due to empty input. The button should show a loading state during the async operations.
 
 ---
 
@@ -192,14 +194,14 @@ Priority algorithm: score each selected mark by its position in the focus area p
 
 | Selection | Name | Identity label | Icon | Color | HealthKit type |
 |---|---|---|---|---|---|
-| Sleep better | Sleep | Recovery | 🌙 | #10B981 | sleep |
-| Move my body | Workout | Strength | 💪 | #3B82F6 | workout |
-| Drink more water | Water | Vitality | 💧 | #06B6D4 | null |
-| Read consistently | Reading | Growth | 📚 | #8B5CF6 | null |
-| Plan my days | Planning | Clarity | 🗓️ | #F59E0B | null |
-| Practice focus | Focus | Focus | 🎯 | #EF4444 | null |
-| Build a skill | Practice | Mastery | ⚡ | #F97316 | null |
-| Track my finances | Finance | Discipline | 💰 | #84CC16 | null |
+| Sleep better | Sleep | Recovery | 🌙 | #7B9EA6 | sleep |
+| Move my body | Workout | Strength | 💪 | #8A7E6B | workout |
+| Drink more water | Water | Vitality | 💧 | #6B9E8A | null |
+| Read consistently | Reading | Growth | 📚 | #8A6B7B | null |
+| Plan my days | Planning | Clarity | 🗓️ | #9E8A6B | null |
+| Practice focus | Focus | Focus | 🎯 | #8A9E8A | null |
+| Build a skill | Practice | Mastery | ⚡ | #7B6B9E | null |
+| Track my finances | Finance | Discipline | 💰 | #9E7B6B | null |
 
 ---
 
