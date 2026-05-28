@@ -26,6 +26,8 @@ const STORAGE_KEYS = {
   streaks: '@livra_db_streaks',
   badges: '@livra_db_badges',
   meta: '@livra_db_meta',
+  userXp: '@livra_db_user_xp',
+  xpEvents: '@livra_db_xp_events',
 };
 
 // In-memory storage for development (backed by AsyncStorage)
@@ -66,6 +68,16 @@ const loadFromStorage = async (): Promise<void> => {
       Object.entries(metaData).forEach(([key, value]) => {
         meta.set(key, value as string);
       });
+    }
+
+    const userXpJson = await AsyncStorage.getItem(STORAGE_KEYS.userXp);
+    if (userXpJson) {
+      storage.set('userXp', JSON.parse(userXpJson));
+    }
+
+    const xpEventsJson = await AsyncStorage.getItem(STORAGE_KEYS.xpEvents);
+    if (xpEventsJson) {
+      storage.set('xpEvents', JSON.parse(xpEventsJson));
     }
   } catch (error) {
     logger.error('[DB] Error loading from AsyncStorage:', error);
@@ -115,6 +127,12 @@ const createMockDb = (): MockDatabase => ({
     }
     if (sql.includes('lc_meta') && !storage.has('meta')) {
       storage.set('meta', []);
+    }
+    if (sql.includes('lc_user_xp') && !storage.has('userXp')) {
+      storage.set('userXp', []);
+    }
+    if (sql.includes('lc_xp_events') && !storage.has('xpEvents')) {
+      storage.set('xpEvents', []);
     }
   },
   
@@ -566,7 +584,46 @@ const createMockDb = (): MockDatabase => ({
       }
       return { rowsAffected: 0 };
     }
-    
+
+    // INSERT OR REPLACE INTO lc_user_xp
+    if (sql.includes('lc_user_xp')) {
+      const rows = storage.get('userXp') || [];
+      const userId = params[0];
+      const idx = rows.findIndex((r: any) => r.user_id === userId);
+      const row = {
+        user_id: params[0],
+        total_xp: params[1],
+        current_level: params[2],
+        cooldown_until: params[3],
+        last_7d_bonus_date: params[4],
+        last_30d_bonus_date: params[5],
+      };
+      if (idx >= 0) {
+        rows[idx] = row;
+      } else {
+        rows.push(row);
+      }
+      storage.set('userXp', rows);
+      await saveToStorage('userXp', rows);
+      return { rowsAffected: 1 };
+    }
+
+    // INSERT INTO lc_xp_events
+    if (sql.includes('lc_xp_events')) {
+      const rows = storage.get('xpEvents') || [];
+      rows.push({
+        id: params[0],
+        user_id: params[1],
+        event_type: params[2],
+        xp_awarded: params[3],
+        created_at: params[4],
+        metadata: params[5],
+      });
+      storage.set('xpEvents', rows);
+      await saveToStorage('xpEvents', rows);
+      return { rowsAffected: 1 };
+    }
+
     return { rowsAffected: 0 };
   },
   
@@ -838,7 +895,32 @@ const createMockDb = (): MockDatabase => ({
       // Default: filter out deleted badges
       return badges.filter((b: any) => !b.deleted_at) as T[];
     }
-    
+
+    if (sql.includes('FROM lc_xp_events')) {
+      let rows: any[] = storage.get('xpEvents') || [];
+      if (sql.includes('user_id = ?') && params[0]) {
+        rows = rows.filter((r) => r.user_id === params[0]);
+      }
+      // Filter by date prefix: created_at LIKE '2026-05-28%'
+      if (sql.includes('created_at LIKE ?') && params.length >= 2) {
+        const prefix = params[1].replace('%', '');
+        rows = rows.filter((r) => r.created_at.startsWith(prefix));
+      }
+      // Filter by event_type
+      if (sql.includes('event_type = ?')) {
+        const typeIdx = sql.includes('created_at LIKE ?') ? 2 : 1;
+        if (params[typeIdx]) {
+          rows = rows.filter((r) => r.event_type === params[typeIdx]);
+        }
+      }
+      if (sql.includes('ORDER BY created_at DESC')) {
+        rows = [...rows].sort(
+          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+        );
+      }
+      return rows as T[];
+    }
+
     return [];
   },
   
@@ -907,7 +989,13 @@ const createMockDb = (): MockDatabase => ({
       const result = badges.find(b => b.counter_id === params[0] && !b.deleted_at) || null;
       return result as T | null;
     }
-    
+
+    if (sql.includes('FROM lc_user_xp')) {
+      const rows: any[] = storage.get('userXp') || [];
+      const userId = params[0];
+      return (rows.find((r) => r.user_id === userId) ?? null) as T | null;
+    }
+
     return null;
   },
   
@@ -1012,9 +1100,31 @@ export const initDatabase = async (): Promise<MockDatabase> => {
       value TEXT
     );
   `);
-  
+
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS lc_user_xp (
+      user_id TEXT PRIMARY KEY,
+      total_xp INTEGER NOT NULL DEFAULT 0,
+      current_level INTEGER NOT NULL DEFAULT 1,
+      cooldown_until TEXT,
+      last_7d_bonus_date TEXT,
+      last_30d_bonus_date TEXT
+    );
+  `);
+
+  await db.execAsync(`
+    CREATE TABLE IF NOT EXISTS lc_xp_events (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      xp_awarded INTEGER NOT NULL,
+      created_at TEXT NOT NULL,
+      metadata TEXT NOT NULL DEFAULT '{}'
+    );
+  `);
+
   meta.set('db_version', '1');
-  
+
   return db;
 };
 
