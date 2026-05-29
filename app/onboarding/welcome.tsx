@@ -14,7 +14,13 @@ export default function WelcomeScreen() {
     <SafeAreaView style={[styles.fill, { backgroundColor: themeColors.background }]}>
       <View style={styles.content}>
         <View style={styles.logoArea}>
-          <Text style={[styles.logoText, { color: themeColors.accent.primary }]}>Livra</Text>
+          <Text
+            style={[styles.logoText, { color: themeColors.accent.primary }]}
+            accessibilityRole="text"
+            accessibilityLabel="Livra"
+          >
+            Livra
+          </Text>
         </View>
 
         <View style={styles.copyArea}>
@@ -31,6 +37,8 @@ export default function WelcomeScreen() {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           onPress={() => router.push('/onboarding/commitment' as any)}
           activeOpacity={0.82}
+          accessibilityRole="button"
+          accessibilityLabel="Let's start"
         >
           <Text style={styles.ctaButtonText}>{"Let's start"}</Text>
         </TouchableOpacity>
