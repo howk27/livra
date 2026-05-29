@@ -128,17 +128,17 @@ export async function syncXPToSupabase(userId: string): Promise<void> {
     }
 
     const all = await readAllXPEvents();
-    const unsyncedEvents = all.filter((e) => e.user_id === userId);
-    if (unsyncedEvents.length === 0) return;
+    const eventsForUser = all.filter((e) => e.user_id === userId);
+    if (eventsForUser.length === 0) return;
 
     const { error: eventsErr } = await supabase.from('xp_events').upsert(
-      unsyncedEvents.map((e) => ({
+      eventsForUser.map((e) => ({
         id: e.id,
         user_id: e.user_id,
         event_type: e.event_type,
         xp_awarded: e.xp_awarded,
         created_at: e.created_at,
-        metadata: JSON.parse(e.metadata),
+        metadata: (() => { try { return JSON.parse(e.metadata); } catch { return {}; } })(),
       })),
       { onConflict: 'id' },
     );
