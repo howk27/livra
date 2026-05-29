@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getSupabaseClient } from '../supabase';
 import { logger } from '../utils/logger';
+import { formatDate } from '../date';
 
 const USER_XP_KEY = '@livra_db_user_xp';
 const XP_EVENTS_KEY = '@livra_db_xp_events';
@@ -78,10 +79,10 @@ export async function insertXPEvent(event: XPEvent): Promise<void> {
 }
 
 export async function loadXPEventsForDate(userId: string, date: string): Promise<XPEvent[]> {
-  // date is YYYY-MM-DD; match against ISO created_at prefix
+  // date is YYYY-MM-DD local; convert created_at (UTC ISO) to local date for comparison
   const all = await readAllXPEvents();
   return all.filter(
-    (e) => e.user_id === userId && e.created_at.startsWith(date),
+    (e) => e.user_id === userId && formatDate(e.created_at) === date,
   );
 }
 
@@ -97,9 +98,9 @@ export async function loadXPEventDates(userId: string, days: number): Promise<st
     if (
       e.user_id === userId &&
       e.event_type === 'mark_logged' &&
-      e.created_at.slice(0, 10) >= cutoffISO
+      formatDate(e.created_at) >= cutoffISO
     ) {
-      dateSet.add(e.created_at.slice(0, 10));
+      dateSet.add(formatDate(e.created_at));
     }
   }
   return Array.from(dateSet);

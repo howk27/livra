@@ -39,6 +39,7 @@ import { checkProStatus } from '../lib/iap/iap';
 import { reVerifyProOnLaunch } from '../lib/iap/iapReVerify';
 import { useXPStore } from '../state/xpSlice';
 import { LevelUpModal } from '../components/LevelUpModal';
+import { LEVEL_TITLES } from '../lib/xpEngine';
 
 const queryClient = new QueryClient();
 
@@ -447,12 +448,6 @@ export default function RootLayout() {
   );
 }
 
-const LEVEL_TITLES: Record<number, string> = {
-  1: 'Beginner', 2: 'Committed', 3: 'Consistent', 4: 'Focused',
-  5: 'Disciplined', 6: 'Dedicated', 7: 'Relentless', 8: 'Unstoppable',
-  9: 'Elite', 10: 'Livra',
-};
-
 function RootNavigator() {
   const theme = useEffectiveTheme();
   const pendingLevelUp = useXPStore((s) => s.pendingLevelUp);
@@ -497,7 +492,7 @@ function RootNavigator() {
       {pendingLevelUp !== null && (
         <LevelUpModal
           level={pendingLevelUp}
-          levelTitle={LEVEL_TITLES[pendingLevelUp] ?? 'Livra'}
+          levelTitle={LEVEL_TITLES[pendingLevelUp - 1] ?? 'Livra'}
           onDismiss={clearPendingLevelUp}
         />
       )}

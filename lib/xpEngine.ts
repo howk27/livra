@@ -1,5 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from './utils/logger';
+import { formatDate } from './date';
+import { getAppDate } from './appDate';
 import {
   loadUserXP,
   upsertUserXP,
@@ -21,7 +23,7 @@ export const LEVEL_THRESHOLDS: number[] = [
   0, 200, 500, 1000, 2000, 3500, 5500, 8000, 11000, 15000,
 ];
 
-const LEVEL_TITLES: string[] = [
+export const LEVEL_TITLES: string[] = [
   'Beginner',
   'Committed',
   'Consistent',
@@ -147,7 +149,7 @@ export function getBorderStyle(level: number): BorderStyle {
 const DAILY_CAP = 100;
 
 function todayDateString(): string {
-  return new Date().toISOString().slice(0, 10);
+  return formatDate(getAppDate());
 }
 
 function defaultUserXP(userId: string): UserXP {
