@@ -253,7 +253,11 @@ export async function awardMarkXP(
   const allLoggedToday =
     activeMarks.length > 0 && activeMarks.every((m) => marksLoggedToday.has(m.id));
 
-  if (allLoggedToday && runningDailyTotal < DAILY_CAP) {
+  const fullDayAlreadyAwarded = refreshedTodayEvents.some(
+    (e) => e.event_type === 'full_day_bonus',
+  );
+
+  if (allLoggedToday && !fullDayAlreadyAwarded && runningDailyTotal < DAILY_CAP) {
     const bonusXP = Math.min(25, DAILY_CAP - runningDailyTotal);
     totalAwarded += bonusXP;
     runningDailyTotal += bonusXP;

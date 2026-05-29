@@ -112,6 +112,17 @@ describe('getBorderStyle', () => {
     const s = getBorderStyle(10);
     expect(s.animated).toBe(true);
   });
+  it('level 5 — double ring', () => {
+    const s = getBorderStyle(5);
+    expect(s.borderWidth).toBe(2);
+    expect(s.doubleRing).toBe(true);
+    expect(s.animated).toBe(false);
+  });
+  it('level 7 — shadow elevation', () => {
+    const s = getBorderStyle(7);
+    expect(s.shadowElevation).toBe(6);
+    expect(s.animated).toBe(false);
+  });
 });
 
 describe('LEVEL_UP_COPY', () => {
