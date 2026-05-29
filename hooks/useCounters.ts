@@ -311,7 +311,18 @@ export const useMarks = () => {
         evaluateMarkBadges(markId, userId).catch((error) => {
           logger.error('[INCREMENT] Error evaluating badges after increment:', error);
         });
-        
+
+        import('../lib/xpEngine').then(({ awardMarkXP }) => {
+          awardMarkXP(userId, markId, today)
+            .then((result) => {
+              const { useXPStore } = require('../state/xpSlice');
+              useXPStore.getState().applyXPResult(result);
+            })
+            .catch((err: unknown) => {
+              logger.error('[XP] awardMarkXP failed:', err);
+            });
+        });
+
         logger.log('[INCREMENT] ===== END INCREMENT (background tasks started) =====', {
           markId,
           finalTotal: newTotal,

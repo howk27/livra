@@ -102,6 +102,22 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
     const writes = [completed, ...(activated ? [activated] : [])];
     await upsertGoals(writes);
 
+    // Fire-and-forget goal completion XP (anti-cheat: must be ≥ 14 days old)
+    const goalAgeMs = Date.now() - new Date(completing.created_at).getTime();
+    const goalAgeDays = goalAgeMs / (1000 * 60 * 60 * 24);
+    if (goalAgeDays >= 14 && completing.user_id) {
+      import('../lib/xpEngine').then(({ awardGoalXP }) => {
+        awardGoalXP(completing.user_id, completing.id)
+          .then((result) => {
+            const { useXPStore } = require('./xpSlice');
+            useXPStore.getState().applyXPResult(result);
+          })
+          .catch((err: unknown) => {
+            console.warn('[XP] awardGoalXP failed:', err);
+          });
+      });
+    }
+
     set(s => ({
       goals: s.goals.map(g => {
         if (g.id === completed.id) return completed;

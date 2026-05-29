@@ -37,6 +37,8 @@ import { getMilestonesToFire, MILESTONE_COPY } from '../lib/goalMilestones';
 import { getAppDate } from '../lib/appDate';
 import { checkProStatus } from '../lib/iap/iap';
 import { reVerifyProOnLaunch } from '../lib/iap/iapReVerify';
+import { useXPStore } from '../state/xpSlice';
+import { LevelUpModal } from '../components/LevelUpModal';
 
 const queryClient = new QueryClient();
 
@@ -373,6 +375,7 @@ export default function RootLayout() {
           await useGoalsStore.getState().loadGoals(user.id);
           checkAndFireMilestones().catch(() => {});
           await useCheckinsStore.getState().loadCheckins(user.id);
+          await useXPStore.getState().loadXP(user.id);
           logger.log('[App] Local marks loaded, now syncing...');
           
           // CRITICAL: Run cleanup before sync to remove any duplicates first
@@ -444,8 +447,16 @@ export default function RootLayout() {
   );
 }
 
+const LEVEL_TITLES: Record<number, string> = {
+  1: 'Beginner', 2: 'Committed', 3: 'Consistent', 4: 'Focused',
+  5: 'Disciplined', 6: 'Dedicated', 7: 'Relentless', 8: 'Unstoppable',
+  9: 'Elite', 10: 'Livra',
+};
+
 function RootNavigator() {
   const theme = useEffectiveTheme();
+  const pendingLevelUp = useXPStore((s) => s.pendingLevelUp);
+  const clearPendingLevelUp = useXPStore((s) => s.clearPendingLevelUp);
 
   return (
     <>
@@ -483,6 +494,13 @@ function RootNavigator() {
         />
       </Stack>
       <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
+      {pendingLevelUp !== null && (
+        <LevelUpModal
+          level={pendingLevelUp}
+          levelTitle={LEVEL_TITLES[pendingLevelUp] ?? 'Livra'}
+          onDismiss={clearPendingLevelUp}
+        />
+      )}
     </>
   );
 }
