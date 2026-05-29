@@ -1,4 +1,4 @@
-import type { FocusArea } from '../../state/onboardingSlice';
+import type { FocusArea } from '@/state/onboardingSlice';
 
 export interface MarkTemplate {
   name: string;
@@ -8,7 +8,9 @@ export interface MarkTemplate {
   health_kit_type: string | null;
 }
 
-// Keyed by Screen 4 option label
+// default_color values are mark palette data (user-facing), not UI theme tokens.
+// Conscious exception to the color-token rule — these are identity colors for marks,
+// not design system tokens.
 export const MARK_TEMPLATES: Record<string, MarkTemplate> = {
   'Sleep better': {
     name: 'Sleep',

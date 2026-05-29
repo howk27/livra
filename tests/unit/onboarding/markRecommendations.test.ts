@@ -108,9 +108,10 @@ describe('getRecommendedMarks', () => {
     const names = result.map(r => r.name);
     expect(names).toContain('Finance');
     expect(names).toContain('Planning');
+    expect(names[2]).toBe('Sleep'); // first non-priority item by selection order
   });
 
-  test('marks not in priority list fall back to selection order for ties', () => {
+  test('returns all 3 when exactly 3 selected regardless of focusArea', () => {
     // Only 3 selected — all returned regardless of focusArea
     const result = getRecommendedMarks(['Sleep better', 'Move my body', 'Drink more water'], 'career');
     expect(result).toHaveLength(3);
@@ -139,5 +140,18 @@ describe('getRecommendedMarks', () => {
   test('health_kit_type is null for Water mark', () => {
     const result = getRecommendedMarks(['Drink more water'], null);
     expect(result[0].health_kit_type).toBeNull();
+  });
+
+  test('silently drops unrecognized selection labels', () => {
+    // 4 inputs but only 3 recognized → triggers ≤3 shortcut, returns all 3 recognized
+    const result = getRecommendedMarks(
+      ['Sleep better', 'UNKNOWN_LABEL', 'Move my body', 'Drink more water'],
+      null,
+    );
+    expect(result).toHaveLength(3);
+    const names = result.map(r => r.name);
+    expect(names).toContain('Sleep');
+    expect(names).toContain('Workout');
+    expect(names).toContain('Water');
   });
 });
