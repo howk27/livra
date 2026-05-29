@@ -85,7 +85,7 @@ export default function Index() {
   }
 
   if (!isOnboarded) {
-    return <Redirect href="/onboarding" />;
+    return <Redirect href="/onboarding/welcome" />;
   }
 
   return <Redirect href="/(tabs)/home" />;
