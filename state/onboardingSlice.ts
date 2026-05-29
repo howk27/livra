@@ -8,7 +8,7 @@ export type FocusArea =
   | 'relationships'
   | 'finances';
 
-interface OnboardingState {
+export interface OnboardingState {
   goalTitle: string;
   focusArea: FocusArea | null;
   identitySelections: string[];
@@ -28,6 +28,6 @@ export const useOnboardingStore = create<OnboardingState>((set) => ({
   ...initialState,
   setGoalTitle: (title) => set({ goalTitle: title }),
   setFocusArea: (area) => set({ focusArea: area }),
-  setIdentitySelections: (selections) => set({ identitySelections: selections }),
+  setIdentitySelections: (selections) => set({ identitySelections: selections.slice(0, 3) }),
   reset: () => set({ ...initialState }),
 }));

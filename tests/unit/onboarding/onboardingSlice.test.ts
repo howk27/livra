@@ -38,6 +38,12 @@ describe('useOnboardingStore', () => {
     expect(useOnboardingStore.getState().identitySelections).toEqual(['Sleep better', 'Move my body']);
   });
 
+  test('setIdentitySelections caps at 3 items', () => {
+    useOnboardingStore.getState().setIdentitySelections(['Sleep better', 'Move my body', 'Read consistently', 'Plan my days']);
+    expect(useOnboardingStore.getState().identitySelections).toHaveLength(3);
+    expect(useOnboardingStore.getState().identitySelections).toEqual(['Sleep better', 'Move my body', 'Read consistently']);
+  });
+
   test('reset returns all fields to initial values', () => {
     const store = useOnboardingStore.getState();
     store.setGoalTitle('Something');
