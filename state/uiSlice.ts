@@ -26,7 +26,10 @@ interface UIState {
   setSortBy: (sort: SortOption) => void;
   setSearchQuery: (query: string) => void;
   /** Returns false if logged-in cloud update failed (local completion still applied). */
-  completeOnboarding: (userId?: string) => Promise<boolean>;
+  completeOnboarding: (
+    userId?: string,
+    meta?: { focusArea?: string; completedAt?: string }
+  ) => Promise<boolean>;
   loadUIState: (userId?: string) => Promise<void>;
   getEffectiveTheme: () => 'light' | 'dark';
 }
@@ -57,7 +60,10 @@ export const useUIStore = create<UIState>((set, get) => ({
     set({ searchQuery: query });
   },
 
-  completeOnboarding: async (userId?: string) => {
+  completeOnboarding: async (
+    userId?: string,
+    meta?: { focusArea?: string; completedAt?: string }
+  ) => {
     const supabase = getSupabaseClient();
     const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
     const isSupabaseConfigured = Boolean(supabaseUrl && !supabaseUrl.includes('placeholder'));
@@ -66,9 +72,13 @@ export const useUIStore = create<UIState>((set, get) => ({
 
     if (userId && isSupabaseConfigured) {
       try {
+        const profileUpdate: Record<string, unknown> = { onboarding_completed: true };
+        if (meta?.focusArea) profileUpdate.onboarding_focus_area = meta.focusArea;
+        if (meta?.completedAt) profileUpdate.onboarding_completed_at = meta.completedAt;
+
         const { error } = await supabase
           .from('profiles')
-          .update({ onboarding_completed: true })
+          .update(profileUpdate)
           .eq('id', userId);
 
         if (error) {
