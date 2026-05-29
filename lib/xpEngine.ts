@@ -67,6 +67,9 @@ export interface LevelProgress {
   levelTitle: string;
   nextLevelTitle: string | null;
   xpInCurrentLevel: number;
+  /** Absolute XP threshold for the next level — NOT a delta.
+   *  E.g. at level 1 with 100 XP this is 200, not 100.
+   *  Use `xpToNextLevel - (totalXP)` to get remaining XP. */
   xpToNextLevel: number;
   progressRatio: number;
 }
