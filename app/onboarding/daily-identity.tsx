@@ -7,6 +7,8 @@ import { useOnboardingStore } from '../../state/onboardingSlice';
 import { colors } from '../../theme/colors';
 import { spacing, fontSize, fontWeight, borderRadius } from '../../theme/tokens';
 
+const CTA_TEXT_ACTIVE_COLOR = '#FFFFFF';
+
 const IDENTITY_OPTIONS = [
   'Sleep better',
   'Move my body',
@@ -131,7 +133,7 @@ export default function DailyIdentityScreen() {
           <Text
             style={[
               styles.ctaButtonText,
-              { color: selected.length > 0 ? '#FFFFFF' : themeColors.textTertiary },
+              { color: selected.length > 0 ? CTA_TEXT_ACTIVE_COLOR : themeColors.textTertiary },
             ]}
           >
             {'These feel right'}
