@@ -81,10 +81,11 @@ export default function CommitmentScreen() {
             textAlignVertical="top"
             autoFocus
             returnKeyType="done"
+            onSubmitEditing={handleConfirm}
             accessibilityLabel="Goal input"
           />
 
-          {inputError !== null && (
+          {inputError && (
             <Text style={[styles.errorText, { color: themeColors.error }]}>{inputError}</Text>
           )}
 
