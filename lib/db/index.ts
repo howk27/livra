@@ -586,7 +586,7 @@ const createMockDb = (): MockDatabase => ({
     }
 
     // INSERT OR REPLACE INTO lc_user_xp
-    if (sql.includes('lc_user_xp')) {
+    if (sql.includes('INSERT') && sql.includes('lc_user_xp')) {
       const rows = storage.get('userXp') || [];
       const userId = params[0];
       const idx = rows.findIndex((r: any) => r.user_id === userId);
@@ -609,7 +609,7 @@ const createMockDb = (): MockDatabase => ({
     }
 
     // INSERT INTO lc_xp_events
-    if (sql.includes('lc_xp_events')) {
+    if (sql.includes('INSERT') && sql.includes('lc_xp_events')) {
       const rows = storage.get('xpEvents') || [];
       rows.push({
         id: params[0],
