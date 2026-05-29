@@ -29,6 +29,7 @@ export default function FocusAreaScreen() {
   };
 
   const handleConfirm = () => {
+    if (!selected) return;
     setFocusArea(selected);
     router.push('/onboarding/daily-identity' as any);
   };
