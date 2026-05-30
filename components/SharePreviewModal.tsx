@@ -23,6 +23,8 @@ export interface SharePreviewModalProps {
   onClose: () => void;
 }
 
+const COLOR_WHITE = '#FFFFFF';
+
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const PREVIEW_WIDTH = SCREEN_WIDTH - spacing.xl * 2;
 // 9:16 aspect ratio (portrait share card)
@@ -136,7 +138,6 @@ export const SharePreviewModal: React.FC<SharePreviewModalProps> = ({
           <TouchableOpacity
             style={[
               styles.button,
-              styles.primaryButton,
               { backgroundColor: c.accent.primary, opacity: imageUri == null ? 0.45 : 1 },
             ]}
             onPress={handleShare}
@@ -234,11 +235,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: spacing.md,
   },
-  primaryButton: {
-    // backgroundColor set inline via theme
-  },
   primaryButtonText: {
-    color: '#FFFFFF',
+    color: COLOR_WHITE,
     fontSize: fontSize.base,
     fontWeight: fontWeight.semibold,
   },
