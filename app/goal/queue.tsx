@@ -49,7 +49,7 @@ export default function GoalQueueScreen() {
           onPress: () => {
             completeGoal(goal.id)
               .then(() => {
-                router.push({ pathname: '/goal/complete', params: { goalTitle: goal.title } });
+                router.push({ pathname: '/goal/complete', params: { goalTitle: goal.title, goalId: goal.id } });
               })
               .catch(() => {
                 Alert.alert('Error', 'Could not complete goal. Please try again.');

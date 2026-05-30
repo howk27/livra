@@ -18,6 +18,7 @@ import { getLevelForXP, LEVEL_TITLES } from '../../lib/xpEngine';
 import { useGoalsStore } from '../../state/goalsSlice';
 import { getAppDate } from '../../lib/appDate';
 import { checkProStatus } from '../../lib/iap/iap';
+import { logger } from '../../lib/utils/logger';
 import { generateShareCard } from '../../lib/sharing/generateShareCard';
 import { GoalCompletionShareCard } from '../../components/GoalCompletionShareCard';
 import { SharePreviewModal } from '../../components/SharePreviewModal';
@@ -49,14 +50,18 @@ export default function GoalCompleteScreen() {
   const daysTaken: number = (() => {
     if (!completedGoal?.created_at) return 1;
     const start = new Date(completedGoal.created_at);
-    const end = new Date();
+    const todayStr = getAppDate();
+    const [y, m, d] = todayStr.split('-').map(Number);
+    const end = new Date(y, m - 1, d);
     return Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
   })();
 
   const targetDateLabel: string | undefined = (() => {
     if (!completedGoal?.target_date) return undefined;
     const target = new Date(completedGoal.target_date);
-    const today = new Date();
+    const todayStr = getAppDate();
+    const [ty, tm, td] = todayStr.split('-').map(Number);
+    const today = new Date(ty, tm - 1, td);
     const diffDays = Math.round((today.getTime() - target.getTime()) / (1000 * 60 * 60 * 24));
     if (diffDays < 0) return `Finished ${Math.abs(diffDays)} days early`;
     if (diffDays > 0) return `Finished ${diffDays} days late`;
@@ -105,8 +110,8 @@ export default function GoalCompleteScreen() {
       const uri = await generateShareCard(shareCardRef);
       setShareImageUri(uri);
       setShareModalVisible(true);
-    } catch {
-      // capture failed — silently ignore
+    } catch (e) {
+      logger.debug('[Share] Card capture failed', e);
     } finally {
       setShareLoading(false);
     }
