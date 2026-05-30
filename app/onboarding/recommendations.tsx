@@ -14,7 +14,7 @@ import { useEffectiveTheme, useUIStore } from '../../state/uiSlice';
 import { useOnboardingStore } from '../../state/onboardingSlice';
 import { useAuth } from '../../hooks/useAuth';
 import { useMarksStore, DuplicateMarkError } from '../../state/countersSlice';
-import { useGoalsStore } from '../../state/goalsSlice';
+import { useGoalsStore, GoalLimitError } from '../../state/goalsSlice';
 import { useIapSubscriptions } from '../../hooks/useIapSubscriptions';
 import { useNotification } from '../../contexts/NotificationContext';
 import { getRecommendedMarks } from '../../lib/onboarding/markRecommendations';
@@ -100,11 +100,20 @@ export default function RecommendationsScreen() {
       // Step 2: Create goal only if the trimmed title is long enough.
       const trimmedGoal = goalInput.trim();
       if (trimmedGoal.length >= MIN_GOAL_LENGTH) {
-        await addGoal({
-          title: trimmedGoal,
-          userId,
-          isPro: isProUnlocked,
-        });
+        try {
+          await addGoal({
+            title: trimmedGoal,
+            userId,
+            isPro: isProUnlocked,
+          });
+        } catch (goalErr) {
+          if (goalErr instanceof GoalLimitError) {
+            // Re-onboarding: goal cap already hit, skip goal creation silently
+            logger.log('[Onboarding] Goal cap already hit — skipping goal creation');
+          } else {
+            throw goalErr;
+          }
+        }
       }
 
       // Step 3: Complete onboarding with meta (local-first; ignores remote-ok result here).

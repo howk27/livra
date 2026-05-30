@@ -104,6 +104,8 @@ export default function CommitmentScreen() {
   );
 }
 
+const CTA_TEXT_COLOR = '#FFFFFF';
+
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   topBar: {
@@ -156,7 +158,7 @@ const styles = StyleSheet.create({
     minHeight: 52,
   },
   ctaButtonText: {
-    color: '#FFFFFF',
+    color: CTA_TEXT_COLOR,
     fontSize: fontSize.lg,
     fontWeight: fontWeight.semibold,
   },
