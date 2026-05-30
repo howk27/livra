@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, TextInput, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -13,15 +13,55 @@ import * as Haptics from 'expo-haptics';
 import { colors } from '../../theme/colors';
 import { spacing, fontSize, fontWeight, borderRadius } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
+import { useXPStore } from '../../state/xpSlice';
+import { getLevelForXP, LEVEL_TITLES } from '../../lib/xpEngine';
+import { useGoalsStore } from '../../state/goalsSlice';
+import { getAppDate } from '../../lib/appDate';
+import { checkProStatus } from '../../lib/iap/iap';
+import { generateShareCard } from '../../lib/sharing/generateShareCard';
+import { GoalCompletionShareCard } from '../../components/GoalCompletionShareCard';
+import { SharePreviewModal } from '../../components/SharePreviewModal';
 
 export default function GoalCompleteScreen() {
   const theme = useEffectiveTheme();
   const themeColors = colors[theme];
   const router = useRouter();
-  const { goalTitle } = useLocalSearchParams<{ goalTitle: string }>();
+  const { goalTitle, goalId } = useLocalSearchParams<{ goalTitle: string; goalId?: string }>();
 
   const [phase, setPhase] = useState<'moment' | 'reflect'>('moment');
   const [reflection, setReflection] = useState('');
+
+  // Share flow state
+  const shareCardRef = useRef<View>(null) as React.RefObject<View>;
+  const [shareModalVisible, setShareModalVisible] = useState(false);
+  const [shareImageUri, setShareImageUri] = useState<string | null>(null);
+  const [shareLoading, setShareLoading] = useState(false);
+
+  // Derive level title
+  const xp = useXPStore((s) => s.totalXP ?? 0);
+  const level = getLevelForXP(xp);
+  const levelTitle = LEVEL_TITLES[level - 1] ?? 'Livra';
+
+  // Derive days taken and targetDateLabel
+  const goals = useGoalsStore((s) => s.goals);
+  const completedGoal = goalId ? goals.find((g) => g.id === goalId) : undefined;
+
+  const daysTaken: number = (() => {
+    if (!completedGoal?.created_at) return 1;
+    const start = new Date(completedGoal.created_at);
+    const end = new Date();
+    return Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
+  })();
+
+  const targetDateLabel: string | undefined = (() => {
+    if (!completedGoal?.target_date) return undefined;
+    const target = new Date(completedGoal.target_date);
+    const today = new Date();
+    const diffDays = Math.round((today.getTime() - target.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDays < 0) return `Finished ${Math.abs(diffDays)} days early`;
+    if (diffDays > 0) return `Finished ${diffDays} days late`;
+    return 'Finished right on time';
+  })();
 
   const scale = useSharedValue(0.88);
   const opacity = useSharedValue(0);
@@ -51,6 +91,25 @@ export default function GoalCompleteScreen() {
 
   const handleReflectSubmit = () => {
     router.replace('/(tabs)/home');
+  };
+
+  const handleSharePress = async () => {
+    if (shareLoading) return;
+    const { effectiveUnlocked: isPro } = await checkProStatus();
+    if (!isPro) {
+      router.push('/paywall');
+      return;
+    }
+    setShareLoading(true);
+    try {
+      const uri = await generateShareCard(shareCardRef);
+      setShareImageUri(uri);
+      setShareModalVisible(true);
+    } catch {
+      // capture failed — silently ignore
+    } finally {
+      setShareLoading(false);
+    }
   };
 
   if (phase === 'reflect') {
@@ -117,8 +176,39 @@ export default function GoalCompleteScreen() {
               Take a moment
             </Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.shareBtn}
+            onPress={handleSharePress}
+            disabled={shareLoading}
+            accessibilityRole="button"
+          >
+            <Text style={[styles.shareBtnText, { color: themeColors.textSecondary }]}>
+              {shareLoading ? 'Preparing…' : 'Share this moment'}
+            </Text>
+          </TouchableOpacity>
         </Animated.View>
       </View>
+
+      <View style={styles.offScreen} pointerEvents="none">
+        <GoalCompletionShareCard
+          forwardRef={shareCardRef}
+          goalTitle={goalTitle ?? ''}
+          completedDate={getAppDate().toISOString().slice(0, 10)}
+          levelTitle={levelTitle}
+          daysTaken={daysTaken}
+          targetDateLabel={targetDateLabel}
+        />
+      </View>
+
+      <SharePreviewModal
+        visible={shareModalVisible}
+        imageUri={shareImageUri}
+        goalTitle={goalTitle ?? ''}
+        onClose={() => {
+          setShareModalVisible(false);
+          setShareImageUri(null);
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -155,6 +245,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   secondaryBtnText: { fontSize: fontSize.md },
+  shareBtn: {
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    marginTop: spacing.xs,
+  },
+  shareBtnText: { fontSize: fontSize.sm },
   reflectPrompt: { fontSize: fontSize.lg, fontWeight: fontWeight.semibold, textAlign: 'center' },
   reflectInput: {
     width: '100%',
@@ -164,5 +260,11 @@ const styles = StyleSheet.create({
     fontSize: fontSize.md,
     textAlignVertical: 'top',
     minHeight: 100,
+  },
+  offScreen: {
+    position: 'absolute',
+    left: -10000,
+    top: 0,
+    opacity: 0,
   },
 });
