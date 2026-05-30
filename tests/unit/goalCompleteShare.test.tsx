@@ -19,7 +19,7 @@ jest.mock('../../state/goalsSlice', () => ({
 }));
 
 jest.mock('../../state/xpSlice', () => ({
-  useXPStore: jest.fn((fn: any) => fn({ xp: 1000 })),
+  useXPStore: jest.fn((fn: any) => fn({ totalXP: 1000 })),
 }));
 
 jest.mock('../../lib/xpEngine', () => ({
