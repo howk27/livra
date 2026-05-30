@@ -24,6 +24,8 @@ import { DevToolsProvider } from '../providers/DevToolsProvider';
 import { ExperimentsProvider } from '../providers/ExperimentsProvider';
 import { useFeaturesStore } from '../state/featuresSlice';
 import { useGoalsStore } from '../state/goalsSlice';
+import { useMarksStore } from '../state/countersSlice';
+import { syncWidgetData } from '../lib/widgets/widgetSync';
 import { useCheckinsStore } from '../state/checkinsSlice';
 import { useDailyTrackingStore } from '../state/dailyTrackingSlice';
 import { useAppDateStore } from '../state/appDateSlice';
@@ -112,6 +114,15 @@ export default function RootLayout() {
   const router = useRouter();
   const appStateRef = useRef(AppState.currentState);
 
+  const markCount = useMarksStore((s) => s.marks.length);
+  const activeGoalTitle = useGoalsStore((s) => s.getActiveGoal()?.title);
+
+  useEffect(() => {
+    if (initialized) {
+      void syncWidgetData();
+    }
+  }, [initialized, markCount, activeGoalTitle]);
+
   useEffect(() => {
     if (!initialized) return;
 
@@ -162,6 +173,7 @@ export default function RootLayout() {
         void recordBehaviorAppForeground();
         if (user?.id) scheduleContextualDailyNotification(user.id).catch(() => {});
         checkAndFireMilestones().catch(() => {});
+        void syncWidgetData();
       }
     };
     const appSub = AppState.addEventListener('change', onAppState);
