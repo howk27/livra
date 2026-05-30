@@ -36,7 +36,8 @@
       },
       "entitlements": {
         "com.apple.developer.healthkit": true,
-        "com.apple.developer.healthkit.access": []
+        "com.apple.developer.healthkit.access": [],
+        "com.apple.security.application-groups": ["group.com.livra.app"]
       },
       "config": {
         "usesNonExemptEncryption": false
@@ -122,7 +123,9 @@
           "savePhotosPermission": "Livra needs access to save your goal completion card to Photos.",
           "isAccessMediaLocationEnabled": false
         }
-      ]
+      ],
+
+      "./plugins/withLivraWidget"
     ],
 
     "scheme": "livra",
