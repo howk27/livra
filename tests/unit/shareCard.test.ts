@@ -44,4 +44,10 @@ describe('GoalCompletionShareCard', () => {
     const { queryByText } = render(React.createElement(GoalCompletionShareCard, defaultProps));
     expect(queryByText(/Finished/)).toBeNull();
   });
+
+  it('renders formatted completion date', () => {
+    const { getByText } = render(React.createElement(GoalCompletionShareCard, defaultProps));
+    // completedDate is '2026-05-29' so expect "May 29, 2026"
+    expect(getByText('May 29, 2026')).toBeTruthy();
+  });
 });

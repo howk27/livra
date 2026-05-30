@@ -63,6 +63,7 @@ export function GoalCompletionShareCard({
         <Text style={styles.completionCopy}>{"Done. That one's yours forever."}</Text>
 
         <View style={styles.metaRow}>
+          <Text style={styles.metaText}>{displayDate}</Text>
           <Text style={styles.metaText}>{daysTaken} days</Text>
           {targetDateLabel != null ? (
             <Text style={styles.metaText}>{targetDateLabel}</Text>
