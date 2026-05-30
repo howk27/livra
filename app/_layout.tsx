@@ -258,6 +258,31 @@ export default function RootLayout() {
             incomingUrl.startsWith('https://www.livralife.com/auth/reset-password')) &&
           incomingUrl.includes('livralife.com/auth/reset-password');
 
+        // Widget deep links — handle before the password-reset guard
+        const isWidgetHome = incomingUrl === 'livra://home' || incomingUrl.startsWith('livra://home?');
+        const isWidgetLogMark = incomingUrl.startsWith('livra://log-mark');
+
+        if (isWidgetHome) {
+          router.replace('/(tabs)/home');
+          return;
+        }
+
+        if (isWidgetLogMark) {
+          try {
+            const asHttpUrl = incomingUrl.replace('livra://', 'https://livra.app/');
+            const url = new URL(asHttpUrl);
+            const markId = url.searchParams.get('markId');
+            if (markId) {
+              router.replace({ pathname: '/(tabs)/home' as any, params: { logMarkId: markId } });
+            } else {
+              router.replace('/(tabs)/home');
+            }
+          } catch {
+            router.replace('/(tabs)/home');
+          }
+          return;
+        }
+
         if (!isResetPassword && !isUniversalLink) {
           return;
         }
