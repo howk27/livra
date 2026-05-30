@@ -50,18 +50,16 @@ export default function GoalCompleteScreen() {
   const daysTaken: number = (() => {
     if (!completedGoal?.created_at) return 1;
     const start = new Date(completedGoal.created_at);
-    const todayStr = getAppDate();
-    const [y, m, d] = todayStr.split('-').map(Number);
-    const end = new Date(y, m - 1, d);
+    const appDate = getAppDate();
+    const end = new Date(appDate.getFullYear(), appDate.getMonth(), appDate.getDate());
     return Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
   })();
 
   const targetDateLabel: string | undefined = (() => {
     if (!completedGoal?.target_date) return undefined;
     const target = new Date(completedGoal.target_date);
-    const todayStr = getAppDate();
-    const [ty, tm, td] = todayStr.split('-').map(Number);
-    const today = new Date(ty, tm - 1, td);
+    const appDate = getAppDate();
+    const today = new Date(appDate.getFullYear(), appDate.getMonth(), appDate.getDate());
     const diffDays = Math.round((today.getTime() - target.getTime()) / (1000 * 60 * 60 * 24));
     if (diffDays < 0) return `Finished ${Math.abs(diffDays)} days early`;
     if (diffDays > 0) return `Finished ${diffDays} days late`;
