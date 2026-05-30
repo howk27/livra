@@ -113,6 +113,15 @@
         {
           "NSHealthShareUsageDescription": "Livra reads your workout, sleep, and activity data to power your weekly reflection."
         }
+      ],
+
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Livra needs access to save your goal completion card to Photos.",
+          "savePhotosPermission": "Livra needs access to save your goal completion card to Photos.",
+          "isAccessMediaLocationEnabled": false
+        }
       ]
     ],
 
