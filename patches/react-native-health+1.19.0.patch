@@ -1,0 +1,12 @@
+diff --git a/node_modules/react-native-health/RCTAppleHealthKit/RCTAppleHealthKit.m b/node_modules/react-native-health/RCTAppleHealthKit/RCTAppleHealthKit.m
+index 1234567..abcdefg 100644
+--- a/node_modules/react-native-health/RCTAppleHealthKit/RCTAppleHealthKit.m
++++ b/node_modules/react-native-health/RCTAppleHealthKit/RCTAppleHealthKit.m
+@@ -840,7 +840,6 @@
+ - (void)emitEventInternal:(NSNotification *)notification {
+   if (self.hasListeners) {
+     self.callableJSModules = [RCTAppleHealthKit sharedJsModule];
+-    [self.callableJSModules setBridge:self.bridge];
+     [self sendEventWithName:notification.name
+                    body:notification.userInfo];
+   }
