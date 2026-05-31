@@ -6,17 +6,15 @@
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "description": "A minimalist progress tracker. Create simple marks for the things that matter to you - no pressure, no guilt, just progress.",
-
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-
     "icon": "./assets/icon.png",
-
-    "assetBundlePatterns": ["**/*"],
-
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.livra.app",
@@ -26,7 +24,9 @@
         "applinks:www.livralife.com"
       ],
       "infoPlist": {
-        "UIBackgroundModes": ["remote-notification"],
+        "UIBackgroundModes": [
+          "remote-notification"
+        ],
         "NSUserNotificationsUsageDescription": "Livra needs permission to send you reminders about your marks.",
         "NSFaceIDUsageDescription": "Livra uses Face ID to securely lock your app.",
         "NSPhotoLibraryUsageDescription": "Livra needs access to your photo library to set a profile picture.",
@@ -37,13 +37,14 @@
       "entitlements": {
         "com.apple.developer.healthkit": true,
         "com.apple.developer.healthkit.access": [],
-        "com.apple.security.application-groups": ["group.com.livra.app"]
+        "com.apple.security.application-groups": [
+          "group.com.livra.app"
+        ]
       },
       "config": {
         "usesNonExemptEncryption": false
       }
     },
-
     "android": {
       "package": "com.livra.app",
       "versionCode": 42,
@@ -67,7 +68,10 @@
               "pathPrefix": "/"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ],
       "permissions": [
@@ -80,7 +84,6 @@
         "android.permission.CAMERA"
       ]
     },
-
     "plugins": [
       "expo-router",
       "expo-secure-store",
@@ -89,7 +92,6 @@
       "expo-sqlite",
       "expo-mail-composer",
       "expo-apple-authentication",
-
       [
         "expo-image-picker",
         {
@@ -97,25 +99,25 @@
           "cameraPermission": "Livra needs access to your camera to take a profile picture."
         }
       ],
-
       [
         "expo-build-properties",
         {
           "ios": {
+            "newArchEnabled": false,
             "cocoapods": {
-              "extraPodsInstallArgs": ["--repo-update"]
+              "extraPodsInstallArgs": [
+                "--repo-update"
+              ]
             }
           }
         }
       ],
-
       [
         "react-native-health",
         {
           "NSHealthShareUsageDescription": "Livra reads your workout, sleep, and activity data to power your weekly reflection."
         }
       ],
-
       [
         "expo-media-library",
         {
@@ -124,26 +126,21 @@
           "isAccessMediaLocationEnabled": false
         }
       ],
-
-      "./plugins/withLivraWidget"
+      "./plugins/withLivraWidget",
+      "expo-sharing"
     ],
-
     "scheme": "livra",
-
     "experiments": {
       "typedRoutes": true
     },
-
     "extra": {
       "eas": {
         "projectId": "884f18e6-7169-4296-9f83-83f8a3de5864"
       }
     },
-
     "updates": {
       "url": "https://u.expo.dev/884f18e6-7169-4296-9f83-83f8a3de5864"
     },
-
     "runtimeVersion": {
       "policy": "sdkVersion"
     }
