@@ -20,10 +20,12 @@ import { useNotification } from '../../contexts/NotificationContext';
 import { getRecommendedMarks } from '../../lib/onboarding/markRecommendations';
 import type { HealthKitType } from '../../lib/health/healthTypes';
 import { colors } from '../../theme/colors';
-import { spacing, fontSize, fontWeight, borderRadius } from '../../theme/tokens';
+import { spacing, borderRadius, fontWeight } from '../../theme/tokens';
 import { logger } from '../../lib/utils/logger';
+import { applyOpacity } from '@/src/components/icons/color';
 
-const CTA_TEXT_ACTIVE_COLOR = '#FFFFFF';
+const DOTS = [0, 1, 2, 3, 4];
+const CURRENT = 4;
 const MIN_GOAL_LENGTH = 3;
 
 export default function RecommendationsScreen() {
@@ -33,28 +35,23 @@ export default function RecommendationsScreen() {
   const { user } = useAuth();
   const { completeOnboarding } = useUIStore();
   const { goalTitle, focusArea, identitySelections, reset: resetOnboarding } = useOnboardingStore();
-  const addMark = useMarksStore((s) => s.addMark);
-  const addGoal = useGoalsStore((s) => s.addGoal);
+  const addMark = useMarksStore(s => s.addMark);
+  const addGoal = useGoalsStore(s => s.addGoal);
   const { isProUnlocked } = useIapSubscriptions();
   const { showError } = useNotification();
 
-  // Pure, deterministic — derived from transient store. Safe to compute on render.
   const recommendedMarks = getRecommendedMarks(identitySelections, focusArea);
-
   const [selectedMarkNames, setSelectedMarkNames] = useState<Set<string>>(
-    () => new Set(recommendedMarks.map((m) => m.name)),
+    () => new Set(recommendedMarks.map(m => m.name)),
   );
   const [goalInput, setGoalInput] = useState(goalTitle);
   const [loading, setLoading] = useState(false);
 
   const toggleMark = useCallback((markName: string) => {
-    setSelectedMarkNames((prev) => {
+    setSelectedMarkNames(prev => {
       const next = new Set(prev);
-      if (next.has(markName)) {
-        next.delete(markName);
-      } else {
-        next.add(markName);
-      }
+      if (next.has(markName)) next.delete(markName);
+      else next.add(markName);
       return next;
     });
   }, []);
@@ -62,163 +59,155 @@ export default function RecommendationsScreen() {
   const handleStartLivra = async () => {
     if (loading || !user?.id) return;
     setLoading(true);
-
     const userId = user.id;
-
     try {
-      // Step 1: Create selected marks. addMark already guards against duplicates
-      // (case-insensitive, non-deleted) at both the store and DB level, so on a
-      // DuplicateMarkError we skip silently. sort_index is seeded from current
-      // non-deleted mark count and incremented per successfully created mark.
-      const marksToCreate = recommendedMarks.filter((m) => selectedMarkNames.has(m.name));
-      let sortIndex = useMarksStore.getState().marks.filter((m) => !m.deleted_at).length;
-
+      const marksToCreate = recommendedMarks.filter(m => selectedMarkNames.has(m.name));
+      let sortIndex = useMarksStore.getState().marks.filter(m => !m.deleted_at).length;
       for (const template of marksToCreate) {
         try {
           await addMark({
             user_id: userId,
             name: template.name,
-            emoji: template.icon,
-            color: template.default_color,
+            emoji: template.emoji,
+            color: template.color,
             unit: 'sessions',
             enable_streak: false,
             sort_index: sortIndex,
             total: 0,
-            health_kit_type: (template.health_kit_type as HealthKitType | null) ?? null,
+            health_kit_type: (template.healthKitType as HealthKitType | null) ?? null,
           });
           sortIndex += 1;
         } catch (markErr) {
           if (markErr instanceof DuplicateMarkError) {
-            // Duplicate — skip silently, do not advance sort_index.
             logger.log(`[Onboarding] Skipping duplicate mark "${template.name}"`);
           } else {
             throw markErr;
           }
         }
       }
-
-      // Step 2: Create goal only if the trimmed title is long enough.
       const trimmedGoal = goalInput.trim();
       if (trimmedGoal.length >= MIN_GOAL_LENGTH) {
         try {
-          await addGoal({
-            title: trimmedGoal,
-            userId,
-            isPro: isProUnlocked,
-          });
+          await addGoal({ title: trimmedGoal, userId, isPro: isProUnlocked });
         } catch (goalErr) {
-          if (goalErr instanceof GoalLimitError) {
-            // Re-onboarding: goal cap already hit, skip goal creation silently
-            logger.log('[Onboarding] Goal cap already hit — skipping goal creation');
-          } else {
-            throw goalErr;
-          }
+          if (!(goalErr instanceof GoalLimitError)) throw goalErr;
         }
       }
-
-      // Step 3: Complete onboarding with meta (local-first; ignores remote-ok result here).
       const now = new Date().toISOString();
-      await completeOnboarding(userId, {
-        focusArea: focusArea ?? undefined,
-        completedAt: now,
-      });
-
-      // Step 4: Clear transient onboarding slice before leaving the flow.
+      await completeOnboarding(userId, { focusArea: focusArea ?? undefined, completedAt: now });
       resetOnboarding();
-
-      // Step 5: Replace so the back gesture cannot return to onboarding.
       router.replace('/(tabs)/home' as any);
     } catch (err) {
       logger.error('[Onboarding] handleStartLivra failed:', err);
       showError("Couldn't finish setup. Please try again.");
       setLoading(false);
     }
-    // On success we navigate away and unmount; no need to reset loading.
   };
 
   const hasRecommendations = recommendedMarks.length > 0;
 
   return (
     <SafeAreaView style={[styles.fill, { backgroundColor: themeColors.background }]}>
+      {/* Progress dots */}
+      <View style={styles.dotsRow}>
+        {DOTS.map(i => (
+          <View
+            key={i}
+            style={[
+              styles.dot,
+              {
+                backgroundColor: i === CURRENT ? '#FEB729' : 'transparent',
+                borderColor: i === CURRENT ? '#FEB729' : themeColors.border,
+              },
+            ]}
+          />
+        ))}
+      </View>
+
       <ScrollView
         style={styles.fill}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
+        {/* Headline */}
         <View style={styles.copyArea}>
           <Text style={[styles.prompt, { color: themeColors.text }]}>
-            {'Here’s where you start.'}
+            Here's where you start.
           </Text>
           <Text style={[styles.subtext, { color: themeColors.textSecondary }]}>
-            {'A few daily marks and your first goal. Adjust anything — nothing’s locked in.'}
+            A few daily marks and your first goal. Adjust anything — nothing's locked in.
           </Text>
         </View>
 
         {/* Recommended marks */}
         <View style={styles.section}>
-          <Text style={[styles.sectionLabel, { color: themeColors.textSecondary }]}>
-            {'YOUR DAILY MARKS'}
+          <Text style={[styles.sectionLabel, { color: themeColors.textTertiary }]}>
+            YOUR DAILY MARKS
           </Text>
+
           {hasRecommendations ? (
-            <View style={styles.cardList}>
-              {recommendedMarks.map((mark) => {
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.marksScroll}
+            >
+              {recommendedMarks.map(mark => {
                 const isSelected = selectedMarkNames.has(mark.name);
+                const cardBg = isSelected
+                  ? applyOpacity(mark.color || '#FEB729', 0.15)
+                  : themeColors.surface;
+                const borderColor = isSelected ? (mark.color || '#FEB729') : themeColors.border;
+
                 return (
                   <TouchableOpacity
                     key={mark.name}
                     style={[
                       styles.markCard,
                       {
-                        backgroundColor: isSelected ? themeColors.primary : themeColors.surface,
-                        borderColor: isSelected ? themeColors.accent.primary : themeColors.border,
+                        backgroundColor: cardBg,
+                        borderColor,
                         borderWidth: isSelected ? 2 : 1,
                       },
                     ]}
                     onPress={() => toggleMark(mark.name)}
                     activeOpacity={0.78}
                     accessibilityRole="checkbox"
-                    accessibilityLabel={`${mark.name} — ${mark.identity_label}`}
+                    accessibilityLabel={mark.name}
                     accessibilityState={{ checked: isSelected }}
                   >
-                    <Text style={styles.markIcon}>{mark.icon}</Text>
-                    <View style={styles.markTextWrap}>
-                      <Text
-                        style={[
-                          styles.markName,
-                          { color: isSelected ? themeColors.accent.primary : themeColors.text },
-                        ]}
-                      >
-                        {mark.name}
-                      </Text>
-                      <Text style={[styles.markIdentity, { color: themeColors.textSecondary }]}>
-                        {mark.identity_label}
-                      </Text>
+                    {/* Icon on tinted bg */}
+                    <View
+                      style={[
+                        styles.markIconBg,
+                        { backgroundColor: applyOpacity(mark.color || '#FEB729', 0.20) },
+                      ]}
+                    >
+                      <Text style={styles.markEmoji}>{mark.emoji}</Text>
                     </View>
                     <Text
                       style={[
-                        styles.markCheck,
-                        {
-                          color: isSelected ? themeColors.accent.primary : themeColors.textTertiary,
-                        },
+                        styles.markName,
+                        { color: isSelected ? (mark.color || '#FEB729') : themeColors.text },
                       ]}
                     >
-                      {isSelected ? '✓' : '+'}
+                      {mark.name}
                     </Text>
                   </TouchableOpacity>
                 );
               })}
-            </View>
+            </ScrollView>
           ) : (
             <Text style={[styles.fallbackText, { color: themeColors.textSecondary }]}>
-              {'You can add marks anytime from home.'}
+              You can add marks anytime from home.
             </Text>
           )}
         </View>
 
         {/* Goal input */}
         <View style={styles.section}>
-          <Text style={[styles.sectionLabel, { color: themeColors.textSecondary }]}>
-            {'YOUR FIRST GOAL'}
+          <Text style={[styles.sectionLabel, { color: themeColors.textTertiary }]}>
+            YOUR FIRST GOAL
           </Text>
           <TextInput
             style={[
@@ -240,23 +229,27 @@ export default function RecommendationsScreen() {
           />
         </View>
 
-        <TouchableOpacity
-          style={[styles.ctaButton, { backgroundColor: themeColors.accent.primary }]}
-          onPress={handleStartLivra}
-          disabled={loading}
-          activeOpacity={0.82}
-          accessibilityRole="button"
-          accessibilityLabel="Start Livra"
-          accessibilityState={{ disabled: loading, busy: loading }}
-        >
-          {loading ? (
-            <ActivityIndicator color={CTA_TEXT_ACTIVE_COLOR} />
-          ) : (
-            <Text style={[styles.ctaButtonText, { color: CTA_TEXT_ACTIVE_COLOR }]}>
-              {'Start Livra'}
-            </Text>
-          )}
-        </TouchableOpacity>
+        {/* Start CTA */}
+        <View style={styles.ctaArea}>
+          <Text style={[styles.ctaHeadline, { color: themeColors.text }]}>
+            Ready when you are.
+          </Text>
+          <TouchableOpacity
+            style={[styles.cta, loading && styles.ctaDisabled]}
+            onPress={handleStartLivra}
+            disabled={loading}
+            activeOpacity={0.85}
+            accessibilityRole="button"
+            accessibilityLabel="Start Livra"
+            accessibilityState={{ disabled: loading, busy: loading }}
+          >
+            {loading ? (
+              <ActivityIndicator color="#111111" />
+            ) : (
+              <Text style={styles.ctaText}>Start Livra</Text>
+            )}
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -264,89 +257,113 @@ export default function RecommendationsScreen() {
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
+  dotsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.sm,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    borderWidth: 1,
+  },
   scrollContent: {
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xl,
     paddingBottom: spacing['4xl'],
     gap: spacing.xl,
   },
-  copyArea: {
-    gap: spacing.md,
-  },
+  copyArea: { gap: spacing.md },
   prompt: {
-    fontSize: fontSize['2xl'],
+    fontSize: 28,
+    fontFamily: 'Satoshi',
     fontWeight: fontWeight.bold,
-    lineHeight: fontSize['2xl'] * 1.3,
+    lineHeight: 36,
+    letterSpacing: -0.3,
   },
   subtext: {
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.normal,
-    lineHeight: fontSize.lg * 1.5,
+    fontSize: 16,
+    fontFamily: 'Inter',
+    lineHeight: 24,
   },
-  section: {
-    gap: spacing.md,
-  },
+  section: { gap: spacing.md },
   sectionLabel: {
-    fontSize: fontSize.sm,
+    fontSize: 11,
+    fontFamily: 'Inter',
     fontWeight: fontWeight.semibold,
-    letterSpacing: 0.4,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
   },
-  cardList: {
+  marksScroll: {
     gap: spacing.md,
+    paddingBottom: spacing.xs,
   },
   markCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: spacing.lg,
-    paddingHorizontal: spacing.lg,
-    borderRadius: borderRadius.xl,
-    gap: spacing.md,
-  },
-  markIcon: {
-    fontSize: fontSize.xl,
-  },
-  markTextWrap: {
-    flex: 1,
-    gap: spacing.xxs,
-  },
-  markName: {
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.semibold,
-  },
-  markIdentity: {
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.normal,
-  },
-  markCheck: {
-    fontSize: fontSize.xl,
-    fontWeight: fontWeight.bold,
-  },
-  fallbackText: {
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.normal,
-    lineHeight: fontSize.base * 1.5,
-  },
-  goalInput: {
-    minHeight: 56,
-    borderWidth: 1,
-    borderRadius: borderRadius.xl,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.normal,
-    textAlignVertical: 'top',
-  },
-  ctaButton: {
-    width: '100%',
-    paddingVertical: spacing.lg,
-    borderRadius: borderRadius.xl,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 52,
+    width: 100,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+    borderRadius: borderRadius.card,
+    gap: spacing.sm,
+  },
+  markIconBg: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  markEmoji: {
+    fontSize: 20,
+  },
+  markName: {
+    fontSize: 12,
+    fontFamily: 'Inter',
+    fontWeight: fontWeight.semibold,
+    textAlign: 'center',
+    lineHeight: 16,
+  },
+  fallbackText: {
+    fontSize: 15,
+    fontFamily: 'Inter',
+    lineHeight: 22,
+  },
+  goalInput: {
+    minHeight: 72,
+    borderWidth: 1,
+    borderRadius: borderRadius.card,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    fontSize: 17,
+    fontFamily: 'Satoshi',
+    textAlignVertical: 'top',
+    lineHeight: 24,
+  },
+  ctaArea: {
+    gap: spacing.lg,
     marginTop: spacing.sm,
   },
-  ctaButtonText: {
-    fontSize: fontSize.lg,
+  ctaHeadline: {
+    fontSize: 22,
+    fontFamily: 'Satoshi',
+    fontWeight: fontWeight.bold,
+    letterSpacing: -0.3,
+  },
+  cta: {
+    backgroundColor: '#FEB729',
+    borderRadius: borderRadius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 56,
+  },
+  ctaDisabled: { opacity: 0.6 },
+  ctaText: {
+    color: '#111111',
+    fontSize: 17,
+    fontFamily: 'Inter',
     fontWeight: fontWeight.semibold,
   },
 });

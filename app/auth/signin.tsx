@@ -12,15 +12,12 @@ import {
   Keyboard,
   TouchableWithoutFeedback,
   ScrollView,
-  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Animated, {
   FadeIn,
   FadeOut,
-  SlideInDown,
-  SlideOutDown,
   useSharedValue,
   useAnimatedStyle,
   withSpring,
@@ -29,7 +26,7 @@ import Animated, {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { colors } from '../../theme/colors';
-import { spacing, borderRadius, fontSize, fontWeight, shadow } from '../../theme/tokens';
+import { spacing, borderRadius, fontSize, fontWeight } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { getSupabaseClient } from '../../lib/supabase';
 import { useSync } from '../../hooks/useSync';
@@ -38,10 +35,9 @@ import { useNotifications } from '../../hooks/useNotifications';
 import { logger } from '../../lib/utils/logger';
 import * as Notifications from 'expo-notifications';
 import { getAuthStorageWriteFailed } from '../../lib/auth/authStorageHealth';
+import { Logo } from '../../components/Logo';
 
 type AuthMode = 'login' | 'signup';
-
-const LIVRA_AUTH_LOGO = require('../../assets/adaptive-icon.png');
 
 export default function SignInScreen() {
   const theme = useEffectiveTheme();
@@ -84,125 +80,75 @@ export default function SignInScreen() {
     }
   }, [initialized, user, router]);
 
-  // Handle keyboard show/hide events
   useEffect(() => {
-    const showSubscription = Keyboard.addListener('keyboardDidShow', (e) => {
+    const showSub = Keyboard.addListener('keyboardDidShow', () => {
       setIsKeyboardVisible(true);
-      // Slide up the form when keyboard appears - more subtle animation
-      keyboardOffset.value = withTiming(-60, {
-        duration: 250,
-      });
+      keyboardOffset.value = withTiming(-60, { duration: 250 });
     });
-    
-    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
       setIsKeyboardVisible(false);
-      // Slide back down when keyboard disappears
-      keyboardOffset.value = withTiming(0, {
-        duration: 250,
-      });
+      keyboardOffset.value = withTiming(0, { duration: 250 });
     });
-
-    return () => {
-      showSubscription.remove();
-      hideSubscription.remove();
-    };
+    return () => { showSub.remove(); hideSub.remove(); };
   }, []);
 
-  // Check if user was redirected due to expired session
   useEffect(() => {
-    const checkExpiredSession = async () => {
+    const check = async () => {
       const expired = await AsyncStorage.getItem('session_expired');
       if (expired === 'true') {
         setSessionExpiredMessage('Your session has expired. Please sign in again.');
-        // Clear the flag
         await AsyncStorage.removeItem('session_expired');
       }
     };
-    checkExpiredSession();
+    check();
   }, []);
 
-  // Check if Apple Authentication is available
   useEffect(() => {
-    const checkAppleAuth = async () => {
+    const checkApple = async () => {
       try {
         const available = await AppleAuthentication.isAvailableAsync();
         setIsAppleAvailable(available);
-      } catch (error) {
-        logger.error('Error checking Apple Authentication availability:', error);
+      } catch {
         setIsAppleAvailable(false);
       }
     };
-    checkAppleAuth();
+    checkApple();
   }, []);
 
-  const animatedContainerStyle = useAnimatedStyle(() => {
-    return {
-      transform: [
-        { translateY: withSpring(slideOffset.value * -20, { damping: 15 }) + keyboardOffset.value }
-      ],
-      opacity: withSpring(mode === 'signup' ? 1 : 1, { damping: 15 }),
-    };
-  });
+  const animatedContainerStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateY: withSpring(slideOffset.value * -20, { damping: 15 }) + keyboardOffset.value },
+    ],
+  }));
 
   const dismissKeyboard = () => {
     Keyboard.dismiss();
-    // Blur all inputs
     emailInputRef.current?.blur();
     passwordInputRef.current?.blur();
     fullNameInputRef.current?.blur();
     confirmPasswordInputRef.current?.blur();
   };
 
-  const validateEmail = (email: string) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
-
-  const validatePassword = (password: string) => {
-    return password.length >= 8;
-  };
+  const validateEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+  const validatePassword = (p: string) => p.length >= 8;
 
   const handleSubmit = async () => {
     setError(null);
     setPendingEmailConfirmation(false);
 
-    // Validation
-    if (!email.trim()) {
-      setError('Please enter your email');
-      return;
-    }
-
-    if (!validateEmail(email)) {
-      setError('Please enter a valid email address');
-      return;
-    }
-
-    if (!password.trim()) {
-      setError('Please enter your password');
-      return;
-    }
+    if (!email.trim()) { setError('Please enter your email'); return; }
+    if (!validateEmail(email)) { setError('Please enter a valid email address'); return; }
+    if (!password.trim()) { setError('Please enter your password'); return; }
 
     if (mode === 'signup') {
-      if (!fullName.trim()) {
-        setError('Please enter your full name');
-        return;
-      }
-
-      if (!validatePassword(password)) {
-        setError('Password must be at least 8 characters');
-        return;
-      }
-
-      if (password !== confirmPassword) {
-        setError('Passwords do not match');
-        return;
-      }
+      if (!fullName.trim()) { setError('Please enter your full name'); return; }
+      if (!validatePassword(password)) { setError('Password must be at least 8 characters'); return; }
+      if (password !== confirmPassword) { setError('Passwords do not match'); return; }
     }
 
     setLoading(true);
 
     try {
-      // Check if Supabase is configured
       const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
       if (!supabaseUrl || supabaseUrl.includes('placeholder')) {
         setError('Authentication is not configured. Please contact support.');
@@ -213,392 +159,92 @@ export default function SignInScreen() {
       if (mode === 'login') {
         const { data, error: signInError } = await supabase.auth.signInWithPassword({
           email: email.trim(),
-          password: password,
+          password,
         });
 
         if (signInError) {
-          // Clear previous field errors
           setPasswordError(false);
           setEmailError(false);
-          
-          // Check for specific error types
           if (signInError.message.includes('Email not confirmed')) {
-            // Email not verified - show email verification alert
-            Alert.alert(
-              'Email Not Verified',
-              'Please check your email and verify your account before signing in. If you didn\'t receive the email, you can request a new one.',
-              [
-                {
-                  text: 'Cancel',
-                  style: 'cancel',
-                },
-                {
-                  text: 'Resend Verification Email',
-                  style: 'default',
-                  onPress: async () => {
-                    try {
-                      setLoading(true);
-                      const { error: resendError } = await supabase.auth.resend({
-                        type: 'signup',
-                        email: email.trim(),
-                      });
-                      
-                      if (resendError) {
-                        Alert.alert(
-                          'Error',
-                          resendError.message || 'Failed to send verification email. Please try again.'
-                        );
-                      } else {
-                        Alert.alert(
-                          'Email Sent',
-                          'A new verification email has been sent. Please check your inbox and spam folder.'
-                        );
-                      }
-                    } catch (error: any) {
-                      logger.error('Error resending verification email:', error);
-                      Alert.alert(
-                        'Error',
-                        'Failed to send verification email. Please try again.'
-                      );
-                    } finally {
-                      setLoading(false);
-                    }
-                  },
-                },
-              ]
-            );
+            Alert.alert('Email Not Verified', "Please check your email and verify your account before signing in.", [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Resend Verification Email', onPress: async () => {
+                try {
+                  setLoading(true);
+                  await supabase.auth.resend({ type: 'signup', email: email.trim() });
+                  Alert.alert('Email Sent', 'A new verification email has been sent. Please check your inbox and spam folder.');
+                } catch { Alert.alert('Error', 'Failed to send verification email. Please try again.'); }
+                finally { setLoading(false); }
+              }},
+            ]);
             setLoading(false);
             return;
           } else if (signInError.message.includes('Invalid login credentials')) {
-            // Invalid credentials - most likely wrong password
-            // Highlight password field and show password-specific error
             setPasswordError(true);
             setError('Incorrect password. Please try again.');
-            // Focus password field and clear it
-            setTimeout(() => {
-              passwordInputRef.current?.focus();
-              setPassword('');
-            }, 100);
+            setTimeout(() => { passwordInputRef.current?.focus(); setPassword(''); }, 100);
           } else if (signInError.message.includes('User not found')) {
-            // User truly doesn't exist
             setEmailError(true);
-            Alert.alert(
-              'Account Not Found',
-              'No account found with this email. Would you like to create one?',
-              [
-                {
-                  text: 'Cancel',
-                  style: 'cancel',
-                  onPress: () => {
-                    setEmailError(false);
-                  },
-                },
-                {
-                  text: 'Create Account',
-                  onPress: () => {
-                    setMode('signup');
-                    setError(null);
-                    setEmailError(false);
-                  },
-                },
-              ]
-            );
+            Alert.alert('Account Not Found', 'No account found with this email. Would you like to create one?', [
+              { text: 'Cancel', style: 'cancel', onPress: () => setEmailError(false) },
+              { text: 'Create Account', onPress: () => { setMode('signup'); setError(null); setEmailError(false); } },
+            ]);
           } else {
-            // Other errors
             setError(signInError.message);
           }
         } else if (data?.user) {
-          // Check if email is confirmed (required for production)
           if (!data.user.email_confirmed_at) {
-            Alert.alert(
-              'Email Not Verified',
-              'Please check your email and verify your account before signing in. If you didn\'t receive the email, you can request a new one.',
-              [
-                {
-                  text: 'Cancel',
-                  style: 'cancel',
-                },
-                {
-                  text: 'Resend Verification Email',
-                  style: 'default',
-                  onPress: async () => {
-                    try {
-                      setLoading(true);
-                      const { error: resendError } = await supabase.auth.resend({
-                        type: 'signup',
-                        email: email.trim(),
-                      });
-                      
-                      if (resendError) {
-                        Alert.alert(
-                          'Error',
-                          resendError.message || 'Failed to send verification email. Please try again.'
-                        );
-                      } else {
-                        Alert.alert(
-                          'Email Sent',
-                          'A new verification email has been sent. Please check your inbox and spam folder.'
-                        );
-                      }
-                    } catch (error: any) {
-                      logger.error('Error resending verification email:', error);
-                      Alert.alert(
-                        'Error',
-                        'Failed to send verification email. Please try again.'
-                      );
-                    } finally {
-                      setLoading(false);
-                    }
-                  },
-                },
-              ]
-            );
+            Alert.alert('Email Not Verified', "Please check your email and verify your account.", [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Resend Verification Email', onPress: async () => {
+                try {
+                  setLoading(true);
+                  await supabase.auth.resend({ type: 'signup', email: email.trim() });
+                  Alert.alert('Email Sent', 'A new verification email has been sent.');
+                } catch { Alert.alert('Error', 'Failed to send verification email.'); }
+                finally { setLoading(false); }
+              }},
+            ]);
             setLoading(false);
             return;
           }
-          
-          // Ensure profile exists - create if missing
-          try {
-            const { data: profileData, error: profileError } = await supabase
-              .from('profiles')
-              .select('id')
-              .eq('id', data.user.id)
-              .single();
-            
-            if (profileError && profileError.code === 'PGRST116') {
-              // Profile doesn't exist - create it with retry logic
-              logger.log('[Auth] Profile not found, creating profile for user:', data.user.id);
-              
-              let profileCreated = false;
-              let retries = 0;
-              const maxRetries = 3;
-              
-              while (!profileCreated && retries < maxRetries) {
-                try {
-                  // Small delay to ensure session is established (especially for RLS)
-                  if (retries > 0) {
-                    await new Promise(resolve => setTimeout(resolve, 500 * retries));
-                  }
-                  
-                  const { error: insertError } = await supabase
-                    .from('profiles')
-                    .insert({
-                      id: data.user.id,
-                      display_name: data.user.user_metadata?.full_name || data.user.email?.split('@')[0] || '',
-                      created_at: new Date().toISOString(),
-                      onboarding_completed: false,
-                      pro_unlocked: false,
-                    });
-                  
-                  if (insertError) {
-                    if (insertError.code === '23505') {
-                      // Profile already exists
-                      logger.log('[Auth] Profile already exists');
-                      profileCreated = true;
-                    } else if (insertError.code === '42501') {
-                      // RLS policy violation - session might not be ready yet, retry
-                      logger.warn(`[Auth] RLS policy violation, retrying profile creation (attempt ${retries + 1}/${maxRetries})`);
-                      retries++;
-                    } else {
-                      logger.error('[Auth] Error creating profile:', insertError);
-                      profileCreated = true; // Stop retrying
-                    }
-                  } else {
-                    logger.log('[Auth] Profile created successfully');
-                    profileCreated = true;
-                  }
-                } catch (error) {
-                  logger.error('[Auth] Unexpected error creating profile:', error);
-                  retries++;
-                  if (retries >= maxRetries) {
-                    break;
-                  }
-                }
-              }
-            } else if (profileError) {
-              logger.error('[Auth] Error checking profile:', profileError);
-              // Don't block login if profile check fails
-            }
-          } catch (profileCheckError) {
-            logger.error('[Auth] Unexpected error checking/creating profile:', profileCheckError);
-            // Don't block login if profile check fails
-          }
-          
-          // Successfully signed in - auth listener will route
+          await ensureProfile(supabase, data.user.id, data.user);
           return;
         } else {
           setError('Unable to sign in. Please try again.');
         }
       } else {
-        // Sign up
         const { data, error: signUpError } = await supabase.auth.signUp({
           email: email.trim(),
-          password: password,
-          options: {
-            data: {
-              full_name: fullName.trim(),
-            },
-            emailRedirectTo: undefined, // Let Supabase use default redirect
-          },
+          password,
+          options: { data: { full_name: fullName.trim() } },
         });
 
         if (signUpError) {
-          // Handle specific signup errors
-          if (signUpError.message.includes('already registered') || 
-              signUpError.message.includes('User already registered')) {
-            // User already exists - try to sign them in automatically
-            logger.log('[Auth] User already registered, attempting to sign in');
+          if (signUpError.message.includes('already registered') || signUpError.message.includes('User already registered')) {
             setError(null);
-            
             try {
-              const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-                email: email.trim(),
-                password: password,
-              });
-              
-              if (signInError) {
-                // Sign in failed - show error and switch to login mode
+              const { data: siData, error: siError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+              if (siError) {
                 setError('An account with this email already exists. Please sign in with your password.');
-                setTimeout(() => {
-                  setMode('login');
-                }, 2000);
-              } else if (signInData?.user) {
-                // Successfully signed in - ensure profile exists with retry logic
-                try {
-                  const { data: profileData, error: profileError } = await supabase
-                    .from('profiles')
-                    .select('id')
-                    .eq('id', signInData.user.id)
-                    .single();
-                  
-                  if (profileError && profileError.code === 'PGRST116') {
-                    // Profile doesn't exist - create it with retry logic
-                    logger.log('[Auth] Profile not found, creating profile for user:', signInData.user.id);
-                    
-                    let profileCreated = false;
-                    let retries = 0;
-                    const maxRetries = 3;
-                    
-                    while (!profileCreated && retries < maxRetries) {
-                      try {
-                        // Small delay to ensure session is established (especially for RLS)
-                        if (retries > 0) {
-                          await new Promise(resolve => setTimeout(resolve, 500 * retries));
-                        }
-                        
-                        const { error: insertError } = await supabase
-                          .from('profiles')
-                          .insert({
-                            id: signInData.user.id,
-                            display_name: fullName.trim() || signInData.user.user_metadata?.full_name || signInData.user.email?.split('@')[0] || '',
-                            created_at: new Date().toISOString(),
-                            onboarding_completed: false,
-                            pro_unlocked: false,
-                          });
-                        
-                        if (insertError) {
-                          if (insertError.code === '23505') {
-                            // Profile already exists
-                            logger.log('[Auth] Profile already exists');
-                            profileCreated = true;
-                          } else if (insertError.code === '42501') {
-                            // RLS policy violation - session might not be ready yet, retry
-                            logger.warn(`[Auth] RLS policy violation, retrying profile creation (attempt ${retries + 1}/${maxRetries})`);
-                            retries++;
-                          } else {
-                            logger.error('[Auth] Error creating profile:', insertError);
-                            profileCreated = true; // Stop retrying
-                          }
-                        } else {
-                          logger.log('[Auth] Profile created successfully');
-                          profileCreated = true;
-                        }
-                      } catch (error) {
-                        logger.error('[Auth] Unexpected error creating profile:', error);
-                        retries++;
-                        if (retries >= maxRetries) {
-                          break;
-                        }
-                      }
-                    }
-                  }
-                } catch (profileCheckError) {
-                  logger.error('[Auth] Error checking/creating profile:', profileCheckError);
-                }
-                
-                // Auth listener will route
+                setTimeout(() => setMode('login'), 2000);
+              } else if (siData?.user) {
+                await ensureProfile(supabase, siData.user.id, siData.user, fullName.trim());
                 return;
               }
-            } catch (autoSignInError: any) {
-              logger.error('[Auth] Error during auto sign-in:', autoSignInError);
+            } catch {
               setError('An account with this email already exists. Please sign in instead.');
-              setTimeout(() => {
-                setMode('login');
-              }, 2000);
+              setTimeout(() => setMode('login'), 2000);
             }
           } else {
             setError(signUpError.message);
           }
         } else if (data?.user) {
-          // Account created successfully - create profile with retry logic
-          // Wait a bit to ensure session is fully established for RLS policies
-          let profileCreated = false;
-          let retries = 0;
-          const maxRetries = 3;
-          
-          while (!profileCreated && retries < maxRetries) {
-            try {
-              // Small delay to ensure session is established (especially for RLS)
-              if (retries > 0) {
-                await new Promise(resolve => setTimeout(resolve, 500 * retries));
-              }
-              
-              const { error: profileError } = await supabase
-                .from('profiles')
-                .insert({
-                  id: data.user.id,
-                  display_name: fullName.trim() || data.user.user_metadata?.full_name || email.trim().split('@')[0] || '',
-                  created_at: new Date().toISOString(),
-                  onboarding_completed: false,
-                  pro_unlocked: false,
-                });
-              
-              if (profileError) {
-                // Check if profile already exists (race condition or already created)
-                if (profileError.code === '23505') {
-                  logger.log('[Auth] Profile already exists (race condition)');
-                  profileCreated = true;
-                } else if (profileError.code === '42501') {
-                  // RLS policy violation - session might not be ready yet, retry
-                  logger.warn(`[Auth] RLS policy violation, retrying profile creation (attempt ${retries + 1}/${maxRetries})`);
-                  retries++;
-                } else {
-                  logger.error('[Auth] Error creating profile:', profileError);
-                  // Don't block account creation if profile creation fails after retries
-                  profileCreated = true; // Stop retrying
-                }
-              } else {
-                logger.log('[Auth] Profile created successfully for new user');
-                profileCreated = true;
-              }
-            } catch (profileCreateError) {
-              logger.error('[Auth] Unexpected error creating profile:', profileCreateError);
-              retries++;
-              if (retries >= maxRetries) {
-                // Don't block account creation if profile creation fails
-                break;
-              }
-            }
-          }
-          
-          // Check if email confirmation is required
-          const requiresEmailConfirmation = !data.user.email_confirmed_at;
-          if (requiresEmailConfirmation) {
+          await ensureProfile(supabase, data.user.id, data.user, fullName.trim());
+          if (!data.user.email_confirmed_at) {
             setPendingEmailConfirmation(true);
             setMode('login');
-            setPassword('');
-            setConfirmPassword('');
-            setFullName('');
+            setPassword(''); setConfirmPassword(''); setFullName('');
           }
         } else {
           setError('Could not create account. Please try again.');
@@ -607,13 +253,8 @@ export default function SignInScreen() {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '';
       const storageFlag = await getAuthStorageWriteFailed();
-      if (
-        storageFlag ||
-        /securestore|keychain|keystore|user interaction|not available|storage/i.test(msg)
-      ) {
-        setError(
-          'This device could not save your sign-in securely. Check storage space and Keychain / device security settings, then try again.',
-        );
+      if (storageFlag || /securestore|keychain|keystore|user interaction|not available|storage/i.test(msg)) {
+        setError('This device could not save your sign-in securely. Check storage space and Keychain settings, then try again.');
       } else {
         setError(msg || 'Something went wrong. Please try again.');
       }
@@ -622,9 +263,7 @@ export default function SignInScreen() {
     }
   };
 
-  const handleForgotPassword = () => {
-    router.push('/auth/reset-password');
-  };
+  const handleForgotPassword = () => router.push('/auth/reset-password');
 
   const toggleMode = () => {
     setMode(mode === 'login' ? 'signup' : 'login');
@@ -632,180 +271,62 @@ export default function SignInScreen() {
     setPasswordError(false);
     setEmailError(false);
     setPendingEmailConfirmation(false);
-    setPassword('');
-    setConfirmPassword('');
-    setFullName('');
+    setPassword(''); setConfirmPassword(''); setFullName('');
   };
 
   const handleAppleSignIn = async () => {
     setIsAppleLoading(true);
     setError(null);
-
     try {
-      // Check if Supabase is configured
       const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
       if (!supabaseUrl || supabaseUrl.includes('placeholder')) {
         setError('Authentication is not configured. Please contact support.');
-        setIsAppleLoading(false);
         return;
       }
-
-      // Request Apple authentication credential
       const credential = await AppleAuthentication.signInAsync({
         requestedScopes: [
           AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
           AppleAuthentication.AppleAuthenticationScope.EMAIL,
         ],
       });
-
-      if (!credential.identityToken) {
-        throw new Error('No identity token received from Apple');
-      }
-
-      // Sign in/up with Supabase using the Apple identity token
-      // Note: Make sure Apple provider is enabled in Supabase Dashboard
-      // and the redirect URL is configured: {your-app-scheme}://
+      if (!credential.identityToken) throw new Error('No identity token received from Apple');
       const { data, error: signInError } = await supabase.auth.signInWithIdToken({
         provider: 'apple',
         token: credential.identityToken,
       });
-
       if (signInError) {
-        logger.error('Error signing in with Apple:', signInError);
-        
-        // Provide more helpful error messages
-        if (signInError.code === 'provider_disabled' || signInError.message?.includes('provider') || signInError.message?.includes('not enabled')) {
-          setError('Apple Sign-In is not enabled in your account settings. Please use email and password to sign in.');
+        if (signInError.code === 'provider_disabled' || signInError.message?.includes('not enabled')) {
+          setError('Apple Sign-In is not enabled. Please use email and password.');
         } else {
           setError(signInError.message || 'Failed to sign in with Apple. Please try again.');
         }
-        setIsAppleLoading(false);
         return;
       }
-
       if (data?.user) {
-        // Successfully signed in/up - ensure profile exists
-        logger.log('Successfully signed in with Apple:', data.user.email || data.user.id);
-        
-        try {
-          // Check if profile exists, create if missing
-          const { data: profileData, error: profileError } = await supabase
-            .from('profiles')
-            .select('id')
-            .eq('id', data.user.id)
-            .single();
-          
-          if (profileError && profileError.code === 'PGRST116') {
-            // Profile doesn't exist - create it with retry logic
-            logger.log('[Auth] Profile not found, creating profile for Apple user:', data.user.id);
-            const fullName = credential.fullName 
-              ? `${credential.fullName.givenName || ''} ${credential.fullName.familyName || ''}`.trim()
-              : data.user.user_metadata?.full_name || '';
-            
-            let profileCreated = false;
-            let retries = 0;
-            const maxRetries = 3;
-            
-            while (!profileCreated && retries < maxRetries) {
-              try {
-                // Small delay to ensure session is established (especially for RLS)
-                if (retries > 0) {
-                  await new Promise(resolve => setTimeout(resolve, 500 * retries));
-                }
-                
-                const { error: insertError } = await supabase
-                  .from('profiles')
-                  .insert({
-                    id: data.user.id,
-                    display_name: fullName || data.user.email?.split('@')[0] || credential.email?.split('@')[0] || '',
-                    created_at: new Date().toISOString(),
-                    onboarding_completed: false,
-                    pro_unlocked: false,
-                  });
-                
-                if (insertError) {
-                  if (insertError.code === '23505') {
-                    // Profile already exists
-                    logger.log('[Auth] Profile already exists');
-                    profileCreated = true;
-                  } else if (insertError.code === '42501') {
-                    // RLS policy violation - session might not be ready yet, retry
-                    logger.warn(`[Auth] RLS policy violation, retrying profile creation (attempt ${retries + 1}/${maxRetries})`);
-                    retries++;
-                  } else {
-                    logger.error('[Auth] Error creating profile:', insertError);
-                    profileCreated = true; // Stop retrying
-                  }
-                } else {
-                  logger.log('[Auth] Profile created successfully for Apple user');
-                  profileCreated = true;
-                }
-              } catch (error) {
-                logger.error('[Auth] Unexpected error creating profile:', error);
-                retries++;
-                if (retries >= maxRetries) {
-                  break;
-                }
-              }
-            }
-          } else if (profileError) {
-            logger.error('[Auth] Error checking profile:', profileError);
-            // Don't block login if profile check fails
-          }
-        } catch (profileCheckError) {
-          logger.error('[Auth] Unexpected error checking/creating profile:', profileCheckError);
-          // Don't block login if profile check fails
-        }
-        
-        // Sync data after successful sign-in
-        try {
-          await sync();
-        } catch (syncError) {
-          logger.warn('Error syncing after Apple sign-in:', syncError);
-          // Don't block the user if sync fails
-        }
-        
-        return;
+        const appleFullName = credential.fullName
+          ? `${credential.fullName.givenName || ''} ${credential.fullName.familyName || ''}`.trim()
+          : data.user.user_metadata?.full_name || '';
+        await ensureProfile(supabase, data.user.id, data.user, appleFullName);
+        try { await sync(); } catch { /* non-blocking */ }
       }
-    } catch (error: unknown) {
-      const err = error as { code?: string; message?: string };
-      if (err.code === 'ERR_REQUEST_CANCELED' || err.code === 'ERR_CANCELED') {
-        logger.log('Apple Sign-In was canceled by user');
-        setIsAppleLoading(false);
-        return;
-      }
-
-      logger.error('Error during Apple Sign-In:', err.message ?? err.code ?? 'unknown');
-
-      let errorMessage = 'Failed to sign in with Apple. Please try again.';
-
-      if (err.message) {
-        errorMessage = err.message;
-      } else if (err.code) {
-        switch (err.code) {
-          case 'ERR_INVALID_RESPONSE':
-            errorMessage = 'Invalid response from Apple. Please try again.';
-            break;
-          case 'ERR_NOT_AVAILABLE':
-            errorMessage = 'Apple Sign-In is not available on this device.';
-            break;
-          default:
-            errorMessage = `Apple Sign-In error: ${err.code}. Please try again.`;
-        }
-      }
-
+    } catch (err: unknown) {
+      const e = err as { code?: string; message?: string };
+      if (e.code === 'ERR_REQUEST_CANCELED' || e.code === 'ERR_CANCELED') return;
       const storageFlag = await getAuthStorageWriteFailed();
-      if (storageFlag || /securestore|keychain|keystore|storage/i.test(err.message ?? '')) {
-        errorMessage =
-          'This device could not save your sign-in securely. Check storage and security settings, then try again.';
+      if (storageFlag || /securestore|keychain|keystore|storage/i.test(e.message ?? '')) {
+        setError('This device could not save your sign-in securely. Check storage and security settings.');
+      } else {
+        setError(e.message || `Apple Sign-In error: ${e.code || 'unknown'}`);
       }
-
-      setError(errorMessage);
-      setIsAppleLoading(false);
     } finally {
       setIsAppleLoading(false);
     }
   };
+
+  // ── Render ──────────────────────────────────────────────────────────────────
+
+  const inputBorderColor = (hasError: boolean) =>
+    hasError ? themeColors.error : themeColors.border;
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
@@ -816,12 +337,13 @@ export default function SignInScreen() {
       >
         {loading && (
           <View style={[styles.loadingOverlay, { backgroundColor: themeColors.background + 'E6' }]}>
-            <ActivityIndicator size="large" color={themeColors.accent.primary} />
+            <ActivityIndicator size="large" color="#FEB729" />
             <Text style={[styles.loadingText, { color: themeColors.text }]}>
               {mode === 'login' ? 'Signing in...' : 'Creating account...'}
             </Text>
           </View>
         )}
+
         <TouchableWithoutFeedback onPress={dismissKeyboard}>
           <ScrollView
             contentContainerStyle={styles.scrollContent}
@@ -829,320 +351,235 @@ export default function SignInScreen() {
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.content}>
-          <Animated.View entering={FadeIn.duration(400)} style={styles.logoWrap}>
-            <Image
-              source={LIVRA_AUTH_LOGO}
-              style={styles.authLogo}
-              resizeMode="contain"
-              accessibilityLabel="Livra"
-              accessibilityIgnoresInvertColors
-            />
-          </Animated.View>
 
-          {/* Header */}
-          <Animated.View
-            entering={FadeIn.duration(400)}
-            style={styles.header}
-          >
-            <Text style={[styles.title, { color: themeColors.text }]}>
-              {mode === 'login' ? 'Welcome Back' : 'Create Account'}
-            </Text>
-            <Text style={[styles.subtitle, { color: themeColors.textSecondary }]}>
-              {mode === 'login'
-                ? 'Sign in to sync your data across devices'
-                : 'Start tracking your progress'}
-            </Text>
-          </Animated.View>
+              {/* Logo + wordmark */}
+              <Animated.View entering={FadeIn.duration(400)} style={styles.logoArea}>
+                <Logo size={64} color="#FEB729" />
+                <Text style={[styles.wordmark, { color: themeColors.text }]}>LIVRA</Text>
+              </Animated.View>
 
-          {/* Form */}
-          <Animated.View
-            style={[styles.form, animatedContainerStyle]}
-            entering={SlideInDown.duration(400).delay(100)}
-          >
-            {/* Full Name Input (Signup only) */}
-            {mode === 'signup' && (
-              <Animated.View
-                entering={FadeIn.duration(300)}
-                exiting={FadeOut.duration(200)}
-                style={styles.inputContainer}
-              >
-                <Text style={[styles.label, { color: themeColors.textSecondary }]}>Full Name</Text>
-                <TextInput
-                  ref={fullNameInputRef}
-                  style={[
-                    styles.input,
-                    {
+              {/* Headline */}
+              <Animated.View entering={FadeIn.duration(400).delay(80)} style={styles.headlineArea}>
+                <Text style={[styles.headline, { color: themeColors.text }]}>
+                  {mode === 'login' ? 'Welcome back.' : 'Create account.'}
+                </Text>
+                <Text style={[styles.subtext, { color: themeColors.textSecondary }]}>
+                  {mode === 'login'
+                    ? 'Sign in to sync your data across devices.'
+                    : 'Start tracking your progress.'}
+                </Text>
+              </Animated.View>
+
+              {/* Form */}
+              <Animated.View style={[styles.form, animatedContainerStyle]}>
+
+                {/* Full name (signup only) */}
+                {mode === 'signup' && (
+                  <Animated.View
+                    entering={FadeIn.duration(250)}
+                    exiting={FadeOut.duration(180)}
+                    style={styles.fieldWrap}
+                  >
+                    <Text style={[styles.label, { color: themeColors.textSecondary }]}>Full name</Text>
+                    <TextInput
+                      ref={fullNameInputRef}
+                      style={[styles.input, {
+                        backgroundColor: themeColors.surface,
+                        color: themeColors.text,
+                        borderColor: themeColors.border,
+                      }]}
+                      placeholder="Your name"
+                      placeholderTextColor={themeColors.textTertiary}
+                      value={fullName}
+                      onChangeText={t => { setFullName(t); setError(null); }}
+                      autoCapitalize="words"
+                      autoCorrect={false}
+                      editable={!loading}
+                      returnKeyType="next"
+                      onSubmitEditing={() => emailInputRef.current?.focus()}
+                    />
+                  </Animated.View>
+                )}
+
+                {/* Email */}
+                <View style={styles.fieldWrap}>
+                  <Text style={[styles.label, { color: themeColors.textSecondary }]}>Email</Text>
+                  <TextInput
+                    ref={emailInputRef}
+                    style={[styles.input, {
                       backgroundColor: themeColors.surface,
                       color: themeColors.text,
-                      borderColor: error ? themeColors.error : themeColors.border,
-                    },
-                  ]}
-                  placeholder="Enter your full name"
-                  placeholderTextColor={themeColors.textTertiary}
-                  value={fullName}
-                  onChangeText={(text) => {
-                    setFullName(text);
-                    setError(null);
-                  }}
-                  onFocus={() => {
-                    // Smooth slide animation when focused - already handled by keyboard listener
-                  }}
-                  onBlur={() => {
-                    // Don't slide back immediately - wait for keyboard to hide
-                  }}
-                  autoCapitalize="words"
-                  autoCorrect={false}
-                  editable={!loading}
-                  returnKeyType="next"
-                  onSubmitEditing={() => {
-                    emailInputRef.current?.focus();
-                  }}
-                />
-              </Animated.View>
-            )}
+                      borderColor: inputBorderColor(emailError),
+                    }]}
+                    placeholder="you@example.com"
+                    placeholderTextColor={themeColors.textTertiary}
+                    value={email}
+                    onChangeText={t => { setEmail(t); setError(null); setEmailError(false); }}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    keyboardType="email-address"
+                    editable={!loading}
+                    returnKeyType="next"
+                    onSubmitEditing={() => passwordInputRef.current?.focus()}
+                  />
+                </View>
 
-            {/* Email Input */}
-            <View style={styles.inputContainer}>
-              <Text style={[styles.label, { color: themeColors.textSecondary }]}>Email</Text>
-              <TextInput
-                ref={emailInputRef}
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: themeColors.surface,
-                    color: themeColors.text,
-                    borderColor: error && emailError ? themeColors.error : error ? themeColors.border : themeColors.border,
-                  },
-                ]}
-                placeholder="Enter your email"
-                placeholderTextColor={themeColors.textTertiary}
-                value={email}
-                onChangeText={(text) => {
-                  setEmail(text);
-                  setError(null);
-                  setEmailError(false);
-                }}
-                onFocus={() => {
-                  // Slide animation handled by keyboard listener
-                }}
-                onBlur={() => {
-                  // Keyboard will handle the slide back
-                }}
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="email-address"
-                editable={!loading}
-                returnKeyType="next"
-                onSubmitEditing={() => {
-                  passwordInputRef.current?.focus();
-                }}
-              />
-            </View>
-
-            {/* Password Input */}
-            <View style={styles.inputContainer}>
-              <Text style={[styles.label, { color: themeColors.textSecondary }]}>Password</Text>
-              <TextInput
-                ref={passwordInputRef}
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: themeColors.surface,
-                    color: themeColors.text,
-                    borderColor: passwordError ? themeColors.error : error ? themeColors.border : themeColors.border,
-                  },
-                ]}
-                placeholder={mode === 'signup' ? 'Enter new password (min. 8 characters)' : 'Enter your password'}
-                placeholderTextColor={themeColors.textTertiary}
-                value={password}
-                onChangeText={(text) => {
-                  setPassword(text);
-                  setError(null);
-                  setPasswordError(false);
-                }}
-                onFocus={() => {
-                  // Slide animation handled by keyboard listener
-                }}
-                onBlur={() => {
-                  // Keyboard will handle the slide back
-                }}
-                secureTextEntry
-                autoCapitalize="none"
-                autoCorrect={false}
-                editable={!loading}
-                returnKeyType={mode === 'signup' ? 'next' : 'done'}
-                onSubmitEditing={() => {
-                  if (mode === 'signup') {
-                    confirmPasswordInputRef.current?.focus();
-                  } else {
-                    dismissKeyboard();
-                    handleSubmit();
-                  }
-                }}
-              />
-            </View>
-
-            {/* Confirm Password Input (Signup only) */}
-            {mode === 'signup' && (
-              <Animated.View
-                entering={FadeIn.duration(300)}
-                exiting={FadeOut.duration(200)}
-                style={styles.inputContainer}
-              >
-                <Text style={[styles.label, { color: themeColors.textSecondary }]}>
-                  Confirm Password
-                </Text>
-                <TextInput
-                  ref={confirmPasswordInputRef}
-                  style={[
-                    styles.input,
-                    {
+                {/* Password */}
+                <View style={styles.fieldWrap}>
+                  <Text style={[styles.label, { color: themeColors.textSecondary }]}>Password</Text>
+                  <TextInput
+                    ref={passwordInputRef}
+                    style={[styles.input, {
                       backgroundColor: themeColors.surface,
                       color: themeColors.text,
-                      borderColor: error ? themeColors.error : themeColors.border,
-                    },
-                  ]}
-                  placeholder="Enter new password (min. 8 characters)"
-                  placeholderTextColor={themeColors.textTertiary}
-                  value={confirmPassword}
-                  onChangeText={(text) => {
-                    setConfirmPassword(text);
-                    setError(null);
-                  }}
-                  onFocus={() => {
-                    keyboardOffset.value = withTiming(-80, {
-                      duration: 250,
-                    });
-                  }}
-                  onBlur={() => {
-                    // Keyboard will handle the slide back
-                  }}
-                  secureTextEntry
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  editable={!loading}
-                  returnKeyType="done"
-                  onSubmitEditing={() => {
-                    dismissKeyboard();
-                    handleSubmit();
-                  }}
-                />
-              </Animated.View>
-            )}
+                      borderColor: inputBorderColor(passwordError),
+                    }]}
+                    placeholder={mode === 'signup' ? 'Min. 8 characters' : 'Your password'}
+                    placeholderTextColor={themeColors.textTertiary}
+                    value={password}
+                    onChangeText={t => { setPassword(t); setError(null); setPasswordError(false); }}
+                    secureTextEntry
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    editable={!loading}
+                    returnKeyType={mode === 'signup' ? 'next' : 'done'}
+                    onSubmitEditing={() => {
+                      if (mode === 'signup') { confirmPasswordInputRef.current?.focus(); }
+                      else { dismissKeyboard(); handleSubmit(); }
+                    }}
+                  />
+                </View>
 
-            {/* Session Expired Message */}
-            {sessionExpiredMessage && (
-              <Animated.View
-                entering={FadeIn.duration(200)}
-                style={[styles.messageContainer, { backgroundColor: themeColors.error + '20' }]}
-              >
-                <Text style={[styles.messageText, { color: themeColors.error }]}>
-                  {sessionExpiredMessage}
-                </Text>
-              </Animated.View>
-            )}
+                {/* Confirm password (signup only) */}
+                {mode === 'signup' && (
+                  <Animated.View
+                    entering={FadeIn.duration(250)}
+                    exiting={FadeOut.duration(180)}
+                    style={styles.fieldWrap}
+                  >
+                    <Text style={[styles.label, { color: themeColors.textSecondary }]}>Confirm password</Text>
+                    <TextInput
+                      ref={confirmPasswordInputRef}
+                      style={[styles.input, {
+                        backgroundColor: themeColors.surface,
+                        color: themeColors.text,
+                        borderColor: themeColors.border,
+                      }]}
+                      placeholder="Repeat password"
+                      placeholderTextColor={themeColors.textTertiary}
+                      value={confirmPassword}
+                      onChangeText={t => { setConfirmPassword(t); setError(null); }}
+                      secureTextEntry
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      editable={!loading}
+                      returnKeyType="done"
+                      onSubmitEditing={() => { dismissKeyboard(); handleSubmit(); }}
+                    />
+                  </Animated.View>
+                )}
 
-            {pendingEmailConfirmation && (
-              <Animated.View
-                entering={FadeIn.duration(200)}
-                style={[
-                  styles.messageContainer,
-                  { backgroundColor: `${themeColors.accent.primary}33` },
-                ]}
-              >
-                <Text style={[styles.messageText, { color: themeColors.accent.primary }]}>
-                  Check your email to verify your account, then sign in to continue.
-                </Text>
-              </Animated.View>
-            )}
+                {/* Messages */}
+                {sessionExpiredMessage && (
+                  <Animated.View
+                    entering={FadeIn.duration(200)}
+                    style={[styles.messageBanner, { backgroundColor: themeColors.error + '20' }]}
+                  >
+                    <Text style={[styles.messageText, { color: themeColors.error }]}>
+                      {sessionExpiredMessage}
+                    </Text>
+                  </Animated.View>
+                )}
 
-            {/* Error Message */}
-            {error && (
-              <Animated.View
-                entering={FadeIn.duration(200)}
-                exiting={FadeOut.duration(200)}
-                style={styles.errorContainer}
-              >
-                <Text style={[styles.errorText, { color: themeColors.error }]}>{error}</Text>
-              </Animated.View>
-            )}
+                {pendingEmailConfirmation && (
+                  <Animated.View
+                    entering={FadeIn.duration(200)}
+                    style={[styles.messageBanner, { backgroundColor: '#FEB72920' }]}
+                  >
+                    <Text style={[styles.messageText, { color: '#FEB729' }]}>
+                      Check your email to verify your account, then sign in to continue.
+                    </Text>
+                  </Animated.View>
+                )}
 
-            {/* Forgot Password (Login only) */}
-            {mode === 'login' && (
-              <TouchableOpacity
-                onPress={handleForgotPassword}
-                disabled={loading}
-                style={styles.forgotPasswordButton}
-              >
-                <Text style={[styles.forgotPasswordText, { color: themeColors.accent.primary }]}>
-                  Forgot Password?
-                </Text>
-              </TouchableOpacity>
-            )}
+                {error && (
+                  <Animated.View
+                    entering={FadeIn.duration(200)}
+                    exiting={FadeOut.duration(200)}
+                    style={styles.errorWrap}
+                  >
+                    <Text style={[styles.errorText, { color: themeColors.error }]}>{error}</Text>
+                  </Animated.View>
+                )}
 
-            {/* Submit Button */}
-            <TouchableOpacity
-              style={[
-                styles.submitButton,
-                { backgroundColor: themeColors.accent.primary },
-                loading && styles.submitButtonDisabled,
-                shadow.md,
-              ]}
-              onPress={handleSubmit}
-              disabled={loading || isAppleLoading}
-              activeOpacity={0.8}
-            >
-              {loading ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={styles.submitButtonText}>
-                  {mode === 'login' ? 'Sign In' : 'Create Account'}
-                </Text>
-              )}
-            </TouchableOpacity>
+                {/* Forgot password */}
+                {mode === 'login' && (
+                  <TouchableOpacity
+                    onPress={handleForgotPassword}
+                    disabled={loading}
+                    style={styles.forgotBtn}
+                  >
+                    <Text style={[styles.forgotText, { color: themeColors.textSecondary }]}>
+                      Forgot password?
+                    </Text>
+                  </TouchableOpacity>
+                )}
 
-            {/* Divider */}
-            {isAppleAvailable && (
-              <View style={styles.dividerContainer}>
-                <View style={[styles.dividerLine, { backgroundColor: themeColors.border }]} />
-                <Text style={[styles.dividerText, { color: themeColors.textSecondary }]}>or</Text>
-                <View style={[styles.dividerLine, { backgroundColor: themeColors.border }]} />
-              </View>
-            )}
+                {/* Submit */}
+                <TouchableOpacity
+                  style={[styles.submitBtn, loading && styles.submitBtnDisabled]}
+                  onPress={handleSubmit}
+                  disabled={loading || isAppleLoading}
+                  activeOpacity={0.85}
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#111111" />
+                  ) : (
+                    <Text style={styles.submitBtnText}>
+                      {mode === 'login' ? 'Sign in' : 'Create account'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
 
-            {/* Apple Sign-In Button */}
-            {isAppleAvailable && !loading && !isAppleLoading && (
-              <AppleAuthentication.AppleAuthenticationButton
-                buttonType={
-                  mode === 'signup'
-                    ? AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP
-                    : AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN
-                }
-                buttonStyle={
-                  theme === 'dark'
-                    ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
-                    : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
-                }
-                cornerRadius={borderRadius.lg}
-                style={styles.appleButton}
-                onPress={handleAppleSignIn}
-              />
-            )}
+                {/* Divider */}
+                {isAppleAvailable && (
+                  <View style={styles.divider}>
+                    <View style={[styles.dividerLine, { backgroundColor: themeColors.border }]} />
+                    <Text style={[styles.dividerText, { color: themeColors.textSecondary }]}>or</Text>
+                    <View style={[styles.dividerLine, { backgroundColor: themeColors.border }]} />
+                  </View>
+                )}
 
-            {/* Toggle Mode */}
-            <View style={styles.toggleContainer}>
-              <Text style={[styles.toggleText, { color: themeColors.textSecondary }]}>
-                {mode === 'login'
-                  ? "Don't have an account? "
-                  : 'Already have an account? '}
-              </Text>
-              <TouchableOpacity onPress={toggleMode} disabled={loading}>
-                <Text style={[styles.toggleLink, { color: themeColors.accent.primary }]}>
-                  {mode === 'login' ? 'Sign Up' : 'Sign In'}
-                </Text>
-              </TouchableOpacity>
-            </View>
+                {/* Apple */}
+                {isAppleAvailable && !loading && !isAppleLoading && (
+                  <AppleAuthentication.AppleAuthenticationButton
+                    buttonType={
+                      mode === 'signup'
+                        ? AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP
+                        : AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN
+                    }
+                    buttonStyle={
+                      theme === 'dark'
+                        ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE
+                        : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
+                    }
+                    cornerRadius={borderRadius.full}
+                    style={styles.appleBtn}
+                    onPress={handleAppleSignIn}
+                  />
+                )}
 
+                {/* Toggle mode */}
+                <View style={styles.toggleRow}>
+                  <Text style={[styles.toggleText, { color: themeColors.textSecondary }]}>
+                    {mode === 'login' ? "Don't have an account? " : 'Already have an account? '}
+                  </Text>
+                  <TouchableOpacity onPress={toggleMode} disabled={loading}>
+                    <Text style={[styles.toggleLink, { color: '#FEB729' }]}>
+                      {mode === 'login' ? 'Start here' : 'Sign in'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </Animated.View>
 
             </View>
@@ -1153,149 +590,169 @@ export default function SignInScreen() {
   );
 }
 
+// ── Profile creation helper ────────────────────────────────────────────────────
+
+async function ensureProfile(supabase: any, userId: string, user: any, displayName?: string) {
+  try {
+    const { data: existing, error: checkErr } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('id', userId)
+      .single();
+    if (existing) return;
+    if (checkErr?.code !== 'PGRST116') return;
+
+    const name = displayName?.trim() ||
+      user?.user_metadata?.full_name ||
+      user?.email?.split('@')[0] || '';
+
+    for (let i = 0; i < 3; i++) {
+      if (i > 0) await new Promise(r => setTimeout(r, 500 * i));
+      const { error: insertErr } = await supabase.from('profiles').insert({
+        id: userId,
+        display_name: name,
+        created_at: new Date().toISOString(),
+        onboarding_completed: false,
+        pro_unlocked: false,
+      });
+      if (!insertErr || insertErr.code === '23505') break;
+      if (insertErr.code !== '42501') break;
+    }
+  } catch (e) {
+    logger.error('[Auth] ensureProfile error:', e);
+  }
+}
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingBottom: spacing['3xl'],
-  },
+  container: { flex: 1 },
+  keyboardView: { flex: 1 },
+  scrollContent: { flexGrow: 1 },
   content: {
     flex: 1,
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xl,
+    paddingTop: spacing['3xl'],
+    paddingBottom: spacing['3xl'],
   },
-  logoWrap: {
+  logoArea: {
     alignItems: 'center',
-    marginBottom: spacing.lg,
+    marginBottom: spacing['3xl'],
+    gap: spacing.md,
   },
-  authLogo: {
-    width: 96,
-    height: 96,
-  },
-  header: {
-    marginBottom: spacing['4xl'],
-  },
-  title: {
-    fontSize: fontSize['3xl'],
+  wordmark: {
+    fontSize: 22,
+    fontFamily: 'Satoshi',
     fontWeight: fontWeight.bold,
-    marginBottom: spacing.md,
+    letterSpacing: 6,
   },
-  subtitle: {
-    fontSize: fontSize.base,
+  headlineArea: {
+    marginBottom: spacing['3xl'],
+    gap: spacing.sm,
+  },
+  headline: {
+    fontSize: 32,
+    fontFamily: 'Satoshi',
+    fontWeight: fontWeight.bold,
+    letterSpacing: -0.5,
+    lineHeight: 38,
+  },
+  subtext: {
+    fontSize: 15,
+    fontFamily: 'Inter',
     lineHeight: 22,
-    marginBottom: spacing.xl,
   },
-  form: {
-    flex: 1,
-  },
-  inputContainer: {
-    marginBottom: spacing.xl,
-  },
+  form: { gap: spacing.lg },
+  fieldWrap: { gap: spacing.xs },
   label: {
-    fontSize: fontSize.sm,
+    fontSize: 12,
+    fontFamily: 'Inter',
     fontWeight: fontWeight.medium,
-    marginBottom: spacing.sm,
+    letterSpacing: 0.3,
   },
   input: {
     height: 52,
     borderWidth: 1,
-    borderRadius: borderRadius.lg,
+    borderRadius: 12,
     paddingHorizontal: spacing.md,
-    fontSize: fontSize.base,
+    fontSize: 15,
+    fontFamily: 'Inter',
   },
-  errorContainer: {
-    marginTop: spacing.md,
-    marginBottom: spacing.md,
-  },
-  errorText: {
-    fontSize: fontSize.sm,
-  },
-  messageContainer: {
+  messageBanner: {
     padding: spacing.md,
-    borderRadius: borderRadius.lg,
-    marginTop: spacing.md,
-    marginBottom: spacing.md,
+    borderRadius: 12,
   },
   messageText: {
-    fontSize: fontSize.sm,
+    fontSize: 13,
+    fontFamily: 'Inter',
     fontWeight: fontWeight.medium,
+    lineHeight: 18,
   },
-  forgotPasswordButton: {
-    alignSelf: 'flex-end',
-    marginTop: spacing.md,
-    marginBottom: spacing.xl,
+  errorWrap: { marginTop: -spacing.xs },
+  errorText: {
+    fontSize: 13,
+    fontFamily: 'Inter',
   },
-  forgotPasswordText: {
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
+  forgotBtn: { alignSelf: 'flex-end', marginTop: -spacing.sm },
+  forgotText: {
+    fontSize: 13,
+    fontFamily: 'Inter',
   },
-  submitButton: {
-    height: 52,
-    borderRadius: borderRadius.lg,
+  submitBtn: {
+    height: 54,
+    borderRadius: borderRadius.full,
+    backgroundColor: '#FEB729',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: spacing.lg,
-    marginBottom: spacing.xl,
+    marginTop: spacing.xs,
   },
-  submitButtonDisabled: {
-    opacity: 0.6,
-  },
-  submitButtonText: {
-    color: '#FFFFFF',
-    fontSize: fontSize.base,
+  submitBtnDisabled: { opacity: 0.6 },
+  submitBtnText: {
+    color: '#111111',
+    fontSize: 16,
+    fontFamily: 'Inter',
     fontWeight: fontWeight.semibold,
   },
-  toggleContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: spacing.xl,
-    marginBottom: spacing.lg,
-  },
-  toggleText: {
-    fontSize: fontSize.base,
-  },
-  toggleLink: {
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.semibold,
-  },
-  dividerContainer: {
+  divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: spacing.xl,
     gap: spacing.md,
+    marginVertical: spacing.xs,
   },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-  },
+  dividerLine: { flex: 1, height: 1 },
   dividerText: {
-    fontSize: fontSize.sm,
+    fontSize: 12,
+    fontFamily: 'Inter',
     fontWeight: fontWeight.medium,
   },
-  appleButton: {
+  appleBtn: {
     width: '100%',
     height: 52,
-    marginBottom: spacing.xl,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: spacing.sm,
+  },
+  toggleText: {
+    fontSize: 14,
+    fontFamily: 'Inter',
+  },
+  toggleLink: {
+    fontSize: 14,
+    fontFamily: 'Inter',
+    fontWeight: fontWeight.semibold,
   },
   loadingOverlay: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    top: 0, left: 0, right: 0, bottom: 0,
     zIndex: 1000,
     justifyContent: 'center',
     alignItems: 'center',
     gap: spacing.md,
   },
   loadingText: {
-    fontSize: fontSize.base,
+    fontSize: 14,
+    fontFamily: 'Inter',
     fontWeight: fontWeight.medium,
   },
 });

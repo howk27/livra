@@ -36,8 +36,16 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+import {
+  ArrowLeft,
+  PencilSimple,
+  Trash,
+  Bell,
+  BellSlash,
+  Heart,
+  ArrowRight,
+  Check,
+} from 'phosphor-react-native';
 import { colors } from '../../theme/colors';
 import { spacing, borderRadius, fontSize, fontWeight, shadow } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
@@ -47,9 +55,8 @@ import { LoadingScreen } from '../../components/LoadingScreen';
 import { useAuth } from '../../hooks/useAuth';
 import { logger } from '../../lib/utils/logger';
 import { useDailyTrackingStore } from '../../state/dailyTrackingSlice';
-import CounterIcon from '@/src/components/icons/CounterIcon';
-import { resolveCounterIconType } from '@/src/components/icons/IconResolver';
 import { applyOpacity, foregroundForHexBackground } from '@/src/components/icons/color';
+import { MARK_LIBRARY } from '@/lib/suggestedCounters';
 import { resolveDailyTarget } from '../../lib/markDailyTarget';
 import { getAppDate } from '../../lib/appDate';
 import { formatDate } from '../../lib/date';
@@ -62,6 +69,7 @@ function toLocalDateStr(d: Date): string {
 }
 
 const NOTE_MAX_LEN = 500;
+const ACCENT = '#FEB729';
 
 export default function CounterDetailScreen() {
   const theme = useEffectiveTheme();
@@ -76,12 +84,12 @@ export default function CounterDetailScreen() {
   const { counters, loading, incrementCounter, decrementCounter, resetCounter, deleteCounter, updateMark } = useCounters();
   const allEvents = useEventsStore((state) => state.events || []);
   const counter = id ? counters.find((c) => c.id === id) : null;
-  const iconType = counter ? resolveCounterIconType(counter) : undefined;
+  const libraryMark = counter ? MARK_LIBRARY.find(m => m.emoji === counter.emoji) : undefined;
+  const MarkIcon = libraryMark?.icon;
 
   const [showCheck, setShowCheck] = useState(false);
   const morphAnim = useRef(new Animated.Value(1)).current;
   const [expandedActivityDate, setExpandedActivityDate] = useState<string | null>(null);
-  /** Local input only — never written to history/log until Save. */
   const [draftNote, setDraftNote] = useState('');
   const [savingNote, setSavingNote] = useState(false);
   const [deletingNote, setDeletingNote] = useState(false);
@@ -152,7 +160,6 @@ export default function CounterDetailScreen() {
   const notesCloudError = useDailyTrackingStore((s) => s.notesCloudError);
   const clearNotesCloudError = useDailyTrackingStore((s) => s.clearNotesCloudError);
 
-  /** Persisted note for this mark+day — from daily log store only (history / Save / Delete). */
   const savedNoteText = todayDailyLog?.text ?? '';
   const savedTrimmed = savedNoteText.trim();
 
@@ -179,8 +186,7 @@ export default function CounterDetailScreen() {
   }, [dailyLogsForMark]);
 
   const markNotes = useMemo(
-    () =>
-      dailyLogsForMark.filter((n) => n.date !== todayStr && n.text.trim().length > 0),
+    () => dailyLogsForMark.filter((n) => n.date !== todayStr && n.text.trim().length > 0),
     [dailyLogsForMark, todayStr],
   );
 
@@ -198,7 +204,6 @@ export default function CounterDetailScreen() {
     });
   }, [completedToday, morphAnim]);
 
-  // Load saved reminder preference
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
@@ -220,10 +225,7 @@ export default function CounterDetailScreen() {
   const scrollNoteIntoView = useCallback(() => {
     requestAnimationFrame(() => {
       const y = noteSectionYRef.current;
-      scrollRef.current?.scrollTo({
-        y: Math.max(0, y - spacing.md),
-        animated: true,
-      });
+      scrollRef.current?.scrollTo({ y: Math.max(0, y - spacing.md), animated: true });
     });
   }, []);
 
@@ -239,23 +241,14 @@ export default function CounterDetailScreen() {
     );
   }
 
-  const markColor = counter.color || themeColors.primary;
-  const title = counter.name;
-  const cardSheenColors = isDark
-    ? [
-        applyOpacity(themeColors.surfaceActive, 0.22),
-        applyOpacity(themeColors.surface, 0.0),
-        applyOpacity(themeColors.surfaceVariant, 0.18),
-      ]
-    : [
-        applyOpacity(themeColors.surfaceActive, 0.36),
-        applyOpacity(themeColors.surface, 0.0),
-        applyOpacity(themeColors.surfaceVariant, 0.24),
-      ];
+  const markColor = counter.color || ACCENT;
+  const iconBg = applyOpacity(markColor, isDark ? 0.20 : 0.18);
+  const iconBgComplete = applyOpacity(markColor, 0.40);
 
-  const handleIncrement = async () => {
-    if (!id || !user?.id) return;
-    if (completedToday) return;
+  // ── Handlers ─────────────────────────────────────────────────────────────────
+
+  const handleLog = async () => {
+    if (!id || !user?.id || completedToday) return;
     if (Platform.OS !== 'web') await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     incrementCounter(id, user.id, 1).catch((error) => {
       logger.error('increment failed:', error);
@@ -264,7 +257,7 @@ export default function CounterDetailScreen() {
   };
 
   const handleDecrement = async () => {
-    if (!id || !user?.id || counter.total <= 0) return;
+    if (!id || !user?.id || todayCount <= 0) return;
     if (Platform.OS !== 'web') await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     decrementCounter(id, user.id, 1).catch((error) => {
       logger.error('decrement failed:', error);
@@ -276,7 +269,7 @@ export default function CounterDetailScreen() {
     if (!id || !user?.id || todayCount === 0) return;
     Alert.alert(
       "Reset today's progress",
-      `Remove today's ${todayCount} log${todayCount === 1 ? '' : 's'} for "${title}"? This does not affect your streak or all-time total.`,
+      `Remove today's ${todayCount} log${todayCount === 1 ? '' : 's'} for "${counter.name}"?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -299,36 +292,29 @@ export default function CounterDetailScreen() {
     if (!id) return;
     Alert.alert(
       'Delete mark?',
-      `Remove "${title}" from Livra? This deletes the mark and its activity on this device${
-        user?.id ? ' and from your account when synced' : ''
-      }.`,
+      `Remove "${counter.name}"? This deletes the mark and its activity${user?.id ? ' from your account' : ''}.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => {
-            Alert.alert(
-              'Are you sure?',
-              `This permanently deletes "${title}". This cannot be undone.`,
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Delete forever',
-                  style: 'destructive',
-                  onPress: async () => {
-                    try {
-                      await deleteCounter(id);
-                      router.replace('/(tabs)/home');
-                    } catch (error) {
-                      logger.error('delete mark failed:', error);
-                      Alert.alert('Error', 'Could not delete this mark.');
-                    }
-                  },
+          onPress: () =>
+            Alert.alert('Are you sure?', `This permanently deletes "${counter.name}".`, [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Delete forever',
+                style: 'destructive',
+                onPress: async () => {
+                  try {
+                    await deleteCounter(id);
+                    router.replace('/(tabs)/home');
+                  } catch (error) {
+                    logger.error('delete mark failed:', error);
+                    Alert.alert('Error', 'Could not delete this mark.');
+                  }
                 },
-              ],
-            );
-          },
+              },
+            ]),
         },
       ],
     );
@@ -350,29 +336,25 @@ export default function CounterDetailScreen() {
 
   const handleDeleteNote = () => {
     if (!todayDailyLog?.id || !hasSavedNote || noteFieldBusy) return;
-    Alert.alert(
-      'Delete note?',
-      'Remove the saved note for today? This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            setDeletingNote(true);
-            try {
-              await deleteDailyLogNote(todayDailyLog.id);
-              setDraftNote('');
-            } catch (error) {
-              logger.error('delete note failed:', error);
-              Alert.alert('Error', 'Could not delete the note.');
-            } finally {
-              setDeletingNote(false);
-            }
-          },
+    Alert.alert('Delete note?', 'Remove the saved note for today?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          setDeletingNote(true);
+          try {
+            await deleteDailyLogNote(todayDailyLog.id);
+            setDraftNote('');
+          } catch (error) {
+            logger.error('delete note failed:', error);
+            Alert.alert('Error', 'Could not delete the note.');
+          } finally {
+            setDeletingNote(false);
+          }
         },
-      ],
-    );
+      },
+    ]);
   };
 
   const handleConnectHealth = async () => {
@@ -401,19 +383,16 @@ export default function CounterDetailScreen() {
       await requestPermissions([type]);
       const config = type === 'steps' && stepGoal !== undefined ? { stepGoal } : null;
       await updateMark(id, { health_kit_type: type, health_kit_config: config });
-
       if (type === 'sleep') {
         let wakeTime = await getSleepNotifTime(id);
-        if (!wakeTime) {
-          wakeTime = await suggestWakeTime();
-        }
+        if (!wakeTime) wakeTime = await suggestWakeTime();
         if (wakeTime) {
           await setSleepNotifTime(id, wakeTime);
           await scheduleSleepNotification(id, wakeTime);
         }
       }
-    } catch (err) {
-      Alert.alert('Could not connect', 'Health permissions could not be requested. Try again from Settings → Privacy → Health.');
+    } catch {
+      Alert.alert('Could not connect', 'Health permissions could not be requested. Try Settings → Privacy → Health.');
     } finally {
       setHealthConnecting(false);
       setHealthModalVisible(false);
@@ -423,21 +402,17 @@ export default function CounterDetailScreen() {
 
   const handleDisconnectHealth = async () => {
     if (!id) return;
-    Alert.alert(
-      'Disconnect Apple Health?',
-      'Your weekly reflection will return to using manual check-ins.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Disconnect',
-          style: 'destructive',
-          onPress: async () => {
-            await updateMark(id, { health_kit_type: null, health_kit_config: null });
-            await cancelSleepNotification(id);
-          },
+    Alert.alert('Disconnect Apple Health?', 'Your weekly reflection will return to manual check-ins.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Disconnect',
+        style: 'destructive',
+        onPress: async () => {
+          await updateMark(id, { health_kit_type: null, health_kit_config: null });
+          await cancelSleepNotification(id);
         },
-      ],
-    );
+      },
+    ]);
   };
 
   const handleReminderToggle = useCallback(async (value: boolean) => {
@@ -463,7 +438,7 @@ export default function CounterDetailScreen() {
     await scheduleMarkReminder(id, counter.name, hhmm);
   }, [id, counter]);
 
-  const primaryActionFg = foregroundForHexBackground(markColor, isDark);
+  // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: themeColors.background }]}>
@@ -476,527 +451,496 @@ export default function CounterDetailScreen() {
           ref={scrollRef}
           contentContainerStyle={[
             styles.content,
-            {
-              paddingBottom: spacing.xxl + insets.bottom + (Platform.OS === 'android' ? 24 : 12),
-            },
+            { paddingBottom: spacing.xxl + insets.bottom + (Platform.OS === 'android' ? 24 : 12) },
           ]}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           showsVerticalScrollIndicator={false}
         >
-        <View style={styles.topBar}>
-          <TouchableOpacity
-            style={styles.topIconBtn}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            onPress={() => router.back()}
-          >
-            <Ionicons name="arrow-back" size={22} color={themeColors.textSecondary} />
-          </TouchableOpacity>
+          {/* ── Header ─────────────────────────────────────────────────────── */}
+          <View style={styles.header}>
+            <TouchableOpacity
+              style={styles.headerIconBtn}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              onPress={() => router.back()}
+              accessibilityLabel="Go back"
+            >
+              <ArrowLeft size={22} color={themeColors.textSecondary} weight="regular" />
+            </TouchableOpacity>
 
-          <View style={styles.titleWrap}>
-            <View style={[styles.titleIconWrap, { backgroundColor: applyOpacity(markColor, 0.16) }]}>
-              {iconType ? (
-                <CounterIcon
-                  type={iconType}
-                  size={20}
-                  variant="withBackground"
-                  animate="none"
-                  fallbackEmoji={counter.emoji || '📊'}
-                  ariaLabel={`${title} icon`}
-                  color={markColor}
-                />
+            <View style={styles.headerCenter}>
+              <View style={[styles.headerIconWrap, { backgroundColor: iconBg }]}>
+                {MarkIcon ? (
+                  <MarkIcon weight="duotone" size={18} color={markColor} />
+                ) : (
+                  <Text style={styles.headerEmoji}>{counter.emoji || '●'}</Text>
+                )}
+              </View>
+              <Text style={[styles.headerTitle, { color: themeColors.text }]} numberOfLines={1}>
+                {counter.name}
+              </Text>
+            </View>
+
+            <View style={styles.headerRight}>
+              <TouchableOpacity
+                style={styles.headerIconBtn}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                onPress={() => router.push(`/counter/${id}/edit` as any)}
+                accessibilityLabel="Edit mark"
+              >
+                <PencilSimple size={20} color={themeColors.textSecondary} weight="regular" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.headerIconBtn}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                onPress={handleDeleteMark}
+                accessibilityLabel="Delete mark"
+              >
+                <Trash size={20} color={themeColors.error} weight="regular" />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* ── Hero ────────────────────────────────────────────────────────── */}
+          <View style={styles.hero}>
+            {/* Icon */}
+            <View
+              style={[
+                styles.heroIconWrap,
+                { backgroundColor: completedToday ? iconBgComplete : iconBg },
+              ]}
+            >
+              {completedToday ? (
+                <View style={[styles.heroCheckCircle, { backgroundColor: ACCENT }]}>
+                  <Check size={28} color="#111111" weight="bold" />
+                </View>
+              ) : MarkIcon ? (
+                <MarkIcon weight="duotone" size={40} color={markColor} />
               ) : (
-                <Text style={styles.titleEmoji}>{counter.emoji || '📊'}</Text>
+                <Text style={styles.heroEmoji}>{counter.emoji || '●'}</Text>
               )}
             </View>
-            <Text style={[styles.titleText, { color: themeColors.text }]} numberOfLines={1}>{title}</Text>
-          </View>
 
-          <View style={styles.topIconGroup}>
-            <TouchableOpacity
-              style={styles.topIconBtn}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              onPress={() => router.push(`/counter/${id}/edit` as any)}
-              accessibilityLabel={`Edit mark ${title}`}
-              accessibilityRole="button"
-            >
-              <Ionicons name="pencil-outline" size={22} color={themeColors.textSecondary} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.topIconBtn}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              onPress={handleDeleteMark}
-              accessibilityLabel={`Delete mark ${title}`}
-              accessibilityRole="button"
-            >
-              <Ionicons name="trash-outline" size={24} color={themeColors.error} />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <View style={styles.ringBlock}>
-          <View style={styles.centerReadout}>
-            <Text style={[styles.centerValue, { color: themeColors.text }]}>
+            {/* Count */}
+            <Text style={[styles.heroCount, { color: themeColors.text }]}>
               {centerCount}
             </Text>
-            <Text style={[styles.centerSub, { color: themeColors.textSecondary }]}>
+
+            <Text style={[styles.heroSub, { color: themeColors.textSecondary }]}>
               {dailyTarget > 1
-                ? `of ${dailyTarget} ${String(counter.unit || 'sessions')}`
+                ? `of ${dailyTarget} ${counter.unit || 'sessions'}`
                 : completedToday
                   ? 'Completed today'
-                  : 'Tap + when done'}
+                  : 'Log when done'}
             </Text>
           </View>
-        </View>
 
-        <View style={styles.actionRow}>
-          <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: themeColors.surface }]}
-            onPress={handleDecrement}
-            disabled={counter.total <= 0}
-            activeOpacity={0.85}
-          >
-            <Text style={[styles.actionText, { color: themeColors.text }]}>−</Text>
-          </TouchableOpacity>
-
-          <Animated.View style={{ transform: [{ scale: morphAnim }] }}>
+          {/* ── Primary action ───────────────────────────────────────────────── */}
+          <Animated.View style={[styles.logBtnWrap, { transform: [{ scale: morphAnim }] }]}>
             <TouchableOpacity
-              style={[styles.actionBtnPrimary, { backgroundColor: markColor }, shadow.sm]}
-              onPress={handleIncrement}
-              activeOpacity={0.88}
+              style={[
+                styles.logBtn,
+                completedToday && styles.logBtnDone,
+                { backgroundColor: completedToday ? themeColors.surfaceVariant : ACCENT },
+              ]}
+              onPress={handleLog}
+              disabled={completedToday}
+              activeOpacity={0.85}
+              accessibilityLabel={completedToday ? 'Logged today' : 'Log for today'}
             >
-              {showCheck ? (
-                <Ionicons name="checkmark" size={26} color={primaryActionFg} />
+              {completedToday ? (
+                <Text style={[styles.logBtnTextDone, { color: themeColors.textSecondary }]}>
+                  Logged today
+                </Text>
               ) : (
-                <Text style={[styles.actionPrimaryText, { color: primaryActionFg }]}>+</Text>
+                <Text style={styles.logBtnText}>Log for today</Text>
               )}
             </TouchableOpacity>
           </Animated.View>
 
-          <TouchableOpacity
-            style={[styles.actionBtn, { backgroundColor: themeColors.surface }]}
-            onPress={handleReset}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="refresh-outline" size={20} color={themeColors.text} />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.statsRow}>
-          <View style={[styles.statCard, { backgroundColor: themeColors.surface }]}>
-            <LinearGradient
-              pointerEvents="none"
-              colors={cardSheenColors}
-              start={{ x: 0.15, y: 0 }}
-              end={{ x: 0.85, y: 1 }}
-              style={styles.cardSheen}
-            />
-            <Text style={[styles.statKicker, { color: themeColors.textTertiary }]}>CURRENT</Text>
-            <Text style={[styles.statValue, { color: themeColors.text }]}>{streakDisplay?.current_streak ?? 0} Days</Text>
-          </View>
-          <View style={[styles.statCard, { backgroundColor: themeColors.surface }]}>
-            <LinearGradient
-              pointerEvents="none"
-              colors={cardSheenColors}
-              start={{ x: 0.15, y: 0 }}
-              end={{ x: 0.85, y: 1 }}
-              style={styles.cardSheen}
-            />
-            <Text style={[styles.statKicker, { color: themeColors.textTertiary }]}>LONGEST</Text>
-            <Text style={[styles.statValue, { color: themeColors.text }]}>{streakDisplay?.longest_streak ?? 0} Days</Text>
-          </View>
-        </View>
-
-        <View
-          onLayout={(e) => {
-            noteSectionYRef.current = e.nativeEvent.layout.y;
-          }}
-        >
-          <View style={[styles.noteCard, { backgroundColor: themeColors.surface }]}>
-          <LinearGradient
-            pointerEvents="none"
-            colors={cardSheenColors}
-            start={{ x: 0.15, y: 0 }}
-            end={{ x: 0.85, y: 1 }}
-            style={styles.cardSheen}
-          />
-          <View style={styles.noteHeader}>
-            <Text style={[styles.noteTitle, { color: themeColors.text }]}>{"Today's note"}</Text>
-            <Text style={[styles.noteDate, { color: themeColors.textSecondary }]}>
-              {getAppDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-            </Text>
-          </View>
-          <TextInput
-            value={draftNote}
-            onChangeText={(t) => setDraftNote(t.slice(0, NOTE_MAX_LEN))}
-            placeholder="Write a note for today…"
-            placeholderTextColor={themeColors.textSecondary}
-            multiline
-            editable={!noteFieldBusy}
-            onFocus={scrollNoteIntoView}
-            style={[
-              styles.noteInput,
-              {
-                color: themeColors.text,
-                borderColor: themeColors.border,
-                backgroundColor: themeColors.background,
-              },
-            ]}
-            textAlignVertical="top"
-          />
-          <View style={styles.noteActionsRow}>
-            <Text style={[styles.noteCharCount, { color: themeColors.textTertiary }]}>
-              {draftNote.length}/{NOTE_MAX_LEN}
-            </Text>
-            <View style={styles.noteActionsButtons}>
-              {hasSavedNote ? (
-                <TouchableOpacity
-                  onPress={handleDeleteNote}
-                  disabled={noteFieldBusy}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  accessibilityRole="button"
-                  accessibilityLabel="Delete saved note"
-                >
-                  <Text
-                    style={[
-                      styles.noteDeleteLabel,
-                      { color: noteFieldBusy ? themeColors.textTertiary : themeColors.error },
-                    ]}
-                  >
-                    Delete note
-                  </Text>
-                </TouchableOpacity>
-              ) : (
-                <View style={styles.noteDeletePlaceholder} />
-              )}
+          {/* Secondary actions: undo + reset */}
+          {todayCount > 0 && (
+            <View style={styles.secondaryRow}>
               <TouchableOpacity
-                onPress={handleSaveNote}
-                disabled={!canSaveNote || noteFieldBusy}
-                style={[
-                  styles.noteSaveBtn,
-                  {
-                    backgroundColor:
-                      canSaveNote || savingNote ? themeColors.accent.primary : themeColors.surfaceVariant,
-                  },
-                ]}
-                activeOpacity={0.85}
-                accessibilityRole="button"
-                accessibilityLabel="Save note"
+                onPress={handleDecrement}
+                hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
+                style={styles.secondaryBtn}
               >
-                {savingNote ? (
-                  <ActivityIndicator
-                    size="small"
-                    color={foregroundForHexBackground(themeColors.accent.primary, isDark)}
-                  />
-                ) : (
-                  <Text
+                <Text style={[styles.secondaryText, { color: themeColors.textSecondary }]}>Undo</Text>
+              </TouchableOpacity>
+              <View style={[styles.secondarySep, { backgroundColor: themeColors.border }]} />
+              <TouchableOpacity
+                onPress={handleReset}
+                hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }}
+                style={styles.secondaryBtn}
+              >
+                <Text style={[styles.secondaryText, { color: themeColors.textSecondary }]}>Reset today</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* ── Streak row ────────────────────────────────────────────────────── */}
+          <View style={styles.statsRow}>
+            <View style={[styles.statChip, { backgroundColor: themeColors.surface }]}>
+              <Text style={[styles.statLabel, { color: themeColors.textTertiary }]}>CURRENT</Text>
+              <Text style={[styles.statVal, { color: themeColors.text }]}>
+                {streakDisplay?.current_streak ?? 0}
+                <Text style={[styles.statUnit, { color: themeColors.textSecondary }]}> days</Text>
+              </Text>
+            </View>
+            <View style={[styles.statChip, { backgroundColor: themeColors.surface }]}>
+              <Text style={[styles.statLabel, { color: themeColors.textTertiary }]}>LONGEST</Text>
+              <Text style={[styles.statVal, { color: themeColors.text }]}>
+                {streakDisplay?.longest_streak ?? 0}
+                <Text style={[styles.statUnit, { color: themeColors.textSecondary }]}> days</Text>
+              </Text>
+            </View>
+          </View>
+
+          {/* ── Calendar heatmap placeholder ──────────────────────────────────── */}
+          <View style={[styles.heatmapWrap, { backgroundColor: themeColors.surface }]}>
+            <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Activity</Text>
+            <View style={styles.heatmapGrid}>
+              {Array.from({ length: 35 }).map((_, i) => {
+                const daysAgo = 34 - i;
+                const dateStr = toLocalDateStr(new Date(Date.now() - daysAgo * 86400000));
+                const hasActivity = events.some(
+                  e => e.event_type === 'increment' && e.occurred_local_date === dateStr,
+                );
+                return (
+                  <View
+                    key={i}
                     style={[
-                      styles.noteSaveLabel,
+                      styles.heatCell,
                       {
-                        color:
-                          canSaveNote
-                            ? foregroundForHexBackground(themeColors.accent.primary, isDark)
-                            : themeColors.textTertiary,
+                        backgroundColor: hasActivity
+                          ? applyOpacity(markColor, 0.75)
+                          : themeColors.surfaceVariant,
                       },
                     ]}
-                  >
-                    Save note
-                  </Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-          {notesCloudError ? (
-            <View style={[styles.noteCloudRow, { borderTopColor: themeColors.border }]}>
-              <Text style={[styles.noteCloudHint, { color: themeColors.textSecondary }]}>
-                {notesCloudError}
-              </Text>
-              <TouchableOpacity
-                onPress={() => clearNotesCloudError()}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                accessibilityRole="button"
-                accessibilityLabel="Dismiss note sync message"
-              >
-                <Text style={[styles.noteCloudDismiss, { color: themeColors.accent.primary }]}>Dismiss</Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
-          </View>
-        </View>
-
-        <View style={styles.activitySection}>
-          <Text style={[styles.activityTitle, { color: themeColors.text }]}>Recent Activity</Text>
-          {recentActivity.length === 0 ? (
-            <View style={[styles.activityCard, { backgroundColor: themeColors.surface }]}>
-              <Text style={[styles.activitySub, { color: themeColors.textSecondary }]}>
-                No activity yet.
-              </Text>
-            </View>
-          ) : (
-            recentActivity.map((event) => {
-              const isInc = event.event_type === 'increment';
-              const dt = new Date(event.occurred_at);
-              const dateNote = notesByDate.get(event.occurred_local_date);
-              const isExpanded = expandedActivityDate === event.occurred_local_date;
-              return (
-                <TouchableOpacity
-                  key={event.id}
-                  style={[styles.activityCard, { backgroundColor: themeColors.surface }]}
-                  activeOpacity={dateNote ? 0.82 : 1}
-                  onPress={() => {
-                    if (!dateNote) return;
-                    setExpandedActivityDate(isExpanded ? null : event.occurred_local_date);
-                  }}
-                >
-                  <LinearGradient
-                    pointerEvents="none"
-                    colors={cardSheenColors}
-                    start={{ x: 0.15, y: 0 }}
-                    end={{ x: 0.85, y: 1 }}
-                    style={styles.cardSheen}
                   />
-                  <View style={[styles.activityStrip, { backgroundColor: isInc ? markColor : themeColors.border }]} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.activityMain, { color: themeColors.text }]}>
-                      {isInc ? 'Completion logged' : 'Adjustment made'}
+                );
+              })}
+            </View>
+            <Text style={[styles.heatmapLabel, { color: themeColors.textTertiary }]}>Last 35 days</Text>
+          </View>
+
+          {/* ── Today's note ─────────────────────────────────────────────────── */}
+          <View
+            onLayout={(e) => { noteSectionYRef.current = e.nativeEvent.layout.y; }}
+            style={[styles.noteCard, { backgroundColor: themeColors.surface }]}
+          >
+            <View style={styles.noteHeader}>
+              <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Today's note</Text>
+              <Text style={[styles.noteDate, { color: themeColors.textSecondary }]}>
+                {getAppDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              </Text>
+            </View>
+            <TextInput
+              value={draftNote}
+              onChangeText={(t) => setDraftNote(t.slice(0, NOTE_MAX_LEN))}
+              placeholder="Write a note for today…"
+              placeholderTextColor={themeColors.textTertiary}
+              multiline
+              editable={!noteFieldBusy}
+              onFocus={scrollNoteIntoView}
+              style={[
+                styles.noteInput,
+                {
+                  color: themeColors.text,
+                  borderColor: themeColors.border,
+                  backgroundColor: themeColors.background,
+                },
+              ]}
+              textAlignVertical="top"
+            />
+            <View style={styles.noteActionsRow}>
+              <Text style={[styles.noteCharCount, { color: themeColors.textTertiary }]}>
+                {draftNote.length}/{NOTE_MAX_LEN}
+              </Text>
+              <View style={styles.noteButtons}>
+                {hasSavedNote && (
+                  <TouchableOpacity
+                    onPress={handleDeleteNote}
+                    disabled={noteFieldBusy}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Text style={[styles.noteDeleteText, { color: noteFieldBusy ? themeColors.textTertiary : themeColors.error }]}>
+                      Delete
                     </Text>
-                    <Text style={[styles.activitySub, { color: themeColors.textSecondary }]}>
-                      {dt.toLocaleDateString('en-US', { weekday: 'short' })} · {dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  onPress={handleSaveNote}
+                  disabled={!canSaveNote || noteFieldBusy}
+                  style={[
+                    styles.noteSaveBtn,
+                    { backgroundColor: canSaveNote ? ACCENT : themeColors.surfaceVariant },
+                  ]}
+                >
+                  {savingNote ? (
+                    <ActivityIndicator size="small" color="#111111" />
+                  ) : (
+                    <Text
+                      style={[
+                        styles.noteSaveText,
+                        { color: canSaveNote ? '#111111' : themeColors.textTertiary },
+                      ]}
+                    >
+                      Save
                     </Text>
-                    {isExpanded && dateNote && (
-                      <View style={[styles.activityNoteRow, { borderTopColor: themeColors.border }]}>
-                        <Ionicons name="document-text-outline" size={13} color={markColor} style={{ marginTop: 1 }} />
-                        <Text style={[styles.activityNoteText, { color: themeColors.text }]}>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+            {notesCloudError ? (
+              <View style={[styles.noteCloudRow, { borderTopColor: themeColors.border }]}>
+                <Text style={[styles.noteCloudHint, { color: themeColors.textSecondary }]}>
+                  {notesCloudError}
+                </Text>
+                <TouchableOpacity onPress={() => clearNotesCloudError()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Text style={[styles.noteCloudDismiss, { color: ACCENT }]}>Dismiss</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+          </View>
+
+          {/* ── Recent activity ─────────────────────────────────────────────── */}
+          {recentActivity.length > 0 && (
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Recent</Text>
+              {recentActivity.map((event) => {
+                const isInc = event.event_type === 'increment';
+                const dt = new Date(event.occurred_at);
+                const dateNote = notesByDate.get(event.occurred_local_date);
+                const isExpanded = expandedActivityDate === event.occurred_local_date;
+                return (
+                  <TouchableOpacity
+                    key={event.id}
+                    style={[styles.activityRow, { backgroundColor: themeColors.surface }]}
+                    activeOpacity={dateNote ? 0.82 : 1}
+                    onPress={() => {
+                      if (!dateNote) return;
+                      setExpandedActivityDate(isExpanded ? null : event.occurred_local_date);
+                    }}
+                  >
+                    <View
+                      style={[
+                        styles.activityDot,
+                        { backgroundColor: isInc ? markColor : themeColors.border },
+                      ]}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.activityMain, { color: themeColors.text }]}>
+                        {isInc ? 'Logged' : 'Adjusted'}
+                      </Text>
+                      <Text style={[styles.activitySub, { color: themeColors.textSecondary }]}>
+                        {dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                        {' · '}
+                        {dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </Text>
+                      {isExpanded && dateNote && (
+                        <Text style={[styles.activityNote, { color: themeColors.textSecondary }]}>
                           {dateNote}
                         </Text>
-                      </View>
+                      )}
+                    </View>
+                    {dateNote && (
+                      <Text style={[styles.activityNoteIcon, { color: themeColors.textTertiary }]}>
+                        {isExpanded ? '▲' : '▼'}
+                      </Text>
                     )}
-                  </View>
-                  <Ionicons
-                    name={isExpanded ? 'chevron-down' : 'chevron-forward'}
-                    size={18}
-                    color={dateNote ? themeColors.textSecondary : themeColors.textTertiary}
-                  />
-                </TouchableOpacity>
-              );
-            })
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           )}
-        </View>
 
-        {markNotes.length > 0 && (
-          <View style={styles.activitySection}>
-            <Text style={[styles.activityTitle, { color: themeColors.text }]}>Notes</Text>
-            {markNotes.map((note) => {
-              const noteDate = new Date(note.date + 'T12:00:00');
-              return (
-                <View key={note.id} style={[styles.activityCard, { backgroundColor: themeColors.surface }]}>
-                  <LinearGradient
-                    pointerEvents="none"
-                    colors={cardSheenColors}
-                    start={{ x: 0.15, y: 0 }}
-                    end={{ x: 0.85, y: 1 }}
-                    style={styles.cardSheen}
-                  />
-                  <View style={[styles.activityStrip, { backgroundColor: markColor }]} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.activityMain, { color: themeColors.text }]} numberOfLines={3}>
-                      {note.text}
-                    </Text>
-                    <Text style={[styles.activitySub, { color: themeColors.textSecondary }]}>
-                      {noteDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                    </Text>
+          {/* Past notes */}
+          {markNotes.length > 0 && (
+            <View style={styles.section}>
+              <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Notes</Text>
+              {markNotes.map((note) => {
+                const noteDate = new Date(note.date + 'T12:00:00');
+                return (
+                  <View key={note.id} style={[styles.activityRow, { backgroundColor: themeColors.surface }]}>
+                    <View style={[styles.activityDot, { backgroundColor: markColor }]} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.activityMain, { color: themeColors.text }]} numberOfLines={3}>
+                        {note.text}
+                      </Text>
+                      <Text style={[styles.activitySub, { color: themeColors.textSecondary }]}>
+                        {noteDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                      </Text>
+                    </View>
                   </View>
-                  <Ionicons name="document-text-outline" size={18} color={themeColors.textTertiary} />
-                </View>
-              );
-            })}
-          </View>
-        )}
-        <HealthConnectBanner
-          markId={id ?? ''}
-          markName={counter.name}
-          alreadyConnected={!!counter.health_kit_type}
-        />
+                );
+              })}
+            </View>
+          )}
 
-        {/* Apple Health connection */}
-        <View style={[styles.noteCard, { backgroundColor: themeColors.surface, marginTop: spacing.md }]}>
-          <LinearGradient
-            pointerEvents="none"
-            colors={cardSheenColors}
-            start={{ x: 0.15, y: 0 }}
-            end={{ x: 0.85, y: 1 }}
-            style={styles.cardSheen}
-          />
-          <View style={{ padding: spacing.md }}>
-            <Text style={[styles.noteTitle, { color: themeColors.text, marginBottom: spacing.xs }]}>
-              Apple Health
-            </Text>
-            {counter.health_kit_type ? (
-              <View>
-                <Text style={{ color: themeColors.textSecondary, fontSize: fontSize.sm, marginBottom: spacing.sm }}>
-                  Connected — weekly reflection powered by Health data.
+          <HealthConnectBanner markId={id ?? ''} markName={counter.name} alreadyConnected={!!counter.health_kit_type} />
+
+          {/* ── Apple Health ─────────────────────────────────────────────────── */}
+          <View style={[styles.settingCard, { backgroundColor: themeColors.surface }]}>
+            <View style={styles.settingRow}>
+              <View style={[styles.settingIcon, { backgroundColor: applyOpacity('#FF2D55', 0.15) }]}>
+                <Heart size={18} color="#FF2D55" weight="duotone" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.settingLabel, { color: themeColors.text }]}>Apple Health</Text>
+                <Text style={[styles.settingMeta, { color: themeColors.textSecondary }]}>
+                  {counter.health_kit_type
+                    ? `Connected — ${counter.health_kit_type}`
+                    : 'Auto-log from Health data'}
                 </Text>
-                <TouchableOpacity onPress={handleDisconnectHealth}>
-                  <Text style={{ color: themeColors.error, fontSize: fontSize.sm }}>Disconnect</Text>
+              </View>
+              {counter.health_kit_type ? (
+                <TouchableOpacity onPress={handleDisconnectHealth} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Text style={[styles.settingAction, { color: themeColors.error }]}>Disconnect</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity onPress={handleConnectHealth} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Text style={[styles.settingAction, { color: ACCENT }]}>Connect</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+
+          {/* ── Daily reminder ────────────────────────────────────────────────── */}
+          {!reminderLoading && (
+            <View style={[styles.settingCard, { backgroundColor: themeColors.surface }]}>
+              <View style={styles.settingRow}>
+                <View style={[styles.settingIcon, { backgroundColor: applyOpacity(ACCENT, 0.15) }]}>
+                  {reminderEnabled ? (
+                    <Bell size={18} color={ACCENT} weight="duotone" />
+                  ) : (
+                    <BellSlash size={18} color={themeColors.textSecondary} weight="regular" />
+                  )}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.settingLabel, { color: themeColors.text }]}>Daily reminder</Text>
+                  {reminderEnabled && (
+                    <TouchableOpacity onPress={() => setShowTimePicker(v => !v)}>
+                      <Text style={[styles.settingMeta, { color: themeColors.textSecondary }]}>
+                        {reminderTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+                <Switch
+                  value={reminderEnabled}
+                  onValueChange={handleReminderToggle}
+                  trackColor={{ false: themeColors.border, true: ACCENT }}
+                  thumbColor="#fff"
+                />
+              </View>
+              {reminderEnabled && showTimePicker && (
+                <DateTimePicker
+                  value={reminderTime}
+                  mode="time"
+                  display="spinner"
+                  onChange={handleReminderTimeChange}
+                  style={{ marginTop: spacing.sm }}
+                />
+              )}
+            </View>
+          )}
+
+          {/* Wake-up alarm (sleep mark) */}
+          {counter?.health_kit_type === 'sleep' && (
+            <View style={[styles.settingCard, { backgroundColor: themeColors.surface }]}>
+              <View style={styles.settingRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.settingLabel, { color: themeColors.text }]}>Wake-Up Alarm</Text>
+                  <Text style={[styles.settingMeta, { color: themeColors.textSecondary }]}>
+                    Set your alarm in the Clock app.
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => Linking.openURL('clock:')}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                >
+                  <Text style={[styles.settingAction, { color: ACCENT }]}>Open</Text>
+                  <ArrowRight size={14} color={ACCENT} weight="bold" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      {/* Health type picker modal */}
+      <Modal
+        visible={healthModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => { setHealthModalVisible(false); setHealthPendingType(null); }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalSheet, { backgroundColor: themeColors.surface }]}>
+            <Text style={[styles.modalTitle, { color: themeColors.text }]}>Connect to Apple Health</Text>
+            {healthPendingType === 'steps' ? (
+              <View style={{ gap: spacing.md }}>
+                <Text style={[styles.modalBody, { color: themeColors.textSecondary }]}>
+                  How many steps counts as an active day?
+                </Text>
+                <TextInput
+                  value={healthStepGoal}
+                  onChangeText={setHealthStepGoal}
+                  keyboardType="number-pad"
+                  placeholder="e.g. 8000"
+                  placeholderTextColor={themeColors.textTertiary}
+                  style={[styles.modalInput, {
+                    borderColor: themeColors.border,
+                    color: themeColors.text,
+                    backgroundColor: themeColors.background,
+                  }]}
+                />
+                <TouchableOpacity
+                  style={[styles.modalBtn, { backgroundColor: ACCENT }]}
+                  disabled={healthConnecting}
+                  onPress={() => {
+                    const goal = parseInt(healthStepGoal, 10);
+                    if (isNaN(goal) || goal <= 0) {
+                      Alert.alert('Invalid goal', 'Enter a number greater than 0.');
+                      return;
+                    }
+                    void confirmHealthConnection('steps', goal);
+                  }}
+                >
+                  <Text style={styles.modalBtnText}>
+                    {healthConnecting ? 'Connecting…' : 'Save & Connect'}
+                  </Text>
                 </TouchableOpacity>
               </View>
             ) : (
-              <TouchableOpacity
-                style={{ backgroundColor: themeColors.primary, borderRadius: borderRadius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, alignSelf: 'flex-start' }}
-                onPress={handleConnectHealth}
-              >
-                <Text style={{ color: '#FFFFFF', fontSize: fontSize.sm, fontWeight: fontWeight.semibold }}>
-                  Connect to Apple Health
-                </Text>
-              </TouchableOpacity>
+              <View>
+                {(['workout', 'sleep', 'hydration', 'mindful', 'steps', 'running'] as HealthKitType[]).map((type, i, arr) => (
+                  <TouchableOpacity
+                    key={type}
+                    style={[
+                      styles.modalOption,
+                      { borderBottomColor: themeColors.border, borderBottomWidth: i < arr.length - 1 ? 1 : 0 },
+                    ]}
+                    onPress={() => void handleHealthTypeSelect(type)}
+                  >
+                    <Text style={[styles.modalOptionText, { color: themeColors.text }]}>
+                      {type.charAt(0).toUpperCase() + type.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+                <TouchableOpacity
+                  style={styles.modalCancel}
+                  onPress={() => { setHealthModalVisible(false); setHealthPendingType(null); }}
+                >
+                  <Text style={[styles.modalCancelText, { color: themeColors.textSecondary }]}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
             )}
           </View>
         </View>
-
-        {/* Health type picker modal */}
-        <Modal
-          visible={healthModalVisible}
-          transparent
-          animationType="slide"
-          onRequestClose={() => { setHealthModalVisible(false); setHealthPendingType(null); }}
-        >
-          <View style={{ flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' }}>
-            <View style={{ backgroundColor: themeColors.surface, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: spacing.lg }}>
-              <Text style={{ color: themeColors.text, fontSize: fontSize.lg, fontWeight: fontWeight.bold, marginBottom: spacing.md }}>
-                Connect to Apple Health
-              </Text>
-
-              {healthPendingType === 'steps' ? (
-                <View>
-                  <Text style={{ color: themeColors.textSecondary, fontSize: fontSize.sm, marginBottom: spacing.sm }}>
-                    How many steps counts as an active day?
-                  </Text>
-                  <TextInput
-                    value={healthStepGoal}
-                    onChangeText={setHealthStepGoal}
-                    keyboardType="number-pad"
-                    placeholder="e.g. 8000"
-                    placeholderTextColor={themeColors.textSecondary}
-                    style={{
-                      borderWidth: 1,
-                      borderColor: themeColors.border,
-                      borderRadius: borderRadius.md,
-                      padding: spacing.sm,
-                      color: themeColors.text,
-                      fontSize: fontSize.md,
-                      marginBottom: spacing.md,
-                    }}
-                  />
-                  <TouchableOpacity
-                    style={{ backgroundColor: themeColors.primary, borderRadius: borderRadius.md, padding: spacing.md, alignItems: 'center' }}
-                    disabled={healthConnecting}
-                    onPress={() => {
-                      const goal = parseInt(healthStepGoal, 10);
-                      if (isNaN(goal) || goal <= 0) {
-                        Alert.alert('Invalid goal', 'Enter a number greater than 0.');
-                        return;
-                      }
-                      void confirmHealthConnection('steps', goal);
-                    }}
-                  >
-                    <Text style={{ color: '#FFFFFF', fontWeight: fontWeight.semibold }}>
-                      {healthConnecting ? 'Connecting…' : 'Save & Connect'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <View>
-                  {(['workout', 'sleep', 'hydration', 'mindful', 'steps', 'running'] as HealthKitType[]).map(type => (
-                    <TouchableOpacity
-                      key={type}
-                      style={{ paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: themeColors.border }}
-                      onPress={() => void handleHealthTypeSelect(type)}
-                    >
-                      <Text style={{ color: themeColors.text, fontSize: fontSize.md, textTransform: 'capitalize' }}>
-                        {type}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                  <TouchableOpacity
-                    style={{ paddingVertical: spacing.sm, marginTop: spacing.xs }}
-                    onPress={() => { setHealthModalVisible(false); setHealthPendingType(null); }}
-                  >
-                    <Text style={{ color: themeColors.textSecondary, fontSize: fontSize.sm, textAlign: 'center' }}>Cancel</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-          </View>
-        </Modal>
-        {/* ── Daily Reminder ─────────────────────────────────────── */}
-        {!reminderLoading && (
-          <View style={[styles.section, { backgroundColor: themeColors.surface, borderRadius: borderRadius.xl, padding: spacing.lg, marginTop: spacing.lg }]}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-                <Ionicons name="notifications-outline" size={18} color={themeColors.textSecondary} />
-                <Text style={{ color: themeColors.text, fontSize: fontSize.base, fontWeight: '600' }}>
-                  Daily Reminder
-                </Text>
-              </View>
-              <Switch
-                value={reminderEnabled}
-                onValueChange={handleReminderToggle}
-                trackColor={{ false: themeColors.border, true: themeColors.primary }}
-                thumbColor="#fff"
-              />
-            </View>
-
-            {reminderEnabled && (
-              <View style={{ marginTop: spacing.md }}>
-                <TouchableOpacity
-                  onPress={() => setShowTimePicker((v) => !v)}
-                  style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
-                >
-                  <Text style={{ color: themeColors.textSecondary, fontSize: fontSize.sm }}>
-                    {reminderTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </Text>
-                  <Ionicons name="chevron-forward-outline" size={16} color={themeColors.textSecondary} />
-                </TouchableOpacity>
-
-                {showTimePicker && (
-                  <DateTimePicker
-                    value={reminderTime}
-                    mode="time"
-                    display="spinner"
-                    onChange={handleReminderTimeChange}
-                    style={{ marginTop: spacing.sm }}
-                  />
-                )}
-              </View>
-            )}
-          </View>
-        )}
-
-        {/* ── Wake-Up Alarm (Sleep marks only) ────────────────────── */}
-        {counter?.health_kit_type === 'sleep' && (
-          <View style={[styles.section, { backgroundColor: themeColors.surface, borderRadius: borderRadius.xl, padding: spacing.lg, marginTop: spacing.lg }]}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm }}>
-              <Ionicons name="alarm-outline" size={18} color={themeColors.textSecondary} />
-              <Text style={{ color: themeColors.text, fontSize: fontSize.base, fontWeight: '600' }}>
-                Wake-Up Alarm
-              </Text>
-            </View>
-            <Text style={{ color: themeColors.textSecondary, fontSize: fontSize.sm, marginBottom: spacing.md }}>
-              Set your alarm in the Clock app.
-            </Text>
-            <TouchableOpacity
-              onPress={() => Linking.openURL('clock:')}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}
-            >
-              <Text style={{ color: themeColors.primary, fontSize: fontSize.base, fontWeight: '500' }}>
-                Open Clock App
-              </Text>
-              <Ionicons name="arrow-forward-outline" size={16} color={themeColors.primary} />
-            </TouchableOpacity>
-          </View>
-        )}
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1006,246 +950,391 @@ const styles = StyleSheet.create({
   keyboardAvoid: { flex: 1 },
   content: {
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xs,
+    paddingTop: spacing.sm,
     flexGrow: 1,
+    gap: spacing.md,
   },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  errorText: { fontSize: fontSize.lg, fontWeight: fontWeight.semibold },
-  topBar: {
-    height: 42,
+  errorText: { fontSize: 17, fontFamily: 'Satoshi', fontWeight: fontWeight.semibold },
+
+  // Header
+  header: {
+    height: 48,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: spacing.lg,
+    marginBottom: spacing.sm,
   },
-  topIconBtn: {
-    width: 28,
+  headerIconBtn: {
+    width: 32,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  topIconGroup: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  titleWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
+  headerCenter: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
+    gap: spacing.xs,
     marginHorizontal: spacing.sm,
   },
-  titleIconWrap: {
+  headerIconWrap: {
     width: 24,
     height: 24,
-    borderRadius: borderRadius.sm,
+    borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  titleEmoji: { fontSize: 16 },
-  titleText: {
-    fontSize: fontSize.lg,
+  headerEmoji: { fontSize: 14 },
+  headerTitle: {
+    fontSize: 16,
+    fontFamily: 'Satoshi',
     fontWeight: fontWeight.bold,
     letterSpacing: -0.2,
   },
-  ringBlock: {
+  headerRight: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: spacing.xl,
+    gap: 2,
   },
-  centerReadout: {
+
+  // Hero
+  hero: {
+    alignItems: 'center',
+    paddingVertical: spacing.xl,
+    gap: spacing.sm,
+  },
+  heroIconWrap: {
+    width: 80,
+    height: 80,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 160,
+    marginBottom: spacing.sm,
   },
-  centerValue: {
-    fontSize: 52,
-    lineHeight: 56,
+  heroCheckCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroEmoji: { fontSize: 36 },
+  heroCount: {
+    fontSize: 80,
+    fontFamily: 'Satoshi',
     fontWeight: fontWeight.bold,
-    letterSpacing: -1,
+    lineHeight: 84,
+    letterSpacing: -3,
   },
-  centerSub: {
-    marginTop: spacing.xs,
-    fontSize: fontSize.sm,
-    letterSpacing: 2,
+  heroSub: {
+    fontSize: 13,
+    fontFamily: 'Inter',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+
+  // Log button
+  logBtnWrap: { marginBottom: spacing.xs },
+  logBtn: {
+    height: 56,
+    borderRadius: borderRadius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logBtnDone: {},
+  logBtnText: {
+    color: '#111111',
+    fontSize: 17,
+    fontFamily: 'Inter',
+    fontWeight: fontWeight.semibold,
+  },
+  logBtnTextDone: {
+    fontSize: 17,
+    fontFamily: 'Inter',
     fontWeight: fontWeight.medium,
   },
-  actionRow: {
+
+  // Secondary actions
+  secondaryRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.md,
-    marginBottom: spacing.xl,
+    gap: spacing.lg,
+    marginBottom: spacing.sm,
   },
-  actionBtn: {
-    width: 64,
-    height: 56,
-    borderRadius: borderRadius.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
+  secondaryBtn: {
+    paddingVertical: spacing.xs,
   },
-  actionBtnPrimary: {
-    width: 74,
-    height: 64,
-    borderRadius: borderRadius.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
+  secondaryText: {
+    fontSize: 13,
+    fontFamily: 'Inter',
+    fontWeight: fontWeight.medium,
   },
-  actionText: {
-    fontSize: 28,
-    lineHeight: 30,
-    fontWeight: fontWeight.bold,
+  secondarySep: {
+    width: 1,
+    height: 14,
   },
-  actionPrimaryText: {
-    fontSize: 34,
-    lineHeight: 36,
-    fontWeight: fontWeight.bold,
-  },
+
+  // Stats row
   statsRow: {
     flexDirection: 'row',
     gap: spacing.md,
-    marginBottom: spacing.lg,
   },
-  statCard: {
+  statChip: {
     flex: 1,
     borderRadius: borderRadius.card,
     padding: spacing.lg,
-    gap: spacing.xs,
-    overflow: 'hidden',
+    gap: 4,
   },
-  statKicker: {
-    fontSize: fontSize.xs,
+  statLabel: {
+    fontSize: 10,
+    fontFamily: 'Inter',
     fontWeight: fontWeight.bold,
-    letterSpacing: 1.2,
+    letterSpacing: 1.5,
   },
-  statValue: {
-    fontSize: fontSize.xl,
-    lineHeight: 30,
+  statVal: {
+    fontSize: 22,
+    fontFamily: 'Satoshi',
     fontWeight: fontWeight.bold,
+    letterSpacing: -0.5,
   },
+  statUnit: {
+    fontSize: 14,
+    fontFamily: 'Inter',
+    fontWeight: fontWeight.normal,
+  },
+
+  // Heatmap
+  heatmapWrap: {
+    borderRadius: borderRadius.card,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  heatmapGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+  },
+  heatCell: {
+    width: 14,
+    height: 14,
+    borderRadius: 3,
+  },
+  heatmapLabel: {
+    fontSize: 11,
+    fontFamily: 'Inter',
+  },
+
+  // Note
   noteCard: {
     borderRadius: borderRadius.card,
     padding: spacing.lg,
-    marginBottom: spacing.lg,
-    overflow: 'hidden',
+    gap: spacing.sm,
   },
   noteHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.sm,
-  },
-  noteTitle: {
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.bold,
   },
   noteDate: {
-    fontSize: fontSize.sm,
+    fontSize: 12,
+    fontFamily: 'Inter',
     fontWeight: fontWeight.medium,
   },
   noteInput: {
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: borderRadius.md,
+    borderRadius: 12,
     padding: spacing.md,
-    minHeight: 100,
-    fontSize: fontSize.base,
+    minHeight: 90,
+    fontSize: 14,
+    fontFamily: 'Inter',
     lineHeight: 22,
   },
   noteActionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: spacing.sm,
-    gap: spacing.sm,
   },
   noteCharCount: {
-    fontSize: fontSize.xs,
+    fontSize: 11,
+    fontFamily: 'Inter',
   },
-  noteActionsButtons: {
+  noteButtons: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
   },
-  noteDeleteLabel: {
-    fontSize: fontSize.sm,
+  noteDeleteText: {
+    fontSize: 13,
+    fontFamily: 'Inter',
     fontWeight: fontWeight.semibold,
   },
-  noteDeletePlaceholder: {
-    minWidth: 92,
-  },
   noteSaveBtn: {
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
-    borderRadius: borderRadius.md,
-    minWidth: 104,
+    borderRadius: borderRadius.full,
+    minWidth: 80,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 36,
+    minHeight: 34,
+  },
+  noteSaveText: {
+    fontSize: 13,
+    fontFamily: 'Inter',
+    fontWeight: fontWeight.semibold,
   },
   noteCloudRow: {
-    marginTop: spacing.sm,
+    marginTop: spacing.xs,
     paddingTop: spacing.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
     gap: spacing.xs,
   },
   noteCloudHint: {
-    fontSize: fontSize.sm,
-    lineHeight: 20,
+    fontSize: 12,
+    fontFamily: 'Inter',
+    lineHeight: 18,
   },
   noteCloudDismiss: {
-    fontSize: fontSize.sm,
+    fontSize: 12,
+    fontFamily: 'Inter',
     fontWeight: fontWeight.semibold,
-    alignSelf: 'flex-start',
   },
-  noteSaveLabel: {
-    fontSize: fontSize.sm,
+
+  // Section
+  section: { gap: spacing.sm },
+  sectionTitle: {
+    fontSize: 17,
+    fontFamily: 'Satoshi',
     fontWeight: fontWeight.bold,
+    letterSpacing: -0.2,
   },
-  activitySection: {
-    gap: spacing.sm,
-    marginBottom: spacing.lg,
-  },
-  activityTitle: {
-    fontSize: fontSize.xl,
-    fontWeight: fontWeight.bold,
-  },
-  activityCard: {
-    borderRadius: borderRadius.lg,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
+
+  // Activity
+  activityRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    overflow: 'hidden',
+    alignItems: 'flex-start',
+    borderRadius: borderRadius.card,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    gap: spacing.md,
   },
-  activityStrip: {
-    width: 4,
-    height: 28,
-    borderRadius: borderRadius.full,
+  activityDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginTop: 5,
   },
   activityMain: {
-    fontSize: fontSize.base,
+    fontSize: 14,
+    fontFamily: 'Inter',
     fontWeight: fontWeight.semibold,
   },
   activitySub: {
-    fontSize: fontSize.sm,
-    marginTop: 1,
+    fontSize: 12,
+    fontFamily: 'Inter',
+    marginTop: 2,
   },
-  activityNoteRow: {
+  activityNote: {
+    fontSize: 13,
+    fontFamily: 'Inter',
+    lineHeight: 18,
+    marginTop: spacing.xs,
+  },
+  activityNoteIcon: {
+    fontSize: 10,
+    marginTop: 6,
+  },
+
+  // Settings cards
+  settingCard: {
+    borderRadius: borderRadius.card,
+    overflow: 'hidden',
+  },
+  settingRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 6,
-    marginTop: spacing.sm,
-    paddingTop: spacing.sm,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    padding: spacing.lg,
+    gap: spacing.md,
   },
-  activityNoteText: {
+  settingIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  settingLabel: {
+    fontSize: 15,
+    fontFamily: 'Satoshi',
+    fontWeight: fontWeight.semibold,
+  },
+  settingMeta: {
+    fontSize: 12,
+    fontFamily: 'Inter',
+    marginTop: 2,
+  },
+  settingAction: {
+    fontSize: 13,
+    fontFamily: 'Inter',
+    fontWeight: fontWeight.semibold,
+  },
+
+  // Modal
+  modalOverlay: {
     flex: 1,
-    fontSize: fontSize.sm,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  modalSheet: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: spacing.xl,
+    gap: spacing.md,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontFamily: 'Satoshi',
+    fontWeight: fontWeight.bold,
+    marginBottom: spacing.sm,
+  },
+  modalBody: {
+    fontSize: 14,
+    fontFamily: 'Inter',
     lineHeight: 20,
   },
-  cardSheen: {
-    ...StyleSheet.absoluteFillObject,
+  modalInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: spacing.md,
+    fontSize: 16,
+    fontFamily: 'Inter',
   },
-  section: {},
+  modalBtn: {
+    borderRadius: borderRadius.full,
+    padding: spacing.md,
+    alignItems: 'center',
+  },
+  modalBtnText: {
+    color: '#111111',
+    fontSize: 16,
+    fontFamily: 'Inter',
+    fontWeight: fontWeight.semibold,
+  },
+  modalOption: {
+    paddingVertical: spacing.md,
+  },
+  modalOptionText: {
+    fontSize: 16,
+    fontFamily: 'Inter',
+  },
+  modalCancel: {
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    marginTop: spacing.xs,
+  },
+  modalCancelText: {
+    fontSize: 14,
+    fontFamily: 'Inter',
+  },
 });

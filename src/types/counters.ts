@@ -44,4 +44,11 @@ export interface MarkIconRegistryItem {
   ariaLabel: string;
 }
 
+// Aliases for icon components that still reference the old Counter* names
+export type CounterType = MarkType;
+export type CounterTone = MarkTone;
+export type CounterIconVariant = MarkIconVariant;
+export type CounterIconAnimation = MarkIconAnimation;
+export type CounterSymbolProps = MarkSymbolProps;
+export type CounterIconRegistryItem = MarkIconRegistryItem;
 

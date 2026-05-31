@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useOnboardingStore, FocusArea } from '../../state/onboardingSlice';
 import { colors } from '../../theme/colors';
-import { spacing, fontSize, fontWeight, borderRadius } from '../../theme/tokens';
+import { spacing, borderRadius, fontWeight } from '../../theme/tokens';
 
 const FOCUS_OPTIONS: { label: string; value: FocusArea }[] = [
   { label: 'Health', value: 'health' },
@@ -16,6 +16,9 @@ const FOCUS_OPTIONS: { label: string; value: FocusArea }[] = [
   { label: 'Finances', value: 'finances' },
 ];
 
+const DOTS = [0, 1, 2, 3, 4];
+const CURRENT = 2;
+
 export default function FocusAreaScreen() {
   const theme = useEffectiveTheme();
   const themeColors = colors[theme];
@@ -23,10 +26,7 @@ export default function FocusAreaScreen() {
   const { setFocusArea } = useOnboardingStore();
   const [selected, setSelected] = useState<FocusArea | null>(null);
 
-  const handleSkip = () => {
-    // Leave focusArea as null in the store — skip does not write
-    router.push('/onboarding/daily-identity' as any);
-  };
+  const handleSkip = () => router.push('/onboarding/daily-identity' as any);
 
   const handleConfirm = () => {
     if (!selected) return;
@@ -36,8 +36,21 @@ export default function FocusAreaScreen() {
 
   return (
     <SafeAreaView style={[styles.fill, { backgroundColor: themeColors.background }]}>
-      {/* Top-right skip link */}
       <View style={styles.topBar}>
+        <View style={styles.dots}>
+          {DOTS.map(i => (
+            <View
+              key={i}
+              style={[
+                styles.dot,
+                {
+                  backgroundColor: i === CURRENT ? '#FEB729' : 'transparent',
+                  borderColor: i === CURRENT ? '#FEB729' : themeColors.border,
+                },
+              ]}
+            />
+          ))}
+        </View>
         <TouchableOpacity
           onPress={handleSkip}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
@@ -55,12 +68,12 @@ export default function FocusAreaScreen() {
       >
         <View style={styles.copyArea}>
           <Text style={[styles.prompt, { color: themeColors.text }]}>
-            {"What area of your life needs the most attention right now?"}
+            What area of your life needs the most attention right now?
           </Text>
         </View>
 
         <View style={styles.cardList}>
-          {FOCUS_OPTIONS.map((option) => {
+          {FOCUS_OPTIONS.map(option => {
             const isSelected = selected === option.value;
             return (
               <TouchableOpacity
@@ -68,8 +81,8 @@ export default function FocusAreaScreen() {
                 style={[
                   styles.card,
                   {
-                    backgroundColor: isSelected ? themeColors.primary : themeColors.surface,
-                    borderColor: isSelected ? themeColors.accent.primary : themeColors.border,
+                    backgroundColor: isSelected ? '#FEB72915' : themeColors.surface,
+                    borderColor: isSelected ? '#FEB729' : themeColors.border,
                     borderWidth: isSelected ? 2 : 1,
                   },
                 ]}
@@ -82,7 +95,7 @@ export default function FocusAreaScreen() {
                 <Text
                   style={[
                     styles.cardLabel,
-                    { color: isSelected ? themeColors.accent.primary : themeColors.text },
+                    { color: isSelected ? '#FEB729' : themeColors.text },
                   ]}
                 >
                   {option.label}
@@ -94,25 +107,18 @@ export default function FocusAreaScreen() {
 
         <TouchableOpacity
           style={[
-            styles.ctaButton,
-            {
-              backgroundColor: selected ? themeColors.accent.primary : themeColors.surfaceVariant,
-            },
+            styles.cta,
+            { backgroundColor: selected ? '#FEB729' : themeColors.surfaceVariant },
           ]}
           onPress={handleConfirm}
-          disabled={selected === null}
-          activeOpacity={0.82}
+          disabled={!selected}
+          activeOpacity={0.85}
           accessibilityRole="button"
           accessibilityLabel="That's my focus"
-          accessibilityState={{ disabled: selected === null }}
+          accessibilityState={{ disabled: !selected }}
         >
-          <Text
-            style={[
-              styles.ctaButtonText,
-              { color: selected ? '#FFFFFF' : themeColors.textTertiary },
-            ]}
-          >
-            {"That's my focus"}
+          <Text style={[styles.ctaText, { color: selected ? '#111111' : themeColors.textTertiary }]}>
+            That's my focus
           </Text>
         </TouchableOpacity>
       </ScrollView>
@@ -124,13 +130,22 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   topBar: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
+    paddingTop: spacing.xl,
     paddingBottom: spacing.sm,
   },
+  dots: { flexDirection: 'row', gap: 6 },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    borderWidth: 1,
+  },
   skipText: {
-    fontSize: fontSize.base,
+    fontSize: 14,
+    fontFamily: 'Inter',
     fontWeight: fontWeight.medium,
   },
   scrollContent: {
@@ -138,39 +153,36 @@ const styles = StyleSheet.create({
     paddingBottom: spacing['4xl'],
     gap: spacing.xl,
   },
-  copyArea: {
-    gap: spacing.md,
-  },
+  copyArea: { gap: spacing.md },
   prompt: {
-    fontSize: fontSize['2xl'],
+    fontSize: 28,
+    fontFamily: 'Satoshi',
     fontWeight: fontWeight.bold,
-    lineHeight: fontSize['2xl'] * 1.3,
+    lineHeight: 36,
+    letterSpacing: -0.3,
   },
-  cardList: {
-    gap: spacing.md,
-  },
+  cardList: { gap: spacing.sm },
   card: {
-    paddingVertical: spacing.xl,
+    paddingVertical: spacing.lg,
     paddingHorizontal: spacing.lg,
-    borderRadius: borderRadius.xl,
+    borderRadius: borderRadius.card,
     alignItems: 'flex-start',
-    justifyContent: 'center',
   },
   cardLabel: {
-    fontSize: fontSize.xl,
+    fontSize: 18,
+    fontFamily: 'Satoshi',
     fontWeight: fontWeight.semibold,
   },
-  ctaButton: {
-    width: '100%',
-    paddingVertical: spacing.lg,
-    borderRadius: borderRadius.xl,
+  cta: {
+    borderRadius: borderRadius.full,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 52,
+    height: 56,
     marginTop: spacing.sm,
   },
-  ctaButtonText: {
-    fontSize: fontSize.lg,
+  ctaText: {
+    fontSize: 16,
+    fontFamily: 'Inter',
     fontWeight: fontWeight.semibold,
   },
 });

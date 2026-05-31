@@ -13,7 +13,10 @@ import { useRouter } from 'expo-router';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useOnboardingStore } from '../../state/onboardingSlice';
 import { colors } from '../../theme/colors';
-import { spacing, fontSize, fontWeight, borderRadius } from '../../theme/tokens';
+import { spacing, borderRadius, fontWeight } from '../../theme/tokens';
+
+const DOTS = [0, 1, 2, 3, 4];
+const CURRENT = 1;
 
 export default function CommitmentScreen() {
   const theme = useEffectiveTheme();
@@ -22,9 +25,7 @@ export default function CommitmentScreen() {
   const { goalTitle, setGoalTitle } = useOnboardingStore();
   const [inputError, setInputError] = useState<string | null>(null);
 
-  const handleSkip = () => {
-    router.push('/onboarding/focus-area' as any);
-  };
+  const handleSkip = () => router.push('/onboarding/focus-area' as any);
 
   const handleConfirm = () => {
     const trimmed = goalTitle.trim();
@@ -43,9 +44,28 @@ export default function CommitmentScreen() {
         style={styles.fill}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        {/* Top-right skip link */}
+        {/* Top bar */}
         <View style={styles.topBar}>
-          <TouchableOpacity onPress={handleSkip} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} accessibilityRole="button" accessibilityLabel="Skip">
+          <View style={styles.dots}>
+            {DOTS.map(i => (
+              <View
+                key={i}
+                style={[
+                  styles.dot,
+                  {
+                    backgroundColor: i === CURRENT ? '#FEB729' : 'transparent',
+                    borderColor: i === CURRENT ? '#FEB729' : themeColors.border,
+                  },
+                ]}
+              />
+            ))}
+          </View>
+          <TouchableOpacity
+            onPress={handleSkip}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            accessibilityRole="button"
+            accessibilityLabel="Skip"
+          >
             <Text style={[styles.skipText, { color: themeColors.textSecondary }]}>Skip</Text>
           </TouchableOpacity>
         </View>
@@ -53,10 +73,10 @@ export default function CommitmentScreen() {
         <View style={styles.content}>
           <View style={styles.copyArea}>
             <Text style={[styles.prompt, { color: themeColors.text }]}>
-              {"What's one thing you've been putting off?"}
+              What have you been putting off?
             </Text>
             <Text style={[styles.subtext, { color: themeColors.textSecondary }]}>
-              {"That's where we start."}
+              That's where we start.
             </Text>
           </View>
 
@@ -70,11 +90,8 @@ export default function CommitmentScreen() {
               },
             ]}
             value={goalTitle}
-            onChangeText={(text) => {
-              setGoalTitle(text);
-              if (inputError) setInputError(null);
-            }}
-            placeholder={"e.g. Finish writing the book"}
+            onChangeText={t => { setGoalTitle(t); if (inputError) setInputError(null); }}
+            placeholder="e.g. Finish writing the book"
             placeholderTextColor={themeColors.textTertiary}
             multiline
             numberOfLines={3}
@@ -90,13 +107,12 @@ export default function CommitmentScreen() {
           )}
 
           <TouchableOpacity
-            style={[styles.ctaButton, { backgroundColor: themeColors.accent.primary }]}
+            style={styles.cta}
             onPress={handleConfirm}
-            activeOpacity={0.82}
+            activeOpacity={0.85}
             accessibilityRole="button"
-            accessibilityLabel="That's it"
           >
-            <Text style={styles.ctaButtonText}>{"That's it"}</Text>
+            <Text style={styles.ctaText}>That's it</Text>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -104,19 +120,29 @@ export default function CommitmentScreen() {
   );
 }
 
-const CTA_TEXT_COLOR = '#FFFFFF';
-
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   topBar: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
+    paddingTop: spacing.xl,
     paddingBottom: spacing.sm,
   },
+  dots: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    borderWidth: 1,
+  },
   skipText: {
-    fontSize: fontSize.base,
+    fontSize: 14,
+    fontFamily: 'Inter',
     fontWeight: fontWeight.medium,
   },
   content: {
@@ -125,41 +151,44 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: spacing.xl,
   },
-  copyArea: {
-    gap: spacing.md,
-  },
+  copyArea: { gap: spacing.md },
   prompt: {
-    fontSize: fontSize['2xl'],
+    fontSize: 28,
+    fontFamily: 'Satoshi',
     fontWeight: fontWeight.bold,
-    lineHeight: fontSize['2xl'] * 1.3,
+    lineHeight: 36,
+    letterSpacing: -0.3,
   },
   subtext: {
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.normal,
+    fontSize: 17,
+    fontFamily: 'Inter',
+    lineHeight: 24,
   },
   input: {
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.normal,
+    fontSize: 18,
+    fontFamily: 'Satoshi',
     borderWidth: 1,
-    borderRadius: borderRadius.xl,
+    borderRadius: 16,
     padding: spacing.lg,
     minHeight: 96,
+    lineHeight: 26,
   },
   errorText: {
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.normal,
+    fontSize: 13,
+    fontFamily: 'Inter',
+    marginTop: -spacing.md,
   },
-  ctaButton: {
-    width: '100%',
-    paddingVertical: spacing.lg,
-    borderRadius: borderRadius.xl,
+  cta: {
+    backgroundColor: '#FEB729',
+    borderRadius: borderRadius.full,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 52,
+    height: 56,
   },
-  ctaButtonText: {
-    color: CTA_TEXT_COLOR,
-    fontSize: fontSize.lg,
+  ctaText: {
+    color: '#111111',
+    fontSize: 16,
+    fontFamily: 'Inter',
     fontWeight: fontWeight.semibold,
   },
 });

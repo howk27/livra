@@ -53,9 +53,7 @@ import { usePaceAlert } from '../../hooks/usePaceAlert';
 import { CheckinButton } from '../../components/CheckinButton';
 import type { HeaderState, WeekArcState, PostLogState } from '../../lib/copy';
 import { deriveStreakForMark } from '../../hooks/useStreaks';
-
-const APP_BRAND_LOGO_LIGHT = require('../../assets/branding/Logo NoBG.png');
-const APP_BRAND_LOGO_DARK = require('../../assets/branding/Logo NoBG dark.png');
+import { Logo } from '../../components/Logo';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const GRID_OUTER_PADDING = spacing.md;
@@ -809,7 +807,10 @@ export default function HomeScreen() {
       <SafeAreaView style={[styles.container, { backgroundColor: 'transparent' }]}>
         {/* ── Top bar ──────────────────────────────────────────── */}
         <View style={styles.topBar}>
-          {/* Edit / Done toggle */}
+          {/* Logo left */}
+          <Logo size={28} />
+
+          {/* Edit / Done toggle (center) */}
           <TouchableOpacity
             style={styles.editIconBtn}
             onPress={() => setIsEditMode(!isEditMode)}
@@ -818,15 +819,12 @@ export default function HomeScreen() {
           >
             <Ionicons
               name={isEditMode ? 'checkmark-circle-outline' : 'apps-outline'}
-              size={22}
-              color={isEditMode ? themeColors.primary : themeColors.textSecondary}
+              size={20}
+              color={isEditMode ? '#FEB729' : themeColors.textSecondary}
             />
           </TouchableOpacity>
 
-          {/* App name (centered) */}
-          <Text style={[styles.appTitle, { color: themeColors.text }]}>LIVRA</Text>
-
-          {/* Avatar */}
+          {/* Avatar right */}
           <TouchableOpacity
             style={styles.profileButton}
             onPress={() => router.push('/(tabs)/settings')}
@@ -859,7 +857,7 @@ export default function HomeScreen() {
               ceremonyToken={ceremonyToken}
             />
             <WeeklySummaryStrip
-              onPress={() => router.navigate('/(tabs)/tracking')}
+              onPress={() => router.navigate('/(tabs)/queue' as any)}
               incompleteMarksToday={incompleteMarksToday}
               hasPartialProgressToday={hasPartialProgressToday}
             />

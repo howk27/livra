@@ -25,6 +25,7 @@ import * as Sharing from 'expo-sharing';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../theme/colors';
 import { spacing, borderRadius, fontSize, fontWeight, shadow } from '../../theme/tokens';
+import { Logo } from '../../components/Logo';
 import {
   useEffectiveTheme,
   useUIStore,
@@ -1224,18 +1225,11 @@ export default function SettingsScreen() {
       <>
         <SafeAreaView style={styles.container}>
         <ScrollView contentContainerStyle={[styles.content, { paddingBottom: scrollContentBottomPad }]}>
-        {/* Top bar — aligned with Marks screen rhythm */}
+        {/* Top bar */}
         <View style={styles.topBar}>
-          <TouchableOpacity
-            style={styles.topBarIconBtn}
-            onPress={() => router.push('/(tabs)/home')}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            accessibilityLabel="Back to marks"
-          >
-            <Ionicons name="menu-outline" size={22} color={themeColors.textSecondary} />
-          </TouchableOpacity>
+          <Logo size={24} />
           <AppText variant="headline" style={[styles.topBarTitle, { color: themeColors.text }]}>
-            Profile
+            Settings
           </AppText>
           <TouchableOpacity
             onPress={handlePickImage}
