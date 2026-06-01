@@ -1,7 +1,7 @@
 /**
  * Centralized In-App Purchase (IAP) Module
  * 
- * This module handles all IAP operations using react-native-iap v14.5
+ * This module handles all IAP operations using expo-iap
  * It provides a clean interface for:
  * - Initializing store connection
  * - Loading subscription products

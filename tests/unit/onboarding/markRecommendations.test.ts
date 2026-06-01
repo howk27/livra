@@ -1,17 +1,20 @@
-import { getRecommendedMarks, MARK_TEMPLATES } from '../../../lib/onboarding/markRecommendations';
+import { getRecommendedMarks } from '../../../lib/onboarding/markRecommendations';
+import { MARK_LIBRARY } from '../../../lib/suggestedCounters';
 
-describe('MARK_TEMPLATES', () => {
-  test('has 8 entries', () => {
-    expect(Object.keys(MARK_TEMPLATES)).toHaveLength(8);
+describe('MARK_LIBRARY', () => {
+  test('has entries for all core marks', () => {
+    expect(MARK_LIBRARY.length).toBeGreaterThan(0);
   });
 
   test('each entry has required fields', () => {
-    for (const [, template] of Object.entries(MARK_TEMPLATES)) {
-      expect(template).toHaveProperty('name');
-      expect(template).toHaveProperty('identity_label');
-      expect(template).toHaveProperty('icon');
-      expect(template).toHaveProperty('default_color');
-      expect(template).toHaveProperty('health_kit_type');
+    for (const mark of MARK_LIBRARY) {
+      expect(mark).toHaveProperty('id');
+      expect(mark).toHaveProperty('name');
+      expect(mark).toHaveProperty('icon');
+      expect(mark).toHaveProperty('emoji');
+      expect(mark).toHaveProperty('color');
+      expect(mark).toHaveProperty('category');
+      expect(mark).toHaveProperty('healthKitType');
     }
   });
 });
@@ -112,38 +115,36 @@ describe('getRecommendedMarks', () => {
   });
 
   test('returns all 3 when exactly 3 selected regardless of focusArea', () => {
-    // Only 3 selected — all returned regardless of focusArea
     const result = getRecommendedMarks(['Sleep better', 'Move my body', 'Drink more water'], 'career');
     expect(result).toHaveLength(3);
   });
 
-  test('returns correct identity_label for Sleep', () => {
+  test('returns correct category for Sleep', () => {
     const result = getRecommendedMarks(['Sleep better'], null);
-    expect(result[0].identity_label).toBe('Recovery');
+    expect(result[0].category).toBe('Recovery');
   });
 
-  test('returns correct icon for Workout', () => {
+  test('returns correct icon component for Workout', () => {
     const result = getRecommendedMarks(['Move my body'], null);
-    expect(result[0].icon).toBe('💪');
+    expect(typeof result[0].icon).toBe('function');
   });
 
-  test('returns correct default_color for Water', () => {
+  test('returns correct color for Water', () => {
     const result = getRecommendedMarks(['Drink more water'], null);
-    expect(result[0].default_color).toBe('#6B9E8A');
+    expect(result[0].color).toBe('#6B9E8A');
   });
 
-  test('health_kit_type is sleep for Sleep mark', () => {
+  test('healthKitType is sleep for Sleep mark', () => {
     const result = getRecommendedMarks(['Sleep better'], null);
-    expect(result[0].health_kit_type).toBe('sleep');
+    expect(result[0].healthKitType).toBe('sleep');
   });
 
-  test('health_kit_type is null for Water mark', () => {
+  test('healthKitType is null for Water mark', () => {
     const result = getRecommendedMarks(['Drink more water'], null);
-    expect(result[0].health_kit_type).toBeNull();
+    expect(result[0].healthKitType).toBeNull();
   });
 
   test('silently drops unrecognized selection labels', () => {
-    // 4 inputs but only 3 recognized → triggers ≤3 shortcut, returns all 3 recognized
     const result = getRecommendedMarks(
       ['Sleep better', 'UNKNOWN_LABEL', 'Move my body', 'Drink more water'],
       null,

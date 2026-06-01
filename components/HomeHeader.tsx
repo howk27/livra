@@ -73,11 +73,11 @@ const ProgressSegment: React.FC<SegmentProps> = ({
 
   return (
     <View style={[styles.segment, { backgroundColor: emptyColor, opacity: filled ? 1 : (isDark ? 0.35 : 0.50) }]}>
-      <Animated.View style={[StyleSheet.absoluteFillObject, { backgroundColor: fillColor, borderRadius: 6 }, fillStyle]} />
+      <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: fillColor, borderRadius: 6 }, fillStyle]} />
       {/* Luminosity glow overlay */}
       <Animated.View
         pointerEvents="none"
-        style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(255,255,255,0.55)', borderRadius: 6 }, glowStyle]}
+        style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.55)', borderRadius: 6 }, glowStyle]}
       />
     </View>
   );

@@ -358,7 +358,7 @@ const styles = StyleSheet.create({
   },
   titleBlock: {
     marginTop: spacing.md,
-    marginBottom: spacing['2xl'] ?? 32,
+    marginBottom: 32,
     alignItems: 'center',
   },
   titleText: {
@@ -370,7 +370,7 @@ const styles = StyleSheet.create({
   statsBlock: {
     width: '100%',
     gap: spacing.md,
-    marginBottom: spacing['2xl'] ?? 32,
+    marginBottom: 32,
   },
   emptyStats: {
     fontSize: fontSize.sm,
@@ -393,7 +393,7 @@ const styles = StyleSheet.create({
   },
   statValue: {
     fontSize: fontSize.sm,
-    fontWeight: fontWeight.regular ?? '400',
+    fontWeight: '400',
   },
   statDivider: {
     fontSize: fontSize.sm,

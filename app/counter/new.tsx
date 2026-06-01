@@ -149,7 +149,7 @@ export default function NewCounterScreen() {
     }
 
     setScheduleType('custom');
-    setScheduleDays(next);
+    setScheduleDays(next as DayOfWeek[]);
   };
 
   const handleSuggestedCounterSelect = (counter: SuggestedCounter) => {
@@ -168,7 +168,7 @@ export default function NewCounterScreen() {
         name: pendingSuggestedCounter.name,
         emoji: pendingSuggestedCounter.emoji,
         color: categoryColor,
-        unit: pendingSuggestedCounter.unit,
+        unit: 'sessions' as const,
         enable_streak: true,
         user_id: user?.id!,
         dailyTarget,
@@ -370,13 +370,7 @@ export default function NewCounterScreen() {
                 value={dailyTarget}
                 onChange={setDailyTarget}
                 label={null}
-                helperText={
-                  pendingSuggestedCounter.unit === 'days'
-                    ? 'DAYS'
-                    : pendingSuggestedCounter.unit === 'items'
-                      ? 'ITEMS'
-                      : 'TIMES'
-                }
+                helperText="TIMES"
               />
               <TouchableOpacity
                 style={[

@@ -10,7 +10,6 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   House,
-  List,
   CheckCircle,
   Gear,
   Plus,
@@ -23,8 +22,6 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
   withTiming,
-  FadeIn,
-  FadeOut,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { colors } from '../../theme/colors';
@@ -53,9 +50,6 @@ type IconProps = { focused: boolean; color: string };
 
 function HomeIcon({ focused, color }: IconProps) {
   return <House size={22} color={color} weight={focused ? 'fill' : 'regular'} />;
-}
-function QueueIcon({ focused, color }: IconProps) {
-  return <List size={22} color={color} weight={focused ? 'fill' : 'regular'} />;
 }
 function MarksIcon({ focused, color }: IconProps) {
   return <CheckCircle size={22} color={color} weight={focused ? 'fill' : 'regular'} />;
@@ -126,7 +120,7 @@ const FloatingActionButton = () => {
   const handleAddGoal = useCallback(() => {
     collapse();
     setExpanded(false);
-    setTimeout(() => router.push('/goal/new'), 160);
+    setTimeout(() => router.push('/goal/queue'), 160);
   }, [collapse, router]);
 
   const fabAnimStyle = useAnimatedStyle(() => ({
@@ -294,15 +288,6 @@ export default function TabLayout() {
             }}
           />
           <Tabs.Screen
-            name="queue"
-            options={{
-              title: 'Queue',
-              tabBarIcon: ({ focused, color }) => (
-                <QueueIcon focused={focused} color={color as string} />
-              ),
-            }}
-          />
-          <Tabs.Screen
             name="marks"
             options={{
               title: 'Marks',
@@ -321,7 +306,8 @@ export default function TabLayout() {
             }}
           />
 
-          {/* Hidden routes */}
+          {/* Hidden routes — accessible programmatically, not from tab bar */}
+          <Tabs.Screen name="queue" options={{ href: null }} />
           <Tabs.Screen name="stats" options={{ href: null }} />
           <Tabs.Screen name="tracking" options={{ href: null }} />
           <Tabs.Screen name="profile" options={{ href: null }} />

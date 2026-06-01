@@ -543,10 +543,10 @@ export const useMarks = () => {
         unit?: 'sessions' | 'days' | 'items';
         enable_streak?: boolean;
         dailyTarget?: number | null;
-        schedule_type?: string;
+        schedule_type?: 'daily' | 'weekly' | 'custom';
         schedule_days?: string;
         goal_value?: number | null;
-        goal_period?: string | null;
+        goal_period?: 'day' | 'week' | 'month' | null;
       }
     ) => {
       await updateMarkAction(markId, updates);

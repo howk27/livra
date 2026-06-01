@@ -1,7 +1,7 @@
 /**
  * IAP Diagnostics Store
  * 
- * Production-safe diagnostic logging for react-native-iap v14.5
+ * Production-safe diagnostic logging for expo-iap
  * Maintains a ring buffer of diagnostic events for in-app debugging
  */
 
@@ -584,11 +584,11 @@ export async function exportSupportBundle(): Promise<void> {
   
   // Detect New Architecture
   function detectNewArchitecture(): boolean {
-    if (typeof global === 'undefined') return false;
+    if (typeof globalThis === 'undefined') return false;
     return !!(
-      (global as any).RN$Bridgeless ||
-      (global as any).__turboModuleProxy ||
-      (global as any).nativeFabricUIManager
+      (globalThis as any).RN$Bridgeless ||
+      (globalThis as any).__turboModuleProxy ||
+      (globalThis as any).nativeFabricUIManager
     );
   }
   

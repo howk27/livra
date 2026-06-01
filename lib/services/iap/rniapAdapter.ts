@@ -66,7 +66,7 @@ function loadRniapModule(): any {
   if (!isNative) return null;
 
   try {
-    const mod = require('react-native-iap');
+    const mod = require('expo-iap');
     if (mod && mod.default && typeof mod.default === 'object') {
       return mod.default;
     }

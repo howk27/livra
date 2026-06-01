@@ -51,7 +51,7 @@ export const CounterIcon: React.FC<CounterIconProps> = ({
   const prefersReducedMotion = useReducedMotion();
   const definition = getIconDefinition(type);
   const themeColors = colors[theme];
-  const flattenedStyle = useMemo(() => StyleSheet.flatten(style) as ViewStyle | undefined, [style]);
+  const flattenedStyle = useMemo(() => StyleSheet.flatten(style) as (ViewStyle & { color?: string }) | undefined, [style]);
 
   const resolvedTone: CounterTone = tone ?? definition?.defaultTone ?? 'misc';
 

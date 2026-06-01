@@ -117,7 +117,7 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
   overlayTouchable: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   modalContainer: {
     width: '100%',

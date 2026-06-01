@@ -857,7 +857,7 @@ export default function HomeScreen() {
               ceremonyToken={ceremonyToken}
             />
             <WeeklySummaryStrip
-              onPress={() => router.navigate('/(tabs)/queue' as any)}
+              onPress={() => router.navigate('/(tabs)/tracking' as any)}
               incompleteMarksToday={incompleteMarksToday}
               hasPartialProgressToday={hasPartialProgressToday}
             />
@@ -927,6 +927,17 @@ export default function HomeScreen() {
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
             extraData={localCounters}
+            ListFooterComponent={
+              <TouchableOpacity
+                style={styles.statsFooter}
+                onPress={() => router.push('/(tabs)/stats' as any)}
+                activeOpacity={0.6}
+              >
+                <Text style={[styles.statsFooterText, { color: themeColors.textTertiary }]}>
+                  Your history →
+                </Text>
+              </TouchableOpacity>
+            }
           />
         )}
       </SafeAreaView>
@@ -1006,6 +1017,15 @@ const styles = StyleSheet.create({
   listContent: {
     paddingTop: spacing.xs,
     paddingBottom: spacing['4xl'],
+  },
+  statsFooter: {
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+  },
+  statsFooterText: {
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.medium,
+    letterSpacing: 0.3,
   },
   sectionHeader: {
     flexDirection: 'row',

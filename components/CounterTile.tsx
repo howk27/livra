@@ -173,7 +173,7 @@ export const MarkTile: React.FC<MarkTileProps> = ({
   );
 
 
-  // Phase 3.2 — subtle color-tinted card background
+  // PHASE_3: subtle color-tinted card background
   const cardBgColor = applyOpacity(markColor, 0.06);
 
   // Use border.soft per spec
@@ -464,7 +464,7 @@ export const MarkTile: React.FC<MarkTileProps> = ({
           >
             {/* Section 3 — momentary brightness flash */}
             <Animated.View
-              style={[StyleSheet.absoluteFillObject, styles.flashOverlay, { opacity: flashAnim }]}
+              style={[StyleSheet.absoluteFill, styles.flashOverlay, { opacity: flashAnim }]}
             />
             <AppText variant="title" style={styles.actionButtonText}>
               +

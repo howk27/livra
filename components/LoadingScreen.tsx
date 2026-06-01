@@ -3,8 +3,7 @@ import { View, StyleSheet, Image, ActivityIndicator } from 'react-native';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { colors } from '../theme/colors';
 
-const APP_BRAND_LOGO_LIGHT = require('../assets/branding/Logo NoBG.png');
-const APP_BRAND_LOGO_DARK = require('../assets/branding/Logo NoBG dark.png');
+const APP_ICON = require('../assets/icon.png');
 
 interface LoadingScreenProps {
   showSpinner?: boolean;
@@ -13,7 +12,7 @@ interface LoadingScreenProps {
 export const LoadingScreen: React.FC<LoadingScreenProps> = ({ showSpinner = true }) => {
   const theme = useEffectiveTheme();
   const themeColors = colors[theme];
-  const logoSource = theme === 'dark' ? APP_BRAND_LOGO_DARK : APP_BRAND_LOGO_LIGHT;
+  const logoSource = APP_ICON;
 
   return (
     <View style={[styles.container, { backgroundColor: themeColors.background }]}>

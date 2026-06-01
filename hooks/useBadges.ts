@@ -134,7 +134,7 @@ const badgeToMap = (records: MarkBadge[]): BadgeMap => {
   const map: BadgeMap = new Map();
   records.forEach((record) => {
     // Use mark_id if available, fallback to counter_id for database compatibility
-    const markId = record.mark_id || record.counter_id || '';
+    const markId = record.mark_id || (record as any).counter_id || '';
     const perCounter = map.get(markId) ?? new Map<BadgeCode, MarkBadge>();
     perCounter.set(record.badge_code, record);
     map.set(markId, perCounter);

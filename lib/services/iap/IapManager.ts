@@ -1,8 +1,8 @@
 /**
- * IAP Manager - SINGLE SOURCE OF TRUTH for react-native-iap
+ * IAP Manager - SINGLE SOURCE OF TRUTH for expo-iap
  * 
- * Capability-based adapter loads react-native-iap dynamically at runtime.
- * All other files must use IapManager, never import react-native-iap directly.
+ * Capability-based adapter loads expo-iap dynamically at runtime.
+ * All other files must use IapManager, never import expo-iap directly.
  * 
  * Responsibilities:
  * - One-time initialization (idempotent)
@@ -52,11 +52,11 @@ const isExpoGo = Constants.appOwnership === 'expo';
  * Detect if running under New Architecture (bridgeless mode)
  */
 function detectNewArchitecture(): boolean {
-  if (typeof global === 'undefined') return false;
+  if (typeof globalThis === 'undefined') return false;
   return !!(
-    (global as any).RN$Bridgeless ||
-    (global as any).__turboModuleProxy ||
-    (global as any).nativeFabricUIManager
+    (globalThis as any).RN$Bridgeless ||
+    (globalThis as any).__turboModuleProxy ||
+    (globalThis as any).nativeFabricUIManager
   );
 }
 

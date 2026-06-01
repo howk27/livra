@@ -53,7 +53,7 @@ export async function cancelAllLivraScheduledNotifications(): Promise<number> {
     const pending = await Notifications.getAllScheduledNotificationsAsync();
     for (const p of pending) {
       const id = p.identifier;
-      if (isLivraOwnedScheduledIdentifier(id) || isLivraOwnedScheduledRequest(p.request)) {
+      if (isLivraOwnedScheduledIdentifier(id) || isLivraOwnedScheduledRequest(p)) {
         await Notifications.cancelScheduledNotificationAsync(id);
         cancelled += 1;
       }

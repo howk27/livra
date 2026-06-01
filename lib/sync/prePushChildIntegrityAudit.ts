@@ -150,7 +150,7 @@ export async function prePushChildIntegrityAuditAndCleanup(opts: {
   const orphanEventIds: string[] = [];
 
   for (const row of eventsRaw) {
-    const e: any = { ...row, mark_id: row.mark_id || row.counter_id };
+    const e: any = { ...row, mark_id: (row as any).mark_id || (row as any).counter_id };
     if (e.deleted_at && String(e.deleted_at).trim() !== '') {
       eventsSkippedTombstoned += 1;
       continue;

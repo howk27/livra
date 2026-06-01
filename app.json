@@ -2,10 +2,10 @@
   "expo": {
     "name": "Livra",
     "slug": "livra",
-    "version": "1.0.44",
+    "version": "1.0.45",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
-    "description": "A minimalist progress tracker. Create simple marks for the things that matter to you - no pressure, no guilt, just progress.",
+    "description": "Livra is where goals actually get done — one at a time, in sequence.",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",

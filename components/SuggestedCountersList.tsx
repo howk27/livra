@@ -4,8 +4,6 @@ import { SUGGESTED_COUNTERS_BY_CATEGORY, SuggestedCounter } from '../lib/suggest
 import { colors } from '../theme/colors';
 import { spacing, borderRadius, fontSize, fontWeight } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
-import CounterIcon from '@/src/components/icons/CounterIcon';
-import { resolveCounterIconType } from '@/src/components/icons/IconResolver';
 import { applyOpacity } from '@/src/components/icons/color';
 import { getCategoryColor, getCategoryForSuggestedCounter } from '../lib/markCategory';
 
@@ -64,7 +62,7 @@ export const SuggestedCountersList: React.FC<SuggestedCountersListProps> = ({
     >
       {SUGGESTED_COUNTERS_BY_CATEGORY.map((category, categoryIndex) => (
         <View key={categoryIndex} style={styles.categorySection}>
-          {(category.title || category.emoji) && (
+          {category.title && (
             <View style={styles.categoryHeader}>
               <View style={[styles.categoryAccent, { backgroundColor: themeColors.accent.primary }]} />
               {category.title ? (
@@ -77,15 +75,12 @@ export const SuggestedCountersList: React.FC<SuggestedCountersListProps> = ({
 
           {/* Counters in this category - Grid Layout */}
           <View style={styles.countersGrid}>
-            {category.counters.map((counter, counterIndex) => {
+            {category.marks.map((counter, counterIndex) => {
               const selected = isSelected(counter);
               const disabled = !selected && !canSelectMore();
-              const category = getCategoryForSuggestedCounter(counter);
-              const categoryColor = getCategoryColor(category);
-              const iconType = resolveCounterIconType({
-                name: counter.name,
-                emoji: counter.emoji,
-              });
+              const markCategory = getCategoryForSuggestedCounter(counter);
+              const categoryColor = getCategoryColor(markCategory);
+              const MarkIcon = counter.icon;
 
               return (
                 <TouchableOpacity
@@ -109,15 +104,8 @@ export const SuggestedCountersList: React.FC<SuggestedCountersListProps> = ({
                   activeOpacity={0.8}
                 >
                   <View style={styles.cardContent}>
-                    {iconType ? (
-                      <CounterIcon
-                        type={iconType}
-                        size={28}
-                        variant="withBackground"
-                        fallbackEmoji={counter.emoji}
-                        ariaLabel={`${counter.name} counter icon`}
-                        color={categoryColor}
-                      />
+                    {MarkIcon ? (
+                      <MarkIcon weight="duotone" size={28} color={counter.color} />
                     ) : (
                       <Text style={styles.counterEmoji}>{counter.emoji}</Text>
                     )}

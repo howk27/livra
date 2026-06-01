@@ -22,7 +22,7 @@ export function AuthPersistenceGate() {
 
 const styles = StyleSheet.create({
   layer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: 'flex-start',
     zIndex: 100,
     elevation: 100,

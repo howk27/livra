@@ -551,11 +551,11 @@ export const MarkCard: React.FC<MarkCardProps> = ({
                 hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
               >
                 {/* +  (fades out on morph) */}
-                <Animated.View style={[StyleSheet.absoluteFillObject, styles.btnIconWrap, plusIconStyle]}>
+                <Animated.View style={[StyleSheet.absoluteFill, styles.btnIconWrap, plusIconStyle]}>
                   <AppText style={[styles.actionText, { color: btnFg }]}>+</AppText>
                 </Animated.View>
                 {/* ✓  (fades in on morph) */}
-                <Animated.View style={[StyleSheet.absoluteFillObject, styles.btnIconWrap, checkIconStyle]}>
+                <Animated.View style={[StyleSheet.absoluteFill, styles.btnIconWrap, checkIconStyle]}>
                   <Ionicons name="checkmark" size={24} color={btnFg} />
                 </Animated.View>
               </Pressable>
@@ -624,7 +624,7 @@ const styles = StyleSheet.create({
   compactFraction: { fontSize: 10, lineHeight: 13, flexShrink: 0 },
   compactCheckCircle: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   cardLightShell: { overflow: 'hidden' },
-  cardSheen: { ...StyleSheet.absoluteFillObject, borderRadius: borderRadius.card },
+  cardSheen: { ...StyleSheet.absoluteFill, borderRadius: borderRadius.card },
   rowContent: { flexDirection: 'row', alignItems: 'center', height: '100%', paddingHorizontal: spacing.md, gap: spacing.sm },
   iconWrap: { width: ICON_SIZE, height: ICON_SIZE, borderRadius: borderRadius.md, alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' },
   identitySection: { flex: 1, gap: spacing.xs, minWidth: 0 },
@@ -649,6 +649,6 @@ const styles = StyleSheet.create({
   pillsRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 4, marginTop: spacing.xxs, minHeight: FIXED_PILL_HEIGHT },
   pillOuter: { width: FIXED_PILL_WIDTH, height: FIXED_PILL_HEIGHT },
   pillTrack: { width: FIXED_PILL_WIDTH, height: FIXED_PILL_HEIGHT, borderRadius: 4, overflow: 'hidden', justifyContent: 'flex-end' },
-  pillFillFull: { ...StyleSheet.absoluteFillObject, borderRadius: 4 },
+  pillFillFull: { ...StyleSheet.absoluteFill, borderRadius: 4 },
   pillFillPartial: { width: '100%', borderRadius: 4 },
 });

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, TextInput, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -88,13 +88,18 @@ export default function GoalCompleteScreen() {
     subtitleOpacity.value = withDelay(400, withTiming(1, { duration: 400 }));
   }, [scale, opacity, subtitleOpacity]);
 
-  const handleNext = () => {
-    router.replace('/(tabs)/home');
-  };
+  const handleNext = useCallback(() => {
+    const nextActive = useGoalsStore.getState().getActiveGoal();
+    if (nextActive) {
+      router.replace('/(tabs)/home');
+    } else {
+      router.replace('/goal/queue');
+    }
+  }, [router]);
 
-  const handleReflectSubmit = () => {
+  const handleReflectSubmit = useCallback(() => {
     router.replace('/(tabs)/home');
-  };
+  }, [router]);
 
   const handleSharePress = async () => {
     if (shareLoading) return;

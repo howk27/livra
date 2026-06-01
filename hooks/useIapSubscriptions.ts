@@ -2,7 +2,7 @@
  * useIapSubscriptions Hook
  * 
  * Production-ready IAP hook using IapManager
- * Uses react-native-iap v14.5 via canonical import boundary
+ * Uses expo-iap via canonical import boundary
  * 
  * State Machine: idle → connecting → loadingProducts → ready(products) OR error(code,message)
  * NO AUTO-RETRIES - Manual retry only

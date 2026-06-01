@@ -72,7 +72,7 @@ const resolveUserId = async (): Promise<string> => {
     const supabase = getSupabaseClient();
     const { data } = await supabase.auth.getUser();
     if (isValidUUID(data?.user?.id)) {
-      return data.user.id;
+      return data.user!.id;
     }
   } catch {
     // ignore
