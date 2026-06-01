@@ -22,9 +22,10 @@ function withAppGroupEntitlement(config) {
 
 function withLivraWidget(config) {
   config = withAppGroupEntitlement(config);
-  // withTargetsDir scans ios/*/expo-target.config.js and wires up each target
-  // including writing the Xcode target, pod extension, and EAS credentials.
-  config = withTargetsDir(config, { root: './ios' });
+  // targets/ lives outside ios/ so it survives expo prebuild --clean.
+  // withTargetsDir scans targets/*/expo-target.config.js and wires up each
+  // target including writing the Xcode target, pod extension, and EAS creds.
+  config = withTargetsDir(config, { root: './targets' });
   return config;
 }
 
