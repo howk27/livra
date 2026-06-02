@@ -485,7 +485,7 @@ export default function CounterDetailScreen() {
               <TouchableOpacity
                 style={styles.headerIconBtn}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                onPress={() => router.push(`/counter/${id}/edit` as any)}
+                onPress={() => router.push(`/mark/${id}/edit` as any)}
                 accessibilityLabel="Edit mark"
               >
                 <PencilSimple size={20} color={themeColors.textSecondary} weight="regular" />

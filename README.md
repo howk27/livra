@@ -19,13 +19,20 @@ Livra is a goal execution app built around a simple idea: finish one thing befor
 
 ### Goals
 - Users queue up to 3 goals (free) or unlimited (Livra+), one active at a time
-- Completing a goal auto-activates the next
-- Completion history is permanent and visible
+- **Completion**: goals complete when their mark count reaches the target (`target_mark_count`). Only marks complete goals — not deadlines.
+- **Expiry**: if a deadline (`deadline_date`) passes while the goal is still active and incomplete, it expires. Expired goals advance the queue automatically.
+- Completion history is permanent and visible in the Queue screen
 
 ### Marks
 - Daily actions that move a goal forward (Sleep, Workout, Deep Work, Read, etc.)
 - Marks live at the user level — they persist across goals
+- Each mark can be linked to one or more goals; logging it credits all linked goals simultaneously
 - Users can reorder marks freely; native integrations auto-log from Apple Health
+
+### Goal Queue
+- Goals are ordered in a queue; only the #1 goal is "active" at any time
+- When the active goal completes or expires, the next queued goal auto-activates
+- Drag/reorder supported on the Queue screen (up/down arrows in v1)
 
 ### Daily Check-in
 - Single focused interaction, one tap, tied to the active goal
@@ -122,10 +129,10 @@ Then press `i` for iOS, `a` for Android, or `w` for web.
 app/
 ├── (tabs)/
 │   ├── home.tsx          # Mark list, edit mode, pace banner
-│   ├── tracking.tsx      # Daily tracking view
-│   ├── profile.tsx       # User profile + momentum
+│   ├── queue.tsx         # Goal queue (active hero card + waiting list)
+│   ├── marks.tsx         # Mark management
 │   └── settings.tsx      # Preferences, theme, account
-├── counter/[id].tsx       # Mark detail (health, reminders, history)
+├── mark/[id].tsx          # Mark detail (health, reminders, history)
 ├── goal/
 │   ├── queue.tsx          # Goal queue management
 │   ├── complete.tsx       # Goal completion moment
@@ -156,8 +163,9 @@ lib/
 └── paceEngine.ts          # Goal pace calculation + recalibration
 
 state/
-├── countersSlice.ts       # Marks (user-level, persistent)
-├── goalsSlice.ts          # Goal queue + active goal
+├── countersSlice.ts       # Marks store (primary export: useMarksStore)
+├── goalsSlice.ts          # Goal queue store (primary export: useGoalsStore)
+├── goalStore.ts           # Canonical import path for useGoalsStore
 ├── eventsSlice.ts         # Increment events (offline-first)
 └── ...
 

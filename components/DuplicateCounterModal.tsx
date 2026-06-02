@@ -12,13 +12,21 @@ import { spacing, borderRadius, fontSize, fontWeight } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { AppText } from './Typography';
 
-interface DuplicateCounterModalProps {
+export interface DuplicateMarkModalProps {
   visible: boolean;
-  counterName: string;
+  markName: string;
   onClose: () => void;
-  onGoToCounter?: () => void;
+  onGoToMark?: () => void;
   showGoToButton?: boolean;
 }
+
+/** @deprecated Use DuplicateMarkModalProps */
+export type DuplicateCounterModalProps = Omit<DuplicateMarkModalProps, 'markName' | 'onGoToMark'> & {
+  counterName?: string;
+  markName?: string;
+  onGoToCounter?: () => void;
+  onGoToMark?: () => void;
+};
 
 const DUPLICATE_MESSAGES = [
   "That mark is already on your board.",
@@ -28,20 +36,16 @@ const DUPLICATE_MESSAGES = [
   "This one is already part of your routine.",
 ];
 
-const getRandomMessage = (_counterName: string) => {
-  return DUPLICATE_MESSAGES[Math.floor(Math.random() * DUPLICATE_MESSAGES.length)];
-};
-
-export const DuplicateCounterModal: React.FC<DuplicateCounterModalProps> = ({
+export const DuplicateMarkModal: React.FC<DuplicateMarkModalProps> = ({
   visible,
-  counterName,
+  markName,
   onClose,
-  onGoToCounter,
+  onGoToMark,
   showGoToButton = false,
 }) => {
   const theme = useEffectiveTheme();
   const themeColors = colors[theme];
-  const message = getRandomMessage(counterName);
+  const message = DUPLICATE_MESSAGES[Math.floor(Math.random() * DUPLICATE_MESSAGES.length)];
 
   return (
     <Modal
@@ -69,10 +73,10 @@ export const DuplicateCounterModal: React.FC<DuplicateCounterModalProps> = ({
                 {message}
               </AppText>
 
-              {/* Counter Name */}
+              {/* Mark Name */}
               <View style={[styles.counterNameContainer, { backgroundColor: themeColors.surfaceVariant || themeColors.surface }]}>
                 <AppText variant="body" style={[styles.counterName, { color: themeColors.textSecondary }]}>
-                  "{counterName}"
+                  "{markName}"
                 </AppText>
               </View>
 
@@ -93,10 +97,10 @@ export const DuplicateCounterModal: React.FC<DuplicateCounterModalProps> = ({
                     Dismiss
                   </AppText>
                 </TouchableOpacity>
-                {showGoToButton && onGoToCounter && (
+                {showGoToButton && onGoToMark && (
                   <TouchableOpacity
                     style={[styles.button, styles.primaryButton, { backgroundColor: themeColors.accent.primary }]}
-                    onPress={onGoToCounter}
+                    onPress={onGoToMark}
                   >
                     <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
                       Go to Mark
@@ -201,4 +205,19 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.semibold,
   },
 });
+
+/** @deprecated Use DuplicateMarkModal */
+export const DuplicateCounterModal: React.FC<DuplicateCounterModalProps> = ({
+  counterName,
+  markName,
+  onGoToCounter,
+  onGoToMark,
+  ...rest
+}) => (
+  <DuplicateMarkModal
+    markName={markName ?? counterName ?? ''}
+    onGoToMark={onGoToMark ?? onGoToCounter}
+    {...rest}
+  />
+);
 

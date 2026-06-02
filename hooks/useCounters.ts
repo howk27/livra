@@ -323,6 +323,13 @@ export const useMarks = () => {
             });
         });
 
+        // Fire-and-forget: credit linked goals. Never blocks mark logging.
+        setTimeout(() => {
+          import('../state/goalsSlice').then(({ useGoalsStore }) => {
+            useGoalsStore.getState().creditMarkToGoals(markId).catch(() => {});
+          });
+        }, 0);
+
         logger.log('[INCREMENT] ===== END INCREMENT (background tasks started) =====', {
           markId,
           finalTotal: newTotal,

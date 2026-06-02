@@ -1,0 +1,179 @@
+import {
+  isMarkCountComplete,
+  isDeadlineExpired,
+  progressPercent,
+  getActiveGoal,
+  getQueuedGoals,
+  getExpiredGoals,
+  nextGoalToActivate,
+} from '../../lib/goalLogic';
+import type { Goal } from '../../types/goal';
+
+function makeGoal(overrides: Partial<Goal> = {}): Goal {
+  return {
+    id: 'g1',
+    user_id: 'u1',
+    title: 'Test goal',
+    status: 'active',
+    sort_index: 0,
+    current_mark_count: 0,
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+    ...overrides,
+  };
+}
+
+// ── isMarkCountComplete ───────────────────────────────────────────────────────
+
+describe('isMarkCountComplete', () => {
+  test('false when no target set', () => {
+    expect(isMarkCountComplete(makeGoal())).toBe(false);
+  });
+
+  test('false when current < target', () => {
+    expect(isMarkCountComplete(makeGoal({ target_mark_count: 10, current_mark_count: 5 }))).toBe(false);
+  });
+
+  test('true when current === target', () => {
+    expect(isMarkCountComplete(makeGoal({ target_mark_count: 10, current_mark_count: 10 }))).toBe(true);
+  });
+
+  test('true when current > target', () => {
+    expect(isMarkCountComplete(makeGoal({ target_mark_count: 10, current_mark_count: 15 }))).toBe(true);
+  });
+
+  test('false when target_mark_count is null', () => {
+    expect(isMarkCountComplete(makeGoal({ target_mark_count: null, current_mark_count: 5 }))).toBe(false);
+  });
+
+  test('false when target_mark_count is 0', () => {
+    expect(isMarkCountComplete(makeGoal({ target_mark_count: 0, current_mark_count: 0 }))).toBe(false);
+  });
+});
+
+// ── isDeadlineExpired ─────────────────────────────────────────────────────────
+
+describe('isDeadlineExpired', () => {
+  test('false when no deadline', () => {
+    expect(isDeadlineExpired(makeGoal())).toBe(false);
+  });
+
+  test('false when deadline is in the future', () => {
+    const future = new Date(Date.now() + 86_400_000).toISOString();
+    expect(isDeadlineExpired(makeGoal({ deadline_date: future }))).toBe(false);
+  });
+
+  test('true when deadline has passed and status is active', () => {
+    const past = new Date(Date.now() - 86_400_000).toISOString();
+    expect(isDeadlineExpired(makeGoal({ deadline_date: past }))).toBe(true);
+  });
+
+  test('false when deadline has passed but status is completed', () => {
+    const past = new Date(Date.now() - 86_400_000).toISOString();
+    expect(isDeadlineExpired(makeGoal({ deadline_date: past, status: 'completed' }))).toBe(false);
+  });
+
+  test('false when deadline has passed but status is queued', () => {
+    const past = new Date(Date.now() - 86_400_000).toISOString();
+    expect(isDeadlineExpired(makeGoal({ deadline_date: past, status: 'queued' }))).toBe(false);
+  });
+
+  test('falls back to target_date when deadline_date absent', () => {
+    const past = new Date(Date.now() - 86_400_000).toISOString();
+    expect(isDeadlineExpired(makeGoal({ target_date: past }))).toBe(true);
+  });
+});
+
+// ── progressPercent ───────────────────────────────────────────────────────────
+
+describe('progressPercent', () => {
+  test('0 when no target', () => {
+    expect(progressPercent(makeGoal())).toBe(0);
+  });
+
+  test('50 at half way', () => {
+    expect(progressPercent(makeGoal({ target_mark_count: 10, current_mark_count: 5 }))).toBe(50);
+  });
+
+  test('100 at completion', () => {
+    expect(progressPercent(makeGoal({ target_mark_count: 10, current_mark_count: 10 }))).toBe(100);
+  });
+
+  test('capped at 100 when over target', () => {
+    expect(progressPercent(makeGoal({ target_mark_count: 10, current_mark_count: 15 }))).toBe(100);
+  });
+
+  test('0 when target is 0 to avoid division by zero', () => {
+    expect(progressPercent(makeGoal({ target_mark_count: 0, current_mark_count: 5 }))).toBe(0);
+  });
+});
+
+// ── getActiveGoal / getQueuedGoals / getExpiredGoals ─────────────────────────
+
+describe('getActiveGoal', () => {
+  test('returns the active goal', () => {
+    const goals = [
+      makeGoal({ id: 'g1', status: 'queued', sort_index: 0 }),
+      makeGoal({ id: 'g2', status: 'active', sort_index: 0 }),
+    ];
+    expect(getActiveGoal(goals)?.id).toBe('g2');
+  });
+
+  test('returns undefined when no active goal', () => {
+    const goals = [makeGoal({ id: 'g1', status: 'queued', sort_index: 0 })];
+    expect(getActiveGoal(goals)).toBeUndefined();
+  });
+});
+
+describe('getQueuedGoals', () => {
+  test('returns queued goals sorted by sort_index', () => {
+    const goals = [
+      makeGoal({ id: 'g3', status: 'queued', sort_index: 2 }),
+      makeGoal({ id: 'g1', status: 'queued', sort_index: 0 }),
+      makeGoal({ id: 'g2', status: 'queued', sort_index: 1 }),
+      makeGoal({ id: 'g4', status: 'active', sort_index: 0 }),
+    ];
+    const result = getQueuedGoals(goals);
+    expect(result.map(g => g.id)).toEqual(['g1', 'g2', 'g3']);
+  });
+});
+
+describe('getExpiredGoals', () => {
+  test('returns expired goals', () => {
+    const goals = [
+      makeGoal({ id: 'g1', status: 'active' }),
+      makeGoal({ id: 'g2', status: 'expired', updated_at: '2026-05-01T00:00:00Z' }),
+      makeGoal({ id: 'g3', status: 'expired', updated_at: '2026-06-01T00:00:00Z' }),
+    ];
+    const result = getExpiredGoals(goals);
+    expect(result.map(g => g.id)).toEqual(['g3', 'g2']);
+  });
+});
+
+describe('nextGoalToActivate', () => {
+  test('returns the queued goal with lowest sort_index', () => {
+    const goals = [
+      makeGoal({ id: 'g2', status: 'queued', sort_index: 1 }),
+      makeGoal({ id: 'g1', status: 'queued', sort_index: 0 }),
+    ];
+    expect(nextGoalToActivate(goals)?.id).toBe('g1');
+  });
+
+  test('returns undefined when no queued goals', () => {
+    expect(nextGoalToActivate([])).toBeUndefined();
+  });
+});
+
+// ── GoalStatus: expired and paused are valid ──────────────────────────────────
+
+describe('GoalStatus types', () => {
+  test('expired goals are excluded from active/queued queries', () => {
+    const goals = [
+      makeGoal({ id: 'g1', status: 'active' }),
+      makeGoal({ id: 'g2', status: 'expired' }),
+      makeGoal({ id: 'g3', status: 'paused' }),
+    ];
+    expect(getActiveGoal(goals)?.id).toBe('g1');
+    expect(getQueuedGoals(goals)).toHaveLength(0);
+  });
+});

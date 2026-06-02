@@ -39,7 +39,7 @@ export default function MarksScreen() {
         <Text style={[styles.headerTitle, { color: themeColors.text }]}>Your marks</Text>
         <TouchableOpacity
           style={[styles.addBtn, { backgroundColor: ACCENT }]}
-          onPress={() => router.push('/counter/new')}
+          onPress={() => router.push('/mark/new' as any)}
           activeOpacity={0.8}
         >
           <Plus size={18} color="#111111" weight="bold" />
@@ -60,7 +60,7 @@ export default function MarksScreen() {
             </Text>
             <TouchableOpacity
               style={[styles.emptyBtn, { backgroundColor: ACCENT }]}
-              onPress={() => router.push('/counter/new')}
+              onPress={() => router.push('/mark/new' as any)}
               activeOpacity={0.8}
             >
               <Text style={styles.emptyBtnText}>Add a mark</Text>
@@ -91,7 +91,7 @@ export default function MarksScreen() {
                     if (isLocked) {
                       router.push('/paywall');
                     } else {
-                      router.push(`/counter/${mark.id}`);
+                      router.push(`/mark/${mark.id}` as any);
                     }
                   }}
                   activeOpacity={0.8}

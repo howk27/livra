@@ -16,6 +16,7 @@ import {
   X,
   CalendarCheck,
   Flag,
+  ListBullets,
 } from 'phosphor-react-native';
 import Animated, {
   useSharedValue,
@@ -56,6 +57,9 @@ function MarksIcon({ focused, color }: IconProps) {
 }
 function SettingsIcon({ focused, color }: IconProps) {
   return <Gear size={22} color={color} weight={focused ? 'fill' : 'regular'} />;
+}
+function QueueIcon({ focused, color }: IconProps) {
+  return <ListBullets size={22} color={color} weight={focused ? 'fill' : 'regular'} />;
 }
 
 // ── Expandable FAB ────────────────────────────────────────────────────────────
@@ -288,6 +292,15 @@ export default function TabLayout() {
             }}
           />
           <Tabs.Screen
+            name="queue"
+            options={{
+              title: 'Queue',
+              tabBarIcon: ({ focused, color }) => (
+                <QueueIcon focused={focused} color={color as string} />
+              ),
+            }}
+          />
+          <Tabs.Screen
             name="marks"
             options={{
               title: 'Marks',
@@ -307,7 +320,6 @@ export default function TabLayout() {
           />
 
           {/* Hidden routes — accessible programmatically, not from tab bar */}
-          <Tabs.Screen name="queue" options={{ href: null }} />
           <Tabs.Screen name="stats" options={{ href: null }} />
           <Tabs.Screen name="tracking" options={{ href: null }} />
           <Tabs.Screen name="profile" options={{ href: null }} />

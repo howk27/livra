@@ -12,7 +12,7 @@ export function ActiveGoalBanner() {
   const themeColors = colors[theme];
   const router = useRouter();
   const goals = useGoalsStore(s => s.goals);
-  const loading = useGoalsStore(s => s.loading);
+  const loading = useGoalsStore(s => s.isLoading);
   const activeGoal = goals.find(g => g.status === 'active');
 
   if (loading) return null;

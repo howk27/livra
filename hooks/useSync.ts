@@ -199,19 +199,19 @@ export const useSync = () => {
           return;
         }
 
-        // Create real-time channel for counters
+        // Create real-time channel for marks
         const channel = supabase
-          .channel(`counters:${user.id}`)
+          .channel(`marks:${user.id}`)
           .on(
             'postgres_changes',
             {
               event: '*',
               schema: 'public',
-              table: 'counters',
+              table: 'marks',
               filter: `user_id=eq.${user.id}`,
             },
             async (payload: any) => {
-              logger.log('[REALTIME] Counter change detected:', payload.eventType, payload.new?.id);
+              logger.log('[REALTIME] Mark change detected:', payload.eventType, payload.new?.id);
               
               // Only handle if user is authenticated
               const { data: { user: currentUser } } = await supabase.auth.getUser();
@@ -234,7 +234,7 @@ export const useSync = () => {
                   await useCountersStore.getState().loadMarks(user.id);
                   useEventsStore.getState().loadEvents(undefined, user.id);
                 } catch (error) {
-                  logger.error('[REALTIME] Error handling counter change:', error);
+                  logger.error('[REALTIME] Error handling mark change:', error);
                 }
               }, 3000);
             }
@@ -244,7 +244,7 @@ export const useSync = () => {
             {
               event: '*',
               schema: 'public',
-              table: 'counter_events',
+              table: 'mark_events',
               filter: `user_id=eq.${user.id}`,
             },
             async (payload: any) => {
@@ -370,7 +370,7 @@ export const useSync = () => {
 
       if (lastPulledAt) {
         const { data: activeRows, error: activeErr } = await supabase
-          .from('counters')
+          .from('marks')
           .select(counterSelect)
           .eq('user_id', userId)
           .is('deleted_at', null)
@@ -379,13 +379,13 @@ export const useSync = () => {
         if (activeErr) {
           const parsed = parseError(activeErr);
           if (parsed.isNetworkError || parsed.shouldRetry) {
-            logger.warn('[SYNC] Pull counters (active) failed:', parsed.message);
+            logger.warn('[SYNC] Pull marks (active) failed:', parsed.message);
           }
           throw activeErr;
         }
 
         const { data: tombRows, error: tombErr } = await supabase
-          .from('counters')
+          .from('marks')
           .select(counterSelect)
           .eq('user_id', userId)
           .not('deleted_at', 'is', null)
@@ -394,7 +394,7 @@ export const useSync = () => {
         if (tombErr) {
           const parsed = parseError(tombErr);
           if (parsed.isNetworkError || parsed.shouldRetry) {
-            logger.warn('[SYNC] Pull counters (tombstones) failed:', parsed.message);
+            logger.warn('[SYNC] Pull marks (tombstones) failed:', parsed.message);
           }
           throw tombErr;
         }
@@ -405,7 +405,7 @@ export const useSync = () => {
         let offset = 0;
         for (;;) {
           const { data: batch, error } = await supabase
-            .from('counters')
+            .from('marks')
             .select(counterSelect)
             .eq('user_id', userId)
             .order('updated_at', { ascending: false })
@@ -414,7 +414,7 @@ export const useSync = () => {
           if (error) {
             const parsed = parseError(error);
             if (parsed.isNetworkError || parsed.shouldRetry) {
-              logger.warn('[SYNC] Pull counters (initial page) failed:', parsed.message);
+              logger.warn('[SYNC] Pull marks (initial page) failed:', parsed.message);
             }
             throw error;
           }
@@ -441,8 +441,8 @@ export const useSync = () => {
       if (lastPulledAt) {
         // Incremental sync - get all changes since last sync
         const { data: events, error: eventsError } = await supabase
-          .from('counter_events')
-          .select('id, user_id, counter_id, event_type, amount, occurred_at, occurred_local_date, meta, deleted_at, created_at, updated_at')
+          .from('mark_events')
+          .select('id, user_id, mark_id, event_type, amount, occurred_at, occurred_local_date, meta, deleted_at, created_at, updated_at')
           .eq('user_id', userId)
           .gt('updated_at', lastPulledAt)
           .order('updated_at', { ascending: false });
@@ -467,8 +467,8 @@ export const useSync = () => {
         
         while (hasMore) {
           let eventsQuery = supabase
-            .from('counter_events')
-            .select('id, user_id, counter_id, event_type, amount, occurred_at, occurred_local_date, meta, deleted_at, created_at, updated_at')
+            .from('mark_events')
+            .select('id, user_id, mark_id, event_type, amount, occurred_at, occurred_local_date, meta, deleted_at, created_at, updated_at')
             .eq('user_id', userId)
             .order('updated_at', { ascending: false })
             .range(offset, offset + BATCH_SIZE - 1);
@@ -503,31 +503,26 @@ export const useSync = () => {
       
       const events = allEvents;
       
-      // Map counter_id from Supabase to mark_id for local types
-      // CRITICAL: Filter out events without valid counter_id and ensure mark_id is set
+      // Filter out events without valid mark_id
       const safeEvents = (events || [])
         .filter((event: any) => {
-          // Ensure counter_id exists and is valid
-          const counterId = event.counter_id || event.mark_id;
-          return counterId && 
-                 typeof counterId === 'string' && 
-                 counterId.trim() !== '' &&
-                 isValidUUID(counterId);
+          const markId = event.mark_id;
+          return markId &&
+                 typeof markId === 'string' &&
+                 markId.trim() !== '' &&
+                 isValidUUID(markId);
         })
-        .map((event: any) => ({
-          ...event,
-          mark_id: event.counter_id || event.mark_id, // Ensure mark_id is always set
-        })) as CounterEvent[];
-      
+        .map((event: any) => ({ ...event })) as CounterEvent[];
+
       if (safeEvents.length !== (events || []).length) {
         const filteredCount = (events || []).length - safeEvents.length;
-        logger.warn(`[SYNC] Filtered out ${filteredCount} event(s) with invalid or missing counter_id when pulling from Supabase`);
+        logger.warn(`[SYNC] Filtered out ${filteredCount} event(s) with invalid or missing mark_id when pulling from Supabase`);
       }
 
       // Pull streaks - select only needed fields
       let streaksQuery = supabase
-        .from('counter_streaks')
-        .select('id, user_id, counter_id, current_streak, longest_streak, last_increment_date, deleted_at, created_at, updated_at')
+        .from('mark_streaks')
+        .select('id, user_id, mark_id, current_streak, longest_streak, last_increment_date, deleted_at, created_at, updated_at')
         .eq('user_id', userId);
       
       if (lastPulledAt) {
@@ -543,17 +538,13 @@ export const useSync = () => {
         throw streaksError;
       }
       
-      // Map counter_id from Supabase to mark_id for local types
-      const safeStreaks = (streaks || []).map((streak: any) => ({
-        ...streak,
-        mark_id: streak.counter_id || streak.mark_id,
-      })) as CounterStreak[];
+      const safeStreaks = (streaks || []).map((streak: any) => ({ ...streak })) as CounterStreak[];
 
       // Pull badges - select only needed fields
       let badges: MarkBadge[] | null = null;
       let badgesQuery = supabase
-        .from('counter_badges')
-        .select('id, user_id, counter_id, badge_code, progress_value, target_value, earned_at, last_progressed_at, deleted_at, created_at, updated_at')
+        .from('mark_badges')
+        .select('id, user_id, mark_id, badge_code, progress_value, target_value, earned_at, last_progressed_at, deleted_at, created_at, updated_at')
         .eq('user_id', userId);
 
       if (lastPulledAt) {
@@ -562,15 +553,11 @@ export const useSync = () => {
 
       const { data: badgesData, error: badgesError } = await badgesQuery;
       if (badgesError) {
-        if (!isMissingSupabaseTable(badgesError, 'counter_badges')) {
+        if (!isMissingSupabaseTable(badgesError, 'mark_badges')) {
           throw badgesError;
         }
       } else {
-        // Map counter_id from Supabase to mark_id for local types
-        badges = (badgesData ?? []).map((badge: any) => ({
-          ...badge,
-          mark_id: badge.counter_id || badge.mark_id,
-        })) as MarkBadge[];
+        badges = (badgesData ?? []).map((badge: any) => ({ ...badge })) as MarkBadge[];
       }
 
       // Merge into local database
@@ -1032,7 +1019,7 @@ export const useSync = () => {
             : batch.map(({ dailyTarget: _dailyTarget, ...rest }) => rest);
 
           let { error: countersError } = await supabase
-            .from('counters')
+            .from('marks')
             .upsert(batchPayload, { onConflict: 'id' });
 
           if (
@@ -1040,10 +1027,10 @@ export const useSync = () => {
             typeof countersError.message === 'string' &&
             countersError.message.includes('dailyTarget')
           ) {
-            logger.warn('[SYNC] Remote counters table missing dailyTarget column; retrying without it');
+            logger.warn('[SYNC] Remote marks table missing dailyTarget column; retrying without it');
             supportsRemoteDailyTarget = false;
             const legacyBatch = batch.map(({ dailyTarget: _dailyTarget, ...rest }) => rest);
-            const retryResult = await supabase.from('counters').upsert(legacyBatch, { onConflict: 'id' });
+            const retryResult = await supabase.from('marks').upsert(legacyBatch, { onConflict: 'id' });
             countersError = retryResult.error;
           }
 
@@ -1102,14 +1089,14 @@ export const useSync = () => {
         for (let i = 0; i < unionParentIds.length; i += CHUNK) {
           const slice = unionParentIds.slice(i, i + CHUNK);
           const { data: verifyRows, error: verifyErr } = await supabase
-            .from('counters')
+            .from('marks')
             .select('id')
             .eq('user_id', userId)
             .in('id', slice)
             .is('deleted_at', null);
           if (verifyErr) {
             postCounterVerifyCompletedAllChunks = false;
-            logger.warn('[SYNC] Post-counter parent verify query failed; child checks use upsert-union only', {
+            logger.warn('[SYNC] Post-mark parent verify query failed; child checks use upsert-union only', {
               message: verifyErr.message,
             });
             break;
@@ -1244,7 +1231,7 @@ export const useSync = () => {
               for (let i = 0; i < eventBatches.length; i++) {
                 const batch = eventBatches[i];
                 const { data, error } = await supabase
-                  .from('counter_events')
+                  .from('mark_events')
                   .upsert(batch)
                   .select('id');
                 
@@ -1341,12 +1328,12 @@ export const useSync = () => {
             const streakBatches = batchArray(streaksForSupabase, BATCH_SIZE);
             for (let i = 0; i < streakBatches.length; i++) {
               const batch = streakBatches[i];
-              let { error } = await supabase.from('counter_streaks').upsert(batch, {
-                onConflict: batch[0]?.id ? 'id' : 'counter_id',
+              let { error } = await supabase.from('mark_streaks').upsert(batch, {
+                onConflict: batch[0]?.id ? 'id' : 'mark_id',
                 ignoreDuplicates: false,
               });
               if (error?.code === '42P10' && batch.every((s) => s.id)) {
-                const retry = await supabase.from('counter_streaks').upsert(batch, {
+                const retry = await supabase.from('mark_streaks').upsert(batch, {
                   onConflict: 'id',
                   ignoreDuplicates: false,
                 });
@@ -1419,13 +1406,13 @@ export const useSync = () => {
             const badgeBatches = batchArray(badgesForSupabase, BATCH_SIZE);
             for (let i = 0; i < badgeBatches.length; i++) {
               const batch = badgeBatches[i];
-              const { error } = await supabase.from('counter_badges').upsert(batch, {
-                onConflict: 'counter_id,badge_code',
+              const { error } = await supabase.from('mark_badges').upsert(batch, {
+                onConflict: 'mark_id,badge_code',
                 ignoreDuplicates: false,
               });
               if (error) {
-                if (isMissingSupabaseTable(error, 'counter_badges')) {
-                  throw new Error('SYNC_COUNTER_BADGES_TABLE_MISSING');
+                if (isMissingSupabaseTable(error, 'mark_badges')) {
+                  throw new Error('SYNC_MARK_BADGES_TABLE_MISSING');
                 }
                 throw error;
               }
@@ -1575,7 +1562,7 @@ export const useSync = () => {
           let orphanBadgeCleanupPartial = false;
           try {
             const { data: supabaseCounters, error: supabaseError } = await supabase
-              .from('counters')
+              .from('marks')
               .select('id')
               .eq('user_id', user.id)
               .is('deleted_at', null);

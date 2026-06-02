@@ -144,4 +144,4 @@ export type Counter = Mark;
 export type CounterEvent = MarkEvent;
 export type CounterStreak = MarkStreak;
 
-export type { Goal, GoalStatus } from './goal';
+export type { Goal, GoalStatus, GoalMarkLink } from './goal';

@@ -641,7 +641,7 @@ export default function NewCounterScreen() {
         onGoToCounter={() => {
           setShowDuplicateModal(false);
           if (existingCounterId) {
-            router.push(`/counter/${existingCounterId}`);
+            router.push(`/mark/${existingCounterId}` as any);
           } else {
             router.back();
           }

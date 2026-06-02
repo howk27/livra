@@ -20,37 +20,48 @@ const TOTAL_HORIZONTAL_PADDING = spacing.lg * 2; // Left and right padding
 const TOTAL_MARGIN_SPACE = CARDS_PER_ROW * CARD_MARGIN; // Total horizontal margin space
 const CARD_SIZE = (SCREEN_WIDTH - TOTAL_HORIZONTAL_PADDING - TOTAL_MARGIN_SPACE) / CARDS_PER_ROW;
 
-interface SuggestedCountersListProps {
-  onCounterSelect?: (counter: SuggestedCounter) => void;
+export interface SuggestedMarksListProps {
+  onMarkSelect?: (mark: SuggestedCounter) => void;
   maxSelections?: number;
-  selectedCounters?: SuggestedCounter[];
+  selectedMarks?: SuggestedCounter[];
   contentBottomPadding?: number;
+  /** @deprecated Use onMarkSelect */
+  onCounterSelect?: (counter: SuggestedCounter) => void;
+  /** @deprecated Use selectedMarks */
+  selectedCounters?: SuggestedCounter[];
 }
 
-export const SuggestedCountersList: React.FC<SuggestedCountersListProps> = ({
+/** @deprecated Alias kept for backward compat */
+export type SuggestedCountersListProps = SuggestedMarksListProps;
+
+export const SuggestedMarksList: React.FC<SuggestedMarksListProps> = ({
+  onMarkSelect,
   onCounterSelect,
   maxSelections,
+  selectedMarks,
   selectedCounters = [],
   contentBottomPadding = spacing.xl,
 }) => {
+  const resolvedOnSelect = onMarkSelect ?? onCounterSelect;
+  const resolvedSelected = selectedMarks ?? selectedCounters;
   const theme = useEffectiveTheme();
   const themeColors = colors[theme];
 
   const isSelected = (counter: SuggestedCounter) => {
-    return selectedCounters.some(
+    return resolvedSelected.some(
       (c) => c.name === counter.name && c.emoji === counter.emoji
     );
   };
 
   const canSelectMore = () => {
     if (!maxSelections) return true;
-    return selectedCounters.length < maxSelections;
+    return resolvedSelected.length < maxSelections;
   };
 
   const handleCounterPress = (counter: SuggestedCounter) => {
-    if (!onCounterSelect) return;
+    if (!resolvedOnSelect) return;
     if (canSelectMore() || isSelected(counter)) {
-      onCounterSelect(counter);
+      resolvedOnSelect(counter);
     }
   };
 
@@ -188,3 +199,6 @@ const styles = StyleSheet.create({
     lineHeight: fontSize.sm * 1.3,
   },
 });
+
+/** @deprecated Use SuggestedMarksList */
+export const SuggestedCountersList = SuggestedMarksList;

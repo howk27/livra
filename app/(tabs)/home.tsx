@@ -616,11 +616,11 @@ export default function HomeScreen() {
   }, [completedCounters, sortedActiveCounters, doneCollapsed]);
 
   const handleCreateCounter = () => {
-    router.push('/counter/new');
+    router.push('/mark/new' as any);
   };
 
   const handleCounterPress = useCallback((id: string) => {
-    router.push(`/counter/${id}`);
+    router.push(`/mark/${id}` as any);
   }, [router]);
 
   const handleQuickIncrement = useCallback(async (counterId: string) => {

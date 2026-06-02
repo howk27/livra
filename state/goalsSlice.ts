@@ -1,13 +1,23 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
-import type { Goal } from '../types/goal';
-import { loadGoalsForUser, upsertGoal, upsertGoals, removeGoal } from '../lib/db/goalsDb';
+import type { Goal, GoalMarkLink } from '../types/goal';
+import {
+  loadGoalsForUser,
+  upsertGoal,
+  upsertGoals,
+  removeGoal,
+  addGoalMarkLink,
+  removeGoalMarkLink,
+  getLinksForMark,
+} from '../lib/db/goalsDb';
 import { canAddGoal } from '../lib/gating';
 import {
   getActiveGoal,
   getQueuedGoals,
   getCompletedGoals,
   nextGoalToActivate,
+  isMarkCountComplete,
+  isDeadlineExpired,
 } from '../lib/goalLogic';
 
 export class GoalLimitError extends Error {
@@ -17,46 +27,53 @@ export class GoalLimitError extends Error {
   }
 }
 
-interface GoalsState {
+export interface GoalsState {
   goals: Goal[];
-  loading: boolean;
-  loadGoals: (userId: string) => Promise<void>;
-  addGoal: (params: {
-    title: string;
-    description?: string;
-    userId: string;
-    isPro: boolean;
-  }) => Promise<Goal>;
-  completeGoal: (id: string) => Promise<void>;
+  isLoading: boolean;
+  error: string | null;
+
+  fetchGoals: (userId: string) => Promise<void>;
+  createGoal: (data: Partial<Goal> & { userId: string; isPro: boolean }) => Promise<Goal>;
+  updateGoal: (id: string, data: Partial<Goal>) => Promise<void>;
   deleteGoal: (id: string) => Promise<void>;
+  completeGoal: (id: string) => Promise<void>;
   reorderQueue: (orderedIds: string[]) => Promise<void>;
+  linkMarkToGoal: (goalId: string, markId: string) => Promise<void>;
+  unlinkMarkFromGoal: (goalId: string, markId: string) => Promise<void>;
+  /** Called after a mark is logged. Increments currentMarkCount for all linked goals, then checks completion. Non-blocking by convention. */
+  creditMarkToGoals: (markId: string) => Promise<void>;
+  checkGoalCompletion: (goalId: string) => Promise<void>;
   updateGoalTargetDate: (id: string, date: string | null) => Promise<void>;
   markMilestonesFired: (goalId: string, keys: string[]) => Promise<void>;
   getActiveGoal: () => Goal | undefined;
   getQueuedGoals: () => Goal[];
   getCompletedGoals: () => Goal[];
+
+  /** @deprecated Use fetchGoals */
+  loadGoals: (userId: string) => Promise<void>;
+  /** @deprecated Use createGoal */
+  addGoal: (params: { title: string; description?: string; userId: string; isPro: boolean }) => Promise<Goal>;
 }
 
 export const useGoalsStore = create<GoalsState>((set, get) => ({
   goals: [],
-  loading: false,
+  isLoading: false,
+  error: null,
 
-  loadGoals: async (userId) => {
-    set({ loading: true });
+  fetchGoals: async (userId) => {
+    set({ isLoading: true, error: null });
     try {
       const goals = await loadGoalsForUser(userId);
-      set({ goals, loading: false });
-    } catch {
-      set({ loading: false });
+      set({ goals, isLoading: false });
+    } catch (e) {
+      set({ isLoading: false, error: e instanceof Error ? e.message : 'Failed to load goals' });
     }
   },
 
-  addGoal: async ({ title, description, userId, isPro }) => {
+  createGoal: async ({ userId, isPro, ...data }) => {
     const current = get().goals.filter(g => g.user_id === userId);
-    const nonCompleted = current.filter(g => g.status !== 'completed');
-    if (!canAddGoal(isPro, nonCompleted.length)) {
-      throw new GoalLimitError();
-    }
+    const nonCompleted = current.filter(g => g.status !== 'completed' && g.status !== 'expired');
+    if (!canAddGoal(isPro, nonCompleted.length)) throw new GoalLimitError();
 
     const hasActive = current.some(g => g.status === 'active');
     const maxSortIndex = current
@@ -67,17 +84,70 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
     const goal: Goal = {
       id: uuidv4(),
       user_id: userId,
-      title: title.trim(),
-      description: description?.trim() || undefined,
+      title: (data.title ?? '').trim(),
+      description: data.description?.trim() || undefined,
+      icon: data.icon,
+      color: data.color,
       status: hasActive ? 'queued' : 'active',
       sort_index: hasActive ? maxSortIndex + 1 : 0,
+      current_mark_count: 0,
+      target_mark_count: data.target_mark_count ?? null,
+      deadline_date: data.deadline_date ?? null,
+      target_date: data.deadline_date ?? data.target_date ?? null,
+      linked_mark_ids: data.linked_mark_ids ?? [],
       created_at: now,
       updated_at: now,
     };
 
     await upsertGoal(goal);
+
+    // Persist mark links
+    if (goal.linked_mark_ids?.length) {
+      await Promise.all(
+        goal.linked_mark_ids.map(markId =>
+          addGoalMarkLink({ id: uuidv4(), goal_id: goal.id, mark_id: markId })
+        )
+      );
+    }
+
     set(s => ({ goals: [...s.goals, goal] }));
     return goal;
+  },
+
+  updateGoal: async (id, data) => {
+    const now = new Date().toISOString();
+    const goal = get().goals.find(g => g.id === id);
+    if (!goal) return;
+
+    const updated: Goal = {
+      ...goal,
+      ...data,
+      updated_at: now,
+      // Keep deadline_date and target_date in sync
+      deadline_date: data.deadline_date ?? goal.deadline_date,
+      target_date: data.deadline_date ?? data.target_date ?? goal.target_date,
+    };
+
+    await upsertGoal(updated);
+
+    // Update mark links if provided
+    if (data.linked_mark_ids !== undefined) {
+      const prev = new Set(goal.linked_mark_ids ?? []);
+      const next = new Set(data.linked_mark_ids);
+      const toAdd = [...next].filter(id => !prev.has(id));
+      const toRemove = [...prev].filter(id => !next.has(id));
+      await Promise.all([
+        ...toAdd.map(markId => addGoalMarkLink({ id: uuidv4(), goal_id: id, mark_id: markId })),
+        ...toRemove.map(markId => removeGoalMarkLink(id, markId)),
+      ]);
+    }
+
+    set(s => ({ goals: s.goals.map(g => (g.id === id ? updated : g)) }));
+  },
+
+  deleteGoal: async (id) => {
+    await removeGoal(id);
+    set(s => ({ goals: s.goals.filter(g => g.id !== id) }));
   },
 
   completeGoal: async (id) => {
@@ -86,13 +156,7 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
     const completing = goals.find(g => g.id === id);
     if (!completing) return;
 
-    const completed: Goal = {
-      ...completing,
-      status: 'completed',
-      completed_at: now,
-      updated_at: now,
-    };
-
+    const completed: Goal = { ...completing, status: 'completed', completed_at: now, updated_at: now };
     const remaining = goals.filter(g => g.id !== id);
     const next = nextGoalToActivate(remaining);
     const activated: Goal | undefined = next
@@ -102,19 +166,16 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
     const writes = [completed, ...(activated ? [activated] : [])];
     await upsertGoals(writes);
 
-    // Fire-and-forget goal completion XP (anti-cheat: must be ≥ 14 days old)
-    const goalAgeMs = Date.now() - new Date(completing.created_at).getTime();
-    const goalAgeDays = goalAgeMs / (1000 * 60 * 60 * 24);
+    // Fire-and-forget XP (anti-cheat: must be ≥ 14 days old)
+    const goalAgeDays = (Date.now() - new Date(completing.created_at).getTime()) / 86_400_000;
     if (goalAgeDays >= 14 && completing.user_id) {
       import('../lib/xpEngine').then(({ awardGoalXP }) => {
         awardGoalXP(completing.user_id, completing.id)
-          .then((result) => {
+          .then(result => {
             const { useXPStore } = require('./xpSlice');
             useXPStore.getState().applyXPResult(result);
           })
-          .catch((err: unknown) => {
-            console.warn('[XP] awardGoalXP failed:', err);
-          });
+          .catch((err: unknown) => console.warn('[XP] awardGoalXP failed:', err));
       });
     }
 
@@ -127,11 +188,6 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
     }));
   },
 
-  deleteGoal: async (id) => {
-    await removeGoal(id);
-    set(s => ({ goals: s.goals.filter(g => g.id !== id) }));
-  },
-
   reorderQueue: async (orderedIds) => {
     const now = new Date().toISOString();
     const goals = get().goals;
@@ -139,9 +195,7 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
 
     orderedIds.forEach((id, idx) => {
       const goal = goals.find(g => g.id === id && g.status === 'queued');
-      if (goal) {
-        updates.push({ ...goal, sort_index: idx, updated_at: now });
-      }
+      if (goal) updates.push({ ...goal, sort_index: idx, updated_at: now });
     });
 
     await upsertGoals(updates);
@@ -149,31 +203,111 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
     set(s => ({ goals: s.goals.map(g => map.get(g.id) ?? g) }));
   },
 
-  updateGoalTargetDate: async (id, date) => {
+  linkMarkToGoal: async (goalId, markId) => {
+    await addGoalMarkLink({ id: uuidv4(), goal_id: goalId, mark_id: markId });
+    set(s => ({
+      goals: s.goals.map(g =>
+        g.id === goalId
+          ? { ...g, linked_mark_ids: [...new Set([...(g.linked_mark_ids ?? []), markId])] }
+          : g
+      ),
+    }));
+  },
+
+  unlinkMarkFromGoal: async (goalId, markId) => {
+    await removeGoalMarkLink(goalId, markId);
+    set(s => ({
+      goals: s.goals.map(g =>
+        g.id === goalId
+          ? { ...g, linked_mark_ids: (g.linked_mark_ids ?? []).filter(id => id !== markId) }
+          : g
+      ),
+    }));
+  },
+
+  creditMarkToGoals: async (markId) => {
+    const links = await getLinksForMark(markId);
+    if (!links.length) return;
+
     const now = new Date().toISOString();
-    const goal = get().goals.find(g => g.id === id);
-    if (!goal) return;
-    const updated: Goal = { ...goal, target_date: date, updated_at: now };
-    await upsertGoal(updated);
-    set(s => ({ goals: s.goals.map(g => (g.id === id ? updated : g)) }));
+    const goals = get().goals;
+    const toUpdate: Goal[] = [];
+
+    for (const link of links) {
+      const goal = goals.find(g => g.id === link.goal_id && g.status === 'active');
+      if (!goal) continue;
+      toUpdate.push({
+        ...goal,
+        current_mark_count: goal.current_mark_count + 1,
+        updated_at: now,
+      });
+    }
+
+    if (!toUpdate.length) return;
+
+    await upsertGoals(toUpdate);
+    const map = new Map(toUpdate.map(g => [g.id, g]));
+    set(s => ({ goals: s.goals.map(g => map.get(g.id) ?? g) }));
+
+    // Check completion for each updated goal
+    await Promise.all(toUpdate.map(g => get().checkGoalCompletion(g.id)));
+  },
+
+  checkGoalCompletion: async (goalId) => {
+    const now = new Date().toISOString();
+    const goal = get().goals.find(g => g.id === goalId);
+    if (!goal || goal.status !== 'active') return;
+
+    if (isMarkCountComplete(goal)) {
+      await get().completeGoal(goalId);
+      return;
+    }
+
+    if (isDeadlineExpired(goal)) {
+      const expired: Goal = { ...goal, status: 'expired', updated_at: now };
+      await upsertGoal(expired);
+
+      // Activate next in queue
+      const remaining = get().goals.filter(g => g.id !== goalId);
+      const next = nextGoalToActivate(remaining);
+      const activated: Goal | undefined = next
+        ? { ...next, status: 'active', updated_at: now }
+        : undefined;
+      if (activated) await upsertGoal(activated);
+
+      set(s => ({
+        goals: s.goals.map(g => {
+          if (g.id === goalId) return expired;
+          if (activated && g.id === activated.id) return activated;
+          return g;
+        }),
+      }));
+    }
+  },
+
+  updateGoalTargetDate: async (id, date) => {
+    await get().updateGoal(id, { deadline_date: date, target_date: date });
   },
 
   markMilestonesFired: async (goalId, keys) => {
-    if (keys.length === 0) return;
+    if (!keys.length) return;
     const goal = get().goals.find(g => g.id === goalId);
     if (!goal) return;
     const now = new Date().toISOString();
     const existing = goal.milestones_fired ?? [];
-    const updated: Goal = {
-      ...goal,
+    await get().updateGoal(goalId, {
       milestones_fired: [...new Set([...existing, ...keys])],
       updated_at: now,
-    };
-    await upsertGoal(updated);
-    set(s => ({ goals: s.goals.map(g => (g.id === goalId ? updated : g)) }));
+    });
   },
 
   getActiveGoal: () => getActiveGoal(get().goals),
   getQueuedGoals: () => getQueuedGoals(get().goals),
   getCompletedGoals: () => getCompletedGoals(get().goals),
+
+  // Backward compat
+  loadGoals: async (userId) => get().fetchGoals(userId),
+  addGoal: async ({ title, description, userId, isPro }) =>
+    get().createGoal({ title, description, userId, isPro }),
 }));
+
