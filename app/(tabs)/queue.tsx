@@ -68,7 +68,7 @@ interface DraggableRowProps {
   activeId: SharedValue<string | null>;
   onMeasure: (height: number) => void;
   onAdd: () => void;
-  onReorder: (fromGoalId: string, toIndex: number) => void;
+  onReorder: () => void;
 }
 
 function DraggableRow({
@@ -95,12 +95,9 @@ function DraggableRow({
     }
   }, []);
 
-  const commitReorder = useCallback(
-    (toIndex: number) => {
-      onReorder(goal.id, toIndex);
-    },
-    [goal.id, onReorder],
-  );
+  const commitReorder = useCallback(() => {
+    onReorder();
+  }, [onReorder]);
 
   const pan = Gesture.Pan()
     // Long-press threshold before the drag activates so vertical scrolling
@@ -145,7 +142,7 @@ function DraggableRow({
       isActive.value = false;
       activeId.value = null;
       if (finalSlot !== startSlot.value) {
-        runOnJS(commitReorder)(finalSlot);
+        runOnJS(commitReorder)();
       }
     })
     .onFinalize(() => {
@@ -248,20 +245,15 @@ function DraggableQueueList({
     [slotHeight],
   );
 
-  const handleReorder = useCallback(
-    (fromGoalId: string, toIndex: number) => {
-      // Build the new draggable order from the live positions map.
-      const ordered = [...goals].sort(
-        (a, b) => (positions.value[a.id] ?? 0) - (positions.value[b.id] ?? 0),
-      );
-      const orderedIds = [...fixedPrefixIds, ...ordered.map((g) => g.id)];
-      void reorderQueue(orderedIds);
-    },
-    [goals, fixedPrefixIds, positions, reorderQueue],
-  );
+  const handleReorder = useCallback(() => {
+    // Build the new draggable order from the live positions map.
+    const ordered = [...goals].sort(
+      (a, b) => (positions.value[a.id] ?? 0) - (positions.value[b.id] ?? 0),
+    );
+    const orderedIds = [...fixedPrefixIds, ...ordered.map((g) => g.id)];
+    void reorderQueue(orderedIds);
+  }, [goals, fixedPrefixIds, positions, reorderQueue]);
 
-  // Reserve vertical space for every row (rows are absolutely-positioned via
-  // transforms, so the container needs an explicit height).
   return (
     <View style={styles.listWrapper}>
       {goals.map((goal, index) => (
@@ -303,7 +295,7 @@ export default function QueueScreen() {
 
   const handleAddGoal = useCallback(() => {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    router.push('/goal/queue' as any);
+    router.push({ pathname: '/goal/queue' });
   }, [router]);
 
   const heroGoal = active ?? queued[0] ?? null;
