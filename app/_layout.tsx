@@ -155,18 +155,16 @@ export default function RootLayout() {
       }
 
       // Biometric lock is enabled — require successful auth; retry on failure
-      const attempt = async (): Promise<void> => {
+      while (true) {
         const result = await LocalAuthentication.authenticateAsync({
           promptMessage: 'Unlock Livra',
         });
         if (result.success) {
           setIsAuthenticated(true);
-        } else {
-          // No bypass — prompt again
-          await attempt();
+          break;
         }
-      };
-      await attempt();
+        // No bypass — prompt again
+      }
     };
     checkBiometricLock().catch(() => {
       // If anything throws (e.g., hardware error), fail open so app isn't bricked

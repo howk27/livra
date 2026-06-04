@@ -155,7 +155,7 @@ export default function PrivacyScreen() {
                 : 'Face ID not available on this device'
             }
             value={faceId}
-            onToggle={handleFaceIdToggle}
+            onToggle={(v) => { void handleFaceIdToggle(v); }}
             disabled={!biometricAvailable}
           />
           <ToggleRow
