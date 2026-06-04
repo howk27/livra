@@ -393,3 +393,11 @@ Already fully implemented with forest design. No visual changes needed — exist
 | `app.json` | `"icon"` → `./assets/branding/Livra_No Background - Clean - 1024x1024.svg`; `"splash.image"` → same; `splash.backgroundColor` → `#F0EBE3` (design-system linen); `android.adaptiveIcon.foregroundImage` → same SVG | Point all icon/splash fields to branding assets; correct linen hex |
 
 **Note:** Expo native builds require PNG for `icon`, `splash.image`, and `adaptiveIcon.foregroundImage`. The branding files are SVG only. A PNG export (1024×1024) from `assets/branding/Livra_No Background - Clean - 1024x1024.svg` must be committed before running `eas build`. The SVG paths are correct placeholders in the meantime and will resolve for web/Expo Go previews.
+
+---
+
+### Task 3 — Avatar Image Picker
+
+| File | Change | Why |
+|------|--------|-----|
+| `components/sheets/ProfileEditSheet.tsx` | Added imports for `useAuth`, `useNotification`, and `uploadAvatar`; wired `user` and `showError` from hooks; updated `pickImage` to call `uploadAvatar(user.id, uri)` after successful picker selection with `try/catch` error reporting via `showError` | Avatar tap had no upload logic — optimistic URI update was in place but upload was never called; error handling now matches the existing pattern used in `settings.tsx` and `mark/new.tsx` |
