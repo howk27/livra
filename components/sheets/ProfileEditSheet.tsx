@@ -76,6 +76,10 @@ export function ProfileEditSheet({
   }));
 
   const pickImage = useCallback(async () => {
+    if (!user?.id) {
+      showError('Sign in to update your avatar.');
+      return;
+    }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
@@ -84,17 +88,17 @@ export function ProfileEditSheet({
     });
     if (!result.canceled && result.assets[0]) {
       const uri = result.assets[0].uri;
-      setAvatarUri(uri);
-      if (user?.id) {
-        try {
-          await uploadAvatar(user.id, uri);
-        } catch (e: unknown) {
-          const message = e instanceof Error ? e.message : 'Failed to upload avatar.';
-          showError(message);
-        }
+      const previousUri = avatarUri;
+      setAvatarUri(uri); // optimistic
+      try {
+        await uploadAvatar(user.id, uri);
+      } catch (e: unknown) {
+        setAvatarUri(previousUri); // revert on failure
+        const message = e instanceof Error ? e.message : 'Failed to upload avatar.';
+        showError(message);
       }
     }
-  }, [user?.id, showError]);
+  }, [user?.id, avatarUri, showError]);
 
   const handleSave = () => {
     onSave?.({ name, displayName });
