@@ -10,13 +10,12 @@ import {
   Alert,
   Platform,
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import Constants from 'expo-constants';
-import { colors as tokenColors } from '../theme/tokens';
 import { colors } from '../theme/colors';
-import { spacing, borderRadius, fontSize, fontWeight, shadow, fonts, radius } from '../theme/tokens';
+import { spacing, borderRadius, fontSize, fontWeight, shadow } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { useIapSubscriptions } from '../hooks/useIapSubscriptions';
 import { MONTHLY_PRODUCT_ID, YEARLY_PRODUCT_ID } from '../lib/iap/iap';
@@ -35,8 +34,6 @@ import { applyOpacity } from '@/src/components/icons/color';
 import { AppText } from '../components/Typography';
 import { Card, PrimaryButton } from '../components/ui';
 import { SvgLogo } from '../components/ui/SvgLogo';
-import { LivraWordmark } from '../components/ui/LivraWordmark';
-import { SectionLabel } from '../components/ui/SectionLabel';
 
 const PRO_FEATURES = [
   { ion: 'flag-outline',           title: 'Unlimited Goals',      description: 'Queue as many goals as you have.' },
@@ -55,7 +52,6 @@ const SHIPPED_PREMIUM_FEATURE_TITLES = [
   'Custom Reminders',
   'CSV Export',
 ];
-
 
 type PlanType = 'monthly' | 'yearly';
 
@@ -726,7 +722,7 @@ function PaywallScreenContent() {
       if (router.canGoBack()) {
         router.back();
       } else {
-        router.replace('/(tabs)/focus' as any);
+        router.replace('/(tabs)/focus');
       }
     }
   }, [isProUnlocked, router]);
@@ -983,199 +979,474 @@ function PaywallScreenContent() {
   // Early return for loading state
   if (isLoadingProducts || connectionStatus === 'connecting') {
     return (
-      <SafeAreaView style={styles.containerDark}>
-        <TouchableOpacity
-          style={styles.closeBtn}
-          onPress={() => router.back()}
-          disabled={purchaseInProgress}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-        >
-          <Feather name="x" size={22} color={tokenColors.inkInverseMuted} />
-        </TouchableOpacity>
-        <View style={styles.loadingCenter}>
-          <ActivityIndicator size="small" color={tokenColors.mintLight} />
-          <Text style={styles.loadingTxt}>
-            {isLoadingProducts ? 'Loading...' : 'Connecting to store...'}
-          </Text>
-        </View>
+      <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
+        <ScrollView contentContainerStyle={styles.content}>
+          <View style={styles.header}>
+            <TouchableOpacity
+              onPress={() => router.back()}
+              disabled={purchaseInProgress}
+              style={{ opacity: purchaseInProgress ? 0.5 : 1 }}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            >
+              <Ionicons name="close-outline" size={28} color={themeColors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.loadingBlock}>
+            <SvgLogo width={48} height={48} />
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color={themeColors.primary} />
+              <Text style={[styles.loadingText, { color: themeColors.textSecondary }]}>
+                {isLoadingProducts ? 'Loading subscription options...' : 'Connecting to store...'}
+              </Text>
+            </View>
+          </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }
 
-  const PRO_FEATURE_LABELS = [
-    'Unlimited marks and goals',
-    'Cloud sync across all devices',
-    'CSV & PDF export',
-    'Priority support',
-    'Future features, always included',
-  ];
-
-  const displayPrice =
-    (selectedPlan === 'monthly'
-      ? monthlyPrice
-      : yearlyPrice) || '$9.99';
-
   return (
-    <SafeAreaView style={styles.containerDark}>
-      {/* Close button */}
-      <TouchableOpacity
-        style={styles.closeBtn}
-        onPress={() => router.back()}
-        disabled={purchaseInProgress}
-        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-      >
-        <Feather name="x" size={22} color={tokenColors.inkInverseMuted} />
-      </TouchableOpacity>
-
-      <ScrollView
-        contentContainerStyle={styles.darkContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Logo + Wordmark */}
-        <View style={styles.logoWrap}>
-          <SvgLogo color={tokenColors.inkInverse} width={48} height={24} />
-          <LivraWordmark
-            color={tokenColors.inkInverse}
-            fontSize={24}
-            letterSpacing={6}
-          />
+    <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
+      <ScrollView contentContainerStyle={styles.content}>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            disabled={purchaseInProgress}
+            style={{ opacity: purchaseInProgress ? 0.5 : 1 }}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          >
+            <Ionicons name="close-outline" size={28} color={themeColors.textSecondary} />
+          </TouchableOpacity>
         </View>
 
-        {/* Tagline */}
-        <TouchableOpacity onPress={handleTitleTap} activeOpacity={1}>
-          <Text style={styles.darkTagline}>Go further.</Text>
-        </TouchableOpacity>
+        {/* Hero + title — structural match to reference */}
+        <View style={styles.titleSection}>
+          <View
+            style={[
+              styles.heroIconWrap,
+              {
+                backgroundColor: themeColors.surface,
+                borderColor: applyOpacity(themeColors.border, 0.9),
+              },
+            ]}
+          >
+            <SvgLogo width={48} height={48} />
+          </View>
+          <TouchableOpacity onPress={handleTitleTap} activeOpacity={1}>
+            <Text style={[styles.title, { color: themeColors.text }]}>Livra+</Text>
+          </TouchableOpacity>
+          <Text style={[styles.subtitle, { color: themeColors.textSecondary }]}>
+            Everything you need to finish what you start.
+          </Text>
+          {!isNativeStorePurchasesSupported() && (
+            <View
+              style={[
+                styles.devEnvBanner,
+                {
+                  borderColor: themeColors.border,
+                  backgroundColor: themeColors.surface,
+                },
+              ]}
+              accessibilityRole="text"
+            >
+              <AppText variant="body" style={[styles.devEnvBannerText, { color: themeColors.textSecondary }]}>
+                Store purchases and restore work only in a development build or TestFlight, not in Expo Go or
+                the browser.
+              </AppText>
+            </View>
+          )}
+        </View>
 
-        {/* Feature list */}
-        <View style={styles.featureListDark}>
-          {PRO_FEATURE_LABELS.map((feat) => (
-            <View key={feat} style={styles.featureRowDark}>
-              <Feather name="check" size={16} color={tokenColors.mint} />
-              <Text style={styles.featureTextDark}>{feat}</Text>
+        {/* Features */}
+        <View style={styles.featuresList}>
+          {PRO_FEATURES.map((feature, index) => (
+            <View
+              key={`feature-${index}-${feature.title}`}
+              style={[
+                styles.featureItem,
+                {
+                  backgroundColor: themeColors.surface,
+                  borderColor: themeColors.border,
+                },
+              ]}
+            >
+              <View
+                style={[
+                  styles.featureIcon,
+                  { backgroundColor: applyOpacity(themeColors.text, isDark ? 0.12 : 0.06) },
+                ]}
+              >
+                <Ionicons name={feature.ion as any} size={26} color={themeColors.text} />
+              </View>
+              <View style={styles.featureText}>
+                <AppText variant="body" style={[styles.featureTitle, { color: themeColors.text }]}>
+                  {feature.title}
+                </AppText>
+                <AppText variant="body" style={[styles.featureDescription, { color: themeColors.textSecondary }]}>
+                  {feature.description}
+                </AppText>
+              </View>
             </View>
           ))}
         </View>
 
-        {/* Divider */}
-        <View style={styles.dividerDark} />
-
-        {/* Price section */}
-        <SectionLabel
-          color={tokenColors.inkInverseMuted}
-          style={styles.sectionLabelCenter}
-        >
-          ONE-TIME PURCHASE
-        </SectionLabel>
-
-        <Text style={styles.priceDisplay}>{displayPrice}</Text>
-        <Text style={styles.noSubText}>No subscription. Ever.</Text>
-
-        {!isNativeStorePurchasesSupported() && (
-          <Text style={[styles.noSubText, { marginTop: spacing.sm, fontSize: 12 }]}>
-            Store purchases work only in a development build or TestFlight.
-          </Text>
-        )}
-
-        {/* Status / error messages */}
-        {isStrictFailure && operationState === 'error' && (
-          <Text style={styles.errorTxtDark}>
-            {operationMessage || 'Purchase failed. Please try again.'}
-          </Text>
-        )}
-        {(operationMessage || lastError) && !productsLoadError && !isStrictFailure && (
-          <Text style={styles.statusTxtDark}>{operationMessage || lastError}</Text>
-        )}
-        {healthCheckFailed && !isLoadingProducts && (
-          <Text style={styles.errorTxtDark}>
-            {healthCheckReasons[0] || 'Unable to load subscription options. Check your connection.'}
-          </Text>
-        )}
-        {productsLoadError && !isLoadingProducts && !healthCheckFailed && supportModeEnabled && (
-          <Text style={styles.errorTxtDark}>
-            {lastError || 'Unable to load subscription options. Please try again.'}
-          </Text>
-        )}
-
-        {/* Purchase / manage button */}
-        <View style={styles.purchaseBtnWrap}>
-          {isSubscribed ? (
+        {/* Pricing Selection - Only show when products are loaded and connection is ready */}
+        {connectionStatus === 'connected' && !isLoadingProducts && products && Array.isArray(products) && products.length > 0 && (
+          <View style={styles.pricingContainer}>
+            {/* Monthly Plan Option */}
             <TouchableOpacity
-              style={styles.purchaseBtn}
-              onPress={handleManageSubscription}
+              style={[
+                styles.planOption,
+                { 
+                  backgroundColor: themeColors.surface,
+                  borderColor: selectedPlan === 'monthly' ? themeColors.accent.primary : themeColors.border,
+                  borderWidth: selectedPlan === 'monthly' ? 2 : 1,
+                },
+                selectedPlan === 'monthly' && shadow.md,
+                isSubscribed && styles.disabledPlan,
+              ]}
+              onPress={() => setSelectedPlan('monthly')}
+              activeOpacity={isSubscribed ? 1 : 0.7}
+              disabled={isSubscribed}
             >
-              <Text style={styles.purchaseBtnText}>Manage Livra Pro</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity
-              style={[styles.purchaseBtn, (buttonDisabled || purchaseInProgress) && { opacity: 0.6 }]}
-              onPress={handlePurchase}
-              disabled={buttonDisabled || purchaseInProgress}
-              activeOpacity={0.8}
-            >
-              {purchaseInProgress ? (
-                <ActivityIndicator size="small" color={tokenColors.forest} />
+              <View style={styles.planHeader}>
+                <Text style={[styles.planLabel, { color: themeColors.text }]}>Monthly</Text>
+                {selectedPlan === 'monthly' && (
+                  <View style={[styles.selectedBadge, { backgroundColor: themeColors.accent.primary }]}>
+                    <Text style={[styles.selectedBadgeText, { color: themeColors.text }]}>✓</Text>
+                  </View>
+                )}
+              </View>
+              {monthlyPrice && monthlyPrice.trim() !== '' ? (
+                <Text style={[styles.planPrice, { color: themeColors.text }]}>
+                  {monthlyPrice} <Text style={styles.planPeriod}>/ month</Text>
+                </Text>
+              ) : pricesMissing || isLoadingProducts ? (
+                <Text style={[styles.planPrice, { color: themeColors.textSecondary }]}>
+                  Loading price… <Text style={styles.planPeriod}>/ month</Text>
+                </Text>
               ) : (
-                <Text style={styles.purchaseBtnText}>
-                  {!isReady
-                    ? 'Initializing...'
-                    : connectionStatus !== 'connected'
-                    ? 'Store Not Available'
-                    : !selectedProduct || !selectedPrice
-                    ? 'Unlock Livra Pro'
-                    : `Unlock Livra Pro — ${displayPrice}`}
+                <Text style={[styles.planPrice, { color: themeColors.textSecondary }]}>
+                  — <Text style={styles.planPeriod}>/ month</Text>
                 </Text>
               )}
             </TouchableOpacity>
-          )}
-        </View>
 
-        {/* Retry verification */}
-        {isTransientState && !isAlreadyOwned && (
-          <TouchableOpacity
-            style={styles.restoreTouchable}
-            onPress={handleRetryVerification}
-          >
-            <Text style={styles.restoreText}>Retry Verification</Text>
-          </TouchableOpacity>
+            {/* Yearly Plan Option */}
+            <TouchableOpacity
+              style={[
+                styles.planOption,
+                { 
+                  backgroundColor: themeColors.surface,
+                  borderColor: selectedPlan === 'yearly' ? themeColors.accent.primary : themeColors.border,
+                  borderWidth: selectedPlan === 'yearly' ? 2 : 1,
+                },
+                selectedPlan === 'yearly' && shadow.md,
+                isSubscribed && styles.disabledPlan,
+              ]}
+              onPress={() => setSelectedPlan('yearly')}
+              activeOpacity={isSubscribed ? 1 : 0.7}
+              disabled={isSubscribed}
+            >
+              <View style={styles.planHeader}>
+                <View style={styles.planHeaderLeft}>
+                  <Text style={[styles.planLabel, { color: themeColors.text }]}>Yearly</Text>
+                  <View style={[styles.bestValueBadge, { backgroundColor: themeColors.accent.primary }]}>
+                    <Text style={[styles.bestValueText, { color: themeColors.text }]}>Best value</Text>
+                  </View>
+                </View>
+                {selectedPlan === 'yearly' && (
+                  <View style={[styles.selectedBadge, { backgroundColor: themeColors.accent.primary }]}>
+                    <Text style={[styles.selectedBadgeText, { color: themeColors.text }]}>✓</Text>
+                  </View>
+                )}
+              </View>
+              {yearlyPrice && yearlyPrice.trim() !== '' ? (
+                <>
+                  <Text style={[styles.planPrice, { color: themeColors.text }]}>
+                    {yearlyPrice} <Text style={styles.planPeriod}>/ year</Text>
+                  </Text>
+                  {pricePerMonth && pricePerMonth.trim() !== '' && savingsPercent > 0 && !isNaN(savingsPercent) && (
+                    <Text style={[styles.planSavings, { color: themeColors.textSecondary }]}>
+                      {pricePerMonth}/month • Save {savingsPercent}%
+                    </Text>
+                  )}
+                </>
+              ) : pricesMissing || isLoadingProducts ? (
+                <Text style={[styles.planPrice, { color: themeColors.textSecondary }]}>
+                  Loading price… <Text style={styles.planPeriod}>/ year</Text>
+                </Text>
+              ) : (
+                <Text style={[styles.planPrice, { color: themeColors.textSecondary }]}>
+                  — <Text style={styles.planPeriod}>/ year</Text>
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
         )}
 
-        {/* Restore */}
-        {!isSubscribed && (
+        {isSubscribed && (
+          <PrimaryButton
+            onPress={handleManageSubscription}
+            backgroundColor={themeColors.accent.primary}
+            indicatorColor={themeColors.text}
+            shadowVariant="lg"
+            style={{ marginBottom: spacing.md }}
+            accessibilityLabel="Manage Livra+ subscription"
+          >
+            <AppText variant="button" style={{ color: themeColors.text, fontWeight: fontWeight.bold }}>
+              Manage Livra+
+            </AppText>
+          </PrimaryButton>
+        )}
+
+        {/* Loading State */}
+        {isLoadingProducts && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="small" color={themeColors.primary} />
+            <AppText variant="body" style={[styles.loadingText, { color: themeColors.textSecondary }]}>
+              Loading subscription options...
+            </AppText>
+          </View>
+        )}
+
+        {/* TASK 7: Preflight health check error - show user-facing error */}
+        {healthCheckFailed && !isLoadingProducts && (
+          <Card
+            backgroundColor={themeColors.surface}
+            borderColor={themeColors.error}
+            borderRadiusKey="md"
+            paddingKey="md"
+            style={[styles.noticeCardMargin, { marginTop: spacing.sm }]}
+          >
+            <AppText variant="body" style={[styles.errorText, { color: themeColors.error, fontWeight: fontWeight.semibold }]}>
+              Unable to load subscription options
+            </AppText>
+            <AppText variant="label" style={[styles.errorHint, { color: themeColors.textSecondary, marginTop: spacing.xs }]}>
+              {healthCheckReasons.length > 0 
+                ? healthCheckReasons[0] // Show first reason as user message
+                : 'Please check your connection and try again.'}
+            </AppText>
+          </Card>
+        )}
+
+        {/* Error State - Products failed to load */}
+        {productsLoadError && !isLoadingProducts && !healthCheckFailed && supportModeEnabled && (
+          <ErrorDetails
+            error={lastError}
+            connectionStatus={connectionStatus}
+            onRetry={handleRetryLoadProducts}
+            themeColors={themeColors}
+            showDiagnostics={supportModeEnabled}
+          />
+        )}
+
+        {/* Purchase Button - Only show when products are loaded and connection is ready */}
+        {connectionStatus === 'connected' && !isLoadingProducts && products && Array.isArray(products) && products.length > 0 && !isSubscribed && (
+          <PrimaryButton
+            onPress={handlePurchase}
+            disabled={buttonDisabled}
+            loading={purchaseInProgress}
+            backgroundColor={themeColors.accent.primary}
+            indicatorColor={themeColors.text}
+            shadowVariant="lg"
+            style={{ marginBottom: spacing.md }}
+            activeOpacity={0.8}
+            accessibilityLabel="Continue with selected subscription plan"
+          >
+            {!isReady ? (
+              <AppText variant="button" style={{ color: themeColors.text, fontWeight: fontWeight.bold }}>Initializing...</AppText>
+            ) : connectionStatus !== 'connected' ? (
+              <AppText variant="button" style={{ color: themeColors.text, fontWeight: fontWeight.bold }}>Store Not Available</AppText>
+            ) : !selectedProduct ? (
+              <AppText variant="button" style={{ color: themeColors.text, fontWeight: fontWeight.bold }}>Select a Plan</AppText>
+            ) : pricesMissing || (!selectedPrice || selectedPrice.trim() === '') ? (
+              <AppText variant="button" style={{ color: themeColors.text, fontWeight: fontWeight.bold }}>Loading price...</AppText>
+            ) : (
+              <AppText variant="button" style={{ color: themeColors.text, fontWeight: fontWeight.bold }}>
+                Start Livra+
+                {selectedPrice && selectedPrice.trim() !== '' ? ` — ${selectedPrice}` : ''}
+              </AppText>
+            )}
+          </PrimaryButton>
+        )}
+
+        {/* Operation Status / Error Display */}
+        {isStrictFailure && operationState === 'error' && (
+          <AppText variant="body" style={[styles.errorText, { color: themeColors.error, textAlign: 'center', marginTop: spacing.sm }]}>
+            {operationMessage || 'Purchase failed. Please try again.'}
+          </AppText>
+        )}
+        {(operationMessage || lastError) && !productsLoadError && !isStrictFailure && (
+          <Card
+            backgroundColor={themeColors.surface}
+            borderColor={
+              operationState === 'subscribed'
+                ? themeColors.success
+                : operationState === 'transient_error' || operationState === 'info'
+                  ? themeColors.accent.primary
+                  : themeColors.error
+            }
+            borderRadiusKey="md"
+            paddingKey="md"
+            style={[styles.noticeCardMargin, { marginTop: spacing.sm }]}
+          >
+            <AppText
+              variant="body"
+              style={[
+                styles.errorText,
+                {
+                  color:
+                    operationState === 'subscribed'
+                      ? themeColors.success
+                      : operationState === 'transient_error' || operationState === 'info'
+                        ? themeColors.accent.primary
+                        : themeColors.error,
+                  fontWeight: fontWeight.semibold,
+                },
+              ]}
+            >
+              {operationMessage || lastError}
+            </AppText>
+            {connectionStatus !== 'connected' && (
+              <AppText variant="label" style={[styles.errorHint, { color: themeColors.textSecondary, marginTop: spacing.xs }]}>
+                Please check your internet connection and try again.
+              </AppText>
+            )}
+            {isTransientState && !isAlreadyOwned && (
+              <PrimaryButton
+                size="compact"
+                onPress={handleRetryVerification}
+                backgroundColor={themeColors.accent.primary}
+                indicatorColor={themeColors.text}
+                shadowVariant="none"
+                style={{ marginTop: spacing.md }}
+                accessibilityLabel="Retry verification"
+              >
+                <AppText variant="body" style={{ color: themeColors.text, fontWeight: fontWeight.semibold }}>
+                  Retry Verification
+                </AppText>
+              </PrimaryButton>
+            )}
+            {isAlreadyOwned && !isSubscribed && (
+              <PrimaryButton
+                size="compact"
+                onPress={handleManageSubscription}
+                disabled={purchaseInProgress}
+                backgroundColor={themeColors.accent.primary}
+                indicatorColor={themeColors.text}
+                shadowVariant="none"
+                style={{ marginTop: spacing.sm }}
+                accessibilityLabel="Manage subscription"
+              >
+                <AppText variant="body" style={{ color: themeColors.text, fontWeight: fontWeight.semibold }}>
+                  Manage Subscription
+                </AppText>
+              </PrimaryButton>
+            )}
+          </Card>
+        )}
+
+        {/* Restore Button */}
+        {!isSubscribed && !operationMessage && !lastError && !isStrictFailure && (
           <TouchableOpacity
-            style={styles.restoreTouchable}
+            style={styles.restoreButton}
             onPress={handleRestore}
             disabled={purchaseInProgress || isLoadingProducts}
           >
-            <Text style={[styles.restoreText, (purchaseInProgress || isLoadingProducts) && { opacity: 0.4 }]}>
-              Restore Purchase
-            </Text>
+            <AppText
+              variant="body"
+              style={[
+                styles.restoreButtonText,
+                {
+                  color: themeColors.textSecondary,
+                  opacity: purchaseInProgress || isLoadingProducts ? 0.5 : 1,
+                },
+              ]}
+            >
+              Restore Purchases
+            </AppText>
           </TouchableOpacity>
         )}
-
-        {/* Restore message */}
+        
+        {/* STEP 5: Restore message display */}
         {restoreMessage && (
-          <Text
-            style={[
-              styles.statusTxtDark,
-              { color: restoreMessageType === 'error' ? '#F87171' : tokenColors.mintLight },
-            ]}
+          <Card
+            backgroundColor={
+              restoreMessageType === 'success'
+                ? applyOpacity(themeColors.success, 0.15)
+                : restoreMessageType === 'info'
+                  ? applyOpacity(themeColors.accent.primary, 0.18)
+                  : applyOpacity(themeColors.error, 0.15)
+            }
+            borderColor={
+              restoreMessageType === 'success'
+                ? themeColors.success
+                : restoreMessageType === 'info'
+                  ? themeColors.accent.primary
+                  : themeColors.error
+            }
+            borderRadiusKey="md"
+            paddingKey="md"
+            style={[styles.noticeCardMargin, { marginTop: spacing.sm }]}
           >
-            {restoreMessage}
-          </Text>
+            <AppText
+              variant="body"
+              style={[
+                styles.restoreMessageText,
+                {
+                  color:
+                    restoreMessageType === 'success'
+                      ? themeColors.success
+                      : restoreMessageType === 'info'
+                        ? themeColors.accent.primary
+                        : themeColors.error,
+                },
+              ]}
+            >
+              {restoreMessage}
+            </AppText>
+          </Card>
         )}
 
-        {/* Legal links */}
-        <View style={styles.legalRowDark}>
-          <TouchableOpacity onPress={() => router.push('/legal/privacy-policy' as any)}>
-            <Text style={styles.legalTxtDark}>Privacy Policy</Text>
+
+        {/* Common questions — reference layout */}
+        <View style={styles.faq}>
+          <View style={styles.faqRuleRow}>
+            <View style={[styles.faqRule, { backgroundColor: themeColors.border }]} />
+            <Text style={[styles.faqRuleLabel, { color: themeColors.textTertiary }]}>
+              COMMON QUESTIONS
+            </Text>
+            <View style={[styles.faqRule, { backgroundColor: themeColors.border }]} />
+          </View>
+
+          <View style={styles.faqItem}>
+            <Text style={[styles.faqQuestion, { color: themeColors.text }]}>Does it work offline?</Text>
+            <Text style={[styles.faqAnswer, { color: themeColors.textSecondary }]}>
+              Yes. Tracking is local-first; sync runs when you are online.
+            </Text>
+          </View>
+
+          <View style={styles.faqItem}>
+            <Text style={[styles.faqQuestion, { color: themeColors.text }]}>How do I cancel?</Text>
+            <Text style={[styles.faqAnswer, { color: themeColors.textSecondary }]}>
+              Manage or cancel anytime in your App Store subscription settings.
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.legalLinks}>
+          <TouchableOpacity onPress={() => router.push('/legal/privacy-policy')} style={styles.legalLink}>
+            <Text style={[styles.legalLinkText, { color: themeColors.textSecondary }]}>Privacy Policy</Text>
           </TouchableOpacity>
-          <Text style={styles.legalSepDark}> · </Text>
-          <TouchableOpacity onPress={() => router.push('/legal/terms-and-conditions' as any)}>
-            <Text style={styles.legalTxtDark}>Terms & Conditions</Text>
+          <Text style={[styles.legalSeparator, { color: themeColors.textTertiary }]}> · </Text>
+          <TouchableOpacity onPress={() => router.push('/legal/terms-and-conditions')} style={styles.legalLink}>
+            <Text style={[styles.legalLinkText, { color: themeColors.textSecondary }]}>Terms & Conditions</Text>
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.copyrightDark}>
+        <Text style={[styles.copyrightLine, { color: themeColors.textTertiary }]}>
           © {new Date().getFullYear()} Livra
         </Text>
       </ScrollView>
@@ -1334,163 +1605,178 @@ function ErrorDetails({
 }
 
 const styles = StyleSheet.create({
-  // ── Dark paywall container ──
-  containerDark: {
+  container: {
     flex: 1,
-    backgroundColor: tokenColors.forest,
   },
-  closeBtn: {
-    position: 'absolute',
-    top: spacing.xl + spacing.lg,
-    right: spacing.lg,
-    zIndex: 10,
-    padding: spacing.xs,
+  content: {
+    padding: spacing.xl,
   },
-  loadingCenter: {
-    flex: 1,
+  header: {
+    alignItems: 'flex-end',
+    marginBottom: spacing.md,
+  },
+  titleSection: {
+    alignItems: 'center',
+    marginBottom: spacing.xl,
+  },
+  heroIconWrap: {
+    width: 88,
+    height: 88,
+    borderRadius: borderRadius.xl,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.sm,
+    marginBottom: spacing.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    overflow: 'hidden',
   },
-  loadingTxt: {
-    fontFamily: fonts.sans,
-    fontSize: 13,
-    color: tokenColors.inkInverseMuted,
+  heroLogo: {
+    width: '100%',
+    height: '100%',
   },
-  darkContent: {
-    paddingTop: spacing.xxl + spacing.xxl,
-    paddingBottom: spacing.xxl,
+  title: {
+    fontSize: fontSize['3xl'],
+    fontWeight: fontWeight.bold,
+    marginBottom: spacing.sm,
+    letterSpacing: -0.5,
+  },
+  subtitle: {
+    fontSize: fontSize.base,
+    textAlign: 'center',
+    paddingHorizontal: spacing.lg,
+    lineHeight: 22,
+  },
+  devEnvBanner: {
+    marginTop: spacing.md,
+    marginHorizontal: spacing.lg,
+    padding: spacing.sm,
+    borderRadius: borderRadius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  devEnvBannerText: {
+    fontSize: fontSize.sm,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  featuresList: {
+    marginBottom: spacing.xl,
+  },
+  featureItem: {
+    flexDirection: 'row',
+    padding: spacing.md,
+    borderRadius: borderRadius.card,
+    marginBottom: spacing.sm,
+    borderWidth: StyleSheet.hairlineWidth,
     alignItems: 'center',
-    paddingHorizontal: spacing.xl,
   },
-  logoWrap: {
+  featureIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: borderRadius.md,
     alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.md,
+  },
+  featureText: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  featureTitle: {
+    fontSize: fontSize.base,
+    fontWeight: fontWeight.semibold,
+    marginBottom: 2,
+  },
+  featureDescription: {
+    fontSize: fontSize.sm,
+  },
+  pricingContainer: {
+    marginBottom: spacing.lg,
     gap: spacing.md,
+  },
+  subscribedContainer: {
+    borderWidth: 1,
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    alignItems: 'center',
+    gap: spacing.sm,
     marginBottom: spacing.lg,
   },
-  darkTagline: {
-    fontFamily: fonts.serifItalic,
-    fontSize: 28,
-    color: tokenColors.inkInverse,
-    textAlign: 'center',
-    marginTop: spacing.lg,
-    marginBottom: spacing.xl,
+  subscribedText: {
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.semibold,
   },
-  featureListDark: {
-    width: '100%',
-    paddingHorizontal: spacing.xl,
-    gap: spacing.md,
+  subscribedHint: {
+    fontSize: fontSize.sm,
   },
-  featureRowDark: {
+  manageSubscriptionButton: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.md,
+  },
+  manageSubscriptionText: {
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.semibold,
+  },
+  planOption: {
+    padding: spacing.lg,
+    borderRadius: borderRadius.xl,
+    marginBottom: spacing.sm,
+  },
+  disabledPlan: {
+    opacity: 0.6,
+  },
+  planHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  planHeaderLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
   },
-  featureTextDark: {
-    fontFamily: fonts.sans,
-    fontSize: 15,
-    color: tokenColors.inkInverse,
-    flex: 1,
+  planLabel: {
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.semibold,
   },
-  dividerDark: {
-    height: 1,
-    backgroundColor: tokenColors.forestLight,
-    width: '100%',
-    marginVertical: spacing.xl,
-    marginHorizontal: spacing.xl,
+  bestValueBadge: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: borderRadius.sm,
   },
-  sectionLabelCenter: {
-    textAlign: 'center',
-    marginBottom: spacing.sm,
+  bestValueText: {
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.bold,
+    textTransform: 'uppercase',
   },
-  priceDisplay: {
-    fontFamily: fonts.serif,
-    fontSize: 56,
-    color: tokenColors.inkInverse,
-    textAlign: 'center',
-    marginTop: spacing.sm,
-    lineHeight: 64,
-  },
-  noSubText: {
-    fontFamily: fonts.sans,
-    fontSize: 13,
-    color: tokenColors.inkInverseMuted,
-    textAlign: 'center',
-    marginTop: spacing.xs,
-  },
-  purchaseBtnWrap: {
-    width: '100%',
-    marginTop: spacing.xl,
-    paddingHorizontal: spacing.lg,
-  },
-  purchaseBtn: {
-    backgroundColor: tokenColors.surface,
-    height: 56,
-    borderRadius: radius.full,
+  selectedBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: borderRadius.lg,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: spacing.xl,
   },
-  purchaseBtnText: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 15,
-    color: tokenColors.forest,
+  selectedBadgeText: {
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.bold,
   },
-  restoreTouchable: {
-    paddingVertical: spacing.md,
-    alignItems: 'center',
-    marginTop: spacing.sm,
+  planPrice: {
+    fontSize: fontSize['3xl'],
+    fontWeight: fontWeight.bold,
+    marginBottom: spacing.xs,
   },
-  restoreText: {
-    fontFamily: fonts.sans,
-    fontSize: 13,
-    color: tokenColors.inkInverseMuted,
-    textAlign: 'center',
+  planPeriod: {
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.normal,
   },
-  errorTxtDark: {
-    fontFamily: fonts.sans,
-    fontSize: 13,
-    color: '#F87171',
-    textAlign: 'center',
-    marginTop: spacing.md,
-    paddingHorizontal: spacing.lg,
+  planSavings: {
+    fontSize: fontSize.sm,
   },
-  statusTxtDark: {
-    fontFamily: fonts.sans,
-    fontSize: 13,
-    color: tokenColors.mintLight,
-    textAlign: 'center',
-    marginTop: spacing.md,
-    paddingHorizontal: spacing.lg,
+  purchaseButtonText: {
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.bold,
   },
-  legalRowDark: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: spacing.xl,
-    flexWrap: 'wrap',
-  },
-  legalTxtDark: {
-    fontFamily: fonts.sans,
-    fontSize: 12,
-    color: tokenColors.inkInverseMuted,
-    textDecorationLine: 'underline',
-    paddingHorizontal: spacing.xs,
-  },
-  legalSepDark: {
-    fontFamily: fonts.sans,
-    fontSize: 12,
-    color: tokenColors.inkInverseMuted,
-  },
-  copyrightDark: {
-    fontFamily: fonts.sans,
-    fontSize: 11,
-    color: tokenColors.inkInverseMuted,
-    textAlign: 'center',
-    marginTop: spacing.md,
-    marginBottom: spacing.xl,
-  },
-  // Legacy styles (used by ErrorDetails component)
+  /** Margins for `Card` / notice blocks (border + padding live on `Card`) */
   noticeCardMargin: {
     marginBottom: spacing.md,
   },
@@ -1504,6 +1790,114 @@ const styles = StyleSheet.create({
     fontSize: fontSize.xs,
     textAlign: 'center',
     lineHeight: 16,
+  },
+  loadingBlock: {
+    alignItems: 'center',
+    marginTop: spacing.xl,
+    marginBottom: spacing.md,
+    gap: spacing.lg,
+  },
+  loadingLogo: {
+    width: 72,
+    height: 72,
+    borderRadius: borderRadius.lg,
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  loadingText: {
+    fontSize: fontSize.sm,
+  },
+  restoreButton: {
+    padding: spacing.md,
+    alignItems: 'center',
+    marginBottom: spacing.xl,
+  },
+  restoreButtonText: {
+    fontSize: fontSize.base,
+  },
+  restoreMessageText: {
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.medium,
+    textAlign: 'center',
+  },
+  manageSubscriptionsButton: {
+    padding: spacing.md,
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  manageSubscriptionsText: {
+    fontSize: fontSize.sm,
+    textDecorationLine: 'underline',
+  },
+  faq: {
+    marginTop: spacing.xl,
+  },
+  faqRuleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  faqRule: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+  },
+  faqRuleLabel: {
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.bold,
+    letterSpacing: 1.4,
+  },
+  faqItem: {
+    marginBottom: spacing.md,
+  },
+  faqQuestion: {
+    fontSize: fontSize.base,
+    fontWeight: fontWeight.semibold,
+    marginBottom: spacing.xs,
+  },
+  faqAnswer: {
+    fontSize: fontSize.sm,
+    lineHeight: 20,
+  },
+  legalLinks: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
+    gap: spacing.xs,
+    flexWrap: 'wrap',
+  },
+  copyrightLine: {
+    fontSize: fontSize.xs,
+    textAlign: 'center',
+    marginBottom: spacing.xl,
+  },
+  legalLink: {
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+  },
+  legalLinkText: {
+    fontSize: fontSize.sm,
+    textDecorationLine: 'underline',
+  },
+  legalSeparator: {
+    fontSize: fontSize.sm,
+  },
+  retryButton: {
+    padding: spacing.md,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+    marginTop: spacing.sm,
+  },
+  retryButtonText: {
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.semibold,
   },
   detailsToggle: {
     padding: spacing.sm,
@@ -1544,16 +1938,36 @@ const styles = StyleSheet.create({
 
 // Error Boundary Fallback Component with Retry
 function PaywallErrorFallback({ onRetry }: { onRetry: () => void }) {
+  const theme = useEffectiveTheme();
+  const themeColors = colors[theme];
+  
   return (
-    <SafeAreaView style={styles.containerDark}>
-      <View style={styles.loadingCenter}>
-        <Text style={[styles.noSubText, { marginBottom: spacing.md }]}>
-          Unable to load subscription options
-        </Text>
-        <TouchableOpacity style={styles.purchaseBtn} onPress={onRetry}>
-          <Text style={styles.purchaseBtnText}>Try Again</Text>
-        </TouchableOpacity>
-      </View>
+    <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
+      <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.header}>
+          <Ionicons name="close-outline" size={28} color={themeColors.textSecondary} />
+        </View>
+        <View style={styles.loadingBlock}>
+          <SvgLogo width={48} height={48} />
+          <AppText variant="headline" style={[styles.title, { color: themeColors.text }]}>
+            Unable to load subscription options
+          </AppText>
+          <AppText variant="body" style={[styles.loadingText, { color: themeColors.textSecondary }]}>
+            Please check your connection and try again.
+          </AppText>
+          <PrimaryButton
+            size="compact"
+            onPress={onRetry}
+            backgroundColor={themeColors.accent.primary}
+            indicatorColor={themeColors.text}
+            shadowVariant="none"
+            style={{ marginTop: spacing.md, alignSelf: 'stretch' }}
+            accessibilityLabel="Try again"
+          >
+            <AppText variant="body" style={{ color: themeColors.text, fontWeight: fontWeight.semibold }}>Try Again</AppText>
+          </PrimaryButton>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
