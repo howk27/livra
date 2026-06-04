@@ -115,11 +115,262 @@ No orphaned components or clearly dead code found. The backward-compat aliases (
 
 ---
 
+## Phase 3 — Architectural Fixes
+
+### Fix 1 — Route consolidation
+
+| File | Change |
+|------|--------|
+| `app/mark/[id].tsx` | Replaced re-export wrapper with full screen implementation (moved from `app/counter/[id].tsx`) |
+| `app/mark/new.tsx` | Replaced re-export wrapper with full screen implementation (moved from `app/counter/new.tsx`) |
+| `app/mark/[id]/edit.tsx` | Replaced re-export wrapper with full screen implementation (moved from `app/counter/[id]/edit.tsx`) |
+| `app/counter/` | Deleted entire directory (`[id].tsx`, `new.tsx`, `[id]/edit.tsx`) |
+| `app/_layout.tsx` | Removed dead `Stack.Screen name="counter/[id]"` registration |
+| `components/HealthConnectBanner.tsx` | Fixed `/counter/${markId}` → `/mark/${markId}` navigation call |
+| `lib/review/weeklyReview.ts` | Fixed `/counter/new` → `/mark/new` empty-state CTA target |
+| `tests/unit/weeklyReview.test.ts` | Updated test expectation to match `/mark/new` |
+
+### Fix 2 — AsyncStorage key migration
+
+| File | Change |
+|------|--------|
+| `lib/db/index.ts` | Changed `STORAGE_KEYS.counters` from `@livra_db_counters` to `@livra_db_marks`. Added `migrateCountersStorageKey()` one-time migration function (guarded by `@livra_migration_v2_complete` flag, non-fatal on error). Called before `loadFromStorage()` in `initDatabase()`. |
+| `tests/unit/storageKeyMigration.test.ts` | New test file: migration runs once, skips if flag set, handles no-data case, preserves existing new-key data, does not throw on failure. |
+
+### Fix 3 — AppState foreground goal expiry
+
+| File | Change |
+|------|--------|
+| `state/goalsSlice.ts` | Added `checkAllGoalExpiry()` to `GoalsState` interface and implementation. Iterates active goals, calls `isDeadlineExpired()`, delegates to `checkGoalCompletion()` for each expired goal. Wrapped in `InteractionManager.runAfterInteractions` (non-blocking). |
+| `app/_layout.tsx` | Added `useGoalsStore.getState().checkAllGoalExpiry()` call inside the existing `onAppState` handler when transitioning from background/inactive → active. |
+
+### Fix 4 — Supabase migration verification
+
+| File | Change |
+|------|--------|
+| `supabase/migrations/20260602_rename_counters_to_marks.sql` | Added `STATUS: READY TO APPLY` comment block with verification notes. Confirmed `useSync.ts` references `marks`/`mark_events`/`mark_streaks`/`mark_badges` and `mappers.ts` uses `mark_id` throughout. |
+
+---
+
 ## Deferred (Future Sprint)
 
 1. Rename `hooks/useCounters.ts` → `hooks/useMarks.ts` and update ~8 import sites
 2. Rename `state/countersSlice.ts` → `state/marksSlice.ts` and update ~15 import sites
 3. Rename `components/CounterTile.tsx` → `components/MarkTile.tsx`
-4. Add data migration for AsyncStorage key rename (`@livra_db_counters` → `@livra_db_marks`)
-5. Implement drag-to-reorder for queue cards (currently uses up/down buttons; `react-native-draggable-flatlist` not installed)
-6. Deadline expiry background check (currently checked on `checkGoalCompletion`; consider app foreground event listener)
+4. Implement drag-to-reorder for queue cards (currently uses up/down buttons; `react-native-draggable-flatlist` not installed)
+
+---
+
+## Phase 4 — UI Overhaul (2026-06-02)
+
+### Summary
+Complete visual redesign of Livra app: design tokens, typography, 4 main tabs, 10+ screens, and shared component library.
+
+### New Packages Installed
+- @expo-google-fonts/cormorant-garamond — serif display font
+- @expo-google-fonts/dm-sans — body/UI font
+- expo-splash-screen — programmatic splash control
+
+### Design System Changes
+- theme/tokens.ts: replaced Inter/Satoshi with CormorantGaramond/DMSans font tokens
+- theme/tokens.ts: new warm palette (linen/forest/mint) replacing grayscale+yellow
+- theme/tokens.ts: backward-compat aliases preserved (borderRadius, fontSize, fontWeight, etc.)
+- app.json: splash backgroundColor updated to #F0EDE8 (linen)
+
+### New Components
+- components/ui/SvgLogo.tsx — vectorized logo mark (placeholder, DESIGN TODO: replace with real logo)
+- components/ui/LivraWordmark.tsx — LIVRA wordmark in CormorantGaramond
+- components/ui/LivraHeader.tsx — unified app header with drawer/back support, exports DrawerContext
+- components/ui/SectionLabel.tsx — uppercase tracking label
+- components/ui/PillButton.tsx — primary/ghost/danger button variants
+- components/ui/FAB.tsx — floating action button
+- components/ui/StatTile.tsx — 1x1 stat display tile
+- components/ui/HeroCard.tsx — dark/light mission card with progress bar
+- components/ui/MarkRow.tsx — mark list row (daily + weekly modes)
+- components/ui/QueueCard.tsx — hero + standard queue item
+- components/navigation/LivraDrawer.tsx — slide-in side drawer (forest green)
+- components/sheets/ProfileEditSheet.tsx — bottom sheet for profile editing
+
+### Screen Changes
+- app/(tabs)/home.tsx: Dashboard rebuild (greeting, HeroCard, 2×2 StatGrid, MarkRows, FAB)
+- app/(tabs)/queue.tsx: Queue rebuild (LivraWordmark header, hero+queue cards, empty state)
+- app/(tabs)/log.tsx: NEW screen (today summary, this-week mark rows)
+- app/(tabs)/settings.tsx: Settings rebuild (profile card, 4 groups, ProfileEditSheet integration)
+- app/settings/notifications.tsx: NEW — notification toggles
+- app/settings/privacy.tsx: NEW — privacy toggles
+- app/settings/appearance.tsx: NEW — theme selector (Light/Dark/System, dark TODO)
+- app/paywall.tsx: Paywall rebuild (forest dark theme, IAP logic preserved)
+- app/onboarding/welcome.tsx: Onboarding rebuild (3-step, serif typography)
+- app/goal/complete.tsx: Goal complete rebuild (staggered Reanimated entrance)
+- app/mark/[id].tsx: Mark detail rebuild (LivraHeader, StatTiles, Log button, history)
+
+### Tab Bar Changes
+- 3 visible tabs: Dashboard (target), Queue (list), Log (zap)
+- Settings moved to drawer navigation only
+- Active tint: colors.forest (#1C3830) replacing #FEB729
+
+### Navigation
+- LivraDrawer wired via DrawerContext throughout app
+- New settings sub-screens registered in root Stack
+
+### Assumptions & Design TODOs
+- DESIGN TODO: SvgLogo uses a placeholder italic "L" — replace with real vectorized logo from Figma
+- DESIGN TODO: app icon not updated (assets/branding/icon.png doesn't exist — kept existing icon)
+- DESIGN TODO: Dark mode stores preference but only Light theme renders
+- DESIGN TODO: Alternate app icons (future, needs separate assets)
+- Local `lc_counters` / `lc_counter_events` SQLite tables intentionally NOT renamed (separate risk)
+- ProfileEditSheet save handler is a stub — onSave prop wires to parent but no Supabase update
+- Notification settings toggles are local state only (not persisted to notification system yet)
+
+---
+
+## Phase 5 — UI Corrections
+
+### Change 1 — Tab Structure
+| File | Change | Why |
+|------|--------|-----|
+| `app/(tabs)/_layout.tsx` | Rewrote — 3 tabs: Focus (sun), Queue (list), Settings (settings). Removed drawer, FABContext, FloatingActionButton | Simplify nav to 3-tab structure per spec |
+| `app/(tabs)/home.tsx` | Deleted — replaced by `focus.tsx` | Tab rename: Dashboard → Focus |
+| `app/(tabs)/focus.tsx` | Created — full Focus screen | New primary tab |
+| `app/(tabs)/log.tsx` | Deleted | Log tab removed from nav |
+
+### Change 2 — Remove Side Drawer
+| File | Change | Why |
+|------|--------|-----|
+| `components/navigation/LivraDrawer.tsx` | Deleted | Drawer pattern removed |
+| `components/ui/LivraHeader.tsx` | Removed hamburger/drawer trigger; left side = 22px empty View | Header no longer drives drawer |
+| Multiple files | Updated `/(tabs)/home` → `/(tabs)/focus` routes | Tab rename |
+
+### Change 3 — SpeedDialFAB
+| File | Change | Why |
+|------|--------|-----|
+| `components/ui/SpeedDialFAB.tsx` | Created — self-contained speed dial with New Mark + New Goal options, backdrop, first-launch hint | Replaces individual FABs on Focus and Queue |
+| `app/(tabs)/focus.tsx` | Imports SpeedDialFAB | |
+| `app/(tabs)/queue.tsx` | Replaced old FAB with SpeedDialFAB | |
+
+### Change 4 — AddMarkSheet
+| File | Change | Why |
+|------|--------|-----|
+| `components/sheets/AddMarkSheet.tsx` | Created — bottom sheet with name, category picker, daily target stepper, Add Mark CTA | Inline mark creation without navigation |
+
+### Change 5 — AddGoalSheet
+| File | Change | Why |
+|------|--------|-----|
+| `components/sheets/AddGoalSheet.tsx` | Created — bottom sheet with name, why, target count, deadline toggle, linked marks, Add Goal CTA | Inline goal creation without navigation |
+
+### Change 6 — Focus Screen
+| File | Change | Why |
+|------|--------|-----|
+| `app/(tabs)/focus.tsx` | Built: greeting, today's progress dark card, 2×2 stat tiles, mark list with inline log taps, SpeedDialFAB | Visual rebuild per Phase 5 spec |
+
+### Change 7 — Mark Detail Screen Rebuild
+| File | Change | Why |
+|------|--------|-----|
+| `app/mark/[id].tsx` | Full visual rebuild: category icon hero, stat tile row, forest log button (64px pill), linked goals section, history section, "all done today" banner | Previous screen used old amber/Satoshi design |
+
+### Change 8 — Typography Correction
+| File | Change | Why |
+|------|--------|-----|
+| `components/ui/HeroCard.tsx` | `description` style: `serifItalic` → `sans` (was 15px, below 20px threshold) | Cormorant only at ≥20px |
+| `components/ui/QueueCard.tsx` | `heroDescription` style: `serifItalic` → `sans` (was 15px) | Same rule |
+
+### Change 9 — Remove Amber/Orange
+| File | Change | Why |
+|------|--------|-----|
+| `app/(tabs)/_layout.tsx` | Rewrote — `#FEB729` FAB color gone | All amber replaced |
+| `app/mark/[id].tsx` | Rewrote — `ACCENT = '#FEB729'` gone | |
+| `components/WeeklyReflectionCard.tsx` | `inconsistent` tier color `#f59e0b` → `#1C3830` (forest) | No amber in app |
+
+### Change 10 — Debug Gear Icon
+| File | Change | Why |
+|------|--------|-----|
+| N/A | Grep found no floating gear icon outside profile.tsx (which is a legitimate nav button, not debug UI) | No action needed |
+
+**Test result: 370/370 passing**
+
+---
+
+## Phase 6 — Remaining Screens
+
+### Preliminary Fix
+| File | Change | Why |
+|------|--------|-----|
+| `components/sheets/AddMarkSheet.tsx` | Already used `createCounter` (correct); no fix needed | Verified via grep |
+| `components/ui/LivraHeader.tsx` | DrawerContext is no-op export only; no real consumers | Verified via grep |
+
+### GoalCompletionOverlay
+| File | Change | Why |
+|------|--------|-----|
+| `state/goalCompletionStore.ts` | Created — Zustand store: `{ completedGoal, show, showCompletion, hideCompletion }` | Needed to trigger overlay from anywhere |
+| `components/overlays/GoalCompletionOverlay.tsx` | Created — full-screen overlay with staggered entry animations, swipe-down dismiss, next goal preview | Fires after any goal → 'completed' transition |
+| `app/_layout.tsx` | Added goals subscription listener; detects completed-status transitions; wires GoalCompletionOverlay | Non-invasive watcher (no goalsSlice modification) |
+
+### Screen 1 — Onboarding
+| File | Change | Why |
+|------|--------|-----|
+| `app/onboarding.tsx` | Created — 3-step onboarding (Welcome, How It Works, Sign Up) with animated step dots, pan-advance support, Supabase email sign-up | Standalone entry screen |
+
+### Screen 2 — Sign In
+| File | Change | Why |
+|------|--------|-----|
+| `app/signin.tsx` | Created — email/password sign in with Feather eye toggle, forgot password link, Google placeholder, back to onboarding link | Standalone sign in screen |
+
+### Screen 3 — Goal Completion
+*See GoalCompletionOverlay above.*
+
+### Screen 4 — Settings
+| File | Change | Why |
+|------|--------|-----|
+| `app/(tabs)/settings.tsx` | Updated Support group: Help/Feedback/Rate now open real URLs; About navigates to `/settings/about` | Wire up previously stubbed rows |
+
+### Screen 5 — ProfileEditSheet
+Already fully implemented. No changes needed.
+
+### Screen 6 — Notifications
+| File | Change | Why |
+|------|--------|-----|
+| `app/settings/notifications.tsx` | Rebuilt — added intro text "Livra never sends guilt. Only momentum."; sub-rows expand on toggle (Reanimated height animation); day-picker pill row for weekly summary | Visual and functional upgrade |
+
+### Screen 7 — Privacy
+| File | Change | Why |
+|------|--------|-----|
+| `app/settings/privacy.tsx` | Rebuilt — 3 sections: Data Collection, Security (with autolock picker), Connected Services with sync status badge | Matches spec |
+
+### Screen 8 — Appearance
+| File | Change | Why |
+|------|--------|-----|
+| `app/settings/appearance.tsx` | Rebuilt — added theme description hint, app icon tile picker (3 placeholder tiles with active border), DESIGN TODO comments | Matches spec; icon assets not yet created |
+
+### Screen 9 — About
+| File | Change | Why |
+|------|--------|-----|
+| `app/settings/about.tsx` | Created — centered logo + wordmark, version, company, Privacy/Terms/OSS links, "Made with intention." footer | New screen |
+| `app/_layout.tsx` | Registered `settings/about` and `signin` routes in Stack | New routes need registration |
+
+### Paywall
+Already fully implemented with forest design. No visual changes needed — existing render matches spec.
+
+### Final Checks
+- No `backgroundColor: '#fff'` or `backgroundColor: 'white'` found in app/ or components/
+- GoalCompletionOverlay renders at zIndex 10000, above tab bar (inside `RootNavigator`, above Stack)
+- Settings "Reset All Data" and "Delete Account" both use Alert confirmation before executing
+- ProfileEditSheet ImagePicker wired via `expo-image-picker` (already installed)
+
+**Test result: see test run**
+
+---
+
+## Phase 7 — Widget Plugin Fix (2026-06-04)
+
+### Task 1 — Widget Plugin Fix
+
+**Audit findings (Step 1):**
+- Swift sources exist at `targets/LivraWidget/` (not `ios/LivraWidget/`) — consistent with the recent commit that moved them there to survive `prebuild --clean`.
+- `expo-target.config.js` exists at `targets/LivraWidget/expo-target.config.js` — found by `@bacons/apple-targets` via the `root: './targets'` option already set in the plugin.
+- `plugins/withLivraWidget.js` already correctly passes `{ root: './targets' }` to `withTargetsDir` — no path fix needed in the plugin itself.
+- Bug confirmed: `bundleIdentifier` in `expo-target.config.js` was set to `'.widget'` (bare suffix) instead of the full reverse-DNS bundle ID.
+
+| File | Change | Why |
+|------|--------|-----|
+| `targets/LivraWidget/expo-target.config.js` | `bundleIdentifier: '.widget'` → `'com.livra.app.widget'` | Bare suffix is not a valid bundle ID; EAS / Xcode requires the full reverse-DNS string so signing and provisioning resolve correctly |
+| `plugins/withLivraWidget.js` | No change required | Plugin already references `root: './targets'`; path was correct after the sources were moved in a prior commit |

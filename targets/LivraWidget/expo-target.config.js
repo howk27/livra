@@ -1,7 +1,7 @@
 module.exports = {
   type: 'widget',
   name: 'LivraWidget',
-  bundleIdentifier: '.widget',
+  bundleIdentifier: 'com.livra.app.widget',
   deploymentTarget: '16.0',
   frameworks: ['SwiftUI', 'WidgetKit'],
   entitlements: {
