@@ -1,7 +1,22 @@
 // CRITICAL: Import react-native-get-random-values FIRST before any uuid imports
 import 'react-native-get-random-values';
-import { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { useFonts } from 'expo-font';
+import {
+  CormorantGaramond_400Regular_Italic,
+  CormorantGaramond_600SemiBold,
+  CormorantGaramond_700Bold,
+} from '@expo-google-fonts/cormorant-garamond';
+import {
+  DMSans_400Regular,
+  DMSans_500Medium,
+  DMSans_600SemiBold,
+} from '@expo-google-fonts/dm-sans';
+import * as LocalAuthentication from 'expo-local-authentication';
+import * as SplashScreen from 'expo-splash-screen';
 import { AppState, AppStateStatus, View } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { BIOMETRIC_LOCK_KEY } from './settings/privacy';
 import * as Notifications from 'expo-notifications';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -42,6 +57,10 @@ import { reVerifyProOnLaunch } from '../lib/iap/iapReVerify';
 import { useXPStore } from '../state/xpSlice';
 import { LevelUpModal } from '../components/LevelUpModal';
 import { LEVEL_TITLES } from '../lib/xpEngine';
+import { useGoalCompletionStore } from '../state/goalCompletionStore';
+import { GoalCompletionOverlay } from '../components/overlays/GoalCompletionOverlay';
+
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const queryClient = new QueryClient();
 
@@ -108,6 +127,53 @@ if (typeof window !== 'undefined' && window.addEventListener) {
 }
 
 export default function RootLayout() {
+  const [fontsLoaded] = useFonts({
+    CormorantGaramond_400Regular_Italic,
+    CormorantGaramond_600SemiBold,
+    CormorantGaramond_700Bold,
+    DMSans_400Regular,
+    DMSans_500Medium,
+    DMSans_600SemiBold,
+  });
+
+  useEffect(() => {
+    if (fontsLoaded) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [fontsLoaded]);
+
+  // Biometric lock gate — must authenticate before the navigator renders
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    const checkBiometricLock = async () => {
+      const stored = await AsyncStorage.getItem(BIOMETRIC_LOCK_KEY);
+      if (stored !== 'true') {
+        // Biometric lock not enabled — allow through immediately
+        setIsAuthenticated(true);
+        return;
+      }
+
+      // Biometric lock is enabled — require successful auth; retry on failure
+      const attempt = async (): Promise<void> => {
+        const result = await LocalAuthentication.authenticateAsync({
+          promptMessage: 'Unlock Livra',
+        });
+        if (result.success) {
+          setIsAuthenticated(true);
+        } else {
+          // No bypass — prompt again
+          await attempt();
+        }
+      };
+      await attempt();
+    };
+    checkBiometricLock().catch(() => {
+      // If anything throws (e.g., hardware error), fail open so app isn't bricked
+      setIsAuthenticated(true);
+    });
+  }, []);
+
   const loadUIState = useUIStore((state) => state.loadUIState);
   const { user, initialized } = useAuth();
   const { sync } = useSync();
@@ -174,6 +240,7 @@ export default function RootLayout() {
         if (user?.id) scheduleContextualDailyNotification(user.id).catch(() => {});
         checkAndFireMilestones().catch(() => {});
         void syncWidgetData();
+        useGoalsStore.getState().checkAllGoalExpiry();
       }
     };
     const appSub = AppState.addEventListener('change', onAppState);
@@ -263,7 +330,7 @@ export default function RootLayout() {
         const isWidgetLogMark = incomingUrl.startsWith('livra://log-mark');
 
         if (isWidgetHome) {
-          router.replace('/(tabs)/home');
+          router.replace('/(tabs)/focus' as any);
           return;
         }
 
@@ -273,12 +340,12 @@ export default function RootLayout() {
             const url = new URL(asHttpUrl);
             const markId = url.searchParams.get('markId');
             if (markId) {
-              router.replace({ pathname: '/(tabs)/home' as any, params: { logMarkId: markId } });
+              router.replace({ pathname: '/(tabs)/focus' as any, params: { logMarkId: markId } });
             } else {
-              router.replace('/(tabs)/home');
+              router.replace('/(tabs)/focus' as any);
             }
           } catch {
-            router.replace('/(tabs)/home');
+            router.replace('/(tabs)/focus' as any);
           }
           return;
         }
@@ -465,6 +532,10 @@ export default function RootLayout() {
     }
   }, [user, initialized, sync]);
 
+  if (!isAuthenticated) {
+    return null;
+  }
+
   return (
     <ErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>
@@ -489,6 +560,23 @@ function RootNavigator() {
   const theme = useEffectiveTheme();
   const pendingLevelUp = useXPStore((s) => s.pendingLevelUp);
   const clearPendingLevelUp = useXPStore((s) => s.clearPendingLevelUp);
+  const goalCompletionShow = useGoalCompletionStore((s) => s.show);
+
+  // Detect newly completed goals and trigger overlay
+  const goals = useGoalsStore((s) => s.goals);
+  const showCompletion = useGoalCompletionStore((s) => s.showCompletion);
+  const prevGoalStatusRef = React.useRef<Record<string, string>>({});
+  useEffect(() => {
+    const prev = prevGoalStatusRef.current;
+    goals.forEach((g) => {
+      if (g.status === 'completed' && prev[g.id] && prev[g.id] !== 'completed') {
+        showCompletion(g);
+      }
+    });
+    const next: Record<string, string> = {};
+    goals.forEach((g) => { next[g.id] = g.status; });
+    prevGoalStatusRef.current = next;
+  }, [goals, showCompletion]);
 
   return (
     <>
@@ -500,7 +588,6 @@ function RootNavigator() {
       >
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="mark/[id]" options={{ presentation: 'modal' }} />
-        <Stack.Screen name="counter/[id]" options={{ presentation: 'modal' }} />
         <Stack.Screen name="onboarding" options={{ presentation: 'fullScreenModal' }} />
         <Stack.Screen name="paywall" options={{ presentation: 'modal' }} />
         <Stack.Screen name="auth" options={{ presentation: 'modal' }} />
@@ -517,6 +604,12 @@ function RootNavigator() {
           }}
         />
         <Stack.Screen name="goal/history" options={{ headerShown: false }} />
+        <Stack.Screen name="settings/notifications" options={{ headerShown: false }} />
+        <Stack.Screen name="settings/privacy" options={{ headerShown: false }} />
+        <Stack.Screen name="settings/appearance" options={{ headerShown: false }} />
+        <Stack.Screen name="settings/profile" options={{ headerShown: false }} />
+        <Stack.Screen name="settings/about" options={{ headerShown: false }} />
+        <Stack.Screen name="signin" options={{ headerShown: false }} />
         <Stack.Screen
           name="goal/milestone"
           options={{
@@ -534,6 +627,7 @@ function RootNavigator() {
           onDismiss={clearPendingLevelUp}
         />
       )}
+      {goalCompletionShow && <GoalCompletionOverlay />}
     </>
   );
 }

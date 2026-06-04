@@ -401,3 +401,12 @@ Already fully implemented with forest design. No visual changes needed — exist
 | File | Change | Why |
 |------|--------|-----|
 | `components/sheets/ProfileEditSheet.tsx` | Added imports for `useAuth`, `useNotification`, and `uploadAvatar`; wired `user` and `showError` from hooks; updated `pickImage` to call `uploadAvatar(user.id, uri)` after successful picker selection with `try/catch` error reporting via `showError` | Avatar tap had no upload logic — optimistic URI update was in place but upload was never called; error handling now matches the existing pattern used in `settings.tsx` and `mark/new.tsx` |
+
+---
+
+### Task 4 — Biometric Lock
+
+| File | Change | Why |
+|------|--------|-----|
+| `app/settings/privacy.tsx` | Imported `expo-local-authentication` and `AsyncStorage`; on mount calls `hasHardwareAsync()` + `isEnrolledAsync()` to set `biometricAvailable`; toggle ON triggers `authenticateAsync({ promptMessage: 'Enable Face ID for Livra' })` and only persists if successful; toggle OFF persists immediately without re-auth; toggle disabled + subtitle changed to `"Face ID not available on this device"` when unavailable; preference stored at `AsyncStorage` key `biometric_lock_enabled` | Face ID toggle was a local `useState` stub with no persistence or auth gating |
+| `app/_layout.tsx` | Imported `expo-local-authentication`, `AsyncStorage`, and `BIOMETRIC_LOCK_KEY`; added `isAuthenticated` state (default `false`); on mount reads `biometric_lock_enabled` — if `true` calls `authenticateAsync` in a recursive retry loop (no bypass on failure), else sets `isAuthenticated` immediately; gates the entire navigator tree on `isAuthenticated` (returns `null` while pending); fail-open on unexpected hardware errors so app is never bricked | Biometric lock preference had no enforcement at launch |
