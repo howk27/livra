@@ -374,3 +374,22 @@ Already fully implemented with forest design. No visual changes needed — exist
 |------|--------|-----|
 | `targets/LivraWidget/expo-target.config.js` | `bundleIdentifier: '.widget'` → `'com.livra.app.widget'` | Bare suffix is not a valid bundle ID; EAS / Xcode requires the full reverse-DNS string so signing and provisioning resolve correctly |
 | `plugins/withLivraWidget.js` | No change required | Plugin already references `root: './targets'`; path was correct after the sources were moved in a prior commit |
+
+---
+
+### Task 2 — App Icon & Logo Assets
+
+**Audit findings:**
+- `assets/branding/` contains 4 SVG files at 60×60, 120×120, 180×180, and 1024×1024 — not PNG. The old `assets/icon.png`, `assets/splash.png`, and `assets/adaptive-icon.png` were already deleted from the repo.
+- `LoadingScreen.tsx` and `app/paywall.tsx` both held dead `require('../assets/icon.png')` references that would crash at runtime.
+- `SvgLogo.tsx` was a placeholder ("L" italic text); replaced with the real vectorized path from `assets/branding/`.
+- No "Logo NoBG" strings existed anywhere in the codebase — grep returned empty.
+
+| File | Change | Why |
+|------|--------|-----|
+| `components/ui/SvgLogo.tsx` | Replaced placeholder italic-"L" SVG with real Livra logomark path data from `assets/branding/Livra_No Background - Clean - 180x180.svg`; default `height` changed to `48` (square); imports changed from `Text` to `Path, ClipPath, Rect, G` | Real brand asset now rendered throughout the app |
+| `components/LoadingScreen.tsx` | Removed dead `require('../assets/icon.png')`; replaced `<Image>` with `<SvgLogo width={180} height={180}>` using `themeColors.text` as fill; removed unused `Image` import | icon.png was deleted; SVG logo renders correctly in both themes |
+| `app/paywall.tsx` | Removed dead `LIVRA_APP_ICON = require('../assets/icon.png')` constant and `Image` from RN imports | icon.png was deleted; paywall already uses `SvgLogo` for rendering |
+| `app.json` | `"icon"` → `./assets/branding/Livra_No Background - Clean - 1024x1024.svg`; `"splash.image"` → same; `splash.backgroundColor` → `#F0EBE3` (design-system linen); `android.adaptiveIcon.foregroundImage` → same SVG | Point all icon/splash fields to branding assets; correct linen hex |
+
+**Note:** Expo native builds require PNG for `icon`, `splash.image`, and `adaptiveIcon.foregroundImage`. The branding files are SVG only. A PNG export (1024×1024) from `assets/branding/Livra_No Background - Clean - 1024x1024.svg` must be committed before running `eas build`. The SVG paths are correct placeholders in the meantime and will resolve for web/Expo Go previews.

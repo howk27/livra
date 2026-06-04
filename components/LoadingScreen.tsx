@@ -1,9 +1,10 @@
 import React from 'react';
-import { View, StyleSheet, Image, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { colors } from '../theme/colors';
+import { SvgLogo } from './ui/SvgLogo';
 
-const APP_ICON = require('../assets/icon.png');
+const LOGO_SIZE = 180;
 
 interface LoadingScreenProps {
   showSpinner?: boolean;
@@ -12,15 +13,10 @@ interface LoadingScreenProps {
 export const LoadingScreen: React.FC<LoadingScreenProps> = ({ showSpinner = true }) => {
   const theme = useEffectiveTheme();
   const themeColors = colors[theme];
-  const logoSource = APP_ICON;
 
   return (
     <View style={[styles.container, { backgroundColor: themeColors.background }]}>
-      <Image
-        source={logoSource}
-        style={styles.logo}
-        resizeMode="contain"
-      />
+      <SvgLogo color={themeColors.text} width={LOGO_SIZE} height={LOGO_SIZE} />
       {showSpinner && (
         <ActivityIndicator
           size="large"
@@ -38,13 +34,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  logo: {
-    width: 120,
-    height: 120,
-    marginBottom: 32,
-  },
   spinner: {
-    marginTop: 16,
+    marginTop: 48,
   },
 });
 

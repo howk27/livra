@@ -7,11 +7,11 @@
     "userInterfaceStyle": "automatic",
     "description": "Livra is where goals actually get done — one at a time, in sequence.",
     "splash": {
-      "image": "./assets/splash.png",
+      "image": "./assets/branding/Livra_No Background - Clean - 1024x1024.svg",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#F0EBE3"
     },
-    "icon": "./assets/icon.png",
+    "icon": "./assets/branding/Livra_No Background - Clean - 1024x1024.svg",
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -49,7 +49,7 @@
       "package": "com.livra.app",
       "versionCode": 42,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/branding/Livra_No Background - Clean - 1024x1024.svg",
         "backgroundColor": "#ffffff"
       },
       "intentFilters": [
@@ -127,7 +127,8 @@
         }
       ],
       "./plugins/withLivraWidget",
-      "expo-sharing"
+      "expo-sharing",
+      "expo-splash-screen"
     ],
     "scheme": "livra",
     "experiments": {
