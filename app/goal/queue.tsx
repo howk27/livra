@@ -14,15 +14,14 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { format, parseISO } from 'date-fns';
-import { colors } from '../../theme/colors';
-import { spacing, fontSize, fontWeight, borderRadius } from '../../theme/tokens';
+import { themedColors, spacing, fontSize, fontWeight, borderRadius } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useGoalsStore } from '../../state/goalsSlice';
 import type { Goal } from '../../types/goal';
 
 export default function GoalQueueScreen() {
   const theme = useEffectiveTheme();
-  const themeColors = colors[theme];
+  const c = themedColors(theme);
   const router = useRouter();
   const goals = useGoalsStore(s => s.goals);
   const completeGoal = useGoalsStore(s => s.completeGoal);
@@ -98,50 +97,50 @@ export default function GoalQueueScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: c.linen }]}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="chevron-back" size={24} color={themeColors.text} />
+          <Ionicons name="chevron-back" size={24} color={c.inkDark} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: themeColors.text }]}>Goals</Text>
+        <Text style={[styles.headerTitle, { color: c.inkDark }]}>Goals</Text>
         <TouchableOpacity onPress={() => router.push('/goal/new')}>
-          <Ionicons name="add" size={26} color={themeColors.primary} />
+          <Ionicons name="add" size={26} color={c.forest} />
         </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
         {active ? (
           <View style={styles.section}>
-            <Text style={[styles.sectionLabel, { color: themeColors.textSecondary }]}>
+            <Text style={[styles.sectionLabel, { color: c.inkMuted }]}>
               ACTIVE
             </Text>
-            <View style={[styles.card, { backgroundColor: themeColors.surface, borderColor: themeColors.primary }]}>
-              <Text style={[styles.goalTitle, { color: themeColors.text }]}>{active.title}</Text>
+            <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.forest }]}>
+              <Text style={[styles.goalTitle, { color: c.inkDark }]}>{active.title}</Text>
               {active.description ? (
-                <Text style={[styles.goalDesc, { color: themeColors.textSecondary }]}>
+                <Text style={[styles.goalDesc, { color: c.inkMuted }]}>
                   {active.description}
                 </Text>
               ) : null}
               {/* Target date row */}
               <TouchableOpacity
-                style={[styles.targetDateRow, { borderTopColor: themeColors.border }]}
+                style={[styles.targetDateRow, { borderTopColor: c.borderLight }]}
                 onPress={handleOpenTargetPicker}
                 activeOpacity={0.75}
               >
-                <Text style={[styles.targetDateLabel, { color: themeColors.textSecondary }]}>
+                <Text style={[styles.targetDateLabel, { color: c.inkMuted }]}>
                   Target date
                 </Text>
-                <Text style={[styles.targetDateValue, { color: active?.target_date ? themeColors.text : themeColors.textSecondary }]}>
+                <Text style={[styles.targetDateValue, { color: active?.target_date ? c.inkDark : c.inkMuted }]}>
                   {active?.target_date
                     ? format(parseISO(active.target_date), 'MMM d, yyyy')
                     : 'Not set'}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.completeBtn, { borderColor: themeColors.primary }]}
+                style={[styles.completeBtn, { borderColor: c.forest }]}
                 onPress={() => handleComplete(active)}
               >
-                <Text style={[styles.completeBtnText, { color: themeColors.primary }]}>
+                <Text style={[styles.completeBtnText, { color: c.forest }]}>
                   Mark complete
                 </Text>
               </TouchableOpacity>
@@ -149,7 +148,7 @@ export default function GoalQueueScreen() {
           </View>
         ) : (
           <View style={styles.section}>
-            <Text style={[styles.emptyText, { color: themeColors.textSecondary }]}>
+            <Text style={[styles.emptyText, { color: c.inkMuted }]}>
               No active goal. Add one below.
             </Text>
           </View>
@@ -157,22 +156,22 @@ export default function GoalQueueScreen() {
 
         {queued.length > 0 && (
           <View style={styles.section}>
-            <Text style={[styles.sectionLabel, { color: themeColors.textSecondary }]}>
+            <Text style={[styles.sectionLabel, { color: c.inkMuted }]}>
               UP NEXT
             </Text>
             {queued.map(goal => (
               <View
                 key={goal.id}
-                style={[styles.card, { backgroundColor: themeColors.surface, borderColor: themeColors.border }]}
+                style={[styles.card, { backgroundColor: c.surface, borderColor: c.borderLight }]}
               >
-                <Text style={[styles.goalTitle, { color: themeColors.text }]}>{goal.title}</Text>
+                <Text style={[styles.goalTitle, { color: c.inkDark }]}>{goal.title}</Text>
                 {goal.description ? (
-                  <Text style={[styles.goalDesc, { color: themeColors.textSecondary }]}>
+                  <Text style={[styles.goalDesc, { color: c.inkMuted }]}>
                     {goal.description}
                   </Text>
                 ) : null}
                 <TouchableOpacity onPress={() => handleDelete(goal)} style={styles.deleteBtn}>
-                  <Ionicons name="trash-outline" size={16} color={themeColors.textSecondary} />
+                  <Ionicons name="trash-outline" size={16} color={c.inkMuted} />
                 </TouchableOpacity>
               </View>
             ))}
@@ -185,24 +184,24 @@ export default function GoalQueueScreen() {
               style={styles.completedToggle}
               onPress={() => router.push('/goal/history')}
             >
-              <Text style={[styles.sectionLabel, { color: themeColors.textSecondary }]}>
+              <Text style={[styles.sectionLabel, { color: c.inkMuted }]}>
                 COMPLETED ({completed.length})
               </Text>
-              <Ionicons name="chevron-forward" size={14} color={themeColors.textSecondary} />
+              <Ionicons name="chevron-forward" size={14} color={c.inkMuted} />
             </TouchableOpacity>
           </View>
         )}
 
         {goals.length === 0 && (
           <View style={styles.emptyState}>
-            <Text style={[styles.emptyStateTitle, { color: themeColors.text }]}>
+            <Text style={[styles.emptyStateTitle, { color: c.inkDark }]}>
               No goals yet.
             </Text>
-            <Text style={[styles.emptyStateMsg, { color: themeColors.textSecondary }]}>
+            <Text style={[styles.emptyStateMsg, { color: c.inkMuted }]}>
               Add your first goal. One at a time — until it's done.
             </Text>
             <TouchableOpacity
-              style={[styles.addBtn, { backgroundColor: themeColors.primary }]}
+              style={[styles.addBtn, { backgroundColor: c.forest }]}
               onPress={() => router.push('/goal/new')}
             >
               <Text style={styles.addBtnText}>Add a goal</Text>
@@ -223,10 +222,10 @@ export default function GoalQueueScreen() {
           onPress={() => setShowTargetPicker(false)}
         >
           <TouchableOpacity
-            style={{ backgroundColor: themeColors.surface, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: spacing.xl }}
+            style={{ backgroundColor: c.surface, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: spacing.xl }}
             activeOpacity={1}
           >
-            <Text style={{ color: themeColors.textSecondary, fontSize: fontSize.sm, fontWeight: fontWeight.medium, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.md }}>
+            <Text style={{ color: c.inkMuted, fontSize: fontSize.sm, fontWeight: fontWeight.medium, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.md }}>
               Target date
             </Text>
             {Platform.OS === 'ios' && (
@@ -240,7 +239,7 @@ export default function GoalQueueScreen() {
                   style={{ width: '100%' }}
                 />
                 <TouchableOpacity
-                  style={{ backgroundColor: themeColors.accent.primary, borderRadius: borderRadius.md, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.md }}
+                  style={{ backgroundColor: c.forest, borderRadius: borderRadius.md, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.md }}
                   onPress={() => handleSaveTargetDate(targetPickerDate)}
                 >
                   <Text style={{ color: '#FFFFFF', fontSize: fontSize.md, fontWeight: fontWeight.semibold }}>
@@ -251,7 +250,7 @@ export default function GoalQueueScreen() {
             )}
             {active?.target_date && (
               <TouchableOpacity onPress={handleClearTargetDate} style={{ alignItems: 'center', marginTop: spacing.sm }}>
-                <Text style={{ color: themeColors.textSecondary, fontSize: fontSize.sm, textDecorationLine: 'underline' }}>
+                <Text style={{ color: c.inkMuted, fontSize: fontSize.sm, textDecorationLine: 'underline' }}>
                   Clear target date
                 </Text>
               </TouchableOpacity>

@@ -19,8 +19,7 @@ import {
 } from '../lib/debug/iapDiagnostics';
 import { isDashboardUnlocked, resetDashboardUnlock } from '../lib/debug/dashboardUnlock';
 import { getIapService } from '../lib/services/iap/getIapService';
-import { colors } from '../theme/colors';
-import { spacing, borderRadius, fontSize, fontWeight } from '../theme/tokens';
+import { themedColors, spacing, borderRadius, fontSize, fontWeight } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { AppText } from '../components/Typography';
 import { logger } from '../lib/utils/logger';
@@ -30,7 +29,7 @@ import { env } from '../lib/env';
 
 export default function IapDashboardScreen() {
   const theme = useEffectiveTheme();
-  const themeColors = colors[theme];
+  const c = themedColors(theme);
   const router = useRouter();
   const iapService = getIapService();
   const [snapshot, setSnapshot] = useState(getDiagSnapshot());
@@ -46,7 +45,7 @@ export default function IapDashboardScreen() {
       if (router.canGoBack()) {
         router.back();
       } else {
-        router.replace('/(tabs)/home');
+        router.replace('/(tabs)/focus' as any);
       }
       return;
     }
@@ -88,7 +87,7 @@ export default function IapDashboardScreen() {
       if (router.canGoBack()) {
         router.back();
       } else {
-        router.replace('/(tabs)/home');
+        router.replace('/(tabs)/focus' as any);
       }
     }
   }, [router, supportDiagnosticsEnabled, supportDiagnosticsPrefLoaded]);
@@ -137,8 +136,8 @@ export default function IapDashboardScreen() {
   };
 
   const renderSection = (title: string, content: React.ReactNode) => (
-    <View style={[styles.section, { backgroundColor: themeColors.surface }]}>
-      <AppText variant="subheading" style={[styles.sectionTitle, { color: themeColors.text }]}>
+    <View style={[styles.section, { backgroundColor: c.surface }]}>
+      <AppText variant="subheading" style={[styles.sectionTitle, { color: c.inkDark }]}>
         {title}
       </AppText>
       {content}
@@ -147,10 +146,10 @@ export default function IapDashboardScreen() {
 
   const renderKeyValue = (label: string, value: any) => (
     <View style={styles.keyValueRow}>
-      <AppText variant="caption" style={[styles.key, { color: themeColors.textSecondary }]}>
+      <AppText variant="caption" style={[styles.key, { color: c.inkMuted }]}>
         {label}:
       </AppText>
-      <AppText variant="body" style={[styles.value, { color: themeColors.text }]}>
+      <AppText variant="body" style={[styles.value, { color: c.inkDark }]}>
         {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
       </AppText>
     </View>
@@ -161,16 +160,16 @@ export default function IapDashboardScreen() {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: c.linen }]}>
       {/* Header */}
-      <View style={[styles.header, { backgroundColor: themeColors.surface, borderBottomColor: themeColors.border }]}>
+      <View style={[styles.header, { backgroundColor: c.surface, borderBottomColor: c.borderLight }]}>
         <TouchableOpacity
           onPress={() => router.back()}
           style={styles.backButton}
         >
-          <Ionicons name="arrow-back" size={24} color={themeColors.text} />
+          <Ionicons name="arrow-back" size={24} color={c.inkDark} />
         </TouchableOpacity>
-        <AppText variant="heading" style={[styles.headerTitle, { color: themeColors.text }]}>
+        <AppText variant="heading" style={[styles.headerTitle, { color: c.inkDark }]}>
           IAP Dashboard
         </AppText>
         <View style={styles.backButton} />
@@ -217,7 +216,7 @@ export default function IapDashboardScreen() {
           <View style={styles.content}>
             {renderKeyValue('Support Diagnostics Enabled', supportDiagnosticsEnabled)}
             <TouchableOpacity
-              style={[styles.copyButton, { backgroundColor: themeColors.primary, marginTop: spacing.sm }]}
+              style={[styles.copyButton, { backgroundColor: c.forest, marginTop: spacing.sm }]}
               onPress={handleToggleSupportDiagnostics}
             >
               <Ionicons name="pulse-outline" size={20} color="#FFFFFF" />
@@ -233,7 +232,7 @@ export default function IapDashboardScreen() {
           'IAP Recovery',
           <View style={styles.content}>
             <TouchableOpacity
-              style={[styles.copyButton, { backgroundColor: themeColors.primary }]}
+              style={[styles.copyButton, { backgroundColor: c.forest }]}
               onPress={handleRetryIapSetup}
             >
               <Ionicons name="refresh-outline" size={20} color="#FFFFFF" />
@@ -275,14 +274,14 @@ export default function IapDashboardScreen() {
           <View style={styles.content}>
             {snapshot.events.slice(-50).map((event, index) => (
               <View key={index} style={styles.eventItem}>
-                <AppText variant="caption" style={[styles.eventTime, { color: themeColors.textSecondary }]}>
+                <AppText variant="caption" style={[styles.eventTime, { color: c.inkMuted }]}>
                   {new Date(event.timestamp).toLocaleTimeString()}
                 </AppText>
-                <AppText variant="body" style={[styles.eventType, { color: themeColors.text }]}>
+                <AppText variant="body" style={[styles.eventType, { color: c.inkDark }]}>
                   {event.type}
                 </AppText>
                 {event.duration && (
-                  <AppText variant="caption" style={[styles.eventDuration, { color: themeColors.textSecondary }]}>
+                  <AppText variant="caption" style={[styles.eventDuration, { color: c.inkMuted }]}>
                     {event.duration}ms
                   </AppText>
                 )}
@@ -293,9 +292,9 @@ export default function IapDashboardScreen() {
       </ScrollView>
 
       {/* Copy Button */}
-      <View style={[styles.footer, { backgroundColor: themeColors.surface, borderTopColor: themeColors.border }]}>
+      <View style={[styles.footer, { backgroundColor: c.surface, borderTopColor: c.borderLight }]}>
         <TouchableOpacity
-          style={[styles.copyButton, { backgroundColor: themeColors.primary }]}
+          style={[styles.copyButton, { backgroundColor: c.forest }]}
           onPress={handleCopy}
         >
           <Ionicons name="copy-outline" size={20} color="#FFFFFF" />

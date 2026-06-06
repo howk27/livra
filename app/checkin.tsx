@@ -10,8 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { colors } from '../theme/colors';
-import { spacing, borderRadius, fontWeight } from '../theme/tokens';
+import { themedColors, spacing, borderRadius, fontWeight } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { useGoalsStore } from '../state/goalsSlice';
 import { useCheckinsStore } from '../state/checkinsSlice';
@@ -20,7 +19,7 @@ import { Logo } from '../components/Logo';
 
 export default function CheckinScreen() {
   const theme = useEffectiveTheme();
-  const themeColors = colors[theme];
+  const c = themedColors(theme);
   const router = useRouter();
   const { user } = useAuth();
   const goals = useGoalsStore(s => s.goals);
@@ -54,24 +53,24 @@ export default function CheckinScreen() {
 
   if (!activeGoal) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: c.linen }]}>
         <View style={styles.logoRow}>
           <Logo size={24} />
         </View>
         <View style={styles.center}>
-          <Text style={[styles.noGoalText, { color: themeColors.textSecondary }]}>
+          <Text style={[styles.noGoalText, { color: c.inkMuted }]}>
             Add a goal first to start checking in.
           </Text>
         </View>
         <TouchableOpacity style={styles.doneBtn} onPress={() => router.back()}>
-          <Text style={[styles.doneBtnText, { color: themeColors.textSecondary }]}>Done</Text>
+          <Text style={[styles.doneBtnText, { color: c.inkMuted }]}>Done</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: c.linen }]}>
       {/* Logo top center */}
       <View style={styles.logoRow}>
         <Logo size={24} />
@@ -81,30 +80,30 @@ export default function CheckinScreen() {
         {!answered ? (
           <>
             {/* Goal context */}
-            <Text style={[styles.goalContext, { color: themeColors.textSecondary }]} numberOfLines={2}>
+            <Text style={[styles.goalContext, { color: c.inkMuted }]} numberOfLines={2}>
               {activeGoal.title}
             </Text>
 
             {/* Question */}
-            <Text style={[styles.question, { color: themeColors.text }]}>
+            <Text style={[styles.question, { color: c.inkDark }]}>
               Did you show up for this today?
             </Text>
 
             {/* Response options */}
             <View style={styles.actions}>
               <TouchableOpacity
-                style={styles.yesBtn}
+                style={[styles.yesBtn, { backgroundColor: c.forest }]}
                 onPress={() => handleAnswer(true)}
                 activeOpacity={0.85}
               >
-                <Text style={styles.yesBtnText}>I showed up</Text>
+                <Text style={[styles.yesBtnText, { color: c.inkInverse }]}>I showed up</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.noBtn, { borderColor: themeColors.border }]}
+                style={[styles.noBtn, { borderColor: c.borderLight }]}
                 onPress={() => handleAnswer(false)}
                 activeOpacity={0.85}
               >
-                <Text style={[styles.noBtnText, { color: themeColors.textSecondary }]}>
+                <Text style={[styles.noBtnText, { color: c.inkMuted }]}>
                   Not today
                 </Text>
               </TouchableOpacity>
@@ -112,12 +111,12 @@ export default function CheckinScreen() {
           </>
         ) : (
           <View style={styles.responseArea}>
-            <Text style={[styles.responseTitle, { color: themeColors.text }]}>
+            <Text style={[styles.responseTitle, { color: c.inkDark }]}>
               {response
                 ? (streak >= 7 ? `${streak} days.` : streak >= 3 ? 'Keep going.' : 'Logged.')
                 : 'Noted.'}
             </Text>
-            <Text style={[styles.responseSubtitle, { color: themeColors.textSecondary }]}>
+            <Text style={[styles.responseSubtitle, { color: c.inkMuted }]}>
               {response
                 ? (streak >= 7 ? "That's the work." : streak >= 3 ? 'Stack another day.' : 'See you tomorrow.')
                 : 'Tomorrow is the reset.'}
@@ -129,7 +128,7 @@ export default function CheckinScreen() {
       {/* Skip / Done */}
       {!answered && (
         <TouchableOpacity style={styles.doneBtn} onPress={() => router.back()}>
-          <Text style={[styles.doneBtnText, { color: themeColors.textSecondary }]}>Skip</Text>
+          <Text style={[styles.doneBtnText, { color: c.inkMuted }]}>Skip</Text>
         </TouchableOpacity>
       )}
     </SafeAreaView>
@@ -178,13 +177,11 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   yesBtn: {
-    backgroundColor: '#FEB729',
     paddingVertical: spacing.lg,
     borderRadius: borderRadius.full,
     alignItems: 'center',
   },
   yesBtnText: {
-    color: '#111111',
     fontSize: 17,
     fontFamily: 'Inter',
     fontWeight: fontWeight.semibold,

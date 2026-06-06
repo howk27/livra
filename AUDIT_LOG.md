@@ -418,3 +418,56 @@ Already fully implemented with forest design. No visual changes needed — exist
 | File | Change | Why |
 |------|--------|-----|
 | `app/(tabs)/queue.tsx` | Replaced the static `remainingGoals.map(...)` render with a self-contained `DraggableQueueList` built on `react-native-gesture-handler`'s `Gesture.Pan()` (modern Gesture API) + `react-native-reanimated` shared values — no third-party drag library. Each row exposes an `Ionicons` `reorder-three-outline` drag handle on the right edge, shown only when the draggable list has more than 1 item (`count > 1`). The handle's pan gesture uses `.activateAfterLongPress(220)` so a quick swipe still scrolls; on activation it fires `Haptics.impactAsync(Medium)` (skipped on web). During drag the active row scales to `1.03`, gains an elevated shadow, and raises `zIndex`; intermediate rows reflow live via a shared `positions` map keyed by goal id. On drop the row springs to its nearest slot and `reorderQueue(orderedIds)` is called with the full queued order. When no goal is active, the hero is `queued[0]` and is kept as a fixed prefix (`fixedPrefixIds`) so it stays first in the persisted order. A `positions` effect re-syncs when goals are added/removed/completed. Removed the now-unused `useMarksStore` import. | The queue had no reorder UI at all (no up/down buttons existed); spec required drag-to-reorder with long-press, haptics, elevated active card, auto-snap, drag handle (>1 item), wired to the existing `reorderQueue` action |
+
+### Task 6 — Dark Mode
+
+Dark-mode preference was already persisted (`uiSlice.themeMode` + `useEffectiveTheme()`), but the "Livra 2.0" screens/components rendered light only because they imported the flat, light-only palette `colors` from `theme/tokens.ts` and baked those hex values directly into `StyleSheet.create`. There is no `theme/colors.ts` `colors.light.*` usage in these screens (that file is only used by the legacy screens, which were already theme-aware via `colors[theme]`), so the fix routed every "2.0" screen through a new theme-aware resolver instead.
+
+| File | Change | Why |
+|------|--------|-----|
+| `theme/tokens.ts` | Added a dark variant of the semantic palette (`colorsDark`) with the same shape as `colors`, plus `themedColors(theme: 'light' \| 'dark')` that returns the palette for the effective theme. Dark variant flips background/surface/ink/border roles (e.g. `linen → #15211D`, `surface → #1C2826`, `inkDark → #F0EDE8`) while keeping brand accents on-brand (`forest`, `mint`). Light `colors` export is unchanged. | A single source of truth for per-theme semantic colors so screens can resolve at render time without restructuring layout |
+| `components/ui/SectionLabel.tsx`, `StatTile.tsx`, `HeroCard.tsx`, `MarkRow.tsx`, `LivraHeader.tsx`, `FAB.tsx`, `PillButton.tsx`, `LivraWordmark.tsx`, `QueueCard.tsx`, `SpeedDialFAB.tsx` | Each now calls `themedColors(useEffectiveTheme())` and applies colors via inline overrides; color properties removed from their static `StyleSheet.create` blocks (layout/spacing untouched). Defaulted-color props (`SectionLabel.color`, `LivraWordmark.color`, `StatTile.bgColor`) now resolve their fallback from the theme. | Shared UI primitives are reused across every screen, so they must be theme-aware for dark mode to render anywhere |
+| `app/(tabs)/focus.tsx`, `app/(tabs)/queue.tsx`, `app/(tabs)/settings.tsx` | Wired `useEffectiveTheme()` + `themedColors`; moved all background/text/border colors to inline overrides. `settings.tsx` helper sub-components (`SettingsCard`, `SettingsRow`) made theme-aware. | These are the primary tab screens that only rendered light |
+| `app/settings/appearance.tsx` | Wired the theme picker to the real store: replaced the placeholder `useState` with `useUIStore.themeMode` / `setThemeMode`, removed the "only Light renders" TODO, and made the screen itself theme-aware. Hint now reflects the active mode. | The toggle existed but was a no-op; spec requires it to actually switch themes |
+| `app/settings/notifications.tsx`, `app/settings/privacy.tsx`, `app/settings/about.tsx` | Made theme-aware (screen, cards, toggle rows, day/auto-lock pills, dividers, links). In `privacy.tsx` the hardcoded `#E6F4EE` sync badge background was replaced with `surfaceAlt` (theme-aware). | Settings sub-screens rendered light only |
+| `app/onboarding/welcome.tsx` | Made all three onboarding steps theme-aware (background, wordmark/logo, step circles, body copy, progress dots). | Listed critical onboarding screen |
+| `components/overlays/GoalCompletionOverlay.tsx`, `components/sheets/AddMarkSheet.tsx`, `components/sheets/AddGoalSheet.tsx` | Made theme-aware: overlay/sheet backgrounds, handles, inputs (incl. `placeholderTextColor`), category/stepper controls, switches, linked-mark rows. Sheets use a `tc` alias for theme colors to avoid clashing with existing `c =>` find callbacks. | Listed critical overlay/sheet components |
+
+**Out of scope / not changed (flagged):** Category accent hex values in `AddMarkSheet`/`MarkRow` (`#6B8FA6`, `#A0614A`, etc.) are intentional per-category brand hues and remain as primitives. White-on-accent text (`#FFFFFF`) in `iap-dashboard`, `auth/*`, `goal/*`, and several non-target components is text sitting on the always-yellow `#FEB729` accent or other fixed-hue surfaces; left as-is since those screens were outside the listed scope and the white is intentional. The legacy `theme/colors.ts` (`light`/`dark` keyed) was untouched — it already drives the older screens correctly.
+
+**Validation:** `tsc --noEmit` clean; `npm test` 370/370 passing (32 suites).
+
+---
+
+### Task 6 Extended — Dark Mode Pass 2 (2026-06-05)
+
+Continued the migration started above; all remaining user-reachable screens that still imported from `theme/colors` were converted to `themedColors`. Pattern identical to above: import swap, `const c = themedColors(theme)`, replace `themeColors.*` aliases.
+
+| File | Change | Why |
+|------|--------|-----|
+| `app/mark/[id].tsx` | Converted to `createStyles(c)` + `useMemo`; removed `tokenColors.*` import; full inline-to-theme migration | Mark detail is primary UX |
+| `app/goal/complete.tsx`, `app/goal/milestone.tsx` | Converted to `themedColors`; removed old `colors[theme]` usage | Goal completion flow |
+| `app/onboarding.tsx`, `app/signin.tsx` | New screens wired to `themedColors` from creation | New auth/onboarding flow |
+| `app/goal/queue.tsx` | Removed `colors[theme]`; replaced `themeColors.*` → `c.*` via mapping (`background→linen`, `text→inkDark`, `textSecondary→inkMuted`, `primary→forest`, `accent.primary→forest`) | Reachable from Queue tab |
+| `app/goal/new.tsx`, `app/goal/history.tsx` | Same migration pattern (both use only inline styles, no createStyles needed) | Both reachable from goal/queue |
+| `app/auth/reset-password.tsx`, `app/auth/reset-password-complete.tsx` | Migrated + added mappings for `error→danger`, `success→success`, `textTertiary→inkMuted` | Reachable from new signin screen |
+| `app/legal/privacy-policy.tsx`, `app/legal/terms-and-conditions.tsx` | Migrated | Reachable from settings/privacy |
+| `app/iap-dashboard.tsx` | Migrated | Reachable from settings |
+| `app/checkin.tsx` | Migrated inline tokens; removed amber `#FEB729` from `yesBtn` StyleSheet → replaced with `{ backgroundColor: c.forest }` inline; `#111111` text → `{ color: c.inkInverse }` | Registered Stack.Screen; CheckinButton pushes to this route |
+
+**Route fix (broken navigation):**
+| File | Change | Why |
+|------|--------|-----|
+| `app/settings/profile.tsx` | Created — full-screen "Edit Profile" with avatar picker (`expo-image-picker`), display name field, read-only email, Save → Supabase upsert | Settings tab navigated to `/settings/profile` but the file did not exist; would crash on tap |
+
+**Remaining on old color system (not reachable in current 3-tab nav):**
+- `app/paywall.tsx` — 1997 lines; has partial dark mode via old system; out of scope
+- `app/(tabs)/marks.tsx`, `profile.tsx`, `tracking.tsx`, `stats.tsx` — hidden tabs
+- `app/mark/new.tsx`, `app/mark/[id]/edit.tsx` — only reachable from hidden `marks.tsx` tab
+- `app/auth/signin.tsx`, `app/auth/_layout.tsx` — old auth stack replaced by `app/signin.tsx`
+- `app/onboarding/*` sub-screens — old onboarding replaced by `app/onboarding.tsx`
+- `app/diagnostics.tsx` — dev screen
+
+**Validation:** `tsc --noEmit` 0 errors; `npm test` 370/370 passing.
+
+**Validation:** `tsc --noEmit` clean; `npm test` 370/370 passing (32 suites). `npm run lint` is broken project-wide (ESLint v9 missing `eslint.config.js`) — pre-existing and unrelated to this change.

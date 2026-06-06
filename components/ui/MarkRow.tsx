@@ -1,0 +1,212 @@
+import React, { useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+} from 'react-native-reanimated';
+import { Feather } from '@expo/vector-icons';
+import { fonts, radius, spacing, themedColors } from '../../theme/tokens';
+import { useEffectiveTheme } from '../../state/uiSlice';
+
+// Category → icon → accent color mapping
+export const CATEGORY_MAP: Record<string, { icon: keyof typeof Feather.glyphMap; accent: string }> = {
+  sleep:    { icon: 'moon',       accent: '#6B8FA6' },
+  workout:  { icon: 'activity',   accent: '#A0614A' },
+  water:    { icon: 'droplet',    accent: '#4A8C7A' },
+  planning: { icon: 'calendar',   accent: '#8C7A3A' },
+  reading:  { icon: 'book-open',  accent: '#7A4A8C' },
+  work:     { icon: 'briefcase',  accent: '#4A6A8C' },
+  custom:   { icon: 'circle',     accent: '#6B7A6B' },
+};
+
+function hexToRgba(hex: string, alpha: number): string {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+interface MarkRowProps {
+  title: string;
+  subtitle?: string;
+  category?: string;
+  icon?: keyof typeof Feather.glyphMap;
+  loggedToday?: boolean;
+  onPress?: () => void;
+  onLog?: () => void;
+  isLast?: boolean;
+  showWeeklyCount?: boolean;
+  weeklyCount?: number;
+  weeklyTarget?: number;
+}
+
+export function MarkRow({
+  title,
+  subtitle,
+  category,
+  icon: iconOverride,
+  loggedToday,
+  onPress,
+  onLog,
+  isLast,
+  showWeeklyCount,
+  weeklyCount = 0,
+  weeklyTarget = 7,
+}: MarkRowProps) {
+  const theme = useEffectiveTheme();
+  const c = themedColors(theme);
+  const catKey = category ?? 'custom';
+  const catData = CATEGORY_MAP[catKey] ?? CATEGORY_MAP.custom;
+  const accent = catData.accent;
+  const iconName = iconOverride ?? catData.icon;
+
+  // Scale-in animation for the check circle when transitioning to logged
+  const checkScale = useSharedValue(loggedToday ? 1 : 0);
+  const prevLogged = React.useRef(loggedToday);
+  if (prevLogged.current !== loggedToday && loggedToday) {
+    checkScale.value = withSpring(1, { damping: 14, stiffness: 300 });
+  }
+  prevLogged.current = loggedToday;
+
+  const checkStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: checkScale.value }],
+  }));
+
+  const handleLog = useCallback(() => {
+    if (!loggedToday && onLog) {
+      checkScale.value = 0;
+      checkScale.value = withSpring(1, { damping: 14, stiffness: 300 });
+      onLog();
+    }
+  }, [loggedToday, onLog, checkScale]);
+
+  return (
+    <TouchableOpacity
+      style={[styles.row, !isLast && [styles.border, { borderBottomColor: c.borderLight }]]}
+      onPress={onPress}
+      activeOpacity={onPress ? 0.7 : 1}
+    >
+      {/* Left accent bar */}
+      <View style={[styles.accentBar, { backgroundColor: accent }]} />
+
+      {/* Icon tile */}
+      <View
+        style={[
+          styles.iconTile,
+          { backgroundColor: hexToRgba(accent, 0.12) },
+        ]}
+      >
+        <Feather name={iconName} size={18} color={accent} />
+      </View>
+
+      {/* Center */}
+      <View style={styles.center}>
+        <Text style={[styles.title, { color: c.inkDark }]}>{title}</Text>
+        {subtitle ? <Text style={[styles.subtitle, { color: c.inkMuted }]}>{subtitle}</Text> : null}
+        {showWeeklyCount && weeklyTarget > 0 && (
+          <View style={styles.progressTrackWrap}>
+            <View style={[styles.progressTrack, { backgroundColor: c.borderLight }]}>
+              <View
+                style={[
+                  styles.progressFill,
+                  { backgroundColor: c.forest, width: `${Math.min(100, (weeklyCount / weeklyTarget) * 100)}%` },
+                ]}
+              />
+            </View>
+          </View>
+        )}
+      </View>
+
+      {/* Right: log circle or weekly count */}
+      <View style={styles.right}>
+        {showWeeklyCount ? (
+          <Text style={[styles.count, { color: c.inkDark }]}>{weeklyCount}</Text>
+        ) : (
+          <TouchableOpacity
+            onPress={handleLog}
+            disabled={loggedToday || !onLog}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            {loggedToday ? (
+              <Animated.View style={[styles.logCircleFilled, { backgroundColor: c.forest }, checkStyle]}>
+                <Feather name="check" size={11} color={c.inkInverse} />
+              </Animated.View>
+            ) : (
+              <View style={[styles.logCircleEmpty, { borderColor: c.borderMid }]} />
+            )}
+          </TouchableOpacity>
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+const styles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    gap: spacing.md,
+  },
+  border: {
+    borderBottomWidth: 1,
+  },
+  accentBar: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 3,
+    borderTopRightRadius: 2,
+    borderBottomRightRadius: 2,
+  },
+  iconTile: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  center: { flex: 1 },
+  title: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 15,
+  },
+  subtitle: {
+    fontFamily: fonts.sans,
+    fontSize: 12,
+    marginTop: 2,
+  },
+  right: { alignItems: 'flex-end', justifyContent: 'center' },
+  count: {
+    fontFamily: fonts.sansSemibold,
+    fontSize: 16,
+  },
+  logCircleEmpty: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+  },
+  logCircleFilled: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  progressTrackWrap: { marginTop: spacing.xs },
+  progressTrack: {
+    height: 2,
+    borderRadius: 1,
+    overflow: 'hidden',
+    width: '100%',
+  },
+  progressFill: {
+    height: 2,
+    borderRadius: 1,
+  },
+});

@@ -8,7 +8,7 @@ import type { ReflectionTier } from '../lib/weeklyReflectionCopy';
 const TIER_ACCENT: Record<ReflectionTier, string> = {
   strong: '#22c55e',
   solid: '#3b82f6',
-  inconsistent: '#f59e0b',
+  inconsistent: '#1C3830',
   missing: '#6b7280',
   first_week: '#a78bfa',
 };

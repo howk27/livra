@@ -10,14 +10,13 @@ import Animated, {
   withDelay,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import { colors } from '../../theme/colors';
-import { spacing, fontSize, fontWeight, borderRadius } from '../../theme/tokens';
+import { themedColors, spacing, fontSize, fontWeight, borderRadius } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { MILESTONE_COPY } from '../../lib/goalMilestones';
 
 export default function GoalMilestoneScreen() {
   const theme = useEffectiveTheme();
-  const themeColors = colors[theme];
+  const c = themedColors(theme);
   const router = useRouter();
   const { goalTitle, milestoneKey } = useLocalSearchParams<{ goalTitle: string; milestoneKey: string }>();
 
@@ -49,31 +48,31 @@ export default function GoalMilestoneScreen() {
   const copy = MILESTONE_COPY[milestoneKey ?? ''] ?? '';
 
   const handleKeepGoing = () => {
-    router.replace('/(tabs)/home');
+    router.replace('/(tabs)/focus' as any);
   };
 
   const handleReflectSubmit = () => {
-    router.replace('/(tabs)/home');
+    router.replace('/(tabs)/focus' as any);
   };
 
   if (phase === 'reflect') {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: c.linen }]}>
         <View style={styles.center}>
-          <Text style={[styles.reflectPrompt, { color: themeColors.textSecondary }]}>
+          <Text style={[styles.reflectPrompt, { color: c.inkMuted }]}>
             What made this one possible?
           </Text>
           <TextInput
             style={[
               styles.reflectInput,
               {
-                color: themeColors.text,
-                backgroundColor: themeColors.surface,
-                borderColor: themeColors.border,
+                color: c.inkDark,
+                backgroundColor: c.surface,
+                borderColor: c.borderLight,
               },
             ]}
             placeholder="Write anything — or skip."
-            placeholderTextColor={themeColors.textSecondary}
+            placeholderTextColor={c.inkMuted}
             value={reflection}
             onChangeText={setReflection}
             multiline
@@ -81,7 +80,7 @@ export default function GoalMilestoneScreen() {
             autoFocus
           />
           <TouchableOpacity
-            style={[styles.primaryBtn, { backgroundColor: themeColors.primary }]}
+            style={[styles.primaryBtn, { backgroundColor: c.forest }]}
             onPress={handleReflectSubmit}
           >
             <Text style={styles.primaryBtnText}>Done</Text>
@@ -92,27 +91,27 @@ export default function GoalMilestoneScreen() {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: c.linen }]}>
       <View style={styles.center}>
         <Animated.View style={[styles.titleBlock, titleStyle]}>
-          <Text style={[styles.goalName, { color: themeColors.textSecondary }]}>
+          <Text style={[styles.goalName, { color: c.inkMuted }]}>
             {goalTitle}
           </Text>
-          <Text style={[styles.headline, { color: themeColors.text }]}>{copy}</Text>
+          <Text style={[styles.headline, { color: c.inkDark }]}>{copy}</Text>
         </Animated.View>
 
         <Animated.View style={[styles.actions, subtitleStyle]}>
           <TouchableOpacity
-            style={[styles.primaryBtn, { backgroundColor: themeColors.primary }]}
+            style={[styles.primaryBtn, { backgroundColor: c.forest }]}
             onPress={handleKeepGoing}
           >
             <Text style={styles.primaryBtnText}>Keep going</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.secondaryBtn, { borderColor: themeColors.border }]}
+            style={[styles.secondaryBtn, { borderColor: c.borderLight }]}
             onPress={() => setPhase('reflect')}
           >
-            <Text style={[styles.secondaryBtnText, { color: themeColors.textSecondary }]}>
+            <Text style={[styles.secondaryBtnText, { color: c.inkMuted }]}>
               Take a moment
             </Text>
           </TouchableOpacity>

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, TextInput, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -10,8 +10,7 @@ import Animated, {
   withDelay,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import { colors } from '../../theme/colors';
-import { spacing, fontSize, fontWeight, borderRadius } from '../../theme/tokens';
+import { themedColors, spacing, fontSize, fontWeight, borderRadius, fonts } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useXPStore } from '../../state/xpSlice';
 import { getLevelForXP, LEVEL_TITLES } from '../../lib/xpEngine';
@@ -22,10 +21,14 @@ import { logger } from '../../lib/utils/logger';
 import { generateShareCard } from '../../lib/sharing/generateShareCard';
 import { GoalCompletionShareCard } from '../../components/GoalCompletionShareCard';
 import { SharePreviewModal } from '../../components/SharePreviewModal';
+import { SvgLogo } from '../../components/ui/SvgLogo';
+import { SectionLabel } from '../../components/ui/SectionLabel';
+import { PillButton } from '../../components/ui/PillButton';
 
 export default function GoalCompleteScreen() {
   const theme = useEffectiveTheme();
-  const themeColors = colors[theme];
+  const c = themedColors(theme);
+  const styles = useMemo(() => createStyles(c), [c]);
   const router = useRouter();
   const { goalTitle, goalId } = useLocalSearchParams<{ goalTitle: string; goalId?: string }>();
 
@@ -47,6 +50,10 @@ export default function GoalCompleteScreen() {
   const goals = useGoalsStore((s) => s.goals);
   const completedGoal = goalId ? goals.find((g) => g.id === goalId) : undefined;
 
+  const nextGoal = useGoalsStore((s) =>
+    s.goals.find((g) => g.status === 'active' && g.id !== goalId) ?? null
+  );
+
   const daysTaken: number = (() => {
     if (!completedGoal?.created_at) return 1;
     const start = new Date(completedGoal.created_at);
@@ -66,39 +73,42 @@ export default function GoalCompleteScreen() {
     return 'Finished right on time';
   })();
 
-  const scale = useSharedValue(0.88);
-  const opacity = useSharedValue(0);
-  const subtitleOpacity = useSharedValue(0);
+  // Staggered entrance animations
+  const logoOpacity = useSharedValue(0);
+  const titleOpacity = useSharedValue(0);
+  const copyOpacity = useSharedValue(0);
+  const dividerOpacity = useSharedValue(0);
+  const nextOpacity = useSharedValue(0);
 
-  const titleStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-    opacity: opacity.value,
-  }));
-
-  const subtitleStyle = useAnimatedStyle(() => ({
-    opacity: subtitleOpacity.value,
-  }));
+  const logoStyle = useAnimatedStyle(() => ({ opacity: logoOpacity.value }));
+  const titleStyle = useAnimatedStyle(() => ({ opacity: titleOpacity.value }));
+  const copyStyle = useAnimatedStyle(() => ({ opacity: copyOpacity.value }));
+  const dividerStyle = useAnimatedStyle(() => ({ opacity: dividerOpacity.value }));
+  const nextStyle = useAnimatedStyle(() => ({ opacity: nextOpacity.value }));
 
   useEffect(() => {
     if (Platform.OS !== 'web') {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
-    scale.value = withSpring(1, { damping: 14, stiffness: 90 });
-    opacity.value = withTiming(1, { duration: 500 });
-    subtitleOpacity.value = withDelay(400, withTiming(1, { duration: 400 }));
-  }, [scale, opacity, subtitleOpacity]);
+    const d = 200;
+    logoOpacity.value = withTiming(1, { duration: d });
+    titleOpacity.value = withDelay(d, withTiming(1, { duration: d }));
+    copyOpacity.value = withDelay(d * 2, withTiming(1, { duration: d }));
+    dividerOpacity.value = withDelay(d * 3, withTiming(1, { duration: d }));
+    nextOpacity.value = withDelay(d * 4, withTiming(1, { duration: d }));
+  }, [logoOpacity, titleOpacity, copyOpacity, dividerOpacity, nextOpacity]);
 
   const handleNext = useCallback(() => {
     const nextActive = useGoalsStore.getState().getActiveGoal();
     if (nextActive) {
-      router.replace('/(tabs)/home');
+      router.replace('/(tabs)/focus' as any);
     } else {
       router.replace('/goal/queue');
     }
   }, [router]);
 
   const handleReflectSubmit = useCallback(() => {
-    router.replace('/(tabs)/home');
+    router.replace('/(tabs)/focus' as any);
   }, [router]);
 
   const handleSharePress = async () => {
@@ -122,78 +132,78 @@ export default function GoalCompleteScreen() {
 
   if (phase === 'reflect') {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
+      <SafeAreaView style={styles.container}>
         <View style={styles.center}>
-          <Text style={[styles.reflectPrompt, { color: themeColors.textSecondary }]}>
+          <Text style={styles.reflectPrompt}>
             What made this one possible?
           </Text>
           <TextInput
             style={[
               styles.reflectInput,
               {
-                color: themeColors.text,
-                backgroundColor: themeColors.surface,
-                borderColor: themeColors.border,
+                color: c.inkDark,
+                backgroundColor: c.surface,
+                borderColor: c.borderLight,
               },
             ]}
             placeholder="Write anything — or skip."
-            placeholderTextColor={themeColors.textSecondary}
+            placeholderTextColor={c.inkMuted}
             value={reflection}
             onChangeText={setReflection}
             multiline
             numberOfLines={4}
             autoFocus
           />
-          <TouchableOpacity
-            style={[styles.primaryBtn, { backgroundColor: themeColors.primary }]}
-            onPress={handleReflectSubmit}
-          >
-            <Text style={styles.primaryBtnText}>Done</Text>
-          </TouchableOpacity>
+          <PillButton label="Done" onPress={handleReflectSubmit} fullWidth />
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
+    <SafeAreaView style={styles.container}>
       <View style={styles.center}>
-        <Animated.View style={[styles.titleBlock, titleStyle]}>
-          <Text style={[styles.goalName, { color: themeColors.textSecondary }]}>
-            {goalTitle}
-          </Text>
-          <Text style={[styles.headline, { color: themeColors.text }]}>Done.</Text>
+        {/* Logo */}
+        <Animated.View style={[styles.logoWrap, logoStyle]}>
+          <SvgLogo color={c.forest} width={56} height={28} />
         </Animated.View>
 
-        <Animated.Text style={[styles.tagline, { color: themeColors.textSecondary }, subtitleStyle]}>
-          That one's yours forever.
+        {/* Goal title */}
+        <Animated.Text style={[styles.goalTitle, titleStyle]}>
+          {goalTitle}
         </Animated.Text>
 
-        <Animated.View style={[styles.actions, subtitleStyle]}>
-          <TouchableOpacity
-            style={[styles.primaryBtn, { backgroundColor: themeColors.primary }]}
-            onPress={handleNext}
-          >
-            <Text style={styles.primaryBtnText}>See what's next</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.secondaryBtn, { borderColor: themeColors.border }]}
-            onPress={() => setPhase('reflect')}
-          >
-            <Text style={[styles.secondaryBtnText, { color: themeColors.textSecondary }]}>
-              Take a moment
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.shareBtn}
-            onPress={handleSharePress}
-            disabled={shareLoading}
-            accessibilityRole="button"
-          >
-            <Text style={[styles.shareBtnText, { color: themeColors.textSecondary }]}>
-              {shareLoading ? 'Preparing…' : 'Share this moment'}
-            </Text>
-          </TouchableOpacity>
+        {/* Tagline */}
+        <Animated.Text style={[styles.tagline, copyStyle]}>
+          {"Done. That one's yours forever."}
+        </Animated.Text>
+
+        {/* Divider */}
+        <Animated.View style={[styles.divider, dividerStyle]} />
+
+        {/* What's Next */}
+        <Animated.View style={[styles.nextBlock, nextStyle]}>
+          <SectionLabel color={c.inkMuted} style={styles.nextLabel}>
+            {"WHAT'S NEXT?"}
+          </SectionLabel>
+          {nextGoal ? (
+            <Text style={styles.nextTitle}>{nextGoal.title}</Text>
+          ) : (
+            <Text style={styles.nextTitle}>Your queue is clear.</Text>
+          )}
+          <View style={styles.actions}>
+            <PillButton label="Continue" onPress={handleNext} fullWidth />
+            <TouchableOpacity
+              style={styles.shareBtn}
+              onPress={handleSharePress}
+              disabled={shareLoading}
+              accessibilityRole="button"
+            >
+              <Text style={styles.shareBtnText}>
+                {shareLoading ? 'Preparing…' : 'Share this moment'}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </Animated.View>
       </View>
 
@@ -221,45 +231,78 @@ export default function GoalCompleteScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1 },
+function createStyles(c: ReturnType<typeof themedColors>) {
+  return StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: c.linen,
+  },
   center: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: spacing.xl,
-    gap: spacing.lg,
   },
-  titleBlock: { alignItems: 'center', gap: spacing.xs },
-  goalName: {
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
+  logoWrap: {
+    marginBottom: spacing.xl,
   },
-  headline: { fontSize: 56, fontWeight: fontWeight.bold, lineHeight: 64 },
-  tagline: { fontSize: fontSize.lg, textAlign: 'center' },
-  actions: { width: '100%', gap: spacing.sm, marginTop: spacing.md },
-  primaryBtn: {
-    paddingVertical: spacing.md,
-    borderRadius: borderRadius.lg,
+  goalTitle: {
+    fontFamily: fonts.serif,
+    fontSize: 32,
+    lineHeight: 38,
+    color: c.inkDark,
+    textAlign: 'center',
+    marginBottom: spacing.md,
+  },
+  tagline: {
+    fontFamily: fonts.serifItalic,
+    fontSize: 22,
+    color: c.inkMid,
+    textAlign: 'center',
+  },
+  divider: {
+    width: 48,
+    height: 1,
+    backgroundColor: c.borderLight,
+    alignSelf: 'center',
+    marginTop: spacing.xl,
+  },
+  nextBlock: {
     alignItems: 'center',
+    width: '100%',
+    marginTop: spacing.xl,
   },
-  primaryBtnText: { color: '#FFFFFF', fontSize: fontSize.md, fontWeight: fontWeight.semibold },
-  secondaryBtn: {
-    paddingVertical: spacing.md,
-    borderRadius: borderRadius.lg,
-    alignItems: 'center',
-    borderWidth: 1,
+  nextLabel: {
+    textAlign: 'center',
   },
-  secondaryBtnText: { fontSize: fontSize.md },
+  nextTitle: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 17,
+    color: c.inkDark,
+    textAlign: 'center',
+    marginTop: spacing.sm,
+  },
+  actions: {
+    width: '100%',
+    gap: spacing.sm,
+    marginTop: spacing.xl,
+  },
   shareBtn: {
     paddingVertical: spacing.sm,
     alignItems: 'center',
-    marginTop: spacing.xs,
   },
-  shareBtnText: { fontSize: fontSize.sm },
-  reflectPrompt: { fontSize: fontSize.lg, fontWeight: fontWeight.semibold, textAlign: 'center' },
+  shareBtnText: {
+    fontFamily: fonts.sans,
+    fontSize: fontSize.sm,
+    color: c.inkMuted,
+  },
+  reflectPrompt: {
+    fontFamily: fonts.serifSemibold,
+    fontSize: fontSize.lg,
+    color: c.inkDark,
+    textAlign: 'center',
+    marginBottom: spacing.lg,
+  },
   reflectInput: {
     width: '100%',
     borderWidth: 1,
@@ -268,6 +311,7 @@ const styles = StyleSheet.create({
     fontSize: fontSize.md,
     textAlignVertical: 'top',
     minHeight: 100,
+    marginBottom: spacing.lg,
   },
   offScreen: {
     position: 'absolute',
@@ -275,4 +319,5 @@ const styles = StyleSheet.create({
     top: 0,
     opacity: 0,
   },
-});
+  });
+}

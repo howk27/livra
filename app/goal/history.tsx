@@ -4,15 +4,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { format, parseISO } from 'date-fns';
-import { colors } from '../../theme/colors';
-import { spacing, fontSize, fontWeight, borderRadius } from '../../theme/tokens';
+import { themedColors, spacing, fontSize, fontWeight, borderRadius } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useGoalsStore } from '../../state/goalsSlice';
 import { formatDuration, formatTargetDelta } from '../../lib/goalHistory';
 
 export default function GoalHistoryScreen() {
   const theme = useEffectiveTheme();
-  const themeColors = colors[theme];
+  const c = themedColors(theme);
   const router = useRouter();
   const goals = useGoalsStore(s => s.goals);
   const completed = useMemo(
@@ -28,15 +27,15 @@ export default function GoalHistoryScreen() {
     count === 0 ? '' : count === 1 ? '1 thing you actually finished.' : `${count} things you actually finished.`;
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: c.linen }]}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Ionicons name="chevron-back" size={24} color={themeColors.text} />
+          <Ionicons name="chevron-back" size={24} color={c.inkDark} />
         </TouchableOpacity>
         <View style={styles.headerTextWrap}>
-          <Text style={[styles.headerTitle, { color: themeColors.text }]}>Done.</Text>
+          <Text style={[styles.headerTitle, { color: c.inkDark }]}>Done.</Text>
           {subtitle ? (
-            <Text style={[styles.headerSubtitle, { color: themeColors.textSecondary }]}>
+            <Text style={[styles.headerSubtitle, { color: c.inkMuted }]}>
               {subtitle}
             </Text>
           ) : null}
@@ -46,7 +45,7 @@ export default function GoalHistoryScreen() {
 
       {count === 0 ? (
         <View style={styles.emptyState}>
-          <Text style={[styles.emptyText, { color: themeColors.textSecondary }]}>
+          <Text style={[styles.emptyText, { color: c.inkMuted }]}>
             Nothing here yet. Your first completed goal will show up the moment you finish one.
           </Text>
         </View>
@@ -57,23 +56,23 @@ export default function GoalHistoryScreen() {
               key={goal.id}
               style={[
                 styles.card,
-                { backgroundColor: themeColors.surface, borderColor: themeColors.border },
+                { backgroundColor: c.surface, borderColor: c.borderLight },
               ]}
             >
-              <Text style={[styles.goalTitle, { color: themeColors.text }]}>{goal.title}</Text>
+              <Text style={[styles.goalTitle, { color: c.inkDark }]}>{goal.title}</Text>
               <View style={styles.meta}>
                 {goal.completed_at ? (
-                  <Text style={[styles.metaText, { color: themeColors.textSecondary }]}>
+                  <Text style={[styles.metaText, { color: c.inkMuted }]}>
                     {'Finished ' + format(parseISO(goal.completed_at), 'MMM d')}
                   </Text>
                 ) : null}
                 {goal.completed_at ? (
-                  <Text style={[styles.metaText, { color: themeColors.textSecondary }]}>
+                  <Text style={[styles.metaText, { color: c.inkMuted }]}>
                     {'  ·  Took ' + formatDuration(goal.created_at, goal.completed_at)}
                   </Text>
                 ) : null}
                 {goal.completed_at && goal.target_date ? (
-                  <Text style={[styles.metaText, { color: themeColors.textSecondary }]}>
+                  <Text style={[styles.metaText, { color: c.inkMuted }]}>
                     {'  ·  ' + formatTargetDelta(goal.completed_at, goal.target_date)}
                   </Text>
                 ) : null}

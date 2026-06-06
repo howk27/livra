@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
+import { InteractionManager } from 'react-native';
 import type { Goal, GoalMarkLink } from '../types/goal';
 import {
   loadGoalsForUser,
@@ -48,6 +49,9 @@ export interface GoalsState {
   getActiveGoal: () => Goal | undefined;
   getQueuedGoals: () => Goal[];
   getCompletedGoals: () => Goal[];
+
+  /** Checks all active goals for deadline expiry. Non-blocking; call on app foreground. */
+  checkAllGoalExpiry: () => void;
 
   /** @deprecated Use fetchGoals */
   loadGoals: (userId: string) => Promise<void>;
@@ -304,6 +308,17 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
   getActiveGoal: () => getActiveGoal(get().goals),
   getQueuedGoals: () => getQueuedGoals(get().goals),
   getCompletedGoals: () => getCompletedGoals(get().goals),
+
+  checkAllGoalExpiry: () => {
+    InteractionManager.runAfterInteractions(async () => {
+      const activeGoals = get().goals.filter(g => g.status === 'active');
+      for (const goal of activeGoals) {
+        if (isDeadlineExpired(goal)) {
+          await get().checkGoalCompletion(goal.id);
+        }
+      }
+    });
+  },
 
   // Backward compat
   loadGoals: async (userId) => get().fetchGoals(userId),

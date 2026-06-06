@@ -20,7 +20,8 @@ import Animated, {
 } from 'react-native-reanimated';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
-import { colors, fonts, spacing } from '../../theme/tokens';
+import { fonts, spacing, themedColors } from '../../theme/tokens';
+import { useEffectiveTheme } from '../../state/uiSlice';
 
 // ── New UI components ─────────────────────────────────────────────────────────
 import { LivraHeader } from '../../components/ui/LivraHeader';
@@ -83,6 +84,8 @@ function DraggableRow({
   onAdd,
   onReorder,
 }: DraggableRowProps) {
+  const theme = useEffectiveTheme();
+  const c = themedColors(theme);
   // translateY relative to this row's resting slot position.
   const translateY = useSharedValue(0);
   const isActive = useSharedValue(false);
@@ -192,7 +195,7 @@ function DraggableRow({
       {count > 1 && (
         <GestureDetector gesture={pan}>
           <Animated.View style={styles.dragHandle} hitSlop={spacing.sm}>
-            <Ionicons name="reorder-three-outline" size={24} color={colors.inkMuted} />
+            <Ionicons name="reorder-three-outline" size={24} color={c.inkMuted} />
           </Animated.View>
         </GestureDetector>
       )}
@@ -278,6 +281,8 @@ function DraggableQueueList({
 // ── Main Screen ───────────────────────────────────────────────────────────────
 
 export default function QueueScreen() {
+  const theme = useEffectiveTheme();
+  const c = themedColors(theme);
   const router = useRouter();
   const { user } = useAuth();
   const { isProUnlocked } = useIapSubscriptions();
@@ -309,7 +314,7 @@ export default function QueueScreen() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <View style={styles.screen}>
+    <View style={[styles.screen, { backgroundColor: c.linen }]}>
       {/* Header — no centerLogo, no title */}
       <LivraHeader />
 
@@ -320,17 +325,17 @@ export default function QueueScreen() {
       >
         {/* ── Brand wordmark + section title ── */}
         <View style={styles.topBlock}>
-          <LivraWordmark fontSize={28} letterSpacing={5} color={colors.inkDark} />
-          <Text style={styles.sectionTitle}>Guided Task Progress</Text>
-          <Text style={styles.sectionSubtitle}>Your sequential path to achieving goals.</Text>
+          <LivraWordmark fontSize={28} letterSpacing={5} color={c.inkDark} />
+          <Text style={[styles.sectionTitle, { color: c.inkDark }]}>Guided Task Progress</Text>
+          <Text style={[styles.sectionSubtitle, { color: c.inkMid }]}>Your sequential path to achieving goals.</Text>
         </View>
 
         {/* ── Empty state ── */}
         {isEmpty && (
           <View style={styles.emptyState}>
-            <SvgLogo color={colors.inkMuted} width={40} height={20} />
-            <Text style={styles.emptyTitle}>No goals yet.</Text>
-            <Text style={styles.emptySubtitle}>Add your first goal to begin.</Text>
+            <SvgLogo color={c.inkMuted} width={40} height={20} />
+            <Text style={[styles.emptyTitle, { color: c.inkDark }]}>No goals yet.</Text>
+            <Text style={[styles.emptySubtitle, { color: c.inkMid }]}>Add your first goal to begin.</Text>
           </View>
         )}
 
@@ -370,7 +375,6 @@ export default function QueueScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.linen,
   },
   scroll: {
     flex: 1,
@@ -388,13 +392,11 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontFamily: fonts.serif,
     fontSize: 28,
-    color: colors.inkDark,
     marginTop: spacing.lg,
   },
   sectionSubtitle: {
     fontFamily: fonts.sans,
     fontSize: 15,
-    color: colors.inkMid,
     marginTop: spacing.xs,
   },
 
@@ -433,14 +435,12 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontFamily: fonts.serifSemibold,
     fontSize: 24,
-    color: colors.inkDark,
     textAlign: 'center',
     marginTop: spacing.lg,
   },
   emptySubtitle: {
     fontFamily: fonts.sans,
     fontSize: 15,
-    color: colors.inkMid,
     textAlign: 'center',
   },
   // Bottom spacer

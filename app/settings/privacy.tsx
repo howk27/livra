@@ -9,7 +9,8 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LivraHeader } from '../../components/ui/LivraHeader';
 import { SectionLabel } from '../../components/ui/SectionLabel';
-import { colors, fonts, spacing, radius, shadow } from '../../theme/tokens';
+import { fonts, spacing, radius, shadow, themedColors } from '../../theme/tokens';
+import { useEffectiveTheme } from '../../state/uiSlice';
 
 export const BIOMETRIC_LOCK_KEY = 'biometric_lock_enabled';
 
@@ -34,6 +35,7 @@ function ToggleRow({
   subRowVisible,
   disabled,
 }: ToggleRowProps) {
+  const c = themedColors(useEffectiveTheme());
   const height = useSharedValue(0);
   const opacity = useSharedValue(0);
 
@@ -54,17 +56,17 @@ function ToggleRow({
   }));
 
   return (
-    <View style={[styles.rowWrap, !isLast && styles.rowBorder]}>
+    <View style={[styles.rowWrap, !isLast && [styles.rowBorder, { borderBottomColor: c.borderLight }]]}>
       <View style={styles.toggleRow}>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.rowLabel, disabled && styles.rowLabelDisabled]}>{label}</Text>
-          <Text style={styles.rowSubtitle}>{subtitle}</Text>
+          <Text style={[styles.rowLabel, { color: disabled ? c.inkMuted : c.inkDark }]}>{label}</Text>
+          <Text style={[styles.rowSubtitle, { color: c.inkMuted }]}>{subtitle}</Text>
         </View>
         <Switch
           value={value}
           onValueChange={onToggle}
-          trackColor={{ false: colors.borderMid, true: colors.forest }}
-          thumbColor={colors.surface}
+          trackColor={{ false: c.borderMid, true: c.forest }}
+          thumbColor={c.surface}
           disabled={disabled}
         />
       </View>
@@ -80,6 +82,7 @@ function ToggleRow({
 const AUTO_LOCK_OPTIONS = ['1 min', '5 min', '15 min', 'Never'];
 
 export default function PrivacyScreen() {
+  const c = themedColors(useEffectiveTheme());
   const [analytics, setAnalytics] = useState(true);
   const [crashReports, setCrashReports] = useState(true);
   const [faceId, setFaceId] = useState(false);
@@ -124,12 +127,12 @@ export default function PrivacyScreen() {
   };
 
   return (
-    <View style={styles.screen}>
+    <View style={[styles.screen, { backgroundColor: c.linen }]}>
       <LivraHeader showBack title="Privacy" />
       <ScrollView contentContainerStyle={styles.content}>
 
         <SectionLabel style={styles.sectionLabel}>DATA COLLECTION</SectionLabel>
-        <View style={styles.card}>
+        <View style={[styles.card, { backgroundColor: c.surface }]}>
           <ToggleRow
             label="Analytics"
             subtitle="Helps improve Livra (anonymous)"
@@ -146,7 +149,7 @@ export default function PrivacyScreen() {
         </View>
 
         <SectionLabel style={styles.sectionLabel}>SECURITY</SectionLabel>
-        <View style={styles.card}>
+        <View style={[styles.card, { backgroundColor: c.surface }]}>
           <ToggleRow
             label="Face ID / Touch ID"
             subtitle={
@@ -170,11 +173,11 @@ export default function PrivacyScreen() {
                 {AUTO_LOCK_OPTIONS.map((opt, i) => (
                   <TouchableOpacity
                     key={opt}
-                    style={[styles.optPill, autoLockOption === i && styles.optPillActive]}
+                    style={[styles.optPill, { backgroundColor: autoLockOption === i ? c.forest : c.surfaceAlt }]}
                     onPress={() => setAutoLockOption(i)}
                     activeOpacity={0.7}
                   >
-                    <Text style={[styles.optText, autoLockOption === i && styles.optTextActive]}>
+                    <Text style={[styles.optText, { color: autoLockOption === i ? c.inkInverse : c.inkMid }]}>
                       {opt}
                     </Text>
                   </TouchableOpacity>
@@ -185,13 +188,13 @@ export default function PrivacyScreen() {
         </View>
 
         <SectionLabel style={styles.sectionLabel}>CONNECTED SERVICES</SectionLabel>
-        <View style={styles.card}>
+        <View style={[styles.card, { backgroundColor: c.surface }]}>
           <View style={styles.syncRow}>
             <View style={styles.syncLeft}>
-              <Text style={styles.rowLabel}>Supabase Sync</Text>
+              <Text style={[styles.rowLabel, { color: c.inkDark }]}>Supabase Sync</Text>
             </View>
-            <View style={styles.syncBadge}>
-              <Text style={styles.syncBadgeText}>Synced</Text>
+            <View style={[styles.syncBadge, { backgroundColor: c.surfaceAlt }]}>
+              <Text style={[styles.syncBadgeText, { color: c.success }]}>Synced</Text>
             </View>
           </View>
         </View>
@@ -204,7 +207,6 @@ export default function PrivacyScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: colors.linen,
   },
   content: {
     padding: spacing.lg,
@@ -215,7 +217,6 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   card: {
-    backgroundColor: colors.surface,
     borderRadius: radius.lg,
     ...shadow.card,
     overflow: 'hidden',
@@ -230,20 +231,14 @@ const styles = StyleSheet.create({
   },
   rowBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
   },
   rowLabel: {
     fontFamily: fonts.sansMedium,
     fontSize: 15,
-    color: colors.inkDark,
-  },
-  rowLabelDisabled: {
-    color: colors.inkMuted,
   },
   rowSubtitle: {
     fontFamily: fonts.sans,
     fontSize: 12,
-    color: colors.inkMuted,
     marginTop: 2,
   },
   subRow: {
@@ -257,18 +252,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: 6,
     borderRadius: radius.full,
-    backgroundColor: colors.surfaceAlt,
-  },
-  optPillActive: {
-    backgroundColor: colors.forest,
   },
   optText: {
     fontFamily: fonts.sansMedium,
     fontSize: 13,
-    color: colors.inkMid,
-  },
-  optTextActive: {
-    color: colors.inkInverse,
   },
   syncRow: {
     flexDirection: 'row',
@@ -279,7 +266,6 @@ const styles = StyleSheet.create({
   },
   syncLeft: { flex: 1 },
   syncBadge: {
-    backgroundColor: '#E6F4EE',
     borderRadius: radius.full,
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,
@@ -287,6 +273,5 @@ const styles = StyleSheet.create({
   syncBadgeText: {
     fontFamily: fonts.sansMedium,
     fontSize: 12,
-    color: colors.success,
   },
 });

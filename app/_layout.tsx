@@ -28,7 +28,7 @@ import { useUIStore } from '../state/uiSlice';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { useAuth } from '../hooks/useAuth';
 import { useSync } from '../hooks/useSync';
-import { colors } from '../theme/colors';
+import { themedColors } from '../theme/tokens';
 import { NotificationProvider } from '../contexts/NotificationContext';
 import { cleanupDuplicateCounters } from '../lib/db/cleanup';
 import { parseError } from '../hooks/useSync';
@@ -581,7 +581,7 @@ function RootNavigator() {
       <Stack
         screenOptions={{
           headerShown: false,
-          contentStyle: { backgroundColor: colors[theme].background },
+          contentStyle: { backgroundColor: themedColors(theme).linen },
         }}
       >
         <Stack.Screen name="(tabs)" />

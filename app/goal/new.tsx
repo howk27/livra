@@ -11,8 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { colors } from '../../theme/colors';
-import { spacing, fontSize, fontWeight, borderRadius } from '../../theme/tokens';
+import { themedColors, spacing, fontSize, fontWeight, borderRadius } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useGoalsStore, GoalLimitError } from '../../state/goalsSlice';
 import { useAuth } from '../../hooks/useAuth';
@@ -20,7 +19,7 @@ import { checkProStatus } from '../../lib/iap/iap';
 
 export default function NewGoalScreen() {
   const theme = useEffectiveTheme();
-  const themeColors = colors[theme];
+  const c = themedColors(theme);
   const router = useRouter();
   const { user } = useAuth();
   const addGoal = useGoalsStore(s => s.addGoal);
@@ -60,21 +59,21 @@ export default function NewGoalScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: c.linen }]}>
       <KeyboardAvoidingView
         style={styles.inner}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()}>
-            <Text style={[styles.cancel, { color: themeColors.textSecondary }]}>Cancel</Text>
+            <Text style={[styles.cancel, { color: c.inkMuted }]}>Cancel</Text>
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: themeColors.text }]}>New Goal</Text>
+          <Text style={[styles.headerTitle, { color: c.inkDark }]}>New Goal</Text>
           <TouchableOpacity onPress={handleSave} disabled={!title.trim() || saving}>
             <Text
               style={[
                 styles.save,
-                { color: title.trim() && !saving ? themeColors.primary : themeColors.textSecondary },
+                { color: title.trim() && !saving ? c.forest : c.inkMuted },
               ]}
             >
               {saving ? 'Saving…' : 'Add'}
@@ -83,18 +82,18 @@ export default function NewGoalScreen() {
         </View>
 
         <View style={styles.form}>
-          <Text style={[styles.label, { color: themeColors.textSecondary }]}>Goal</Text>
+          <Text style={[styles.label, { color: c.inkMuted }]}>Goal</Text>
           <TextInput
             style={[
               styles.input,
               {
-                color: themeColors.text,
-                backgroundColor: themeColors.surface,
-                borderColor: themeColors.border,
+                color: c.inkDark,
+                backgroundColor: c.surface,
+                borderColor: c.borderLight,
               },
             ]}
             placeholder="e.g. Run a marathon"
-            placeholderTextColor={themeColors.textSecondary}
+            placeholderTextColor={c.inkMuted}
             value={title}
             onChangeText={setTitle}
             maxLength={80}
@@ -102,7 +101,7 @@ export default function NewGoalScreen() {
             returnKeyType="next"
           />
 
-          <Text style={[styles.label, { color: themeColors.textSecondary }]}>
+          <Text style={[styles.label, { color: c.inkMuted }]}>
             Why this goal? (optional)
           </Text>
           <TextInput
@@ -110,13 +109,13 @@ export default function NewGoalScreen() {
               styles.input,
               styles.descInput,
               {
-                color: themeColors.text,
-                backgroundColor: themeColors.surface,
-                borderColor: themeColors.border,
+                color: c.inkDark,
+                backgroundColor: c.surface,
+                borderColor: c.borderLight,
               },
             ]}
             placeholder="What will finishing this change for you?"
-            placeholderTextColor={themeColors.textSecondary}
+            placeholderTextColor={c.inkMuted}
             value={description}
             onChangeText={setDescription}
             maxLength={200}

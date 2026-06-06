@@ -13,15 +13,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Animated, { FadeIn, SlideInDown } from 'react-native-reanimated';
-import { colors } from '../../theme/colors';
-import { spacing, borderRadius, fontSize, fontWeight, shadow } from '../../theme/tokens';
+import { themedColors, spacing, borderRadius, fontSize, fontWeight, shadow } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { getSupabaseClient } from '../../lib/supabase';
 
 export default function ResetPasswordScreen() {
   const supabase = getSupabaseClient();
   const theme = useEffectiveTheme();
-  const themeColors = colors[theme];
+  const c = themedColors(theme);
   const router = useRouter();
 
   const [email, setEmail] = useState('');
@@ -77,7 +76,7 @@ export default function ResetPasswordScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: c.linen }]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
@@ -92,10 +91,10 @@ export default function ResetPasswordScreen() {
               onPress={() => router.back()}
               style={styles.backButton}
             >
-              <Text style={[styles.backButtonText, { color: themeColors.textSecondary }]}>←</Text>
+              <Text style={[styles.backButtonText, { color: c.inkMuted }]}>←</Text>
             </TouchableOpacity>
-            <Text style={[styles.title, { color: themeColors.text }]}>Reset Password</Text>
-            <Text style={[styles.subtitle, { color: themeColors.textSecondary }]}>
+            <Text style={[styles.title, { color: c.inkDark }]}>Reset Password</Text>
+            <Text style={[styles.subtitle, { color: c.inkMuted }]}>
               Enter your email address and we'll send you instructions to reset your password.
             </Text>
           </Animated.View>
@@ -107,18 +106,18 @@ export default function ResetPasswordScreen() {
           >
             {/* Email Input */}
             <View style={styles.inputContainer}>
-              <Text style={[styles.label, { color: themeColors.textSecondary }]}>Email</Text>
+              <Text style={[styles.label, { color: c.inkMuted }]}>Email</Text>
               <TextInput
                 style={[
                   styles.input,
                   {
-                    backgroundColor: themeColors.surface,
-                    color: themeColors.text,
-                    borderColor: error ? themeColors.error : themeColors.border,
+                    backgroundColor: c.surface,
+                    color: c.inkDark,
+                    borderColor: error ? c.danger : c.borderLight,
                   },
                 ]}
                 placeholder="Enter your email"
-                placeholderTextColor={themeColors.textTertiary}
+                placeholderTextColor={c.inkMuted}
                 value={email}
                 onChangeText={(text) => {
                   setEmail(text);
@@ -138,7 +137,7 @@ export default function ResetPasswordScreen() {
                 entering={FadeIn.duration(200)}
                 style={styles.errorContainer}
               >
-                <Text style={[styles.errorText, { color: themeColors.error }]}>{error}</Text>
+                <Text style={[styles.errorText, { color: c.danger }]}>{error}</Text>
               </Animated.View>
             )}
 
@@ -148,7 +147,7 @@ export default function ResetPasswordScreen() {
                 entering={FadeIn.duration(200)}
                 style={styles.successContainer}
               >
-                <Text style={[styles.successText, { color: themeColors.success }]}>
+                <Text style={[styles.successText, { color: c.success }]}>
                   ✓ Password reset email sent successfully!
                 </Text>
               </Animated.View>
@@ -158,7 +157,7 @@ export default function ResetPasswordScreen() {
             <TouchableOpacity
               style={[
                 styles.submitButton,
-                { backgroundColor: themeColors.primary },
+                { backgroundColor: c.forest },
                 (loading || success) && styles.submitButtonDisabled,
                 shadow.md,
               ]}
@@ -181,7 +180,7 @@ export default function ResetPasswordScreen() {
               disabled={loading}
               style={styles.backToSignInButton}
             >
-              <Text style={[styles.backToSignInText, { color: themeColors.primary }]}>
+              <Text style={[styles.backToSignInText, { color: c.forest }]}>
                 ← Back to Sign In
               </Text>
             </TouchableOpacity>

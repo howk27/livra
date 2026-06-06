@@ -44,7 +44,7 @@ export function HealthConnectBanner({ markId, markName, alreadyConnected }: Prop
     if (!status.effectiveUnlocked) {
       router.push('/paywall');
     } else {
-      router.push(`/counter/${markId}` as any);
+      router.push(`/mark/${markId}` as any);
     }
   };
 

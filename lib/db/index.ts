@@ -21,13 +21,41 @@ interface MockDatabase {
 
 // Storage keys for AsyncStorage
 const STORAGE_KEYS = {
-  counters: '@livra_db_counters',
+  counters: '@livra_db_marks',
   events: '@livra_db_events',
   streaks: '@livra_db_streaks',
   badges: '@livra_db_badges',
   meta: '@livra_db_meta',
   userXp: '@livra_db_user_xp',
   xpEvents: '@livra_db_xp_events',
+};
+
+const MIGRATION_V2_FLAG = '@livra_migration_v2_complete';
+const LEGACY_COUNTERS_KEY = '@livra_db_counters';
+
+/**
+ * One-time migration: copies data from the old @livra_db_counters key to @livra_db_marks.
+ * Guarded by a flag so it never runs twice. Failures are non-fatal — the app reads
+ * from whichever key has data.
+ */
+export const migrateCountersStorageKey = async (): Promise<void> => {
+  try {
+    const alreadyDone = await AsyncStorage.getItem(MIGRATION_V2_FLAG);
+    if (alreadyDone) return;
+
+    const legacyData = await AsyncStorage.getItem(LEGACY_COUNTERS_KEY);
+    if (legacyData) {
+      const newData = await AsyncStorage.getItem(STORAGE_KEYS.counters);
+      if (!newData) {
+        await AsyncStorage.setItem(STORAGE_KEYS.counters, legacyData);
+      }
+      await AsyncStorage.removeItem(LEGACY_COUNTERS_KEY);
+    }
+
+    await AsyncStorage.setItem(MIGRATION_V2_FLAG, '1');
+  } catch (error) {
+    logger.error('[DB] Storage key migration failed (non-fatal):', error);
+  }
 };
 
 // In-memory storage for development (backed by AsyncStorage)
@@ -1019,7 +1047,10 @@ export const resetDatabaseState = async (): Promise<void> => {
 
 export const initDatabase = async (): Promise<MockDatabase> => {
   if (db) return db;
-  
+
+  // Migrate old storage key before reading any data
+  await migrateCountersStorageKey();
+
   // Load existing data from AsyncStorage first
   await loadFromStorage();
   

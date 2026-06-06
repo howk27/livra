@@ -13,8 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import Animated, { FadeIn, SlideInDown } from 'react-native-reanimated';
-import { colors } from '../../theme/colors';
-import { spacing, borderRadius, fontSize, fontWeight, shadow } from '../../theme/tokens';
+import { themedColors, spacing, borderRadius, fontSize, fontWeight, shadow } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { getSupabaseClient } from '../../lib/supabase';
 import { logger } from '../../lib/utils/logger';
@@ -25,7 +24,7 @@ type RecoveryGate = 'checking' | 'ready' | 'invalid';
 export default function ResetPasswordCompleteScreen() {
   const supabase = getSupabaseClient();
   const theme = useEffectiveTheme();
-  const themeColors = colors[theme];
+  const c = themedColors(theme);
   const router = useRouter();
   const params = useLocalSearchParams<{ token?: string; type?: string }>();
 
@@ -190,7 +189,7 @@ export default function ResetPasswordCompleteScreen() {
   const goRequestNew = () => router.replace('/auth/reset-password');
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: c.linen }]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
@@ -201,49 +200,49 @@ export default function ResetPasswordCompleteScreen() {
               onPress={() => router.replace('/auth/signin')}
               style={styles.backButton}
             >
-              <Text style={[styles.backButtonText, { color: themeColors.textSecondary }]}>←</Text>
+              <Text style={[styles.backButtonText, { color: c.inkMuted }]}>←</Text>
             </TouchableOpacity>
-            <Text style={[styles.title, { color: themeColors.text }]}>Reset password</Text>
-            <Text style={[styles.subtitle, { color: themeColors.textSecondary }]}>{recoverySubtitle}</Text>
+            <Text style={[styles.title, { color: c.inkDark }]}>Reset password</Text>
+            <Text style={[styles.subtitle, { color: c.inkMuted }]}>{recoverySubtitle}</Text>
           </Animated.View>
 
           {recoveryGate === 'checking' ? (
             <View style={styles.centerBlock}>
-              <ActivityIndicator size="large" color={themeColors.primary} />
-              <Text style={[styles.hint, { color: themeColors.textSecondary }]}>
+              <ActivityIndicator size="large" color={c.forest} />
+              <Text style={[styles.hint, { color: c.inkMuted }]}>
                 Checking your reset link…
               </Text>
             </View>
           ) : recoveryGate === 'invalid' ? (
             <Animated.View entering={SlideInDown.duration(400)} style={styles.block}>
               {error ? (
-                <Text style={[styles.errorText, { color: themeColors.error }]}>{error}</Text>
+                <Text style={[styles.errorText, { color: c.danger }]}>{error}</Text>
               ) : null}
               <TouchableOpacity
-                style={[styles.submitButton, { backgroundColor: themeColors.primary }, shadow.md]}
+                style={[styles.submitButton, { backgroundColor: c.forest }, shadow.md]}
                 onPress={goRequestNew}
               >
                 <Text style={styles.submitButtonText}>Request a new reset email</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={() => router.replace('/auth/signin')} style={styles.linkBtn}>
-                <Text style={[styles.linkText, { color: themeColors.primary }]}>Back to sign in</Text>
+                <Text style={[styles.linkText, { color: c.forest }]}>Back to sign in</Text>
               </TouchableOpacity>
             </Animated.View>
           ) : (
             <Animated.View style={styles.form} entering={SlideInDown.duration(400).delay(100)}>
               <View style={styles.inputContainer}>
-                <Text style={[styles.label, { color: themeColors.textSecondary }]}>New password</Text>
+                <Text style={[styles.label, { color: c.inkMuted }]}>New password</Text>
                 <TextInput
                   style={[
                     styles.input,
                     {
-                      backgroundColor: themeColors.surface,
-                      color: themeColors.text,
-                      borderColor: error ? themeColors.error : themeColors.border,
+                      backgroundColor: c.surface,
+                      color: c.inkDark,
+                      borderColor: error ? c.danger : c.borderLight,
                     },
                   ]}
                   placeholder="At least 6 characters"
-                  placeholderTextColor={themeColors.textTertiary}
+                  placeholderTextColor={c.inkMuted}
                   value={newPassword}
                   onChangeText={(text) => {
                     setNewPassword(text);
@@ -257,18 +256,18 @@ export default function ResetPasswordCompleteScreen() {
               </View>
 
               <View style={styles.inputContainer}>
-                <Text style={[styles.label, { color: themeColors.textSecondary }]}>Confirm password</Text>
+                <Text style={[styles.label, { color: c.inkMuted }]}>Confirm password</Text>
                 <TextInput
                   style={[
                     styles.input,
                     {
-                      backgroundColor: themeColors.surface,
-                      color: themeColors.text,
-                      borderColor: error ? themeColors.error : themeColors.border,
+                      backgroundColor: c.surface,
+                      color: c.inkDark,
+                      borderColor: error ? c.danger : c.borderLight,
                     },
                   ]}
                   placeholder="Confirm new password"
-                  placeholderTextColor={themeColors.textTertiary}
+                  placeholderTextColor={c.inkMuted}
                   value={confirmPassword}
                   onChangeText={(text) => {
                     setConfirmPassword(text);
@@ -283,14 +282,14 @@ export default function ResetPasswordCompleteScreen() {
 
               {error ? (
                 <Animated.View entering={FadeIn.duration(200)} style={styles.errorContainer}>
-                  <Text style={[styles.errorText, { color: themeColors.error }]}>{error}</Text>
+                  <Text style={[styles.errorText, { color: c.danger }]}>{error}</Text>
                 </Animated.View>
               ) : null}
 
               <TouchableOpacity
                 style={[
                   styles.submitButton,
-                  { backgroundColor: themeColors.primary },
+                  { backgroundColor: c.forest },
                   loading && styles.submitButtonDisabled,
                   shadow.md,
                 ]}
@@ -310,7 +309,7 @@ export default function ResetPasswordCompleteScreen() {
                 disabled={loading}
                 style={styles.backToSignInButton}
               >
-                <Text style={[styles.backToSignInText, { color: themeColors.primary }]}>
+                <Text style={[styles.backToSignInText, { color: c.forest }]}>
                   ← Back to sign in
                 </Text>
               </TouchableOpacity>
