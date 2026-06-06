@@ -111,7 +111,7 @@ const getInsight = (params: {
 };
 
 export const getEmptyStateCtaTarget = (hasCounters: boolean): string =>
-  hasCounters ? '/(tabs)/home' : '/counter/new';
+  hasCounters ? '/(tabs)/focus' : '/mark/new';
 
 export const computeWeeklyReview = (params: {
   weekStart: string;

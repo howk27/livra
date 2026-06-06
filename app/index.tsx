@@ -85,8 +85,8 @@ export default function Index() {
   }
 
   if (!isOnboarded) {
-    return <Redirect href={"/onboarding/welcome" as any} />;
+    return <Redirect href={"/onboarding" as any} />;
   }
 
-  return <Redirect href="/(tabs)/home" />;
+  return <Redirect href={'/(tabs)/focus' as any} />;
 }

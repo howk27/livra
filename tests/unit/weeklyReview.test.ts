@@ -62,8 +62,8 @@ describe('computeWeeklyReview', () => {
   });
 
   it('returns correct empty state CTA target', () => {
-    expect(getEmptyStateCtaTarget(true)).toBe('/(tabs)/home');
-    expect(getEmptyStateCtaTarget(false)).toBe('/counter/new');
+    expect(getEmptyStateCtaTarget(true)).toBe('/(tabs)/focus');
+    expect(getEmptyStateCtaTarget(false)).toBe('/mark/new');
   });
 
   it('prioritizes strong finish insight', () => {

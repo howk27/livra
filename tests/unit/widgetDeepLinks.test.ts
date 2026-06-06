@@ -1,5 +1,5 @@
 describe('widget deep link routing', () => {
-  it('livra://home maps to /(tabs)/home', () => {
+  it('livra://home maps to /(tabs)/focus', () => {
     const url = 'livra://home';
     const isHome = url === 'livra://home' || url.startsWith('livra://home?');
     expect(isHome).toBe(true);

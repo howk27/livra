@@ -169,7 +169,7 @@ export type Database = {
           avatar_url?: string | null;
         };
       };
-      counters: {
+      marks: {
         Row: {
           id: string;
           user_id: string;
@@ -232,11 +232,11 @@ export type Database = {
           dailyTarget?: number | null;
         };
       };
-      counter_events: {
+      mark_events: {
         Row: {
           id: string;
           user_id: string;
-          counter_id: string;
+          mark_id: string;
           event_type: 'increment' | 'reset' | 'decrement';
           amount: number;
           occurred_at: string;
@@ -249,7 +249,7 @@ export type Database = {
         Insert: {
           id?: string;
           user_id: string;
-          counter_id: string;
+          mark_id: string;
           event_type: 'increment' | 'reset' | 'decrement';
           amount?: number;
           occurred_at?: string;
@@ -262,7 +262,7 @@ export type Database = {
         Update: {
           id?: string;
           user_id?: string;
-          counter_id?: string;
+          mark_id?: string;
           event_type?: 'increment' | 'reset' | 'decrement';
           amount?: number;
           occurred_at?: string;
@@ -273,11 +273,11 @@ export type Database = {
           updated_at?: string;
         };
       };
-      counter_streaks: {
+      mark_streaks: {
         Row: {
           id: string;
           user_id: string;
-          counter_id: string;
+          mark_id: string;
           current_streak: number;
           longest_streak: number;
           last_increment_date: string | null;
@@ -288,7 +288,7 @@ export type Database = {
         Insert: {
           id?: string;
           user_id: string;
-          counter_id: string;
+          mark_id: string;
           current_streak?: number;
           longest_streak?: number;
           last_increment_date?: string | null;
@@ -299,7 +299,7 @@ export type Database = {
         Update: {
           id?: string;
           user_id?: string;
-          counter_id?: string;
+          mark_id?: string;
           current_streak?: number;
           longest_streak?: number;
           last_increment_date?: string | null;
@@ -308,11 +308,11 @@ export type Database = {
           updated_at?: string;
         };
       };
-      counter_badges: {
+      mark_badges: {
         Row: {
           id: string;
           user_id: string;
-          counter_id: string;
+          mark_id: string;
           badge_code: string;
           progress_value: number;
           target_value: number;
@@ -325,7 +325,7 @@ export type Database = {
         Insert: {
           id?: string;
           user_id: string;
-          counter_id: string;
+          mark_id: string;
           badge_code: string;
           progress_value?: number;
           target_value: number;
@@ -338,7 +338,7 @@ export type Database = {
         Update: {
           id?: string;
           user_id?: string;
-          counter_id?: string;
+          mark_id?: string;
           badge_code?: string;
           progress_value?: number;
           target_value?: number;

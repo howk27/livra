@@ -1,0 +1,1137 @@
+import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Alert,
+  Platform,
+  TextInput,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Modal,
+  Switch,
+  Linking,
+} from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  withDelay,
+  withSequence,
+  runOnJS,
+} from 'react-native-reanimated';
+import {
+  getMarkReminderTime,
+  setMarkReminderTime,
+  scheduleMarkReminder,
+  cancelMarkReminder,
+  clearMarkReminderTime,
+} from '../../../lib/notifications/markReminder';
+import { checkProStatus } from '../../../lib/iap/iap';
+import { requestPermissions } from '../../../lib/health/healthPermissions';
+import { suggestStepGoal, suggestWakeTime } from '../../../lib/health/healthLearner';
+import type { HealthKitType } from '../../../lib/health/healthTypes';
+import {
+  scheduleSleepNotification,
+  cancelSleepNotification,
+  getSleepNotifTime,
+  setSleepNotifTime,
+} from '../../../lib/notifications/sleepNotification';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import * as Haptics from 'expo-haptics';
+import { Feather } from '@expo/vector-icons';
+import { Heart, ArrowRight } from 'phosphor-react-native';
+import { themedColors, spacing, borderRadius, fontSize, fontWeight, shadow, fonts } from '../../../theme/tokens';
+import { useEffectiveTheme } from '../../../state/uiSlice';
+import { LivraHeader } from '../../../components/ui/LivraHeader';
+import { PillButton } from '../../../components/ui/PillButton';
+import { SectionLabel } from '../../../components/ui/SectionLabel';
+import { StatTile } from '../../../components/ui/StatTile';
+import { useCounters } from '../../../hooks/useCounters';
+import { useEventsStore } from '../../../state/eventsSlice';
+import { LoadingScreen } from '../../../components/LoadingScreen';
+import { useAuth } from '../../../hooks/useAuth';
+import { logger } from '../../../lib/utils/logger';
+import { useDailyTrackingStore } from '../../../state/dailyTrackingSlice';
+import { applyOpacity } from '@/src/components/icons/color';
+import { MARK_LIBRARY } from '@/lib/suggestedCounters';
+import { resolveDailyTarget } from '../../../lib/markDailyTarget';
+import { getAppDate } from '../../../lib/appDate';
+import { formatDate } from '../../../lib/date';
+import { useAppDateStore } from '../../../state/appDateSlice';
+import { deriveStreakForMark } from '../../../hooks/useStreaks';
+import { HealthConnectBanner } from '../../../components/HealthConnectBanner';
+import { useGoalsStore } from '../../../state/goalsSlice';
+import { CATEGORY_MAP } from '../../../components/ui/MarkRow';
+
+function toLocalDateStr(d: Date): string {
+  return formatDate(d);
+}
+
+const NOTE_MAX_LEN = 500;
+
+function hexToRgba(hex: string, alpha: number): string {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+export default function MarkDetailScreen() {
+  const theme = useEffectiveTheme();
+  const c = themedColors(theme);
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+  const params = useLocalSearchParams<{ id: string }>();
+  const id = typeof params.id === 'string' ? params.id : params.id?.[0];
+
+  const { counters, loading, incrementCounter, decrementCounter, resetCounter, deleteCounter, updateMark } = useCounters();
+  const allEvents = useEventsStore((state) => state.events || []);
+  const counter = id ? counters.find((c) => c.id === id) : null;
+  const libraryMark = counter ? MARK_LIBRARY.find(m => m.emoji === counter.emoji) : undefined;
+
+  const [expandedActivityDate, setExpandedActivityDate] = useState<string | null>(null);
+  const [draftNote, setDraftNote] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
+  const [deletingNote, setDeletingNote] = useState(false);
+  const noteFieldBusy = savingNote || deletingNote;
+  const scrollRef = useRef<ScrollView>(null);
+  const noteSectionYRef = useRef(0);
+  const appDateKey = useAppDateStore((s) => s.debugDateOverride ?? '');
+
+  const [healthModalVisible, setHealthModalVisible] = useState(false);
+  const [healthStepGoal, setHealthStepGoal] = useState<string>('');
+  const [healthPendingType, setHealthPendingType] = useState<HealthKitType | null>(null);
+  const [healthConnecting, setHealthConnecting] = useState(false);
+
+  const [reminderEnabled, setReminderEnabled] = useState(false);
+  const [reminderTime, setReminderTime] = useState<Date>(() => {
+    const d = new Date();
+    d.setHours(8, 0, 0, 0);
+    return d;
+  });
+  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [reminderLoading, setReminderLoading] = useState(true);
+
+  // Banner for "all done today"
+  const [showAllDoneBanner, setShowAllDoneBanner] = useState(false);
+  const bannerY = useSharedValue(-80);
+
+  const todayStr = useMemo(() => toLocalDateStr(getAppDate()), [appDateKey]);
+
+  const events = useMemo(
+    () => (id ? allEvents.filter((e) => e.mark_id === id && !e.deleted_at) : []),
+    [id, allEvents],
+  );
+
+  const streakDisplay = useMemo(() => {
+    if (!id || !counter) return null;
+    const d = deriveStreakForMark(id, allEvents, counter.enable_streak);
+    if (!d) return null;
+    return { current_streak: d.current, longest_streak: d.longest };
+  }, [id, allEvents, counter, appDateKey]);
+
+  const todayCount = useMemo(
+    () =>
+      events
+        .filter((e) => e.event_type === 'increment' && e.occurred_local_date === todayStr)
+        .reduce((sum, e) => sum + (e.amount ?? 1), 0),
+    [events, todayStr],
+  );
+
+  const allActiveCounters = useMemo(
+    () => counters.filter((c) => !c.deleted_at),
+    [counters],
+  );
+
+  const allLoggedToday = useMemo(() => {
+    return allActiveCounters.every((c) => {
+      const count = allEvents
+        .filter(e => e.mark_id === c.id && e.event_type === 'increment' && e.occurred_local_date === todayStr && !e.deleted_at)
+        .reduce((s, e) => s + (e.amount ?? 1), 0);
+      return count >= resolveDailyTarget(c);
+    });
+  }, [allActiveCounters, allEvents, todayStr]);
+
+  const dailyTarget = useMemo(() => (counter ? resolveDailyTarget(counter) : 1), [counter]);
+  const completedToday = todayCount >= dailyTarget;
+  const allTimeTotal = useMemo(
+    () => events.filter(e => e.event_type === 'increment').reduce((s, e) => s + (e.amount ?? 1), 0),
+    [events],
+  );
+
+  const recentActivity = useMemo(
+    () =>
+      events
+        .filter((e) => e.event_type === 'increment' || e.event_type === 'decrement')
+        .sort((a, b) => +new Date(b.occurred_at) - +new Date(a.occurred_at))
+        .slice(0, 6),
+    [events],
+  );
+
+  const dailyLogsForMark = useDailyTrackingStore(
+    useCallback((s) => (id ? s.getDailyLogsForMark(id, 60) : []), [id]),
+  );
+
+  const todayDailyLog = useDailyTrackingStore(
+    useCallback((s) => (id ? s.getDailyLogForDate(id, todayStr) : null), [id, todayStr]),
+  );
+
+  const upsertDailyLogNote = useDailyTrackingStore((s) => s.upsertDailyLogNote);
+  const deleteDailyLogNote = useDailyTrackingStore((s) => s.deleteDailyLogNote);
+  const notesCloudError = useDailyTrackingStore((s) => s.notesCloudError);
+  const clearNotesCloudError = useDailyTrackingStore((s) => s.clearNotesCloudError);
+
+  const savedNoteText = todayDailyLog?.text ?? '';
+  const savedTrimmed = savedNoteText.trim();
+  const draftTrimmed = draftNote.trim();
+  const canSaveNote =
+    draftTrimmed !== savedTrimmed && !(draftTrimmed === '' && savedTrimmed !== '');
+  const hasSavedNote = Boolean(todayDailyLog && savedTrimmed.length > 0);
+
+  const notesByDate = useMemo(() => {
+    const map = new Map<string, string>();
+    dailyLogsForMark.forEach((n) => {
+      const t = n.text.trim();
+      if (t) map.set(n.date, t);
+    });
+    return map;
+  }, [dailyLogsForMark]);
+
+  const markNotes = useMemo(
+    () => dailyLogsForMark.filter((n) => n.date !== todayStr && n.text.trim().length > 0),
+    [dailyLogsForMark, todayStr],
+  );
+
+  const noteUserId = user?.id ?? 'local';
+
+  // Goals linked to this mark
+  const goals = useGoalsStore(s => s.goals);
+  const linkedGoals = useMemo(
+    () => goals.filter(g => g.linked_mark_ids?.includes(id ?? '') && g.status !== 'completed' && g.status !== 'expired'),
+    [goals, id],
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!id) return;
+      const row = useDailyTrackingStore.getState().getDailyLogForDate(id, todayStr);
+      setDraftNote(row?.text ?? '');
+    }, [id, todayStr]),
+  );
+
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    (async () => {
+      const stored = await getMarkReminderTime(id);
+      if (cancelled) return;
+      if (stored) {
+        const [h = '8', m = '0'] = stored.split(':');
+        const d = new Date();
+        d.setHours(parseInt(h, 10), parseInt(m, 10), 0, 0);
+        setReminderTime(d);
+        setReminderEnabled(true);
+      }
+      setReminderLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [id]);
+
+  // Log button animation
+  const logBtnScale = useSharedValue(1);
+  const logBtnStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: logBtnScale.value }],
+  }));
+
+  const bannerStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: bannerY.value }],
+  }));
+
+  const scrollNoteIntoView = useCallback(() => {
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({ y: Math.max(0, noteSectionYRef.current - spacing.md), animated: true });
+    });
+  }, []);
+
+  const styles = useMemo(() => createStyles(c), [c]);
+
+  if (loading) return <LoadingScreen />;
+
+  if (!counter || !id) {
+    return (
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: c.linen }]}>
+        <View style={styles.centered}>
+          <Text style={styles.errorText}>Mark not found</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Category data
+  const catKey = libraryMark?.category ?? 'custom';
+  const catData = CATEGORY_MAP[catKey] ?? CATEGORY_MAP.custom;
+  const accent = catData.accent;
+
+  // ── Handlers ─────────────────────────────────────────────────────────────────
+
+  const handleLog = async () => {
+    if (!id || !user?.id || completedToday) return;
+    if (Platform.OS !== 'web') await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    // Button press feedback
+    logBtnScale.value = withSequence(
+      withSpring(0.96, { damping: 20, stiffness: 400 }),
+      withSpring(1, { damping: 18, stiffness: 300 }),
+    );
+
+    incrementCounter(id, user.id, 1).catch((error) => {
+      logger.error('increment failed:', error);
+      Alert.alert('Error', 'Could not update mark');
+    });
+
+    // Check if all marks done after this log (check after short delay for state to update)
+    setTimeout(() => {
+      if (allLoggedToday) {
+        bannerY.value = withTiming(0, { duration: 300 });
+        setTimeout(() => {
+          bannerY.value = withTiming(-80, { duration: 300 });
+          setTimeout(() => setShowAllDoneBanner(false), 300);
+        }, 2000);
+        setShowAllDoneBanner(true);
+      }
+    }, 200);
+  };
+
+  const handleDecrement = async () => {
+    if (!id || !user?.id || todayCount <= 0) return;
+    if (Platform.OS !== 'web') await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    decrementCounter(id, user.id, 1).catch((error) => {
+      logger.error('decrement failed:', error);
+      Alert.alert('Error', 'Could not update mark');
+    });
+  };
+
+  const handleReset = () => {
+    if (!id || !user?.id || todayCount === 0) return;
+    Alert.alert(
+      "Reset today's progress",
+      `Remove today's ${todayCount} log${todayCount === 1 ? '' : 's'} for "${counter.name}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await decrementCounter(id, user.id, todayCount);
+            } catch (error) {
+              logger.error('reset today failed:', error);
+              Alert.alert('Error', 'Could not reset progress for today');
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleDeleteMark = () => {
+    if (!id) return;
+    Alert.alert(
+      'Delete mark?',
+      `Remove "${counter.name}"? This deletes the mark and its activity${user?.id ? ' from your account' : ''}.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () =>
+            Alert.alert('Are you sure?', `This permanently deletes "${counter.name}".`, [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Delete forever',
+                style: 'destructive',
+                onPress: async () => {
+                  try {
+                    await deleteCounter(id);
+                    router.replace('/(tabs)/focus' as any);
+                  } catch (error) {
+                    logger.error('delete mark failed:', error);
+                    Alert.alert('Error', 'Could not delete this mark.');
+                  }
+                },
+              },
+            ]),
+        },
+      ],
+    );
+  };
+
+  const handleSaveNote = async () => {
+    if (!id || !canSaveNote || noteFieldBusy) return;
+    setSavingNote(true);
+    try {
+      await upsertDailyLogNote(id, noteUserId, todayStr, draftTrimmed);
+      setDraftNote('');
+    } catch (error) {
+      logger.error('save note failed:', error);
+      Alert.alert('Error', 'Could not save your note.');
+    } finally {
+      setSavingNote(false);
+    }
+  };
+
+  const handleDeleteNote = () => {
+    if (!todayDailyLog?.id || !hasSavedNote || noteFieldBusy) return;
+    Alert.alert('Delete note?', 'Remove the saved note for today?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          setDeletingNote(true);
+          try {
+            await deleteDailyLogNote(todayDailyLog.id);
+            setDraftNote('');
+          } catch (error) {
+            logger.error('delete note failed:', error);
+            Alert.alert('Error', 'Could not delete the note.');
+          } finally {
+            setDeletingNote(false);
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleConnectHealth = async () => {
+    const status = await checkProStatus();
+    if (!status.effectiveUnlocked) {
+      router.push('/paywall');
+      return;
+    }
+    setHealthModalVisible(true);
+  };
+
+  const handleHealthTypeSelect = async (type: HealthKitType) => {
+    if (type === 'steps') {
+      setHealthPendingType(type);
+      const suggested = await suggestStepGoal();
+      setHealthStepGoal(suggested !== null ? String(suggested) : '');
+      return;
+    }
+    await confirmHealthConnection(type, undefined);
+  };
+
+  const confirmHealthConnection = async (type: HealthKitType, stepGoal: number | undefined) => {
+    if (!id) return;
+    setHealthConnecting(true);
+    try {
+      await requestPermissions([type]);
+      const config = type === 'steps' && stepGoal !== undefined ? { stepGoal } : null;
+      await updateMark(id, { health_kit_type: type, health_kit_config: config });
+      if (type === 'sleep') {
+        let wakeTime = await getSleepNotifTime(id);
+        if (!wakeTime) wakeTime = await suggestWakeTime();
+        if (wakeTime) {
+          await setSleepNotifTime(id, wakeTime);
+          await scheduleSleepNotification(id, wakeTime);
+        }
+      }
+    } catch {
+      Alert.alert('Could not connect', 'Health permissions could not be requested. Try Settings → Privacy → Health.');
+    } finally {
+      setHealthConnecting(false);
+      setHealthModalVisible(false);
+      setHealthPendingType(null);
+    }
+  };
+
+  const handleDisconnectHealth = async () => {
+    if (!id) return;
+    Alert.alert('Disconnect Apple Health?', 'Your weekly reflection will return to manual check-ins.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Disconnect',
+        style: 'destructive',
+        onPress: async () => {
+          await updateMark(id, { health_kit_type: null, health_kit_config: null });
+          await cancelSleepNotification(id);
+        },
+      },
+    ]);
+  };
+
+  const handleReminderToggle = useCallback(async (value: boolean) => {
+    if (!id || !counter) return;
+    setReminderEnabled(value);
+    if (value) {
+      setShowTimePicker(true);
+      const hhmm = `${reminderTime.getHours()}:${String(reminderTime.getMinutes()).padStart(2, '0')}`;
+      await setMarkReminderTime(id, hhmm);
+      await scheduleMarkReminder(id, counter.name, hhmm);
+    } else {
+      setShowTimePicker(false);
+      await cancelMarkReminder(id);
+      await clearMarkReminderTime(id);
+    }
+  }, [id, counter, reminderTime]);
+
+  const handleReminderTimeChange = useCallback(async (_: any, selected?: Date) => {
+    if (!selected || !id || !counter) return;
+    setReminderTime(selected);
+    const hhmm = `${selected.getHours()}:${String(selected.getMinutes()).padStart(2, '0')}`;
+    await setMarkReminderTime(id, hhmm);
+    await scheduleMarkReminder(id, counter.name, hhmm);
+  }, [id, counter]);
+
+  // ── Render ────────────────────────────────────────────────────────────────────
+
+  return (
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: c.linen }]} edges={['top']}>
+      <LivraHeader
+        showBack
+        title={counter.name}
+        rightIcon="trash-2"
+        onRightPress={handleDeleteMark}
+      />
+
+      {/* All Done Today Banner */}
+      {showAllDoneBanner && (
+        <Animated.View style={[styles.allDoneBanner, bannerStyle]}>
+          <Text style={styles.allDoneBannerText}>All done today.</Text>
+        </Animated.View>
+      )}
+
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoid}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
+      >
+        <ScrollView
+          ref={scrollRef}
+          contentContainerStyle={[
+            styles.content,
+            { paddingBottom: spacing.xxl + insets.bottom + (Platform.OS === 'android' ? 24 : 12) },
+          ]}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* ── Hero Area ─────────────────────────────────────────────────── */}
+          <View style={styles.heroArea}>
+            <View style={[styles.heroIconWrap, { backgroundColor: hexToRgba(accent, 0.15) }]}>
+              <Feather name={catData.icon} size={32} color={accent} />
+            </View>
+            <Text style={styles.heroTitle}>{counter.name}</Text>
+            {counter.unit ? (
+              <Text style={styles.heroMeta}>{counter.unit}</Text>
+            ) : null}
+          </View>
+
+          {/* ── Stat Tiles Row ────────────────────────────────────────────── */}
+          <View style={styles.statRow}>
+            <StatTile
+              icon="check-circle"
+              value={`${todayCount}/${dailyTarget}`}
+              label="TODAY"
+              bgColor={c.surface}
+            />
+            <StatTile
+              icon="activity"
+              value={String(allTimeTotal)}
+              label="ALL TIME"
+              bgColor={c.surfaceAlt}
+            />
+          </View>
+
+          {/* ── Log Button ────────────────────────────────────────────────── */}
+          <Animated.View style={[styles.logBtnWrap, logBtnStyle]}>
+            <TouchableOpacity
+              style={[styles.logBtn, completedToday && styles.logBtnDone]}
+              onPress={handleLog}
+              disabled={completedToday}
+              activeOpacity={0.85}
+              accessibilityLabel={completedToday ? 'Logged today' : 'Log for today'}
+            >
+              {completedToday ? (
+                <>
+                  <Feather name="check" size={18} color={c.forest} />
+                  <Text style={styles.logBtnTextDone}>Logged today</Text>
+                </>
+              ) : (
+                <>
+                  <Feather name="check-circle" size={22} color={c.inkInverse} />
+                  <Text style={styles.logBtnText}>Log for Today</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </Animated.View>
+
+          {/* Secondary actions */}
+          {todayCount > 0 && (
+            <View style={styles.secondaryRow}>
+              <TouchableOpacity onPress={handleDecrement} hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }} style={styles.secondaryBtn}>
+                <Text style={styles.secondaryText}>Undo</Text>
+              </TouchableOpacity>
+              <View style={styles.secondarySep} />
+              <TouchableOpacity onPress={handleReset} hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }} style={styles.secondaryBtn}>
+                <Text style={styles.secondaryText}>Reset today</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* ── Linked Goals ────────────────────────────────────────────── */}
+          <View style={styles.section}>
+            <SectionLabel style={styles.sectionLabelPad}>FEEDING INTO</SectionLabel>
+            {linkedGoals.length > 0 ? (
+              linkedGoals.map(goal => {
+                const progress = goal.target_mark_count && goal.target_mark_count > 0
+                  ? Math.round(((goal.current_mark_count ?? 0) / goal.target_mark_count) * 100)
+                  : null;
+                return (
+                  <View key={goal.id} style={styles.linkedGoalRow}>
+                    <Feather name="flag" size={14} color={c.inkMuted} />
+                    <Text style={styles.linkedGoalTitle}>{goal.title}</Text>
+                    {progress !== null && (
+                      <Text style={styles.linkedGoalProgress}>→ {progress}% complete</Text>
+                    )}
+                  </View>
+                );
+              })
+            ) : (
+              <View style={styles.linkedGoalRow}>
+                <Text style={styles.noLinkedGoals}>Not linked to any goals yet.</Text>
+              </View>
+            )}
+          </View>
+
+          {/* ── History ─────────────────────────────────────────────────── */}
+          <View style={styles.section}>
+            <SectionLabel style={styles.sectionLabelPad}>HISTORY</SectionLabel>
+            {recentActivity.length > 0 ? (
+              recentActivity.map((event) => {
+                const dt = new Date(event.occurred_at);
+                const dateNote = notesByDate.get(event.occurred_local_date);
+                const isExpanded = expandedActivityDate === event.occurred_local_date;
+                return (
+                  <TouchableOpacity
+                    key={event.id}
+                    style={styles.historyRow}
+                    activeOpacity={dateNote ? 0.82 : 1}
+                    onPress={() => {
+                      if (!dateNote) return;
+                      setExpandedActivityDate(isExpanded ? null : event.occurred_local_date);
+                    }}
+                  >
+                    <Text style={styles.historyDate}>
+                      {dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                    </Text>
+                    <Feather name="check" size={14} color={c.forest} />
+                  </TouchableOpacity>
+                );
+              })
+            ) : (
+              <Text style={styles.noHistoryText}>No history yet.</Text>
+            )}
+          </View>
+
+          {/* ── Today's note ─────────────────────────────────────────────── */}
+          <View
+            onLayout={(e) => { noteSectionYRef.current = e.nativeEvent.layout.y; }}
+            style={[styles.noteCard]}
+          >
+            <View style={styles.noteHeader}>
+              <Text style={styles.noteTitle}>Today's note</Text>
+              <Text style={styles.noteDate}>
+                {getAppDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              </Text>
+            </View>
+            <TextInput
+              value={draftNote}
+              onChangeText={(t) => setDraftNote(t.slice(0, NOTE_MAX_LEN))}
+              placeholder="Write a note for today…"
+              placeholderTextColor={c.inkMuted}
+              multiline
+              editable={!noteFieldBusy}
+              onFocus={scrollNoteIntoView}
+              style={styles.noteInput}
+              textAlignVertical="top"
+            />
+            <View style={styles.noteActionsRow}>
+              <Text style={styles.noteCharCount}>{draftNote.length}/{NOTE_MAX_LEN}</Text>
+              <View style={styles.noteButtons}>
+                {hasSavedNote && (
+                  <TouchableOpacity onPress={handleDeleteNote} disabled={noteFieldBusy} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Text style={[styles.noteDeleteText, noteFieldBusy && { opacity: 0.4 }]}>Delete</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  onPress={handleSaveNote}
+                  disabled={!canSaveNote || noteFieldBusy}
+                  style={[styles.noteSaveBtn, { opacity: canSaveNote ? 1 : 0.4 }]}
+                >
+                  {savingNote ? (
+                    <ActivityIndicator size="small" color={c.inkInverse} />
+                  ) : (
+                    <Text style={styles.noteSaveText}>Save</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+            {notesCloudError ? (
+              <View style={styles.noteCloudRow}>
+                <Text style={styles.noteCloudHint}>{notesCloudError}</Text>
+                <TouchableOpacity onPress={() => clearNotesCloudError()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Text style={styles.noteCloudDismiss}>Dismiss</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+          </View>
+
+          <HealthConnectBanner markId={id ?? ''} markName={counter.name} alreadyConnected={!!counter.health_kit_type} />
+
+          {/* ── Apple Health ─────────────────────────────────────────────── */}
+          <View style={styles.settingCard}>
+            <View style={styles.settingRow}>
+              <View style={[styles.settingIcon, { backgroundColor: applyOpacity('#FF2D55', 0.15) }]}>
+                <Heart size={18} color="#FF2D55" weight="duotone" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.settingLabel}>Apple Health</Text>
+                <Text style={styles.settingMeta}>
+                  {counter.health_kit_type
+                    ? `Connected — ${counter.health_kit_type}`
+                    : 'Auto-log from Health data'}
+                </Text>
+              </View>
+              {counter.health_kit_type ? (
+                <TouchableOpacity onPress={handleDisconnectHealth} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Text style={[styles.settingAction, { color: c.danger }]}>Disconnect</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity onPress={handleConnectHealth} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Text style={styles.settingAction}>Connect</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+
+          {/* ── Daily reminder ────────────────────────────────────────────── */}
+          {!reminderLoading && (
+            <View style={styles.settingCard}>
+              <View style={styles.settingRow}>
+                <View style={[styles.settingIcon, { backgroundColor: hexToRgba(accent, 0.15) }]}>
+                  <Feather name={reminderEnabled ? 'bell' : 'bell-off'} size={18} color={accent} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.settingLabel}>Daily reminder</Text>
+                  {reminderEnabled && (
+                    <TouchableOpacity onPress={() => setShowTimePicker(v => !v)}>
+                      <Text style={styles.settingMeta}>
+                        {reminderTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+                <Switch
+                  value={reminderEnabled}
+                  onValueChange={handleReminderToggle}
+                  trackColor={{ false: c.borderMid, true: c.forest }}
+                  thumbColor={c.inkInverse}
+                />
+              </View>
+              {reminderEnabled && showTimePicker && (
+                <DateTimePicker
+                  value={reminderTime}
+                  mode="time"
+                  display="spinner"
+                  onChange={handleReminderTimeChange}
+                  style={{ marginTop: spacing.sm }}
+                />
+              )}
+            </View>
+          )}
+
+          {/* Wake-up alarm (sleep mark) */}
+          {counter?.health_kit_type === 'sleep' && (
+            <View style={styles.settingCard}>
+              <View style={styles.settingRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.settingLabel}>Wake-Up Alarm</Text>
+                  <Text style={styles.settingMeta}>Set your alarm in the Clock app.</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => Linking.openURL('clock:')}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                >
+                  <Text style={styles.settingAction}>Open</Text>
+                  <ArrowRight size={14} color={c.forest} weight="bold" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      {/* Health type picker modal */}
+      <Modal
+        visible={healthModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => { setHealthModalVisible(false); setHealthPendingType(null); }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <Text style={styles.modalTitle}>Connect to Apple Health</Text>
+            {healthPendingType === 'steps' ? (
+              <View style={{ gap: spacing.md }}>
+                <Text style={styles.modalBody}>How many steps counts as an active day?</Text>
+                <TextInput
+                  value={healthStepGoal}
+                  onChangeText={setHealthStepGoal}
+                  keyboardType="number-pad"
+                  placeholder="e.g. 8000"
+                  placeholderTextColor={c.inkMuted}
+                  style={styles.modalInput}
+                />
+                <TouchableOpacity
+                  style={styles.modalBtn}
+                  disabled={healthConnecting}
+                  onPress={() => {
+                    const goal = parseInt(healthStepGoal, 10);
+                    if (isNaN(goal) || goal <= 0) {
+                      Alert.alert('Invalid goal', 'Enter a number greater than 0.');
+                      return;
+                    }
+                    void confirmHealthConnection('steps', goal);
+                  }}
+                >
+                  <Text style={styles.modalBtnText}>
+                    {healthConnecting ? 'Connecting…' : 'Save & Connect'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View>
+                {(['workout', 'sleep', 'hydration', 'mindful', 'steps', 'running'] as HealthKitType[]).map((type, i, arr) => (
+                  <TouchableOpacity
+                    key={type}
+                    style={[
+                      styles.modalOption,
+                      { borderBottomWidth: i < arr.length - 1 ? 1 : 0, borderBottomColor: c.borderLight },
+                    ]}
+                    onPress={() => void handleHealthTypeSelect(type)}
+                  >
+                    <Text style={styles.modalOptionText}>
+                      {type.charAt(0).toUpperCase() + type.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+                <TouchableOpacity
+                  style={styles.modalCancel}
+                  onPress={() => { setHealthModalVisible(false); setHealthPendingType(null); }}
+                >
+                  <Text style={styles.modalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
+  );
+}
+
+function createStyles(c: ReturnType<typeof themedColors>) {
+  return StyleSheet.create({
+  safeArea: { flex: 1 },
+  keyboardAvoid: { flex: 1 },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  errorText: { fontSize: 17, fontFamily: fonts.sansMedium },
+  content: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    flexGrow: 1,
+    gap: spacing.md,
+  },
+
+  // All done banner
+  allDoneBanner: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 100,
+    backgroundColor: c.forest,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+  },
+  allDoneBannerText: {
+    fontFamily: fonts.serifItalic,
+    fontSize: 20,
+    color: c.inkInverse,
+  },
+
+  // Hero area
+  heroArea: {
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    gap: spacing.sm,
+  },
+  heroIconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: borderRadius.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroTitle: {
+    fontFamily: fonts.serif,
+    fontSize: 32,
+    color: c.inkDark,
+    lineHeight: 36,
+    textAlign: 'center',
+    marginTop: spacing.lg,
+  },
+  heroMeta: {
+    fontFamily: fonts.sans,
+    fontSize: 13,
+    color: c.inkMuted,
+  },
+
+  // Stat row
+  statRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+
+  // Log button
+  logBtnWrap: { },
+  logBtn: {
+    height: 64,
+    borderRadius: borderRadius.full,
+    backgroundColor: c.forest,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+  },
+  logBtnDone: {
+    backgroundColor: c.surfaceAlt,
+    borderWidth: 1,
+    borderColor: c.borderMid,
+  },
+  logBtnText: {
+    fontFamily: fonts.serif,
+    fontSize: 18,
+    color: c.inkInverse,
+  },
+  logBtnTextDone: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 16,
+    color: c.forest,
+  },
+
+  // Secondary actions
+  secondaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  secondaryBtn: { paddingVertical: spacing.xs },
+  secondaryText: {
+    fontSize: 13,
+    fontFamily: fonts.sansMedium,
+    color: c.inkMuted,
+  },
+  secondarySep: {
+    width: 1,
+    height: 14,
+    backgroundColor: c.borderMid,
+  },
+
+  // Linked goals
+  section: { gap: spacing.sm },
+  sectionLabelPad: { },
+  linkedGoalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: c.borderLight,
+  },
+  linkedGoalTitle: {
+    flex: 1,
+    fontFamily: fonts.sansMedium,
+    fontSize: 14,
+    color: c.inkDark,
+  },
+  linkedGoalProgress: {
+    fontFamily: fonts.sans,
+    fontSize: 12,
+    color: c.inkMuted,
+  },
+  noLinkedGoals: {
+    fontFamily: fonts.sans,
+    fontSize: 14,
+    color: c.inkMuted,
+  },
+
+  // History
+  historyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: c.borderLight,
+  },
+  historyDate: {
+    fontFamily: fonts.sans,
+    fontSize: 14,
+    color: c.inkMid,
+  },
+  noHistoryText: {
+    fontFamily: fonts.sans,
+    fontSize: 14,
+    color: c.inkMuted,
+  },
+
+  // Note
+  noteCard: {
+    backgroundColor: c.surface,
+    borderRadius: borderRadius.card,
+    padding: spacing.lg,
+    gap: spacing.sm,
+    ...shadow.card,
+  },
+  noteHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  noteTitle: {
+    fontSize: 17,
+    fontFamily: fonts.sansMedium,
+    color: c.inkDark,
+  },
+  noteDate: {
+    fontSize: 12,
+    fontFamily: fonts.sans,
+    color: c.inkMuted,
+  },
+  noteInput: {
+    borderWidth: 1,
+    borderColor: c.borderLight,
+    borderRadius: 12,
+    padding: spacing.md,
+    minHeight: 90,
+    fontSize: 14,
+    fontFamily: fonts.sans,
+    color: c.inkDark,
+    lineHeight: 22,
+    backgroundColor: c.linen,
+  },
+  noteActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  noteCharCount: { fontSize: 11, fontFamily: fonts.sans, color: c.inkMuted },
+  noteButtons: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  noteDeleteText: { fontSize: 13, fontFamily: fonts.sansMedium, color: c.danger },
+  noteSaveBtn: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.full,
+    backgroundColor: c.forest,
+    minWidth: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 34,
+  },
+  noteSaveText: { fontSize: 13, fontFamily: fonts.sansMedium, color: c.inkInverse },
+  noteCloudRow: {
+    marginTop: spacing.xs,
+    paddingTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: c.borderLight,
+    gap: spacing.xs,
+  },
+  noteCloudHint: { fontSize: 12, fontFamily: fonts.sans, color: c.inkMuted, lineHeight: 18 },
+  noteCloudDismiss: { fontSize: 12, fontFamily: fonts.sansMedium, color: c.forest },
+
+  // Settings cards
+  settingCard: {
+    borderRadius: borderRadius.card,
+    overflow: 'hidden',
+    backgroundColor: c.surface,
+    ...shadow.card,
+  },
+  settingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  settingIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  settingLabel: { fontSize: 15, fontFamily: fonts.sansMedium, color: c.inkDark },
+  settingMeta: { fontSize: 12, fontFamily: fonts.sans, color: c.inkMuted, marginTop: 2 },
+  settingAction: { fontSize: 13, fontFamily: fonts.sansMedium, color: c.forest },
+
+  // Modal
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  modalSheet: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: spacing.xl,
+    gap: spacing.md,
+    backgroundColor: c.surface,
+  },
+  modalTitle: { fontSize: 18, fontFamily: fonts.sansMedium, color: c.inkDark, marginBottom: spacing.sm },
+  modalBody: { fontSize: 14, fontFamily: fonts.sans, color: c.inkMuted, lineHeight: 20 },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: c.borderLight,
+    borderRadius: 12,
+    padding: spacing.md,
+    fontSize: 16,
+    fontFamily: fonts.sans,
+    color: c.inkDark,
+    backgroundColor: c.linen,
+  },
+  modalBtn: {
+    borderRadius: borderRadius.full,
+    padding: spacing.md,
+    alignItems: 'center',
+    backgroundColor: c.forest,
+  },
+  modalBtnText: { color: c.inkInverse, fontSize: 16, fontFamily: fonts.sansMedium },
+  modalOption: { paddingVertical: spacing.md },
+  modalOptionText: { fontSize: 16, fontFamily: fonts.sans, color: c.inkDark },
+  modalCancel: { paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.xs },
+  modalCancelText: { fontSize: 14, fontFamily: fonts.sans, color: c.inkMuted },
+  });
+}

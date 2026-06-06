@@ -26,21 +26,24 @@ export function mapStreakToSupabase(streak: CounterStreak): SupabaseStreak {
   if (!streak.mark_id) {
     throw new Error('Cannot map streak to Supabase: mark_id is required');
   }
-  return { ...streak, mark_id: streak.mark_id };
+  const { counter_id: _omit, ...rest } = streak as any;
+  return { ...rest, mark_id: streak.mark_id };
 }
 
 export function mapBadgeToSupabase(badge: MarkBadge): SupabaseBadge {
   if (!badge.mark_id) {
     throw new Error('Cannot map badge to Supabase: mark_id is required');
   }
-  return { ...badge, mark_id: badge.mark_id };
+  const { counter_id: _omit, ...rest } = badge as any;
+  return { ...rest, mark_id: badge.mark_id };
 }
 
 export function mapEventToSupabase(event: CounterEvent): SupabaseEvent {
   if (!event.mark_id) {
     throw new Error('Cannot map event to Supabase: mark_id is required');
   }
-  return { ...event, mark_id: event.mark_id };
+  const { counter_id: _omit, ...rest } = event as any;
+  return { ...rest, mark_id: event.mark_id };
 }
 
 export function mapStreakFromSupabase(supabaseStreak: SupabaseStreak): CounterStreak {

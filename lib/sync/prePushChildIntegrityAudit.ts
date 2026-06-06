@@ -123,7 +123,7 @@ export async function prePushChildIntegrityAuditAndCleanup(opts: {
   const localMap = new Map(allLocalCounters.map((c) => [c.id, c]));
 
   const { data: remoteRows, error: remoteErr } = await supabase
-    .from('counters')
+    .from('marks')
     .select('id')
     .eq('user_id', userId)
     .is('deleted_at', null);
