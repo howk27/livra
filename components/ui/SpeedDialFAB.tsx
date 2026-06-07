@@ -173,16 +173,18 @@ export function SpeedDialFAB() {
           </View>
         </Animated.View>
 
-        {/* Main FAB */}
-        <TouchableOpacity
-          style={[styles.fab, { backgroundColor: colors.forest }]}
-          onPress={toggle}
-          activeOpacity={0.9}
-        >
-          <Animated.View style={fabRotateStyle}>
-            <Feather name="plus" size={22} color={colors.inkInverse} />
-          </Animated.View>
-        </TouchableOpacity>
+        {/* Main FAB — hidden when a sheet is open */}
+        {!markSheetVisible && !goalSheetVisible && (
+          <TouchableOpacity
+            style={[styles.fab, { backgroundColor: colors.forest }]}
+            onPress={toggle}
+            activeOpacity={0.9}
+          >
+            <Animated.View style={fabRotateStyle}>
+              <Feather name="plus" size={22} color={colors.inkInverse} />
+            </Animated.View>
+          </TouchableOpacity>
+        )}
       </View>
 
       <AddMarkSheet visible={markSheetVisible} onClose={() => setMarkSheetVisible(false)} />
