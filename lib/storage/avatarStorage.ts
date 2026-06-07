@@ -107,9 +107,16 @@ export async function getAvatarUrl(
       .createSignedUrl(avatarPath, expiresIn);
 
     if (signedUrlError) {
-      // File doesn't exist or access denied
-      if (signedUrlError.message?.includes('not found') || signedUrlError.message?.includes('Object not found')) {
-        logger.log('[Avatar Storage] Avatar not found for user:', userId);
+      const httpStatus = (signedUrlError as any).originalError?.status;
+      const msg = signedUrlError.message?.toLowerCase() ?? '';
+      // 400 from createSignedUrl = object does not exist in the bucket.
+      // 404 and explicit "not found" messages are the same case.
+      const isNotFound =
+        httpStatus === 400 ||
+        httpStatus === 404 ||
+        msg.includes('not found') ||
+        msg.includes('object not found');
+      if (isNotFound) {
         return null;
       }
       logger.error('[Avatar Storage] Error getting signed URL:', signedUrlError);
