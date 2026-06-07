@@ -175,16 +175,16 @@ export function AddGoalSheet({ visible, onClose }: AddGoalSheetProps) {
             keyboardShouldPersistTaps="handled"
           >
             <Text style={[styles.sheetTitle, { color: tc.inkDark }]}>New Goal</Text>
-            <Text style={[styles.sheetSubtitle, { color: tc.inkMuted }]}>What do you want to achieve?</Text>
+            <Text style={[styles.sheetSubtitle, { color: tc.inkMuted }]}>What does finishing this make possible?</Text>
 
             {/* Goal Name */}
             <View style={styles.fieldBlock}>
               <SectionLabel>GOAL NAME</SectionLabel>
               <TextInput
-                style={[styles.input, { backgroundColor: tc.surfaceAlt, color: tc.inkDark, borderColor: tc.borderLight }]}
+                style={[styles.input, styles.goalNameInput, { backgroundColor: tc.surfaceAlt, color: tc.inkDark, borderColor: tc.borderLight }]}
                 value={title}
                 onChangeText={setTitle}
-                placeholder="e.g. Run a marathon"
+                placeholder="Run a marathon..."
                 placeholderTextColor={tc.inkMuted}
                 returnKeyType="next"
               />
@@ -197,13 +197,17 @@ export function AddGoalSheet({ visible, onClose }: AddGoalSheetProps) {
                 style={[styles.input, styles.multiInput, { backgroundColor: tc.surfaceAlt, color: tc.inkDark, borderColor: tc.borderLight }]}
                 value={why}
                 onChangeText={setWhy}
-                placeholder="What will finishing this change for you?"
+                placeholder="What will finishing this change?"
                 placeholderTextColor={tc.inkMuted}
                 multiline
                 numberOfLines={3}
                 textAlignVertical="top"
               />
             </View>
+
+            {/* Zone divider */}
+            <View style={[styles.zoneDivider, { backgroundColor: tc.borderLight }]} />
+            <SectionLabel style={styles.zoneMechanicsLabel}>HOW IT WORKS</SectionLabel>
 
             {/* Target Count */}
             <View style={styles.fieldBlock}>
@@ -254,7 +258,7 @@ export function AddGoalSheet({ visible, onClose }: AddGoalSheetProps) {
             {/* Link Marks */}
             {marks.length > 0 && (
               <View style={styles.fieldBlock}>
-                <SectionLabel>LINKED MARKS</SectionLabel>
+                <SectionLabel>WHICH MARKS FEED THIS?</SectionLabel>
                 <Text style={[styles.linkSubtitle, { color: tc.inkMuted }]}>Which marks feed this goal?</Text>
                 {marks.map((mark, idx) => {
                   const linked = linkedMarkIds.has(mark.id);
@@ -281,10 +285,10 @@ export function AddGoalSheet({ visible, onClose }: AddGoalSheetProps) {
             )}
 
             <PillButton
-              label={saving ? 'Adding…' : 'Add Goal'}
+              label={saving ? 'Adding…' : 'Add to queue'}
               onPress={handleSave}
-              disabled={saving}
-              style={styles.cta}
+              disabled={saving || !title.trim()}
+              style={[styles.cta, { opacity: (!title.trim() && !saving) ? 0.4 : 1 }]}
             />
           </ScrollView>
         </KeyboardAvoidingView>
@@ -319,13 +323,15 @@ const styles = StyleSheet.create({
   },
   sheetTitle: {
     fontFamily: fonts.serif,
-    fontSize: 22,
+    fontSize: 28,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
+    lineHeight: 34,
   },
   sheetSubtitle: {
     fontFamily: fonts.sans,
     fontSize: 14,
+    fontStyle: 'italic',
     paddingHorizontal: spacing.lg,
     marginTop: spacing.xs,
   },
@@ -342,9 +348,23 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     marginTop: spacing.xs,
   },
+  goalNameInput: {
+    height: 56,
+    fontSize: 17,
+    fontFamily: fonts.sansMedium,
+  },
   multiInput: {
     height: 80,
     paddingTop: spacing.sm,
+  },
+  zoneDivider: {
+    height: 1,
+    marginHorizontal: spacing.lg,
+    marginVertical: spacing.xl,
+  },
+  zoneMechanicsLabel: {
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
   },
   stepperRow: {
     flexDirection: 'row',
