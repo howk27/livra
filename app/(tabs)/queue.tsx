@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,7 +25,6 @@ import { fonts, spacing, themedColors } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 
 // ── New UI components ─────────────────────────────────────────────────────────
-import { LivraHeader } from '../../components/ui/LivraHeader';
 import { LivraWordmark } from '../../components/ui/LivraWordmark';
 import { QueueCard } from '../../components/ui/QueueCard';
 import { SvgLogo } from '../../components/ui/SvgLogo';
@@ -286,6 +286,7 @@ export default function QueueScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { isProUnlocked } = useIapSubscriptions();
+  const insets = useSafeAreaInsets();
 
   const goals = useGoalsStore((s) => s.goals);
   const isLoading = useGoalsStore((s) => s.isLoading);
@@ -315,27 +316,25 @@ export default function QueueScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: c.linen }]}>
-      {/* Header — no centerLogo, no title */}
-      <LivraHeader />
-
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* ── Brand wordmark + section title ── */}
-        <View style={styles.topBlock}>
+        {/* ── Brand wordmark ── */}
+        <View style={[styles.topBlock, { paddingTop: insets.top + 8 }]}>
           <LivraWordmark fontSize={28} letterSpacing={5} color={c.inkDark} />
-          <Text style={[styles.sectionTitle, { color: c.inkDark }]}>Guided Task Progress</Text>
-          <Text style={[styles.sectionSubtitle, { color: c.inkMid }]}>Your sequential path to achieving goals.</Text>
+          <Text style={[styles.sectionSubtitle, { color: c.inkMuted }]}>Your goals, one at a time.</Text>
         </View>
 
         {/* ── Empty state ── */}
         {isEmpty && (
           <View style={styles.emptyState}>
-            <SvgLogo color={c.inkMuted} width={40} height={20} />
+            <View style={{ opacity: 0.4 }}>
+              <SvgLogo color={c.inkMuted} width={32} height={16} />
+            </View>
             <Text style={[styles.emptyTitle, { color: c.inkDark }]}>No goals yet.</Text>
-            <Text style={[styles.emptySubtitle, { color: c.inkMid }]}>Add your first goal to begin.</Text>
+            <Text style={[styles.emptySubtitle, { color: c.inkMuted }]}>Add your first goal to begin.</Text>
           </View>
         )}
 
@@ -386,18 +385,13 @@ const styles = StyleSheet.create({
   // Top text block
   topBlock: {
     paddingHorizontal: spacing.lg,
-    marginTop: spacing.lg,
-    marginBottom: spacing.xl,
-  },
-  sectionTitle: {
-    fontFamily: fonts.serif,
-    fontSize: 28,
-    marginTop: spacing.lg,
+    paddingBottom: 0,
+    marginBottom: 24,
   },
   sectionSubtitle: {
-    fontFamily: fonts.sans,
-    fontSize: 15,
-    marginTop: spacing.xs,
+    fontFamily: fonts.serifItalic,
+    fontSize: 16,
+    marginTop: 4,
   },
 
   // Hero card
@@ -430,18 +424,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.xl,
-    gap: spacing.md,
   },
   emptyTitle: {
-    fontFamily: fonts.serifSemibold,
-    fontSize: 24,
+    fontFamily: fonts.serif,
+    fontSize: 22,
     textAlign: 'center',
-    marginTop: spacing.lg,
+    marginTop: spacing.md,
   },
   emptySubtitle: {
     fontFamily: fonts.sans,
-    fontSize: 15,
+    fontSize: 14,
     textAlign: 'center',
+    marginTop: spacing.sm,
   },
   // Bottom spacer
   bottomSpacer: {

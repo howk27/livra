@@ -17,6 +17,7 @@ import Animated, {
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Feather } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { spacing, radius, shadow, themedColors } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { AddMarkSheet } from '../sheets/AddMarkSheet';
@@ -28,6 +29,8 @@ const SPRING = { damping: 18, stiffness: 260, mass: 0.9 };
 export function SpeedDialFAB() {
   const theme = useEffectiveTheme();
   const colors = themedColors(theme);
+  const insets = useSafeAreaInsets();
+  const fabBottom = 64 + insets.bottom + 16;
   const [expanded, setExpanded] = useState(false);
   const [markSheetVisible, setMarkSheetVisible] = useState(false);
   const [goalSheetVisible, setGoalSheetVisible] = useState(false);
@@ -137,7 +140,7 @@ export function SpeedDialFAB() {
 
         {/* Option 1 — New Mark (lower) */}
         <Animated.View
-          style={[styles.optionWrap, styles.optionPosition, opt1Style]}
+          style={[styles.optionWrap, styles.optionPosition, { bottom: fabBottom }, opt1Style]}
           pointerEvents={expanded ? 'auto' : 'none'}
         >
           <View style={styles.optionRow}>
@@ -156,7 +159,7 @@ export function SpeedDialFAB() {
 
         {/* Option 2 — New Goal (upper) */}
         <Animated.View
-          style={[styles.optionWrap, styles.optionPosition, opt2Style]}
+          style={[styles.optionWrap, styles.optionPosition, { bottom: fabBottom }, opt2Style]}
           pointerEvents={expanded ? 'auto' : 'none'}
         >
           <View style={styles.optionRow}>
@@ -176,7 +179,7 @@ export function SpeedDialFAB() {
         {/* Main FAB — hidden when a sheet is open */}
         {!markSheetVisible && !goalSheetVisible && (
           <TouchableOpacity
-            style={[styles.fab, { backgroundColor: colors.forest }]}
+            style={[styles.fab, { backgroundColor: colors.forest, bottom: fabBottom }]}
             onPress={toggle}
             activeOpacity={0.9}
           >
@@ -208,7 +211,6 @@ const styles = StyleSheet.create({
   },
   optionPosition: {
     position: 'absolute',
-    bottom: FAB_BOTTOM,
     right: FAB_RIGHT,
   },
   optionRow: {
@@ -244,7 +246,6 @@ const styles = StyleSheet.create({
   },
   fab: {
     position: 'absolute',
-    bottom: FAB_BOTTOM,
     right: FAB_RIGHT,
     width: FAB_SIZE,
     height: FAB_SIZE,

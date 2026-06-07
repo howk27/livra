@@ -208,16 +208,23 @@ export default function FocusScreen() {
         <Text style={[styles.greeting, { color: c.inkDark }]}>{greetingText}</Text>
 
         {/* ── Compact Progress Banner ── */}
-        <View style={[styles.progressBanner, { backgroundColor: c.forest }]}>
+        <View style={[
+          styles.progressBanner,
+          {
+            backgroundColor: theme === 'dark' ? 'rgba(141,181,168,0.12)' : 'rgba(28,60,52,0.10)',
+            borderWidth: 0.5,
+            borderColor: theme === 'dark' ? 'rgba(141,181,168,0.15)' : 'rgba(28,60,52,0.15)',
+          },
+        ]}>
           <View>
-            <Text style={[styles.bannerFraction, { color: c.inkInverse }]}>
+            <Text style={[styles.bannerFraction, { color: theme === 'dark' ? c.inkInverse : c.forest }]}>
               {completedMarksToday}/{todayTotal}
             </Text>
-            <Text style={[styles.bannerFractionLabel, { color: c.inkInverseMuted }]}>marks</Text>
+            <Text style={[styles.bannerFractionLabel, { color: theme === 'dark' ? c.inkInverseMuted : c.inkMuted }]}>marks</Text>
           </View>
           <View style={styles.bannerStreak}>
             <Lightning size={14} color={c.mint} weight="duotone" />
-            <Text style={[styles.bannerStreakText, { color: c.inkInverseMuted }]}>
+            <Text style={[styles.bannerStreakText, { color: c.mint }]}>
               {overallStreakDays} day streak
             </Text>
           </View>
@@ -325,9 +332,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   bannerFraction: {
-    fontFamily: fonts.sansBold,
-    fontSize: 20,
-    lineHeight: 24,
+    fontFamily: fonts.serif,
+    fontSize: 26,
+    lineHeight: 32,
   },
   bannerFractionLabel: {
     fontFamily: fonts.sans,

@@ -13,6 +13,7 @@ import {
   CircleIcon,
   Calendar,
   BookOpen,
+  EnvelopeSimple,
   type Icon as PhosphorIcon,
 } from 'phosphor-react-native';
 import { CheckinButton } from './CheckinButton';
@@ -29,6 +30,7 @@ export const CATEGORY_MAP: Record<string, { Icon: PhosphorIcon; accent: string }
   Discipline:    { Icon: Shield,         accent: '#8A7E6B' },
   Relationships: { Icon: Users,          accent: '#9E7B6B' },
   Finance:       { Icon: CurrencyDollar, accent: '#9E8A6B' },
+  email:         { Icon: EnvelopeSimple,  accent: '#4A7A8C' },
   // Legacy lowercase keys
   sleep:         { Icon: Moon,           accent: '#6B8FA6' },
   workout:       { Icon: Pulse,          accent: '#A0614A' },
