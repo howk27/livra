@@ -177,14 +177,21 @@ function MarkDetailContent() {
     [events],
   );
 
-  const recentActivity = useMemo(
-    () =>
-      events
-        .filter((e) => e.event_type === 'increment' || e.event_type === 'decrement')
-        .sort((a, b) => +new Date(b.occurred_at) - +new Date(a.occurred_at))
-        .slice(0, 6),
-    [events],
-  );
+  const recentActivity = useMemo(() => {
+    // Aggregate increment events by local date, sum amounts per day.
+    // Show only days with net positive increments — no separate decrement rows.
+    const dayTotals = new Map<string, number>();
+    for (const e of events) {
+      if (e.event_type !== 'increment') continue;
+      const prev = dayTotals.get(e.occurred_local_date) ?? 0;
+      dayTotals.set(e.occurred_local_date, prev + (e.amount ?? 1));
+    }
+    return Array.from(dayTotals.entries())
+      .filter(([, total]) => total > 0)
+      .sort(([a], [b]) => (a < b ? 1 : a > b ? -1 : 0)) // newest date first
+      .slice(0, 6)
+      .map(([date]) => date);
+  }, [events]);
 
   const dailyLogsForMark = useDailyTrackingStore(
     (s) => (id ? s.getDailyLogsForMark(id, 60) : []),
@@ -625,18 +632,20 @@ function MarkDetailContent() {
           <View style={styles.section}>
             <SectionLabel style={styles.sectionLabelPad}>HISTORY</SectionLabel>
             {recentActivity.length > 0 ? (
-              recentActivity.map((event) => {
-                const dt = new Date(event.occurred_at);
-                const dateNote = notesByDate.get(event.occurred_local_date);
-                const isExpanded = expandedActivityDate === event.occurred_local_date;
+              recentActivity.map((date) => {
+                // date is a 'yyyy-MM-dd' string — parse as local midnight to avoid UTC shift
+                const [y, m, d] = date.split('-').map(Number);
+                const dt = new Date(y, m - 1, d);
+                const dateNote = notesByDate.get(date);
+                const isExpanded = expandedActivityDate === date;
                 return (
                   <TouchableOpacity
-                    key={event.id}
+                    key={date}
                     style={styles.historyRow}
                     activeOpacity={dateNote ? 0.82 : 1}
                     onPress={() => {
                       if (!dateNote) return;
-                      setExpandedActivityDate(isExpanded ? null : event.occurred_local_date);
+                      setExpandedActivityDate(isExpanded ? null : date);
                     }}
                   >
                     <Text style={styles.historyDate}>
