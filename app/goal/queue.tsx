@@ -86,7 +86,11 @@ export default function GoalQueueScreen() {
   );
   const completed = useMemo(() => goals.filter(g => g.status === 'completed'), [goals]);
 
+  const isGoalUnlocked = (goal: Goal) =>
+    !goal.target_mark_count || goal.current_mark_count >= goal.target_mark_count;
+
   const handleComplete = (goal: Goal) => {
+    if (!isGoalUnlocked(goal)) return;
     Alert.alert(
       'Mark goal complete?',
       `"${goal.title}" will move to your history. The next goal in queue becomes active.`,
@@ -171,6 +175,24 @@ export default function GoalQueueScreen() {
                 </Text>
               ) : null}
               <GoalMarkRow linkedMarkIds={active.linked_mark_ids} />
+              {/* Progress toward unlock */}
+              {active.target_mark_count ? (
+                <View style={{ marginTop: spacing.sm, gap: 4 }}>
+                  <View style={{ height: 4, borderRadius: 2, backgroundColor: c.borderLight, overflow: 'hidden' }}>
+                    <View
+                      style={{
+                        height: '100%',
+                        borderRadius: 2,
+                        backgroundColor: c.forest,
+                        width: `${Math.min(100, (active.current_mark_count / active.target_mark_count) * 100)}%`,
+                      }}
+                    />
+                  </View>
+                  <Text style={{ fontSize: 10, color: c.inkMuted }}>
+                    {active.current_mark_count} / {active.target_mark_count} check-ins to complete
+                  </Text>
+                </View>
+              ) : null}
               {/* Target date row */}
               <TouchableOpacity
                 style={[styles.targetDateRow, { borderTopColor: c.borderLight }]}
@@ -186,14 +208,26 @@ export default function GoalQueueScreen() {
                     : 'Not set'}
                 </Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.completeBtn, { borderColor: c.forest }]}
-                onPress={() => handleComplete(active)}
-              >
-                <Text style={[styles.completeBtnText, { color: c.forest }]}>
-                  Mark complete
-                </Text>
-              </TouchableOpacity>
+              {(() => {
+                const unlocked = isGoalUnlocked(active);
+                const remaining = (active.target_mark_count ?? 0) - active.current_mark_count;
+                return (
+                  <TouchableOpacity
+                    style={[
+                      styles.completeBtn,
+                      { borderColor: unlocked ? c.forest : c.borderMid, opacity: unlocked ? 1 : 0.5 },
+                    ]}
+                    onPress={() => handleComplete(active)}
+                    disabled={!unlocked}
+                  >
+                    <Text style={[styles.completeBtnText, { color: unlocked ? c.forest : c.inkMuted }]}>
+                      {unlocked
+                        ? 'Mark complete'
+                        : `${remaining} more check-in${remaining === 1 ? '' : 's'} to unlock`}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })()}
             </View>
           </View>
         ) : (

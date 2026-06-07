@@ -1,4 +1,4 @@
-import { getMarksForGoal } from '../../lib/goalMarkSuggestions';
+import { getMarksForGoal, calculateUnlockThreshold } from '../../lib/goalMarkSuggestions';
 
 describe('getMarksForGoal', () => {
   it('returns run and steps for "Run a marathon"', () => {
@@ -40,5 +40,29 @@ describe('getMarksForGoal', () => {
     const marks = getMarksForGoal('Build passive income');
     const ids = marks.map(m => m.id);
     expect(ids).toContain('invest');
+  });
+});
+
+describe('calculateUnlockThreshold', () => {
+  it('scales with mark count', () => {
+    const one = calculateUnlockThreshold('building', 'steady', 1);
+    const three = calculateUnlockThreshold('building', 'steady', 3);
+    expect(three).toBeGreaterThan(one);
+  });
+
+  it('all-in pushing produces highest threshold', () => {
+    const high = calculateUnlockThreshold('all-in', 'pushing', 3);
+    const low = calculateUnlockThreshold('starting', 'light', 3);
+    expect(high).toBeGreaterThan(low);
+  });
+
+  it('returns a positive integer', () => {
+    const result = calculateUnlockThreshold('leveling', 'steady', 2);
+    expect(result).toBeGreaterThan(0);
+    expect(Number.isInteger(result)).toBe(true);
+  });
+
+  it('returns 0 for 0 marks', () => {
+    expect(calculateUnlockThreshold('building', 'steady', 0)).toBe(0);
   });
 });

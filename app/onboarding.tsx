@@ -23,8 +23,13 @@ import { SvgLogo } from '../components/ui/SvgLogo';
 import { LivraWordmark } from '../components/ui/LivraWordmark';
 import { PillButton } from '../components/ui/PillButton';
 import { SectionLabel } from '../components/ui/SectionLabel';
+import { CommitmentScreen, CommitmentSelection } from '../components/CommitmentScreen';
 import { themedColors, fonts, spacing, radius } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
+import { useGoalsStore } from '../state/goalsSlice';
+import { useMarksStore } from '../state/countersSlice';
+import { getMarksForGoal } from '../lib/goalMarkSuggestions';
+import { MarkDefinition } from '../lib/suggestedCounters';
 import { getSupabaseClient } from '../lib/supabase';
 import { logger } from '../lib/utils/logger';
 
@@ -46,9 +51,10 @@ const HOW_IT_WORKS = [
   },
 ];
 
-// Animated step dot
+// Animated step dot — only shown for steps 0–2
 function StepDots({ step }: { step: number }) {
   const c = themedColors(useEffectiveTheme());
+  if (step > 2) return null;
   return (
     <View style={dotStyles.dotsRow}>
       {[0, 1, 2].map((i) => {
@@ -91,15 +97,23 @@ export default function OnboardingScreen() {
   const styles = useMemo(() => createStyles(c), [c]);
   const router = useRouter();
   const supabase = getSupabaseClient();
+  const createGoal = useGoalsStore(s => s.createGoal);
+  const addMark = useMarksStore(s => s.addMark);
+
   const [step, setStep] = useState(0);
 
-  // Step 2 form state
+  // Step 2 — auth state
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [newUserId, setNewUserId] = useState<string | null>(null);
 
-  const advance = useCallback(() => setStep((s) => Math.min(2, s + 1)), []);
+  // Steps 3–4 — goal state
+  const [goalTitle, setGoalTitle] = useState('');
+  const [suggestions, setSuggestions] = useState<MarkDefinition[]>([]);
+
+  const advance = useCallback(() => setStep((s) => Math.min(4, s + 1)), []);
 
   const handleSignUp = async () => {
     if (!email.trim() || !password) {
@@ -108,18 +122,70 @@ export default function OnboardingScreen() {
     }
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email: email.trim().toLowerCase(),
         password,
       });
       if (error) throw error;
-      router.replace('/(tabs)/focus' as any);
+      const uid = data.user?.id ?? null;
+      setNewUserId(uid);
+      advance(); // go to step 3 (goal title)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Sign up failed.';
       logger.error('[Onboarding] signUp error:', err);
       Alert.alert('Sign up failed', msg);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGoalTitleNext = () => {
+    const trimmed = goalTitle.trim();
+    if (!trimmed) return;
+    setSuggestions(getMarksForGoal(trimmed));
+    advance(); // go to step 4 (CommitmentScreen)
+  };
+
+  const handleOnboardingConfirm = async (selection: CommitmentSelection) => {
+    const userId = newUserId;
+    if (!userId) {
+      router.replace('/(tabs)/focus' as any);
+      return;
+    }
+    try {
+      const newMarkIds: string[] = [];
+      for (const id of selection.selectedNewMarkIds) {
+        const sugg = suggestions.find(s => s.id === id);
+        if (!sugg) continue;
+        const newMark = await addMark({
+          name: sugg.name,
+          emoji: sugg.emoji,
+          color: sugg.color,
+          unit: sugg.unit,
+          user_id: userId,
+          goal_period: 'day',
+          schedule_type: 'daily',
+          dailyTarget: 1,
+          total: 0,
+          enable_streak: true,
+          sort_index: 0,
+        });
+        newMarkIds.push(newMark.id);
+      }
+
+      await createGoal({
+        title: goalTitle.trim(),
+        userId,
+        isPro: false,
+        linked_mark_ids: [...selection.alreadyOwnedMarkIds, ...newMarkIds],
+        target_mark_count: selection.unlockThreshold > 0 ? selection.unlockThreshold : null,
+        tier: selection.tier,
+        frequency: selection.frequency,
+      });
+    } catch (err) {
+      logger.error('[Onboarding] goal creation failed:', err);
+    } finally {
+      router.replace('/(tabs)/focus' as any);
     }
   };
 
@@ -244,7 +310,6 @@ export default function OnboardingScreen() {
             <Text style={styles.googleLogoText}>G</Text>
           </View>
           <Text style={styles.googleBtnText}>Continue with Google</Text>
-          {/* DESIGN TODO: replace G placeholder with real Google logo asset */}
         </TouchableOpacity>
 
         <TouchableOpacity onPress={() => router.push('/signin' as any)}>
@@ -257,12 +322,81 @@ export default function OnboardingScreen() {
     </KeyboardAvoidingView>
   );
 
+  // Step 3 — Goal title
+  const renderStep3 = () => (
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <ScrollView
+        contentContainerStyle={styles.stepContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={styles.stepTitle}>What's the goal you're after?</Text>
+        <Text style={styles.stepSubtitle}>
+          Be specific. "Run a marathon" beats "get fit."
+        </Text>
+
+        <View style={styles.fieldBlock}>
+          <TextInput
+            style={styles.input}
+            value={goalTitle}
+            onChangeText={setGoalTitle}
+            placeholder="Run a marathon, save $10k, learn Spanish…"
+            placeholderTextColor={c.inkMuted}
+            autoFocus
+            maxLength={80}
+            returnKeyType="next"
+            onSubmitEditing={handleGoalTitleNext}
+          />
+        </View>
+
+        <PillButton
+          label="Next →"
+          onPress={handleGoalTitleNext}
+          disabled={!goalTitle.trim()}
+          style={{ ...styles.primaryBtn, opacity: goalTitle.trim() ? 1 : 0.4 }}
+        />
+
+        <TouchableOpacity
+          onPress={() => router.replace('/(tabs)/focus' as any)}
+          style={{ alignItems: 'center', marginTop: spacing.md }}
+        >
+          <Text style={styles.secondaryLink}>Skip for now</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+
+  // Step 4 — CommitmentScreen
+  const renderStep4 = () => (
+    <CommitmentScreen
+      goalTitle={goalTitle}
+      suggestedMarks={suggestions}
+      userMarks={[]}
+      onConfirm={handleOnboardingConfirm}
+      onBack={() => setStep(3)}
+      isOnboarding
+    />
+  );
+
+  // For steps 3–4, render without the SafeAreaView wrapper (CommitmentScreen handles its own scroll)
+  if (step === 4) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: c.linen }}>
+        {renderStep4()}
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.screen}>
       <View style={styles.fill}>
         {step === 0 && renderStep0()}
         {step === 1 && renderStep1()}
         {step === 2 && renderStep2()}
+        {step === 3 && renderStep3()}
       </View>
       <StepDots step={step} />
     </SafeAreaView>
@@ -277,30 +411,6 @@ function createStyles(c: ReturnType<typeof themedColors>) {
   },
   fill: {
     flex: 1,
-  },
-
-  // Step dots
-  dotsRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: spacing.sm,
-    position: 'absolute',
-    bottom: 48,
-    left: 0,
-    right: 0,
-  },
-  dot: {
-    height: 6,
-    borderRadius: radius.full,
-  },
-  dotActive: {
-    width: 20,
-    backgroundColor: c.forest,
-  },
-  dotInactive: {
-    width: 6,
-    backgroundColor: c.borderMid,
   },
 
   // Step 0 — centered
@@ -344,7 +454,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     color: c.forest,
   },
 
-  // Step 1 & 2 — top-padded
+  // Step 1 & 2 & 3 — top-padded
   stepContent: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.xl,

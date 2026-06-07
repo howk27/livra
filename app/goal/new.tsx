@@ -8,7 +8,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
-  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -19,18 +18,10 @@ import { useMarksStore } from '../../state/countersSlice';
 import { useAuth } from '../../hooks/useAuth';
 import { checkProStatus } from '../../lib/iap/iap';
 import { getMarksForGoal } from '../../lib/goalMarkSuggestions';
+import { CommitmentScreen, CommitmentSelection } from '../../components/CommitmentScreen';
 import { MarkDefinition } from '../../lib/suggestedCounters';
-import type { Mark } from '../../types';
 
-type Step = 'title' | 'marks';
-
-function isAlreadyOwned(suggested: MarkDefinition, userMarks: Mark[]): Mark | undefined {
-  return userMarks.find(
-    m =>
-      m.name.toLowerCase() === suggested.name.toLowerCase() ||
-      (m as any).icon === suggested.id,
-  );
-}
+type Step = 'title' | 'commitment';
 
 export default function NewGoalScreen() {
   const theme = useEffectiveTheme();
@@ -46,46 +37,23 @@ export default function NewGoalScreen() {
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
   const [suggestedMarks, setSuggestedMarks] = useState<MarkDefinition[]>([]);
-  const [selectedNewMarkIds, setSelectedNewMarkIds] = useState<Set<string>>(new Set());
 
   const handleNext = () => {
     const trimmed = title.trim();
     if (!trimmed) return;
-    const suggestions = getMarksForGoal(trimmed);
-    setSuggestedMarks(suggestions);
-    const newIds = suggestions
-      .filter(s => !isAlreadyOwned(s, marks))
-      .map(s => s.id);
-    setSelectedNewMarkIds(new Set(newIds));
-    setStep('marks');
+    setSuggestedMarks(getMarksForGoal(trimmed));
+    setStep('commitment');
   };
 
-  const toggleMarkSelection = (id: string) => {
-    setSelectedNewMarkIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  };
-
-  const handleCreate = async () => {
-    const trimmed = title.trim();
-    if (!trimmed || !user?.id) return;
+  const handleConfirm = async (selection: CommitmentSelection) => {
+    if (!user?.id) return;
     setSaving(true);
     try {
       const proStatus = await checkProStatus();
 
-      const ownedAssociated = suggestedMarks
-        .map(s => isAlreadyOwned(s, marks))
-        .filter(Boolean) as Mark[];
-
       const newMarkIds: string[] = [];
-      for (const suggId of selectedNewMarkIds) {
-        const sugg = suggestedMarks.find(s => s.id === suggId);
+      for (const id of selection.selectedNewMarkIds) {
+        const sugg = suggestedMarks.find(s => s.id === id);
         if (!sugg) continue;
         const newMark = await addMark({
           name: sugg.name,
@@ -103,17 +71,15 @@ export default function NewGoalScreen() {
         newMarkIds.push(newMark.id);
       }
 
-      const linked_mark_ids = [
-        ...ownedAssociated.map(m => m.id),
-        ...newMarkIds,
-      ];
-
       await createGoal({
-        title: trimmed,
+        title: title.trim(),
         description: description.trim() || undefined,
         userId: user.id,
         isPro: proStatus.effectiveUnlocked,
-        linked_mark_ids,
+        linked_mark_ids: [...selection.alreadyOwnedMarkIds, ...newMarkIds],
+        target_mark_count: selection.unlockThreshold > 0 ? selection.unlockThreshold : null,
+        tier: selection.tier,
+        frequency: selection.frequency,
       });
 
       router.back();
@@ -135,80 +101,16 @@ export default function NewGoalScreen() {
     }
   };
 
-  if (step === 'marks') {
+  if (step === 'commitment') {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: c.linen }]}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => setStep('title')}>
-            <Text style={[styles.cancel, { color: c.inkMuted }]}>Back</Text>
-          </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: c.inkDark }]}>Pick Marks</Text>
-          <TouchableOpacity onPress={handleCreate} disabled={saving}>
-            <Text style={[styles.save, { color: saving ? c.inkMuted : c.forest }]}>
-              {saving ? 'Saving…' : 'Create'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <ScrollView contentContainerStyle={styles.markList}>
-          <Text style={[styles.markSubheader, { color: c.inkMuted }]}>
-            These are the daily actions that move this goal forward.
-          </Text>
-
-          {suggestedMarks.map(sugg => {
-            const owned = isAlreadyOwned(sugg, marks);
-            const isSelected = selectedNewMarkIds.has(sugg.id);
-
-            return (
-              <TouchableOpacity
-                key={sugg.id}
-                style={[
-                  styles.markCard,
-                  {
-                    backgroundColor: c.surface,
-                    borderColor: owned
-                      ? c.forest
-                      : isSelected
-                      ? c.forest
-                      : c.borderLight,
-                  },
-                ]}
-                onPress={() => {
-                  if (owned) {
-                    router.push(`/mark/${owned.id}` as any);
-                  } else {
-                    toggleMarkSelection(sugg.id);
-                  }
-                }}
-                activeOpacity={0.75}
-              >
-                <Text style={styles.markEmoji}>{sugg.emoji}</Text>
-                <Text style={[styles.markName, { color: c.inkDark }]}>{sugg.name}</Text>
-                {owned ? (
-                  <View style={[styles.ownedBadge, { backgroundColor: c.forest + '22', borderColor: c.forest }]}>
-                    <Text style={[styles.ownedBadgeText, { color: c.forest }]}>✓ Already tracking</Text>
-                  </View>
-                ) : (
-                  <View
-                    style={[
-                      styles.checkbox,
-                      {
-                        borderColor: isSelected ? c.forest : c.borderMid,
-                        backgroundColor: isSelected ? c.forest : 'transparent',
-                      },
-                    ]}
-                  >
-                    {isSelected && <Text style={styles.checkmark}>✓</Text>}
-                  </View>
-                )}
-              </TouchableOpacity>
-            );
-          })}
-
-          <TouchableOpacity onPress={() => router.push('/mark/new' as any)} style={styles.browseLink}>
-            <Text style={[styles.browseLinkText, { color: c.forest }]}>Browse all marks</Text>
-          </TouchableOpacity>
-        </ScrollView>
+      <SafeAreaView style={{ flex: 1, backgroundColor: c.linen }}>
+        <CommitmentScreen
+          goalTitle={title}
+          suggestedMarks={suggestedMarks}
+          userMarks={marks}
+          onConfirm={handleConfirm}
+          onBack={() => setStep('title')}
+        />
       </SafeAreaView>
     );
   }
@@ -224,8 +126,8 @@ export default function NewGoalScreen() {
             <Text style={[styles.cancel, { color: c.inkMuted }]}>Cancel</Text>
           </TouchableOpacity>
           <Text style={[styles.headerTitle, { color: c.inkDark }]}>New Goal</Text>
-          <TouchableOpacity onPress={handleNext} disabled={!title.trim()}>
-            <Text style={[styles.save, { color: title.trim() ? c.forest : c.inkMuted }]}>
+          <TouchableOpacity onPress={handleNext} disabled={!title.trim() || saving}>
+            <Text style={[styles.save, { color: title.trim() && !saving ? c.forest : c.inkMuted }]}>
               Next
             </Text>
           </TouchableOpacity>
@@ -245,6 +147,7 @@ export default function NewGoalScreen() {
             maxLength={80}
             autoFocus
             returnKeyType="next"
+            onSubmitEditing={handleNext}
           />
 
           <Text style={[styles.label, { color: c.inkMuted }]}>
@@ -293,42 +196,4 @@ const styles = StyleSheet.create({
     fontSize: fontSize.md,
   },
   descInput: { height: 80, textAlignVertical: 'top' },
-  markList: {
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.xl,
-    gap: spacing.sm,
-  },
-  markSubheader: {
-    fontSize: fontSize.sm,
-    marginBottom: spacing.sm,
-    lineHeight: 20,
-  },
-  markCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    padding: spacing.md,
-    borderRadius: borderRadius.lg,
-    borderWidth: 1,
-  },
-  markEmoji: { fontSize: 22, width: 28 },
-  markName: { flex: 1, fontSize: fontSize.md, fontWeight: fontWeight.medium },
-  ownedBadge: {
-    borderWidth: 1,
-    borderRadius: borderRadius.full,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-  },
-  ownedBadgeText: { fontSize: 11, fontWeight: fontWeight.medium },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkmark: { color: '#FFFFFF', fontSize: 12, fontWeight: fontWeight.bold },
-  browseLink: { alignItems: 'center', marginTop: spacing.md, paddingVertical: spacing.sm },
-  browseLinkText: { fontSize: fontSize.sm, fontWeight: fontWeight.medium },
 });

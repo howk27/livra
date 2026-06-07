@@ -1,3 +1,5 @@
+import type { TierId, FrequencyId } from '../lib/goalMarkSuggestions';
+
 export type GoalStatus = 'active' | 'queued' | 'completed' | 'expired' | 'paused';
 
 export type Goal = {
@@ -22,6 +24,10 @@ export type Goal = {
   milestones_fired?: string[];
   /** Mark IDs linked to this goal. Populated on fetch from goal_mark_links. */
   linked_mark_ids?: string[];
+  /** Commitment tier selected at goal creation (e.g. 'building'). */
+  tier?: TierId;
+  /** Check-in frequency selected at goal creation (e.g. 'steady'). */
+  frequency?: FrequencyId;
 };
 
 export type GoalMarkLink = {

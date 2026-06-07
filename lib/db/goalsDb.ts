@@ -22,6 +22,8 @@ function normalizeGoal(g: Goal): Goal {
     ...g,
     current_mark_count: g.current_mark_count ?? 0,
     deadline_date: g.deadline_date ?? g.target_date ?? null,
+    tier: g.tier ?? 'building',
+    frequency: g.frequency ?? 'steady',
   };
 }
 

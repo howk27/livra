@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 import { InteractionManager } from 'react-native';
 import type { Goal, GoalMarkLink } from '../types/goal';
+import type { TierId, FrequencyId } from '../lib/goalMarkSuggestions';
 import {
   loadGoalsForUser,
   upsertGoal,
@@ -34,7 +35,7 @@ export interface GoalsState {
   error: string | null;
 
   fetchGoals: (userId: string) => Promise<void>;
-  createGoal: (data: Partial<Goal> & { userId: string; isPro: boolean }) => Promise<Goal>;
+  createGoal: (data: Partial<Goal> & { userId: string; isPro: boolean; tier?: TierId; frequency?: FrequencyId }) => Promise<Goal>;
   updateGoal: (id: string, data: Partial<Goal>) => Promise<void>;
   deleteGoal: (id: string) => Promise<void>;
   completeGoal: (id: string) => Promise<void>;
@@ -74,7 +75,7 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
     }
   },
 
-  createGoal: async ({ userId, isPro, ...data }) => {
+  createGoal: async ({ userId, isPro, tier, frequency, ...data }) => {
     const current = get().goals.filter(g => g.user_id === userId);
     const nonCompleted = current.filter(g => g.status !== 'completed' && g.status !== 'expired');
     if (!canAddGoal(isPro, nonCompleted.length)) throw new GoalLimitError();
@@ -99,6 +100,8 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
       deadline_date: data.deadline_date ?? null,
       target_date: data.deadline_date ?? data.target_date ?? null,
       linked_mark_ids: data.linked_mark_ids ?? [],
+      tier: tier ?? 'building',
+      frequency: frequency ?? 'steady',
       created_at: now,
       updated_at: now,
     };
