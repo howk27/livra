@@ -377,6 +377,11 @@ export default function SettingsScreen() {
             onPress={() => router.push('/settings/privacy' as any)}
           />
           <SettingsRow
+            icon="link"
+            label="Integrations"
+            onPress={() => router.push('/settings/integrations' as any)}
+          />
+          <SettingsRow
             icon="star"
             label="Subscription"
             onPress={() => router.push('/paywall')}
