@@ -227,6 +227,29 @@ function MarkDetailContent() {
 
   const noteUserId = user?.id ?? 'local';
 
+  const handleReminderToggle = useCallback(async (value: boolean) => {
+    if (!id || !counter) return;
+    setReminderEnabled(value);
+    if (value) {
+      setShowTimePicker(true);
+      const hhmm = `${reminderTime.getHours()}:${String(reminderTime.getMinutes()).padStart(2, '0')}`;
+      await setMarkReminderTime(id, hhmm);
+      await scheduleMarkReminder(id, counter.name, hhmm);
+    } else {
+      setShowTimePicker(false);
+      await cancelMarkReminder(id);
+      await clearMarkReminderTime(id);
+    }
+  }, [id, counter, reminderTime]);
+
+  const handleReminderTimeChange = useCallback(async (_: any, selected?: Date) => {
+    if (!selected || !id || !counter) return;
+    setReminderTime(selected);
+    const hhmm = `${selected.getHours()}:${String(selected.getMinutes()).padStart(2, '0')}`;
+    await setMarkReminderTime(id, hhmm);
+    await scheduleMarkReminder(id, counter.name, hhmm);
+  }, [id, counter]);
+
   // Goals linked to this mark
   const goals = useGoalsStore(s => s.goals);
   const linkedGoals = useMemo(
@@ -484,29 +507,6 @@ function MarkDetailContent() {
       },
     ]);
   };
-
-  const handleReminderToggle = useCallback(async (value: boolean) => {
-    if (!id || !counter) return;
-    setReminderEnabled(value);
-    if (value) {
-      setShowTimePicker(true);
-      const hhmm = `${reminderTime.getHours()}:${String(reminderTime.getMinutes()).padStart(2, '0')}`;
-      await setMarkReminderTime(id, hhmm);
-      await scheduleMarkReminder(id, counter.name, hhmm);
-    } else {
-      setShowTimePicker(false);
-      await cancelMarkReminder(id);
-      await clearMarkReminderTime(id);
-    }
-  }, [id, counter, reminderTime]);
-
-  const handleReminderTimeChange = useCallback(async (_: any, selected?: Date) => {
-    if (!selected || !id || !counter) return;
-    setReminderTime(selected);
-    const hhmm = `${selected.getHours()}:${String(selected.getMinutes()).padStart(2, '0')}`;
-    await setMarkReminderTime(id, hhmm);
-    await scheduleMarkReminder(id, counter.name, hhmm);
-  }, [id, counter]);
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
