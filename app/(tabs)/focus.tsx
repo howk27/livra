@@ -7,15 +7,13 @@ import {
   TouchableOpacity,
   Platform,
 } from 'react-native';
-import { CheckCircle, Lightning, Pulse, Flag } from 'phosphor-react-native';
+import { Lightning } from 'phosphor-react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 
 import { fonts, spacing, radius, shadow, themedColors } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { LivraHeader } from '../../components/ui/LivraHeader';
-import { HeroCard } from '../../components/ui/HeroCard';
-import { StatTile } from '../../components/ui/StatTile';
 import { MarkRow } from '../../components/ui/MarkRow';
 import { SectionLabel } from '../../components/ui/SectionLabel';
 import { SpeedDialFAB } from '../../components/ui/SpeedDialFAB';
@@ -209,54 +207,41 @@ export default function FocusScreen() {
         {/* ── Greeting ── */}
         <Text style={[styles.greeting, { color: c.inkDark }]}>{greetingText}</Text>
 
-        {/* ── Today's Progress Card ── */}
-        <View style={[styles.progressCard, { backgroundColor: c.forest }]}>
-          <SectionLabel color={c.inkInverseMuted}>TODAY'S PROGRESS</SectionLabel>
-          <View style={styles.progressCardContent}>
-            <View>
-              <Text style={[styles.marksFraction, { color: c.inkInverse }]}>
-                {completedMarksToday}/{todayTotal}
-              </Text>
-              <Text style={[styles.marksSubtitle, { color: c.inkInverseMuted }]}>marks complete</Text>
-            </View>
-            <View style={styles.streakBlock}>
-              <Lightning size={14} color={c.mint} weight="duotone" />
-              <Text style={[styles.streakNumber, { color: c.inkInverse }]}>{overallStreakDays}</Text>
-              <SectionLabel color={c.inkInverseMuted}>STREAK</SectionLabel>
-            </View>
+        {/* ── Compact Progress Banner ── */}
+        <View style={[styles.progressBanner, { backgroundColor: c.forest }]}>
+          <View>
+            <Text style={[styles.bannerFraction, { color: c.inkInverse }]}>
+              {completedMarksToday}/{todayTotal}
+            </Text>
+            <Text style={[styles.bannerFractionLabel, { color: c.inkInverseMuted }]}>marks</Text>
+          </View>
+          <View style={styles.bannerStreak}>
+            <Lightning size={14} color={c.mint} weight="duotone" />
+            <Text style={[styles.bannerStreakText, { color: c.inkInverseMuted }]}>
+              {overallStreakDays} day streak
+            </Text>
           </View>
         </View>
 
-        {/* ── Stat Tiles 2x2 ── */}
-        <View style={styles.tilesSection}>
-          <View style={styles.tilesRow}>
-            <StatTile
-              icon={CheckCircle}
-              value={`${completedMarksToday}/${todayTotal}`}
-              label="TODAY"
-              bgColor={c.surface}
-            />
-            <StatTile
-              icon={Lightning}
-              value={String(overallStreakDays)}
-              label="STREAK"
-              bgColor={c.surfaceAlt}
-            />
-          </View>
-          <View style={[styles.tilesRow, { marginTop: spacing.sm }]}>
-            <StatTile
-              icon={Pulse}
-              value={String(thisWeekCount)}
-              label="THIS WEEK"
-              bgColor={c.surfaceAlt}
-            />
-            <StatTile
-              icon={Flag}
-              value={String(activeGoalCount)}
-              label="GOALS"
-              bgColor={c.surface}
-            />
-          </View>
+        {/* ── Compact Stat Strip ── */}
+        <View style={[styles.statStrip, { borderTopColor: c.borderLight, borderBottomColor: c.borderLight }]}>
+          {[
+            { value: `${completedMarksToday}/${todayTotal}`, label: 'TODAY' },
+            { value: String(overallStreakDays), label: 'STREAK' },
+            { value: String(thisWeekCount), label: 'THIS WEEK' },
+            { value: String(activeGoalCount), label: 'GOALS' },
+          ].map((item, idx, arr) => (
+            <View
+              key={item.label}
+              style={[
+                styles.statCell,
+                idx < arr.length - 1 && [styles.statCellBorder, { borderRightColor: c.borderLight }],
+              ]}
+            >
+              <Text style={[styles.statValue, { color: c.inkDark }]}>{item.value}</Text>
+              <Text style={[styles.statLabel, { color: c.inkMuted }]}>{item.label}</Text>
+            </View>
+          ))}
         </View>
 
         {/* ── Your Marks ── */}
@@ -327,46 +312,61 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
 
-  // Today's Progress Card
-  progressCard: {
+  // Compact progress banner
+  progressBanner: {
     marginHorizontal: spacing.lg,
     marginTop: spacing.lg,
-    borderRadius: radius.xl,
-    padding: spacing.lg,
-  },
-  progressCardContent: {
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    height: 56,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginTop: spacing.md,
-  },
-  marksFraction: {
-    fontFamily: fonts.serif,
-    fontSize: 42,
-    lineHeight: 46,
-  },
-  marksSubtitle: {
-    fontFamily: fonts.sans,
-    fontSize: 13,
-    marginTop: spacing.xs,
-  },
-  streakBlock: {
     alignItems: 'center',
-    gap: 2,
   },
-  streakNumber: {
-    fontFamily: fonts.sansSemibold,
-    fontSize: 26,
+  bannerFraction: {
+    fontFamily: fonts.sansBold,
+    fontSize: 20,
+    lineHeight: 24,
   },
-
-  // Stat Tiles
-  tilesSection: {
-    marginTop: spacing.lg,
-    marginHorizontal: spacing.lg,
+  bannerFractionLabel: {
+    fontFamily: fonts.sans,
+    fontSize: 12,
   },
-  tilesRow: {
+  bannerStreak: {
     flexDirection: 'row',
-    gap: spacing.sm,
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  bannerStreakText: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 13,
+  },
+  // Compact stat strip
+  statStrip: {
+    flexDirection: 'row',
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    height: 44,
+    borderTopWidth: 0.5,
+    borderBottomWidth: 0.5,
+  },
+  statCell: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statCellBorder: {
+    borderRightWidth: 0.5,
+  },
+  statValue: {
+    fontFamily: fonts.sansSemibold,
+    fontSize: 16,
+  },
+  statLabel: {
+    fontFamily: fonts.sans,
+    fontSize: 10,
+    letterSpacing: 0.5,
   },
 
   // Marks section
