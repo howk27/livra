@@ -154,25 +154,30 @@ export function AddMarkSheet({ visible, onClose }: AddMarkSheetProps) {
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-            <Text style={[styles.sheetTitle, { color: tc.inkDark }]}>New Mark</Text>
-            <Text style={[styles.sheetSubtitle, { color: tc.inkMuted }]}>What will you track?</Text>
+            <Text style={[styles.sheetTitle, { color: tc.inkDark }]}>What will you do every day?</Text>
+            <Text style={[styles.sheetSubtitle, { color: tc.inkMuted }]}>Pick something small enough to start today.</Text>
 
             {/* Mark Name */}
             <View style={styles.fieldBlock}>
-              <SectionLabel>MARK NAME</SectionLabel>
+              <SectionLabel>OR CREATE YOUR OWN</SectionLabel>
               <TextInput
                 style={[styles.input, { backgroundColor: tc.surfaceAlt, color: tc.inkDark, borderColor: tc.borderLight }]}
                 value={name}
                 onChangeText={setName}
-                placeholder="e.g. Morning Run"
+                placeholder="Name your mark..."
                 placeholderTextColor={tc.inkMuted}
                 returnKeyType="done"
               />
+              {name.trim().length > 0 && (
+                <Text style={[styles.identityPreview, { color: tc.inkMuted }]}>
+                  I am someone who {name.trim().toLowerCase()}.
+                </Text>
+              )}
             </View>
 
             {/* Category */}
             <View style={styles.fieldBlock}>
-              <SectionLabel>CATEGORY</SectionLabel>
+              <SectionLabel>POPULAR MARKS</SectionLabel>
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -186,7 +191,9 @@ export function AddMarkSheet({ visible, onClose }: AddMarkSheetProps) {
                       key={cat.key}
                       style={[
                         styles.categoryPill,
-                        { backgroundColor: isSelected ? tc.forest : tc.surfaceAlt },
+                        isSelected
+                          ? { backgroundColor: `${tc.forest}18`, borderWidth: 1.5, borderColor: tc.forest }
+                          : { backgroundColor: tc.surfaceAlt, borderWidth: 1.5, borderColor: 'transparent' },
                       ]}
                       onPress={() => setCategory(cat.key)}
                       activeOpacity={0.7}
@@ -234,10 +241,10 @@ export function AddMarkSheet({ visible, onClose }: AddMarkSheetProps) {
             </View>
 
             <PillButton
-              label={saving ? 'Adding…' : 'Add Mark'}
+              label={saving ? 'Adding…' : 'Add this mark'}
               onPress={handleSave}
-              disabled={saving}
-              style={styles.cta}
+              disabled={saving || !name.trim()}
+              style={[styles.cta, { opacity: (!name.trim() && !saving) ? 0.4 : 1 }]}
             />
           </ScrollView>
         </KeyboardAvoidingView>
@@ -272,9 +279,10 @@ const styles = StyleSheet.create({
   },
   sheetTitle: {
     fontFamily: fonts.serif,
-    fontSize: 22,
+    fontSize: 24,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
+    lineHeight: 30,
   },
   sheetSubtitle: {
     fontFamily: fonts.sans,
@@ -313,6 +321,12 @@ const styles = StyleSheet.create({
   categoryLabel: {
     fontFamily: fonts.sansMedium,
     fontSize: 13,
+  },
+  identityPreview: {
+    fontFamily: fonts.sans,
+    fontSize: 13,
+    fontStyle: 'italic',
+    marginTop: spacing.sm,
   },
   stepperRow: {
     flexDirection: 'row',
