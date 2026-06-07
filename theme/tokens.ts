@@ -120,6 +120,7 @@ export const fonts = {
   sans: 'DMSans_400Regular',
   sansMedium: 'DMSans_500Medium',
   sansSemibold: 'DMSans_600SemiBold',
+  sansBold: 'DMSans_700Bold',
   // Backward compat aliases used by theme/typography.ts
   heading: 'CormorantGaramond_700Bold',
   regular: 'DMSans_400Regular',

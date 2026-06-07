@@ -11,6 +11,7 @@ import {
   DMSans_400Regular,
   DMSans_500Medium,
   DMSans_600SemiBold,
+  DMSans_700Bold,
 } from '@expo-google-fonts/dm-sans';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as SplashScreen from 'expo-splash-screen';
@@ -134,6 +135,7 @@ export default function RootLayout() {
     DMSans_400Regular,
     DMSans_500Medium,
     DMSans_600SemiBold,
+    DMSans_700Bold,
   });
 
   useEffect(() => {

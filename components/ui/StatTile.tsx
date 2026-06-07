@@ -40,7 +40,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   value: {
-    fontFamily: fonts.serifSemibold,
+    fontFamily: fonts.sansSemibold,
     fontSize: 28,
   },
   label: {
