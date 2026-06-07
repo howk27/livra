@@ -354,9 +354,18 @@ function MarkDetailContent() {
   const handleDecrement = async () => {
     if (!id || !user?.id || todayCount <= 0) return;
     if (Platform.OS !== 'web') await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    decrementCounter(id, user.id, 1).catch((error) => {
-      logger.error('decrement failed:', error);
-      Alert.alert('Error', 'Could not update mark');
+
+    // Find the most recent increment event for today and delete it
+    const todayIncrements = events
+      .filter((e) => e.event_type === 'increment' && e.occurred_local_date === todayStr && !e.deleted_at)
+      .sort((a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime());
+
+    const lastEvent = todayIncrements[0];
+    if (!lastEvent) return;
+
+    useEventsStore.getState().deleteEvent(lastEvent.id).catch((error) => {
+      logger.error('undo failed:', error);
+      Alert.alert('Error', 'Could not undo');
     });
   };
 
@@ -372,7 +381,12 @@ function MarkDetailContent() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await decrementCounter(id, user.id, todayCount);
+              const todayIncrements = events.filter(
+                (e) => e.event_type === 'increment' && e.occurred_local_date === todayStr && !e.deleted_at,
+              );
+              for (const event of todayIncrements) {
+                await useEventsStore.getState().deleteEvent(event.id);
+              }
             } catch (error) {
               logger.error('reset today failed:', error);
               Alert.alert('Error', 'Could not reset progress for today');
