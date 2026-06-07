@@ -1,10 +1,5 @@
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-} from 'react-native-reanimated';
 import {
   Moon,
   Pulse,
@@ -18,9 +13,9 @@ import {
   CircleIcon,
   Calendar,
   BookOpen,
-  Check,
   type Icon as PhosphorIcon,
 } from 'phosphor-react-native';
+import { CheckinButton } from './CheckinButton';
 import { fonts, radius, spacing, themedColors } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 
@@ -86,25 +81,11 @@ export function MarkRow({
   const accent = catData.accent;
   const CatIcon = iconOverride ?? catData.Icon;
 
-  const checkScale = useSharedValue(loggedToday ? 1 : 0);
-
-  useEffect(() => {
-    checkScale.value = loggedToday
-      ? withSpring(1, { damping: 14, stiffness: 300 })
-      : 0;
-  }, [loggedToday, checkScale]);
-
-  const checkStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: checkScale.value }],
-  }));
-
   const handleLog = useCallback(() => {
     if (!loggedToday && onLog) {
-      checkScale.value = 0;
-      checkScale.value = withSpring(1, { damping: 14, stiffness: 300 });
       onLog();
     }
-  }, [loggedToday, onLog, checkScale]);
+  }, [loggedToday, onLog]);
 
   return (
     <TouchableOpacity
@@ -148,19 +129,11 @@ export function MarkRow({
         {showWeeklyCount ? (
           <Text style={[styles.count, { color: c.inkDark }]}>{weeklyCount}</Text>
         ) : (
-          <TouchableOpacity
-            onPress={handleLog}
+          <CheckinButton
+            checked={loggedToday ?? false}
+            onCheckin={handleLog}
             disabled={loggedToday || !onLog}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            {loggedToday ? (
-              <Animated.View style={[styles.logCircleFilled, { backgroundColor: c.forest }, checkStyle]}>
-                <Check size={11} color={c.inkInverse} weight="duotone" />
-              </Animated.View>
-            ) : (
-              <View style={[styles.logCircleEmpty, { borderColor: c.borderMid }]} />
-            )}
-          </TouchableOpacity>
+          />
         )}
       </View>
     </TouchableOpacity>
@@ -208,19 +181,6 @@ const styles = StyleSheet.create({
   count: {
     fontFamily: fonts.sansSemibold,
     fontSize: 16,
-  },
-  logCircleEmpty: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 1.5,
-  },
-  logCircleFilled: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   progressTrackWrap: { marginTop: spacing.xs },
   progressTrack: {
