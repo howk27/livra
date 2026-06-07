@@ -471,3 +471,28 @@ Continued the migration started above; all remaining user-reachable screens that
 **Validation:** `tsc --noEmit` 0 errors; `npm test` 370/370 passing.
 
 **Validation:** `tsc --noEmit` clean; `npm test` 370/370 passing (32 suites). `npm run lint` is broken project-wide (ESLint v9 missing `eslint.config.js`) — pre-existing and unrelated to this change.
+
+---
+
+## Phase 7.5 — UI Overhaul (2026-06-07)
+
+Visual improvements across Focus tab, mark detail, sheets, and shared components.
+No logic changes; no protected files touched. 381 tests pass; 0 type errors.
+
+| File | Change |
+|------|--------|
+| `theme/tokens.ts` | Added `sansBold: 'DMSans_700Bold'` font token |
+| `app/_layout.tsx` | Load `DMSans_700Bold` font |
+| `components/ui/StatTile.tsx` | Number font: serifSemibold → sansSemibold |
+| `components/ui/PillButton.tsx` | Widened `style` prop to `StyleProp<ViewStyle>` |
+| `app/(tabs)/focus.tsx` | Replaced progress card + 2×2 stat grid with compact banner (56px) + stat strip (44px) |
+| `components/ui/CheckinButton.tsx` | Created: 3-state animated check-in button (+ → spin → ✓) with Reanimated + haptics |
+| `components/ui/MarkRow.tsx` | Integrated CheckinButton; removed internal spring animation |
+| `components/ui/SpeedDialFAB.tsx` | Hide FAB when AddMark or AddGoal sheet is open |
+| `app/settings/integrations.tsx` | Created: Apple Health + Coming Soon integrations screen |
+| `app/(tabs)/settings.tsx` | Added Integrations row in ACCOUNT section |
+| `components/sheets/AddMarkSheet.tsx` | Upgraded layout: serif headline, POPULAR MARKS label, forest-green selected state, live identity preview |
+| `components/sheets/AddGoalSheet.tsx` | Restructured into Intent (serif 28px) + Mechanics (HOW IT WORKS) zones; CTA → "Add to queue" |
+| `app/mark/[id]/index.tsx` | Simplified to 3 zones: compact stat row (TODAY / ALL TIME), log button text updated, Apple Health card removed |
+
+**Task 6 (email removal): email mark was already absent from MARK_LIBRARY — no action required.**
