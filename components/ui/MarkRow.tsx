@@ -1,23 +1,47 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
 } from 'react-native-reanimated';
-import { Feather } from '@expo/vector-icons';
+import {
+  Moon,
+  Pulse,
+  Drop,
+  Heart,
+  Briefcase,
+  PencilSimple,
+  Shield,
+  Users,
+  CurrencyDollar,
+  CircleIcon,
+  Calendar,
+  BookOpen,
+  Check,
+  type Icon as PhosphorIcon,
+} from 'phosphor-react-native';
 import { fonts, radius, spacing, themedColors } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 
-// Category → icon → accent color mapping
-export const CATEGORY_MAP: Record<string, { icon: keyof typeof Feather.glyphMap; accent: string }> = {
-  sleep:    { icon: 'moon',       accent: '#6B8FA6' },
-  workout:  { icon: 'activity',   accent: '#A0614A' },
-  water:    { icon: 'droplet',    accent: '#4A8C7A' },
-  planning: { icon: 'calendar',   accent: '#8C7A3A' },
-  reading:  { icon: 'book-open',  accent: '#7A4A8C' },
-  work:     { icon: 'briefcase',  accent: '#4A6A8C' },
-  custom:   { icon: 'circle',     accent: '#6B7A6B' },
+export const CATEGORY_MAP: Record<string, { Icon: PhosphorIcon; accent: string }> = {
+  Recovery:      { Icon: Moon,           accent: '#6B8FA6' },
+  Fitness:       { Icon: Pulse,          accent: '#A0614A' },
+  Health:        { Icon: Drop,           accent: '#4A8C7A' },
+  Mindset:       { Icon: Heart,          accent: '#8A6B7B' },
+  'Deep Work':   { Icon: Briefcase,      accent: '#4A6A8C' },
+  Creative:      { Icon: PencilSimple,   accent: '#7A4A8C' },
+  Discipline:    { Icon: Shield,         accent: '#8A7E6B' },
+  Relationships: { Icon: Users,          accent: '#9E7B6B' },
+  Finance:       { Icon: CurrencyDollar, accent: '#9E8A6B' },
+  // Legacy lowercase keys
+  sleep:         { Icon: Moon,           accent: '#6B8FA6' },
+  workout:       { Icon: Pulse,          accent: '#A0614A' },
+  water:         { Icon: Drop,           accent: '#4A8C7A' },
+  planning:      { Icon: Calendar,       accent: '#8C7A3A' },
+  reading:       { Icon: BookOpen,       accent: '#7A4A8C' },
+  work:          { Icon: Briefcase,      accent: '#4A6A8C' },
+  custom:        { Icon: CircleIcon,      accent: '#6B7A6B' },
 };
 
 function hexToRgba(hex: string, alpha: number): string {
@@ -32,7 +56,7 @@ interface MarkRowProps {
   title: string;
   subtitle?: string;
   category?: string;
-  icon?: keyof typeof Feather.glyphMap;
+  icon?: PhosphorIcon;
   loggedToday?: boolean;
   onPress?: () => void;
   onLog?: () => void;
@@ -60,15 +84,15 @@ export function MarkRow({
   const catKey = category ?? 'custom';
   const catData = CATEGORY_MAP[catKey] ?? CATEGORY_MAP.custom;
   const accent = catData.accent;
-  const iconName = iconOverride ?? catData.icon;
+  const CatIcon = iconOverride ?? catData.Icon;
 
-  // Scale-in animation for the check circle when transitioning to logged
   const checkScale = useSharedValue(loggedToday ? 1 : 0);
-  const prevLogged = React.useRef(loggedToday);
-  if (prevLogged.current !== loggedToday && loggedToday) {
-    checkScale.value = withSpring(1, { damping: 14, stiffness: 300 });
-  }
-  prevLogged.current = loggedToday;
+
+  useEffect(() => {
+    checkScale.value = loggedToday
+      ? withSpring(1, { damping: 14, stiffness: 300 })
+      : 0;
+  }, [loggedToday, checkScale]);
 
   const checkStyle = useAnimatedStyle(() => ({
     transform: [{ scale: checkScale.value }],
@@ -98,7 +122,7 @@ export function MarkRow({
           { backgroundColor: hexToRgba(accent, 0.12) },
         ]}
       >
-        <Feather name={iconName} size={18} color={accent} />
+        <CatIcon size={18} color={accent} weight="duotone" />
       </View>
 
       {/* Center */}
@@ -131,7 +155,7 @@ export function MarkRow({
           >
             {loggedToday ? (
               <Animated.View style={[styles.logCircleFilled, { backgroundColor: c.forest }, checkStyle]}>
-                <Feather name="check" size={11} color={c.inkInverse} />
+                <Check size={11} color={c.inkInverse} weight="duotone" />
               </Animated.View>
             ) : (
               <View style={[styles.logCircleEmpty, { borderColor: c.borderMid }]} />

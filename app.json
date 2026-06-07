@@ -18,6 +18,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.livra.app",
+      "appleTeamId": "AL8YGQMBQG",
       "buildNumber": "44",
       "associatedDomains": [
         "applinks:livralife.com",

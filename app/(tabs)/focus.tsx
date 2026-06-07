@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   Platform,
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { CheckCircle, Lightning, Pulse, Flag } from 'phosphor-react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 
@@ -220,7 +220,7 @@ export default function FocusScreen() {
               <Text style={[styles.marksSubtitle, { color: c.inkInverseMuted }]}>marks complete</Text>
             </View>
             <View style={styles.streakBlock}>
-              <Feather name="zap" size={14} color={c.mint} />
+              <Lightning size={14} color={c.mint} weight="duotone" />
               <Text style={[styles.streakNumber, { color: c.inkInverse }]}>{overallStreakDays}</Text>
               <SectionLabel color={c.inkInverseMuted}>STREAK</SectionLabel>
             </View>
@@ -231,13 +231,13 @@ export default function FocusScreen() {
         <View style={styles.tilesSection}>
           <View style={styles.tilesRow}>
             <StatTile
-              icon="check-circle"
+              icon={CheckCircle}
               value={`${completedMarksToday}/${todayTotal}`}
               label="TODAY"
               bgColor={c.surface}
             />
             <StatTile
-              icon="zap"
+              icon={Lightning}
               value={String(overallStreakDays)}
               label="STREAK"
               bgColor={c.surfaceAlt}
@@ -245,13 +245,13 @@ export default function FocusScreen() {
           </View>
           <View style={[styles.tilesRow, { marginTop: spacing.sm }]}>
             <StatTile
-              icon="activity"
+              icon={Pulse}
               value={String(thisWeekCount)}
               label="THIS WEEK"
               bgColor={c.surfaceAlt}
             />
             <StatTile
-              icon="flag"
+              icon={Flag}
               value={String(activeGoalCount)}
               label="GOALS"
               bgColor={c.surface}

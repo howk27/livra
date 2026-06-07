@@ -1,23 +1,23 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { type Icon as PhosphorIcon } from 'phosphor-react-native';
 import { fonts, radius, spacing, shadow, themedColors } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 
 interface StatTileProps {
-  icon: keyof typeof Feather.glyphMap;
+  icon: PhosphorIcon;
   value: string;
   label: string;
   bgColor?: string;
 }
 
-export function StatTile({ icon, value, label, bgColor }: StatTileProps) {
+export function StatTile({ icon: Icon, value, label, bgColor }: StatTileProps) {
   const theme = useEffectiveTheme();
   const c = themedColors(theme);
   return (
     <View style={[styles.tile, { backgroundColor: bgColor ?? c.surface }]}>
       <View style={styles.topRow}>
-        <Feather name={icon} size={18} color={c.inkMid} />
+        <Icon size={18} color={c.inkMid} weight="duotone" />
         <Text style={[styles.value, { color: c.inkDark }]}>{value}</Text>
       </View>
       <Text style={[styles.label, { color: c.inkMuted }]}>{label.toUpperCase()}</Text>

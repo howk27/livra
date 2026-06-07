@@ -71,7 +71,7 @@ export default function SignInScreen() {
   const confirmPasswordInputRef = useRef<TextInput>(null);
 
   useEffect(() => {
-    slideOffset.value = mode === 'signup' ? 1 : 0;
+    slideOffset.value = withSpring(mode === 'signup' ? 1 : 0, { damping: 15 });
   }, [mode]);
 
   useEffect(() => {
@@ -117,7 +117,7 @@ export default function SignInScreen() {
 
   const animatedContainerStyle = useAnimatedStyle(() => ({
     transform: [
-      { translateY: withSpring(slideOffset.value * -20, { damping: 15 }) + keyboardOffset.value },
+      { translateY: slideOffset.value * -20 + keyboardOffset.value },
     ],
   }));
 

@@ -44,8 +44,17 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { Feather } from '@expo/vector-icons';
-import { Heart, ArrowRight } from 'phosphor-react-native';
+import {
+  Heart,
+  ArrowRight,
+  Check,
+  CheckCircle,
+  Flag,
+  Bell,
+  BellSlash,
+  Trash,
+  CheckFat,
+} from 'phosphor-react-native';
 import { themedColors, spacing, borderRadius, fontSize, fontWeight, shadow, fonts } from '../../../theme/tokens';
 import { useEffectiveTheme } from '../../../state/uiSlice';
 import { LivraHeader } from '../../../components/ui/LivraHeader';
@@ -84,6 +93,12 @@ function hexToRgba(hex: string, alpha: number): string {
 }
 
 export default function MarkDetailScreen() {
+  const params = useLocalSearchParams<{ id: string }>();
+  const id = typeof params.id === 'string' ? params.id : params.id?.[0];
+  return <MarkDetailContent key={id ?? '__no_id__'} />;
+}
+
+function MarkDetailContent() {
   const theme = useEffectiveTheme();
   const c = themedColors(theme);
   const router = useRouter();
@@ -177,11 +192,11 @@ export default function MarkDetailScreen() {
   );
 
   const dailyLogsForMark = useDailyTrackingStore(
-    useCallback((s) => (id ? s.getDailyLogsForMark(id, 60) : []), [id]),
+    (s) => (id ? s.getDailyLogsForMark(id, 60) : []),
   );
 
   const todayDailyLog = useDailyTrackingStore(
-    useCallback((s) => (id ? s.getDailyLogForDate(id, todayStr) : null), [id, todayStr]),
+    (s) => (id ? s.getDailyLogForDate(id, todayStr) : null),
   );
 
   const upsertDailyLogNote = useDailyTrackingStore((s) => s.upsertDailyLogNote);
@@ -279,6 +294,7 @@ export default function MarkDetailScreen() {
   const catKey = libraryMark?.category ?? 'custom';
   const catData = CATEGORY_MAP[catKey] ?? CATEGORY_MAP.custom;
   const accent = catData.accent;
+  const CatIcon = catData.Icon;
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
 
@@ -499,7 +515,7 @@ export default function MarkDetailScreen() {
       <LivraHeader
         showBack
         title={counter.name}
-        rightIcon="trash-2"
+        rightIcon={Trash}
         onRightPress={handleDeleteMark}
       />
 
@@ -528,7 +544,7 @@ export default function MarkDetailScreen() {
           {/* ── Hero Area ─────────────────────────────────────────────────── */}
           <View style={styles.heroArea}>
             <View style={[styles.heroIconWrap, { backgroundColor: hexToRgba(accent, 0.15) }]}>
-              <Feather name={catData.icon} size={32} color={accent} />
+              <CatIcon size={32} color={accent} weight="duotone" />
             </View>
             <Text style={styles.heroTitle}>{counter.name}</Text>
             {counter.unit ? (
@@ -539,13 +555,13 @@ export default function MarkDetailScreen() {
           {/* ── Stat Tiles Row ────────────────────────────────────────────── */}
           <View style={styles.statRow}>
             <StatTile
-              icon="check-circle"
+              icon={CheckCircle}
               value={`${todayCount}/${dailyTarget}`}
               label="TODAY"
               bgColor={c.surface}
             />
             <StatTile
-              icon="activity"
+              icon={CheckFat}
               value={String(allTimeTotal)}
               label="ALL TIME"
               bgColor={c.surfaceAlt}
@@ -563,12 +579,12 @@ export default function MarkDetailScreen() {
             >
               {completedToday ? (
                 <>
-                  <Feather name="check" size={18} color={c.forest} />
+                  <Check size={18} color={c.forest} weight="duotone" />
                   <Text style={styles.logBtnTextDone}>Logged today</Text>
                 </>
               ) : (
                 <>
-                  <Feather name="check-circle" size={22} color={c.inkInverse} />
+                  <CheckCircle size={22} color={c.inkInverse} weight="duotone" />
                   <Text style={styles.logBtnText}>Log for Today</Text>
                 </>
               )}
@@ -598,7 +614,7 @@ export default function MarkDetailScreen() {
                   : null;
                 return (
                   <View key={goal.id} style={styles.linkedGoalRow}>
-                    <Feather name="flag" size={14} color={c.inkMuted} />
+                    <Flag size={14} color={c.inkMuted} weight="duotone" />
                     <Text style={styles.linkedGoalTitle}>{goal.title}</Text>
                     {progress !== null && (
                       <Text style={styles.linkedGoalProgress}>→ {progress}% complete</Text>
@@ -634,7 +650,7 @@ export default function MarkDetailScreen() {
                     <Text style={styles.historyDate}>
                       {dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                     </Text>
-                    <Feather name="check" size={14} color={c.forest} />
+                    <Check size={14} color={c.forest} weight="duotone" />
                   </TouchableOpacity>
                 );
               })
@@ -729,7 +745,10 @@ export default function MarkDetailScreen() {
             <View style={styles.settingCard}>
               <View style={styles.settingRow}>
                 <View style={[styles.settingIcon, { backgroundColor: hexToRgba(accent, 0.15) }]}>
-                  <Feather name={reminderEnabled ? 'bell' : 'bell-off'} size={18} color={accent} />
+                  {reminderEnabled
+                    ? <Bell size={18} color={accent} weight="duotone" />
+                    : <BellSlash size={18} color={accent} weight="duotone" />
+                  }
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.settingLabel}>Daily reminder</Text>

@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, TouchableOpacity, StyleSheet, Text } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { ArrowLeft, type Icon as PhosphorIcon } from 'phosphor-react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SvgLogo } from './SvgLogo';
@@ -8,7 +8,6 @@ import { fonts, spacing, themedColors } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 
 // DrawerContext kept for backward compat — no longer wired to any drawer.
-// Components that import DrawerContext will get a no-op context.
 export const DrawerContext = React.createContext<{ open: () => void; close: () => void }>({
   open: () => {},
   close: () => {},
@@ -21,7 +20,7 @@ interface LivraHeaderProps {
   centerLogo?: boolean;
   title?: string;
   avatarUri?: string | null;
-  rightIcon?: string;
+  rightIcon?: PhosphorIcon;
   onRightPress?: () => void;
 }
 
@@ -32,7 +31,7 @@ export function LivraHeader({
   centerLogo,
   title,
   avatarUri: _avatarUri,
-  rightIcon,
+  rightIcon: RightIconComponent,
   onRightPress,
 }: LivraHeaderProps) {
   const router = useRouter();
@@ -46,20 +45,20 @@ export function LivraHeader({
       onPress={() => (onBackPress ? onBackPress() : router.back())}
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
     >
-      <Feather name="arrow-left" size={22} color={colors.inkDark} />
+      <ArrowLeft size={22} color={colors.inkDark} weight="regular" />
     </TouchableOpacity>
   ) : (
     <View style={styles.leftPlaceholder} />
   );
 
   const right =
-    rightIcon && onRightPress ? (
+    RightIconComponent && onRightPress ? (
       <TouchableOpacity
         style={styles.iconBtn}
         onPress={onRightPress}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
-        <Feather name={rightIcon as any} size={20} color={colors.danger} />
+        <RightIconComponent size={20} color={colors.danger} weight="duotone" />
       </TouchableOpacity>
     ) : showAvatar ? (
       <View style={[styles.avatarCircle, { backgroundColor: colors.surfaceAlt, borderColor: colors.forest }]} />
