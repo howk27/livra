@@ -17,7 +17,56 @@ import { format, parseISO } from 'date-fns';
 import { themedColors, spacing, fontSize, fontWeight, borderRadius } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useGoalsStore } from '../../state/goalsSlice';
+import { useMarksStore } from '../../state/countersSlice';
+import { MARK_LIBRARY_BY_ID } from '../../lib/suggestedCounters';
 import type { Goal } from '../../types/goal';
+import type { Mark } from '../../types';
+
+function GoalMarkRow({ linkedMarkIds }: { linkedMarkIds?: string[] }) {
+  const router = useRouter();
+  const marks = useMarksStore(s => s.marks);
+  const theme = useEffectiveTheme();
+  const c = themedColors(theme);
+
+  if (!linkedMarkIds || linkedMarkIds.length === 0) return null;
+
+  const linkedMarks = linkedMarkIds
+    .map(id => marks.find((m: Mark) => m.id === id))
+    .filter(Boolean) as Mark[];
+
+  if (linkedMarks.length === 0) return null;
+
+  return (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+      {linkedMarks.map(mark => {
+        const library = MARK_LIBRARY_BY_ID[(mark as any).icon ?? ''];
+        const emoji = library?.emoji ?? mark.emoji ?? '📍';
+        return (
+          <TouchableOpacity
+            key={mark.id}
+            onPress={() => router.push(`/mark/${mark.id}` as any)}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 4,
+              paddingHorizontal: 8,
+              paddingVertical: 4,
+              borderRadius: 20,
+              borderWidth: 1,
+              borderColor: c.borderLight,
+              backgroundColor: c.linen,
+            }}
+          >
+            <Text style={{ fontSize: 12 }}>{emoji}</Text>
+            <Text style={{ fontSize: 11, color: c.inkMuted, fontWeight: fontWeight.medium }}>
+              {mark.name}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+}
 
 export default function GoalQueueScreen() {
   const theme = useEffectiveTheme();
@@ -121,6 +170,7 @@ export default function GoalQueueScreen() {
                   {active.description}
                 </Text>
               ) : null}
+              <GoalMarkRow linkedMarkIds={active.linked_mark_ids} />
               {/* Target date row */}
               <TouchableOpacity
                 style={[styles.targetDateRow, { borderTopColor: c.borderLight }]}
@@ -170,6 +220,7 @@ export default function GoalQueueScreen() {
                     {goal.description}
                   </Text>
                 ) : null}
+                <GoalMarkRow linkedMarkIds={goal.linked_mark_ids} />
                 <TouchableOpacity onPress={() => handleDelete(goal)} style={styles.deleteBtn}>
                   <Ionicons name="trash-outline" size={16} color={c.inkMuted} />
                 </TouchableOpacity>
