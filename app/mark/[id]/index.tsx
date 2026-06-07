@@ -179,7 +179,7 @@ function MarkDetailContent() {
 
   const recentActivity = useMemo(() => {
     // Aggregate increment events by local date, sum amounts per day.
-    // Show only days with net positive increments — no separate decrement rows.
+    // Show only days with at least one increment event — decrement events are not counted here.
     const dayTotals = new Map<string, number>();
     for (const e of events) {
       if (e.event_type !== 'increment') continue;
