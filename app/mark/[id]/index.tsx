@@ -45,7 +45,6 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import {
-  Heart,
   ArrowRight,
   Check,
   CheckCircle,
@@ -53,28 +52,24 @@ import {
   Bell,
   BellSlash,
   Trash,
-  CheckFat,
 } from 'phosphor-react-native';
 import { themedColors, spacing, borderRadius, fontSize, fontWeight, shadow, fonts } from '../../../theme/tokens';
 import { useEffectiveTheme } from '../../../state/uiSlice';
 import { LivraHeader } from '../../../components/ui/LivraHeader';
 import { PillButton } from '../../../components/ui/PillButton';
 import { SectionLabel } from '../../../components/ui/SectionLabel';
-import { StatTile } from '../../../components/ui/StatTile';
 import { useCounters } from '../../../hooks/useCounters';
 import { useEventsStore } from '../../../state/eventsSlice';
 import { LoadingScreen } from '../../../components/LoadingScreen';
 import { useAuth } from '../../../hooks/useAuth';
 import { logger } from '../../../lib/utils/logger';
 import { useDailyTrackingStore } from '../../../state/dailyTrackingSlice';
-import { applyOpacity } from '@/src/components/icons/color';
 import { MARK_LIBRARY } from '@/lib/suggestedCounters';
 import { resolveDailyTarget } from '../../../lib/markDailyTarget';
 import { getAppDate } from '../../../lib/appDate';
 import { formatDate } from '../../../lib/date';
 import { useAppDateStore } from '../../../state/appDateSlice';
 import { deriveStreakForMark } from '../../../hooks/useStreaks';
-import { HealthConnectBanner } from '../../../components/HealthConnectBanner';
 import { useGoalsStore } from '../../../state/goalsSlice';
 import { CATEGORY_MAP } from '../../../components/ui/MarkRow';
 
@@ -552,20 +547,17 @@ function MarkDetailContent() {
             ) : null}
           </View>
 
-          {/* ── Stat Tiles Row ────────────────────────────────────────────── */}
-          <View style={styles.statRow}>
-            <StatTile
-              icon={CheckCircle}
-              value={`${todayCount}/${dailyTarget}`}
-              label="TODAY"
-              bgColor={c.surface}
-            />
-            <StatTile
-              icon={CheckFat}
-              value={String(allTimeTotal)}
-              label="ALL TIME"
-              bgColor={c.surfaceAlt}
-            />
+          {/* ── Compact Stat Row ── */}
+          <View style={styles.compactStatRow}>
+            <View style={styles.compactStatCell}>
+              <Text style={styles.compactStatValue}>{todayCount}/{dailyTarget}</Text>
+              <Text style={styles.compactStatLabel}>today</Text>
+            </View>
+            <View style={[styles.compactStatDivider, { backgroundColor: c.borderLight }]} />
+            <View style={styles.compactStatCell}>
+              <Text style={styles.compactStatValue}>{allTimeTotal}</Text>
+              <Text style={styles.compactStatLabel}>all time</Text>
+            </View>
           </View>
 
           {/* ── Log Button ────────────────────────────────────────────────── */}
@@ -575,17 +567,17 @@ function MarkDetailContent() {
               onPress={handleLog}
               disabled={completedToday}
               activeOpacity={0.85}
-              accessibilityLabel={completedToday ? 'Logged today' : 'Log for today'}
+              accessibilityLabel={completedToday ? 'Logged today' : 'Log today'}
             >
               {completedToday ? (
                 <>
-                  <Check size={18} color={c.forest} weight="duotone" />
-                  <Text style={styles.logBtnTextDone}>Logged today</Text>
+                  <Check size={18} color="#C47E8A" weight="duotone" />
+                  <Text style={styles.logBtnTextDone}>Logged today ✓</Text>
                 </>
               ) : (
                 <>
                   <CheckCircle size={22} color={c.inkInverse} weight="duotone" />
-                  <Text style={styles.logBtnText}>Log for Today</Text>
+                  <Text style={styles.logBtnText}>Log today</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -710,34 +702,6 @@ function MarkDetailContent() {
                 </TouchableOpacity>
               </View>
             ) : null}
-          </View>
-
-          <HealthConnectBanner markId={id ?? ''} markName={counter.name} alreadyConnected={!!counter.health_kit_type} />
-
-          {/* ── Apple Health ─────────────────────────────────────────────── */}
-          <View style={styles.settingCard}>
-            <View style={styles.settingRow}>
-              <View style={[styles.settingIcon, { backgroundColor: applyOpacity('#FF2D55', 0.15) }]}>
-                <Heart size={18} color="#FF2D55" weight="duotone" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.settingLabel}>Apple Health</Text>
-                <Text style={styles.settingMeta}>
-                  {counter.health_kit_type
-                    ? `Connected — ${counter.health_kit_type}`
-                    : 'Auto-log from Health data'}
-                </Text>
-              </View>
-              {counter.health_kit_type ? (
-                <TouchableOpacity onPress={handleDisconnectHealth} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Text style={[styles.settingAction, { color: c.danger }]}>Disconnect</Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity onPress={handleConnectHealth} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Text style={styles.settingAction}>Connect</Text>
-                </TouchableOpacity>
-              )}
-            </View>
           </View>
 
           {/* ── Daily reminder ────────────────────────────────────────────── */}
@@ -927,10 +891,31 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     color: c.inkMuted,
   },
 
-  // Stat row
-  statRow: {
+  // Compact stat row
+  compactStatRow: {
     flexDirection: 'row',
-    gap: spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.md,
+  },
+  compactStatCell: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  compactStatDivider: {
+    width: 1,
+    height: 32,
+  },
+  compactStatValue: {
+    fontFamily: fonts.sansSemibold,
+    fontSize: 20,
+    color: c.inkDark,
+  },
+  compactStatLabel: {
+    fontFamily: fonts.sans,
+    fontSize: 12,
+    color: c.inkMuted,
+    marginTop: 2,
   },
 
   // Log button
@@ -957,7 +942,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
   logBtnTextDone: {
     fontFamily: fonts.sansMedium,
     fontSize: 16,
-    color: c.forest,
+    color: c.inkMuted,
   },
 
   // Secondary actions
