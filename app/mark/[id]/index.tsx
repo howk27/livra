@@ -620,7 +620,7 @@ function MarkDetailContent() {
               {completedToday ? (
                 <>
                   <Check size={18} color="#C47E8A" weight="duotone" />
-                  <Text style={styles.logBtnTextDone}>Logged today ✓</Text>
+                  <Text style={styles.logBtnTextDone}>Logged today</Text>
                 </>
               ) : (
                 <>
