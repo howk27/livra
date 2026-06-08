@@ -115,6 +115,8 @@ function MarkDetailContent() {
   const scrollRef = useRef<ScrollView>(null);
   const noteSectionYRef = useRef(0);
   const undoInFlight = useRef(false);
+  const draftNoteRef = useRef(draftNote);
+  draftNoteRef.current = draftNote;
   const appDateKey = useAppDateStore((s) => s.debugDateOverride ?? '');
 
   const [healthModalVisible, setHealthModalVisible] = useState(false);
@@ -271,10 +273,9 @@ function MarkDetailContent() {
   // Sync draft when the store hydrates from SQLite after an async load.
   // Only updates if draft is currently empty to avoid overwriting in-progress typing.
   useEffect(() => {
-    if (todayDailyLog?.text && draftNote === '') {
+    if (todayDailyLog?.text && draftNoteRef.current === '') {
       setDraftNote(todayDailyLog.text);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [todayDailyLog?.text]);
 
   useEffect(() => {
