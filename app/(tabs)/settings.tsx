@@ -16,6 +16,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { LivraHeader } from '../../components/ui/LivraHeader';
 import { SectionLabel } from '../../components/ui/SectionLabel';
+import { LevelProgressBar } from '../../components/LevelProgressBar';
 import { fonts, spacing, radius, shadow, themedColors } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { ProfileEditSheet } from '../../components/sheets/ProfileEditSheet';
@@ -339,23 +340,28 @@ export default function SettingsScreen() {
           onPress={() => setEditSheetVisible(true)}
           activeOpacity={0.8}
         >
-          <View style={[styles.avatarCircle, { backgroundColor: c.surfaceAlt, borderColor: c.forest }]}>
-            {profileImageUri ? (
-              <Image source={{ uri: profileImageUri }} style={styles.avatarImage} />
-            ) : (
-              <Feather name="user" size={24} color={c.inkMid} />
-            )}
+          <View style={styles.profileCardRow}>
+            <View style={[styles.avatarCircle, { backgroundColor: c.surfaceAlt, borderColor: c.forest }]}>
+              {profileImageUri ? (
+                <Image source={{ uri: profileImageUri }} style={styles.avatarImage} />
+              ) : (
+                <Feather name="user" size={24} color={c.inkMid} />
+              )}
+            </View>
+            <View style={styles.profileMeta}>
+              <Text style={[styles.profileName, { color: c.inkDark }]}>{profileName}</Text>
+              {user?.email ? (
+                <Text style={[styles.profileEmail, { color: c.inkMuted }]}>{user.email}</Text>
+              ) : null}
+              {memberSince ? (
+                <Text style={[styles.profileSince, { color: c.inkMuted }]}>Member since {memberSince}</Text>
+              ) : null}
+            </View>
+            <Feather name="edit-2" size={16} color={c.inkMuted} />
           </View>
-          <View style={styles.profileMeta}>
-            <Text style={[styles.profileName, { color: c.inkDark }]}>{profileName}</Text>
-            {user?.email ? (
-              <Text style={[styles.profileEmail, { color: c.inkMuted }]}>{user.email}</Text>
-            ) : null}
-            {memberSince ? (
-              <Text style={[styles.profileSince, { color: c.inkMuted }]}>Member since {memberSince}</Text>
-            ) : null}
+          <View style={styles.xpBarWrapper}>
+            <LevelProgressBar />
           </View>
-          <Feather name="edit-2" size={16} color={c.inkMuted} />
         </TouchableOpacity>
 
         {/* ── ACCOUNT ── */}
@@ -540,13 +546,19 @@ const styles = StyleSheet.create({
 
   // Profile mini-card
   profileCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
     borderRadius: radius.lg,
     padding: spacing.lg,
     marginBottom: spacing.xl,
     ...shadow.card,
+  },
+  profileCardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  xpBarWrapper: {
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.xs,
   },
   avatarCircle: {
     width: 64,
