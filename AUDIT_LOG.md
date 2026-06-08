@@ -496,3 +496,17 @@ No logic changes; no protected files touched. 381 tests pass; 0 type errors.
 | `app/mark/[id]/index.tsx` | Simplified to 3 zones: compact stat row (TODAY / ALL TIME), log button text updated, Apple Health card removed |
 
 **Task 6 (email removal): email mark was already absent from MARK_LIBRARY — no action required.**
+
+---
+
+## Phase 7.5 v3 Addendum — Tasks 15–19 (Bug Fixes)
+
+5 logic bug fixes in `app/mark/[id]/index.tsx`. Protected-file exception exercised for Tasks 15–16. 381 tests pass; 0 type errors.
+
+| Task | Commit | File | Change |
+|------|--------|------|--------|
+| 15 — History dedup | `57dc9e7`, `0994508` | `app/mark/[id]/index.tsx` | `recentActivity` now aggregates by `occurred_local_date` (one row per day, increment events only). Fixed UTC-shift bug in date display. |
+| 16 — Undo/Reset wiring | `79731ad`, `f932667` | `app/mark/[id]/index.tsx` | `handleDecrement` (Undo) and `handleReset` now use `deleteEvent` to soft-delete today's increment events instead of adding decrement events. Added null-guard on `counter`, fresh event snapshot on Reset confirm, ref debounce on Undo. |
+| 17 — Notes persistence | `e18a851`, `a0040e3` | `app/mark/[id]/index.tsx` | Removed `setDraftNote('')` after save — saved text stays visible in TextInput. Added `useEffect` (with `draftNoteRef` to avoid stale closure) to sync draft when Zustand store hydrates async. |
+| 18 — Duplicate checkmark | `9ba6e4a` | `app/mark/[id]/index.tsx` | Removed `✓` character from `"Logged today ✓"` label — Phosphor `Check` icon is the sole indicator. |
+| 19 — Gear button | `497088b` | — | Verified: no floating gear button exists on mark detail screen. No code changes required. |
