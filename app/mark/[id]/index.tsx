@@ -268,6 +268,15 @@ function MarkDetailContent() {
     }, [id, todayStr]),
   );
 
+  // Sync draft when the store hydrates from SQLite after an async load.
+  // Only updates if draft is currently empty to avoid overwriting in-progress typing.
+  useEffect(() => {
+    if (todayDailyLog?.text && draftNote === '') {
+      setDraftNote(todayDailyLog.text);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [todayDailyLog?.text]);
+
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
@@ -450,7 +459,8 @@ function MarkDetailContent() {
     setSavingNote(true);
     try {
       await upsertDailyLogNote(id, noteUserId, todayStr, draftTrimmed);
-      setDraftNote('');
+      // Do NOT clear draftNote — keep saved text visible in TextInput.
+      // canSaveNote will become false once savedTrimmed matches draftTrimmed.
     } catch (error) {
       logger.error('save note failed:', error);
       Alert.alert('Error', 'Could not save your note.');
