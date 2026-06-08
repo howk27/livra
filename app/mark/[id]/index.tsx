@@ -114,6 +114,7 @@ function MarkDetailContent() {
   const noteFieldBusy = savingNote || deletingNote;
   const scrollRef = useRef<ScrollView>(null);
   const noteSectionYRef = useRef(0);
+  const undoInFlight = useRef(false);
   const appDateKey = useAppDateStore((s) => s.debugDateOverride ?? '');
 
   const [healthModalVisible, setHealthModalVisible] = useState(false);
@@ -352,7 +353,8 @@ function MarkDetailContent() {
   };
 
   const handleDecrement = async () => {
-    if (!id || !user?.id || todayCount <= 0) return;
+    if (!id || !user?.id || todayCount <= 0 || undoInFlight.current) return;
+    undoInFlight.current = true;
     if (Platform.OS !== 'web') await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     // Find the most recent increment event for today and delete it
@@ -361,16 +363,25 @@ function MarkDetailContent() {
       .sort((a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime());
 
     const lastEvent = todayIncrements[0];
-    if (!lastEvent) return;
+    if (!lastEvent) {
+      undoInFlight.current = false;
+      return;
+    }
 
-    useEventsStore.getState().deleteEvent(lastEvent.id).catch((error) => {
-      logger.error('undo failed:', error);
-      Alert.alert('Error', 'Could not undo');
-    });
+    useEventsStore
+      .getState()
+      .deleteEvent(lastEvent.id)
+      .catch((error) => {
+        logger.error('undo failed:', error);
+        Alert.alert('Error', 'Could not undo');
+      })
+      .finally(() => {
+        undoInFlight.current = false;
+      });
   };
 
   const handleReset = () => {
-    if (!id || !user?.id || todayCount === 0) return;
+    if (!id || !user?.id || todayCount === 0 || !counter) return;
     Alert.alert(
       "Reset today's progress",
       `Remove today's ${todayCount} log${todayCount === 1 ? '' : 's'} for "${counter.name}"?`,
@@ -381,8 +392,13 @@ function MarkDetailContent() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const todayIncrements = events.filter(
-                (e) => e.event_type === 'increment' && e.occurred_local_date === todayStr && !e.deleted_at,
+              const freshEvents = useEventsStore.getState().events;
+              const todayIncrements = freshEvents.filter(
+                (e) =>
+                  e.mark_id === id &&
+                  e.event_type === 'increment' &&
+                  e.occurred_local_date === todayStr &&
+                  !e.deleted_at,
               );
               for (const event of todayIncrements) {
                 await useEventsStore.getState().deleteEvent(event.id);
