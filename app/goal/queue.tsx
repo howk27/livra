@@ -11,14 +11,15 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { CaretLeft, CaretRight, Plus, Trash, ArrowRight } from 'phosphor-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { format, parseISO } from 'date-fns';
-import { themedColors, spacing, fontSize, fontWeight, borderRadius } from '../../theme/tokens';
+import { themedColors, spacing, fontSize, fontWeight, borderRadius, fonts } from '../../theme/tokens';
+import MarkIcon from '@/src/components/icons/CounterIcon';
+import { resolveCounterIconType } from '@/src/components/icons/IconResolver';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useGoalsStore } from '../../state/goalsSlice';
 import { useMarksStore } from '../../state/countersSlice';
-import { MARK_LIBRARY_BY_ID } from '../../lib/suggestedCounters';
 import type { Goal } from '../../types/goal';
 import type { Mark } from '../../types';
 
@@ -38,32 +39,33 @@ function GoalMarkRow({ linkedMarkIds }: { linkedMarkIds?: string[] }) {
 
   return (
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-      {linkedMarks.map(mark => {
-        const library = MARK_LIBRARY_BY_ID[(mark as any).icon ?? ''];
-        const emoji = library?.emoji ?? mark.emoji ?? '📍';
-        return (
-          <TouchableOpacity
-            key={mark.id}
-            onPress={() => router.push(`/mark/${mark.id}` as any)}
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 4,
-              paddingHorizontal: 8,
-              paddingVertical: 4,
-              borderRadius: 20,
-              borderWidth: 1,
-              borderColor: c.borderLight,
-              backgroundColor: c.linen,
-            }}
-          >
-            <Text style={{ fontSize: 12 }}>{emoji}</Text>
-            <Text style={{ fontSize: 11, color: c.inkMuted, fontWeight: fontWeight.medium }}>
-              {mark.name}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
+      {linkedMarks.map(mark => (
+        <TouchableOpacity
+          key={mark.id}
+          onPress={() => router.push(`/mark/${mark.id}` as any)}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
+            paddingHorizontal: 8,
+            paddingVertical: 4,
+            borderRadius: 20,
+            borderWidth: 1,
+            borderColor: c.borderLight,
+            backgroundColor: c.linen,
+          }}
+        >
+          <MarkIcon
+            type={resolveCounterIconType({ name: mark.name, emoji: mark.emoji }) as any}
+            size={13}
+            color={c.inkMuted}
+            variant="symbol"
+          />
+          <Text style={{ fontSize: 11, fontFamily: fonts.sansMedium, color: c.inkMuted }}>
+            {mark.name}
+          </Text>
+        </TouchableOpacity>
+      ))}
     </View>
   );
 }
@@ -152,12 +154,12 @@ export default function GoalQueueScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: c.linen }]}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="chevron-back" size={24} color={c.inkDark} />
+        <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <CaretLeft size={22} color={c.inkDark} weight="bold" />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: c.inkDark }]}>Goals</Text>
-        <TouchableOpacity onPress={() => router.push('/goal/new')}>
-          <Ionicons name="add" size={26} color={c.forest} />
+        <TouchableOpacity style={styles.headerAddBtn} onPress={() => router.push('/goal/new')} activeOpacity={0.8}>
+          <Plus size={18} color="#FFFFFF" weight="bold" />
         </TouchableOpacity>
       </View>
 
@@ -167,7 +169,7 @@ export default function GoalQueueScreen() {
             <Text style={[styles.sectionLabel, { color: c.inkMuted }]}>
               ACTIVE
             </Text>
-            <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.forest }]}>
+            <View style={[styles.card, styles.activeCard, { backgroundColor: c.surface }]}>
               <Text style={[styles.goalTitle, { color: c.inkDark }]}>{active.title}</Text>
               {active.description ? (
                 <Text style={[styles.goalDesc, { color: c.inkMuted }]}>
@@ -188,7 +190,7 @@ export default function GoalQueueScreen() {
                       }}
                     />
                   </View>
-                  <Text style={{ fontSize: 10, color: c.inkMuted }}>
+                  <Text style={{ fontSize: 13, fontFamily: fonts.sans, color: c.inkMuted }}>
                     {active.current_mark_count} / {active.target_mark_count} check-ins to complete
                   </Text>
                 </View>
@@ -211,20 +213,27 @@ export default function GoalQueueScreen() {
               {(() => {
                 const unlocked = isGoalUnlocked(active);
                 const remaining = (active.target_mark_count ?? 0) - active.current_mark_count;
+                if (unlocked) {
+                  return (
+                    <TouchableOpacity
+                      style={[styles.completeBtn, { borderColor: c.forest }]}
+                      onPress={() => handleComplete(active)}
+                    >
+                      <Text style={[styles.completeBtnText, { color: c.forest }]}>
+                        Mark complete
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                }
                 return (
                   <TouchableOpacity
-                    style={[
-                      styles.completeBtn,
-                      { borderColor: unlocked ? c.forest : c.borderMid, opacity: unlocked ? 1 : 0.5 },
-                    ]}
-                    onPress={() => handleComplete(active)}
-                    disabled={!unlocked}
+                    style={[styles.completeBtn, styles.completeBtnMuted, { borderColor: c.borderMid }]}
+                    onPress={() => router.push('/(tabs)/focus' as any)}
                   >
-                    <Text style={[styles.completeBtnText, { color: unlocked ? c.forest : c.inkMuted }]}>
-                      {unlocked
-                        ? 'Mark complete'
-                        : `${remaining} more check-in${remaining === 1 ? '' : 's'} to unlock`}
+                    <Text style={[styles.completeBtnText, styles.completeBtnTextMuted, { color: c.inkMuted }]}>
+                      {`${remaining} more check-in${remaining === 1 ? '' : 's'} to unlock`}
                     </Text>
+                    <ArrowRight size={13} color={c.inkMuted} weight="bold" />
                   </TouchableOpacity>
                 );
               })()}
@@ -256,7 +265,7 @@ export default function GoalQueueScreen() {
                 ) : null}
                 <GoalMarkRow linkedMarkIds={goal.linked_mark_ids} />
                 <TouchableOpacity onPress={() => handleDelete(goal)} style={styles.deleteBtn}>
-                  <Ionicons name="trash-outline" size={16} color={c.inkMuted} />
+                  <Trash size={16} color={c.inkMuted} weight="duotone" />
                 </TouchableOpacity>
               </View>
             ))}
@@ -272,7 +281,7 @@ export default function GoalQueueScreen() {
               <Text style={[styles.sectionLabel, { color: c.inkMuted }]}>
                 COMPLETED ({completed.length})
               </Text>
-              <Ionicons name="chevron-forward" size={14} color={c.inkMuted} />
+              <CaretRight size={14} color={c.inkMuted} weight="bold" />
             </TouchableOpacity>
           </View>
         )}
@@ -356,17 +365,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
-  headerTitle: { fontSize: fontSize.lg, fontWeight: fontWeight.semibold },
+  headerTitle: { fontSize: 24, fontFamily: fonts.serif },
+  headerAddBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#1C3830', alignItems: 'center', justifyContent: 'center' },
   content: { paddingHorizontal: spacing.md, paddingBottom: spacing.xl },
   section: { marginTop: spacing.lg, gap: spacing.sm },
-  sectionLabel: { fontSize: fontSize.xs, fontWeight: fontWeight.semibold, letterSpacing: 1 },
+  sectionLabel: { fontSize: 11, fontFamily: fonts.sansSemibold, letterSpacing: 1.5, textTransform: 'uppercase' },
+  activeCard: { borderWidth: 0, borderLeftWidth: 3, borderLeftColor: '#1C3830' },
   card: {
     borderWidth: 1,
     borderRadius: borderRadius.lg,
     padding: spacing.md,
     gap: spacing.xs,
   },
-  goalTitle: { fontSize: fontSize.md, fontWeight: fontWeight.semibold },
+  goalTitle: { fontSize: 16, fontFamily: fonts.sansSemibold },
   goalDesc: { fontSize: fontSize.sm },
   completeBtn: {
     marginTop: spacing.sm,
@@ -375,7 +386,9 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
     alignItems: 'center',
   },
-  completeBtnText: { fontSize: fontSize.sm, fontWeight: fontWeight.semibold },
+  completeBtnText: { fontSize: fontSize.sm, fontFamily: fonts.sansSemibold },
+  completeBtnMuted: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 },
+  completeBtnTextMuted: { fontFamily: fonts.sans },
   deleteBtn: { position: 'absolute', top: spacing.sm, right: spacing.sm },
   completedToggle: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   emptyText: { fontSize: fontSize.md, textAlign: 'center', marginTop: spacing.xl },

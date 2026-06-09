@@ -9,7 +9,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { Ionicons } from '@expo/vector-icons';
+import { DotsSixVertical } from 'phosphor-react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
@@ -196,7 +196,7 @@ function DraggableRow({
       {count > 1 && (
         <GestureDetector gesture={pan}>
           <Animated.View style={styles.dragHandle} hitSlop={spacing.sm}>
-            <Ionicons name="reorder-three-outline" size={24} color={c.inkMuted} />
+            <DotsSixVertical size={22} color={c.inkMuted} weight="regular" />
           </Animated.View>
         </GestureDetector>
       )}
