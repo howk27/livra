@@ -11,7 +11,7 @@ import { Lightning } from 'phosphor-react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 
-import { fonts, spacing, radius, shadow, themedColors } from '../../theme/tokens';
+import { fonts, spacing, radius, borderRadius, shadow, themedColors } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { LivraHeader } from '../../components/ui/LivraHeader';
 import { MarkRow } from '../../components/ui/MarkRow';
@@ -222,7 +222,7 @@ export default function FocusScreen() {
             style={[
               StyleSheet.absoluteFillObject,
               {
-                borderRadius: 16,
+                borderRadius: borderRadius.card,
                 backgroundColor: theme === 'dark'
                   ? 'rgba(141,181,168,0.08)'
                   : 'rgba(28,60,52,0.08)',
@@ -340,7 +340,8 @@ const styles = StyleSheet.create({
   progressBanner: {
     marginHorizontal: spacing.lg,
     marginTop: spacing.lg,
-    borderRadius: 16,
+    borderRadius: borderRadius.card,
+    overflow: 'hidden',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     height: 56,
