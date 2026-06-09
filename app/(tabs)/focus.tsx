@@ -31,6 +31,7 @@ import { subDays } from 'date-fns';
 import { resolveDailyTarget } from '../../lib/markDailyTarget';
 import { logger } from '../../lib/utils/logger';
 import { MARK_LIBRARY } from '../../lib/suggestedCounters';
+import { resolveCounterIconType } from '../../src/components/icons/IconResolver';
 
 import type { Counter } from '../../types';
 
@@ -275,11 +276,15 @@ export default function FocusScreen() {
                 const loggedToday =
                   (todayCountsMap.get(mark.id) ?? 0) >= resolveDailyTarget(mark);
                 const libMark = MARK_LIBRARY.find(m => m.emoji === mark.emoji);
+                const category =
+                  libMark?.category ??
+                  resolveCounterIconType({ name: mark.name, emoji: mark.emoji ?? '' }) ??
+                  'custom';
                 return (
                   <MarkRow
                     key={mark.id}
                     title={mark.name}
-                    category={libMark?.category ?? 'custom'}
+                    category={category}
                     loggedToday={loggedToday}
                     onPress={() => router.push(`/mark/${mark.id}` as any)}
                     onLog={() => handleQuickIncrement(mark.id)}
