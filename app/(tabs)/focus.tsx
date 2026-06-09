@@ -217,6 +217,18 @@ export default function FocusScreen() {
             borderColor: theme === 'dark' ? 'rgba(141,181,168,0.15)' : 'rgba(28,60,52,0.15)',
           },
         ]}>
+          {/* Glass overlay */}
+          <View
+            style={[
+              StyleSheet.absoluteFillObject,
+              {
+                borderRadius: 16,
+                backgroundColor: theme === 'dark'
+                  ? 'rgba(141,181,168,0.08)'
+                  : 'rgba(28,60,52,0.08)',
+              },
+            ]}
+          />
           <View>
             <Text style={[styles.bannerFraction, { color: theme === 'dark' ? c.inkInverse : c.forest }]}>
               {completedMarksToday}/{todayTotal}
@@ -328,7 +340,7 @@ const styles = StyleSheet.create({
   progressBanner: {
     marginHorizontal: spacing.lg,
     marginTop: spacing.lg,
-    borderRadius: radius.lg,
+    borderRadius: 16,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     height: 56,
