@@ -60,6 +60,7 @@ const ICON_TYPE_TO_EMOJI: Record<Exclude<MarkType, 'custom'>, string> = {
 // Icon types available for selection (excluding 'custom')
 const ICON_OPTIONS: Exclude<MarkType, 'custom'>[] = [
   'gym',
+  'sleep',
   'reading',
   'meditation',
   'water',
@@ -67,10 +68,18 @@ const ICON_OPTIONS: Exclude<MarkType, 'custom'>[] = [
   'focus',
   'email',
   'tasks',
+  'planning',
   'language',
   'rest',
   'steps',
   'calories',
+];
+
+const PRESET_MARKS: Array<{ name: string; iconType: Exclude<MarkType, 'custom'>; color: string }> = [
+  { name: 'Sleep',    iconType: 'sleep',    color: '#7B9EA6' },
+  { name: 'Workout',  iconType: 'gym',      color: '#8A7E6B' },
+  { name: 'Water',    iconType: 'water',    color: '#6B9E8A' },
+  { name: 'Planning', iconType: 'planning', color: '#9E8A6B' },
 ];
 
 const COLOR_OPTIONS = ['#3B82F6', '#10B981', '#A855F7', '#F97316', '#EF4444', '#EC4899'];
@@ -153,9 +162,21 @@ export default function NewCounterScreen() {
   };
 
   const handleSuggestedCounterSelect = (counter: SuggestedCounter) => {
-    setPendingSuggestedCounter(counter);
+    const preset = PRESET_MARKS.find(p => p.name === counter.name);
+    if (preset) {
+      setName(preset.name);
+      setSelectedIconType(preset.iconType);
+      setColor(preset.color);
+      setHasManualColorOverride(true);
+    } else {
+      setName(counter.name);
+      const entry = Object.entries(ICON_TYPE_TO_EMOJI).find(([, emoji]) => emoji === counter.emoji);
+      if (entry) setSelectedIconType(entry[0] as Exclude<MarkType, 'custom'>);
+      setHasManualColorOverride(false);
+    }
     setDailyTarget((prev) => prev || 1);
-    setHasManualColorOverride(false);
+    setPendingSuggestedCounter(null);
+    setMode('custom');
   };
 
   const handleConfirmSuggestedCounter = async () => {
