@@ -11,13 +11,15 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Lock, Plus } from 'phosphor-react-native';
 import { colors } from '../../theme/colors';
-import { spacing, borderRadius, fontWeight } from '../../theme/tokens';
+import { spacing, borderRadius, fontWeight, fonts } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useCounters } from '../../hooks/useCounters';
 import { useIapSubscriptions } from '../../hooks/useIapSubscriptions';
 import { applyOpacity } from '@/src/components/icons/color';
+import MarkIcon from '@/src/components/icons/CounterIcon';
+import { resolveCounterIconType } from '@/src/components/icons/IconResolver';
 
-const ACCENT = '#FEB729';
+const FOREST = '#1C3830';
 const FREE_MARK_LIMIT = 3;
 
 export default function MarksScreen() {
@@ -38,11 +40,11 @@ export default function MarksScreen() {
       <View style={styles.header}>
         <Text style={[styles.headerTitle, { color: themeColors.text }]}>Your marks</Text>
         <TouchableOpacity
-          style={[styles.addBtn, { backgroundColor: ACCENT }]}
+          style={[styles.addBtn, { backgroundColor: FOREST }]}
           onPress={() => router.push('/mark/new' as any)}
           activeOpacity={0.8}
         >
-          <Plus size={18} color="#111111" weight="bold" />
+          <Plus size={18} color="#FFFFFF" weight="bold" />
         </TouchableOpacity>
       </View>
 
@@ -59,7 +61,7 @@ export default function MarksScreen() {
               Marks are the daily actions that move your goal forward.
             </Text>
             <TouchableOpacity
-              style={[styles.emptyBtn, { backgroundColor: ACCENT }]}
+              style={[styles.emptyBtn, { backgroundColor: FOREST }]}
               onPress={() => router.push('/mark/new' as any)}
               activeOpacity={0.8}
             >
@@ -84,7 +86,7 @@ export default function MarksScreen() {
                     styles.markCard,
                     {
                       backgroundColor: themeColors.surface,
-                      opacity: isLocked ? 0.55 : 1,
+                      opacity: isLocked ? 0.45 : 1,
                     },
                   ]}
                   onPress={() => {
@@ -99,10 +101,15 @@ export default function MarksScreen() {
                   {/* Icon */}
                   <View style={[styles.iconWrap, { backgroundColor: iconBg }]}>
                     {isLocked ? (
-                      <Lock size={18} color={markColor} weight="regular" />
-                    ) : mark.emoji ? (
-                      <Text style={styles.markEmoji}>{mark.emoji}</Text>
-                    ) : null}
+                      <Lock size={18} color={markColor} weight="duotone" />
+                    ) : (
+                      <MarkIcon
+                        type={resolveCounterIconType({ name: mark.name, emoji: mark.emoji }) as any}
+                        size={20}
+                        color={markColor}
+                        variant="symbol"
+                      />
+                    )}
                   </View>
 
                   {/* Label */}
@@ -120,7 +127,7 @@ export default function MarksScreen() {
                   {/* Lock badge */}
                   {isLocked && (
                     <View style={[styles.lockBadge, { backgroundColor: themeColors.surfaceVariant }]}>
-                      <Lock size={12} color={themeColors.textSecondary} weight="regular" />
+                      <Lock size={12} color={themeColors.textSecondary} weight="duotone" />
                     </View>
                   )}
                 </TouchableOpacity>
@@ -159,10 +166,9 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.lg,
   },
   headerTitle: {
-    fontSize: 28,
-    fontWeight: fontWeight.bold,
-    fontFamily: 'Satoshi',
-    letterSpacing: -0.5,
+    fontSize: 24,
+    fontFamily: fonts.serif,
+    letterSpacing: -0.3,
   },
   addBtn: {
     width: 36,
@@ -176,8 +182,7 @@ const styles = StyleSheet.create({
   },
   sectionLabel: {
     fontSize: 11,
-    fontFamily: 'Inter',
-    fontWeight: fontWeight.semibold,
+    fontFamily: fonts.sansSemibold,
     letterSpacing: 1.5,
     marginBottom: spacing.md,
     textTransform: 'uppercase',
@@ -202,17 +207,13 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
   },
-  markEmoji: {
-    fontSize: 18,
-  },
   markName: {
-    fontSize: 15,
-    fontFamily: 'Satoshi',
-    fontWeight: fontWeight.medium,
+    fontSize: 16,
+    fontFamily: fonts.sansMedium,
   },
   markUnit: {
     fontSize: 12,
-    fontFamily: 'Inter',
+    fontFamily: fonts.sans,
   },
   lockBadge: {
     width: 28,
@@ -229,7 +230,7 @@ const styles = StyleSheet.create({
   },
   upgradeText: {
     fontSize: 13,
-    fontFamily: 'Inter',
+    fontFamily: fonts.sans,
   },
   emptyState: {
     alignItems: 'center',
@@ -238,12 +239,11 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     fontSize: 17,
-    fontFamily: 'Satoshi',
-    fontWeight: fontWeight.semibold,
+    fontFamily: fonts.sansSemibold,
   },
   emptyBody: {
     fontSize: 14,
-    fontFamily: 'Inter',
+    fontFamily: fonts.sans,
     textAlign: 'center',
     lineHeight: 20,
     maxWidth: 260,
@@ -256,8 +256,7 @@ const styles = StyleSheet.create({
   },
   emptyBtnText: {
     fontSize: 15,
-    fontFamily: 'Inter',
-    fontWeight: fontWeight.semibold,
-    color: '#111111',
+    fontFamily: fonts.sansSemibold,
+    color: '#FFFFFF',
   },
 });
