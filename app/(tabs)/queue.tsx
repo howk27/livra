@@ -6,7 +6,6 @@ import {
   StyleSheet,
   Platform,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
@@ -286,8 +285,6 @@ export default function QueueScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { isProUnlocked } = useIapSubscriptions();
-  const insets = useSafeAreaInsets();
-
   const goals = useGoalsStore((s) => s.goals);
   const isLoading = useGoalsStore((s) => s.isLoading);
 
@@ -322,7 +319,7 @@ export default function QueueScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* ── Brand wordmark ── */}
-        <View style={[styles.topBlock, { paddingTop: insets.top + 8 }]}>
+        <View style={styles.topBlock}>
           <LivraWordmark fontSize={28} letterSpacing={5} color={c.inkDark} />
           <Text style={[styles.sectionSubtitle, { color: c.inkMuted }]}>Your goals, one at a time.</Text>
         </View>
@@ -384,7 +381,8 @@ const styles = StyleSheet.create({
 
   // Top text block
   topBlock: {
-    paddingHorizontal: spacing.lg,
+    paddingTop: 8,
+    paddingHorizontal: 20,
     paddingBottom: 0,
     marginBottom: 24,
   },
@@ -422,11 +420,12 @@ const styles = StyleSheet.create({
   // Empty state
   emptyState: {
     alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xl,
+    paddingTop: spacing.xxl,
   },
   emptyTitle: {
-    fontFamily: fonts.serif,
+    fontFamily: fonts.serifSemibold,
     fontSize: 22,
     textAlign: 'center',
     marginTop: spacing.md,
