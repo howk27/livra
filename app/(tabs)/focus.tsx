@@ -220,7 +220,7 @@ export default function FocusScreen() {
           {/* Glass overlay */}
           <View
             style={[
-              StyleSheet.absoluteFillObject,
+              StyleSheet.absoluteFill,
               {
                 borderRadius: borderRadius.card,
                 backgroundColor: theme === 'dark'

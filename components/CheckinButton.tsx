@@ -2,6 +2,7 @@ import React from 'react';
 import { TouchableOpacity, Text, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { CheckCircle } from 'phosphor-react-native';
 import { colors } from '../theme/colors';
 import { spacing, fontSize, fontWeight, borderRadius } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
@@ -32,11 +33,11 @@ export function CheckinButton() {
       onPress={() => router.push('/checkin')}
       activeOpacity={0.8}
     >
-      <Ionicons
-        name={done ? 'checkmark-circle' : 'radio-button-off'}
-        size={18}
-        color={done ? themeColors.textSecondary : '#FFFFFF'}
-      />
+      {done ? (
+        <CheckCircle size={18} weight="bold" color={themeColors.textSecondary} />
+      ) : (
+        <Ionicons name="radio-button-off" size={18} color="#FFFFFF" />
+      )}
       <Text style={[styles.btnText, { color: done ? themeColors.textSecondary : '#FFFFFF' }]}>
         {done ? 'Checked in today' : 'Check in'}
       </Text>

@@ -9,6 +9,7 @@ import Animated, {
   runOnJS,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
+import { CheckCircle } from 'phosphor-react-native';
 import { colors } from '../theme/colors';
 import { spacing, borderRadius, fontSize, fontWeight, shadow } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
@@ -70,18 +71,15 @@ const NotificationToast: React.FC<NotificationToastProps> = ({ notification, onD
 
   if (!notification) return null;
 
-  const getIconName = () => {
-    switch (notification.type) {
-      case 'success':
-        return 'checkmark-circle';
-      case 'error':
-        return 'alert-circle';
-      case 'warning':
-        return 'warning';
-      case 'info':
-      default:
-        return 'information-circle';
+  const renderIcon = () => {
+    if (notification.type === 'success') {
+      return <CheckCircle size={24} color="#FFFFFF" weight="bold" />;
     }
+    const iconName =
+      notification.type === 'error' ? 'alert-circle'
+      : notification.type === 'warning' ? 'warning'
+      : 'information-circle';
+    return <Ionicons name={iconName} size={24} color="#FFFFFF" />;
   };
 
   const getBackgroundColor = () => {
@@ -111,7 +109,7 @@ const NotificationToast: React.FC<NotificationToastProps> = ({ notification, onD
       ]}
     >
       <View style={styles.content}>
-        <Ionicons name={getIconName()} size={24} color="#FFFFFF" />
+        {renderIcon()}
         <AppText variant="body" style={styles.message}>
           {notification.message}
         </AppText>

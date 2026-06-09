@@ -6,8 +6,8 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { View, StyleSheet, Pressable, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { Check } from 'phosphor-react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -382,7 +382,7 @@ export const MarkCard: React.FC<MarkCardProps> = ({
             )}
           </View>
           <View style={[styles.compactCheckCircle, { backgroundColor: applyOpacity(markColor, 0.18) }]}>
-            <Ionicons name="checkmark" size={14} color={applyOpacity(markColor, 0.85)} />
+            <Check size={13} weight="bold" color={applyOpacity(markColor, 0.85)} />
           </View>
         </View>
       </Pressable>
@@ -556,7 +556,7 @@ export const MarkCard: React.FC<MarkCardProps> = ({
                 </Animated.View>
                 {/* ✓  (fades in on morph) */}
                 <Animated.View style={[StyleSheet.absoluteFill, styles.btnIconWrap, checkIconStyle]}>
-                  <Ionicons name="checkmark" size={24} color={btnFg} />
+                  <Check size={22} weight="bold" color={btnFg} />
                 </Animated.View>
               </Pressable>
             </Animated.View>
