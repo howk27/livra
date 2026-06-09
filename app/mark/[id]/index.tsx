@@ -46,6 +46,8 @@ import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import {
   ArrowRight,
+  CaretDown,
+  CaretUp,
   Check,
   CheckCircle,
   Flag,
@@ -118,6 +120,7 @@ function MarkDetailContent() {
   const undoInFlight = useRef(false);
   const draftNoteRef = useRef(draftNote);
   draftNoteRef.current = draftNote;
+  const [expandedNoteIds, setExpandedNoteIds] = useState<Set<string>>(new Set());
   const appDateKey = useAppDateStore((s) => s.debugDateOverride ?? '');
 
   const [healthModalVisible, setHealthModalVisible] = useState(false);
@@ -719,18 +722,13 @@ function MarkDetailContent() {
           {/* ── Today's note ─────────────────────────────────────────────── */}
           <View
             onLayout={(e) => { noteSectionYRef.current = e.nativeEvent.layout.y; }}
-            style={[styles.noteCard]}
+            style={styles.noteCard}
           >
-            <View style={styles.noteHeader}>
-              <Text style={styles.noteTitle}>Today's note</Text>
-              <Text style={styles.noteDate}>
-                {getAppDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-              </Text>
-            </View>
+            <Text style={styles.noteSectionLabel}>TODAY'S NOTE</Text>
             <TextInput
               value={draftNote}
               onChangeText={(t) => setDraftNote(t.slice(0, NOTE_MAX_LEN))}
-              placeholder="Write a note for today…"
+              placeholder="What did you do today?"
               placeholderTextColor={c.inkMuted}
               multiline
               editable={!noteFieldBusy}
@@ -745,25 +743,16 @@ function MarkDetailContent() {
               textAlignVertical="top"
             />
             <View style={styles.noteActionsRow}>
-              <Text style={styles.noteCharCount}>{draftNote.length}/{NOTE_MAX_LEN}</Text>
-              <View style={styles.noteButtons}>
-                {hasSavedNote && (
-                  <TouchableOpacity onPress={handleDeleteNote} disabled={noteFieldBusy} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <Text style={[styles.noteDeleteText, noteFieldBusy && { opacity: 0.4 }]}>Delete</Text>
-                  </TouchableOpacity>
-                )}
-                <TouchableOpacity
-                  onPress={handleSaveNote}
-                  disabled={!canSaveNote || noteFieldBusy}
-                  style={[styles.noteSaveBtn, { opacity: canSaveNote ? 1 : 0.4 }]}
-                >
-                  {savingNote ? (
-                    <ActivityIndicator size="small" color={c.inkInverse} />
-                  ) : (
-                    <Text style={styles.noteSaveText}>Save</Text>
-                  )}
+              {hasSavedNote && draftTrimmed === savedTrimmed ? (
+                <Text style={styles.noteSavedIndicator}>Saved</Text>
+              ) : (
+                <Text style={styles.noteCharCount}>{draftNote.length}/{NOTE_MAX_LEN}</Text>
+              )}
+              {hasSavedNote && (
+                <TouchableOpacity onPress={handleDeleteNote} disabled={noteFieldBusy} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Text style={[styles.noteDeleteText, noteFieldBusy && { opacity: 0.4 }]}>Delete</Text>
                 </TouchableOpacity>
-              </View>
+              )}
             </View>
             {notesCloudError ? (
               <View style={styles.noteCloudRow}>
@@ -774,6 +763,41 @@ function MarkDetailContent() {
               </View>
             ) : null}
           </View>
+
+          {/* ── Past notes ───────────────────────────────────────────────── */}
+          {markNotes.length > 0 && (
+            <View style={styles.noteCard}>
+              <Text style={styles.noteSectionLabel}>PREVIOUS NOTES</Text>
+              {markNotes.map((note, i) => {
+                const [y, mo, d] = note.date.split('-').map(Number);
+                const dt = new Date(y, mo - 1, d);
+                const dateLabel = dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                const isExpanded = expandedNoteIds.has(note.date);
+                const toggleExpand = () =>
+                  setExpandedNoteIds(prev => {
+                    const next = new Set(prev);
+                    if (next.has(note.date)) { next.delete(note.date); } else { next.add(note.date); }
+                    return next;
+                  });
+                return (
+                  <View key={note.date}>
+                    {i > 0 && <View style={styles.pastNoteSeparator} />}
+                    <TouchableOpacity style={styles.pastNoteRow} onPress={toggleExpand} activeOpacity={0.75}>
+                      <View style={styles.pastNoteContent}>
+                        <Text style={styles.pastNoteDate}>{dateLabel}</Text>
+                        <Text style={styles.pastNoteText} numberOfLines={isExpanded ? undefined : 3}>
+                          {note.text.trim()}
+                        </Text>
+                      </View>
+                      {isExpanded
+                        ? <CaretUp size={14} color={c.inkMuted} weight="bold" />
+                        : <CaretDown size={14} color={c.inkMuted} weight="bold" />}
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </View>
+          )}
 
           {/* ── Daily reminder ────────────────────────────────────────────── */}
           {!reminderLoading && (
@@ -1092,32 +1116,25 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     gap: spacing.sm,
     ...shadow.card,
   },
-  noteHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  noteTitle: {
-    fontSize: 17,
-    fontFamily: fonts.sansMedium,
-    color: c.inkDark,
-  },
-  noteDate: {
-    fontSize: 12,
-    fontFamily: fonts.sans,
+  noteSectionLabel: {
+    fontSize: 11,
+    fontFamily: fonts.sansSemibold,
     color: c.inkMuted,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+    marginBottom: spacing.xs,
   },
   noteInput: {
     borderWidth: 1,
-    borderColor: c.borderLight,
+    borderColor: c.borderMid,
     borderRadius: 12,
     padding: spacing.md,
     minHeight: 90,
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: fonts.sans,
     color: c.inkDark,
     lineHeight: 22,
-    backgroundColor: c.linen,
+    backgroundColor: c.surface,
   },
   noteActionsRow: {
     flexDirection: 'row',
@@ -1125,19 +1142,8 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     justifyContent: 'space-between',
   },
   noteCharCount: { fontSize: 11, fontFamily: fonts.sans, color: c.inkMuted },
-  noteButtons: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  noteSavedIndicator: { fontSize: 11, fontFamily: fonts.sans, color: c.inkMuted },
   noteDeleteText: { fontSize: 13, fontFamily: fonts.sansMedium, color: c.danger },
-  noteSaveBtn: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: borderRadius.full,
-    backgroundColor: c.forest,
-    minWidth: 80,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 34,
-  },
-  noteSaveText: { fontSize: 13, fontFamily: fonts.sansMedium, color: c.inkInverse },
   noteCloudRow: {
     marginTop: spacing.xs,
     paddingTop: spacing.sm,
@@ -1147,6 +1153,18 @@ function createStyles(c: ReturnType<typeof themedColors>) {
   },
   noteCloudHint: { fontSize: 12, fontFamily: fonts.sans, color: c.inkMuted, lineHeight: 18 },
   noteCloudDismiss: { fontSize: 12, fontFamily: fonts.sansMedium, color: c.forest },
+
+  // Past notes
+  pastNoteRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+  },
+  pastNoteContent: { flex: 1, gap: 3 },
+  pastNoteDate: { fontSize: 12, fontFamily: fonts.sans, color: c.inkMuted },
+  pastNoteText: { fontSize: 14, fontFamily: fonts.sans, color: c.inkDark, lineHeight: 20 },
+  pastNoteSeparator: { height: StyleSheet.hairlineWidth, backgroundColor: c.borderLight },
 
   // Settings cards
   settingCard: {
