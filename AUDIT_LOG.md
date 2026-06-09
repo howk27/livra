@@ -535,3 +535,28 @@ No logic changes; no protected files touched. 381 tests pass; 0 type errors.
 | File | Change |
 |------|--------|
 | `app/mark/new.tsx` | Added `PRESET_MARKS` constant (Sleep/gym, Workout/gym, Water/water, Planning/planning with hex colors). Added `sleep` and `planning` to `ICON_OPTIONS` so the icon grid reflects those selections. Replaced `handleSuggestedCounterSelect` to: look up the tapped counter by name in `PRESET_MARKS` (sets name, iconType, color, `hasManualColorOverride = true`); fall back to a reverse-emoji lookup via `ICON_TYPE_TO_EMOJI` for any counter not in the preset list; then call `setMode('custom')` and clear `pendingSuggestedCounter` so the custom form is visible and pre-filled. |
+
+---
+
+## 2026-06-09 — Material Warmth UI Consistency Pass
+
+Design system enforced across three screens: CormorantGaramond serif for headings ≥20px, DM Sans (`fonts.*` tokens) for UI text, `#1C3830` forest green for all CTAs, Phosphor icons (duotone) replacing all Ionicons, no emoji in UI chrome.
+
+### Task 1 — "See All" Marks screen (commit `08a125b`)
+
+| File | Change |
+|------|--------|
+| `app/(tabs)/marks.tsx` | Header "Your marks": `fontFamily: 'Satoshi'` 28px bold → `fonts.serif` 24px. Add/empty-state CTA buttons: `#FEB729` amber bg + dark text → `#1C3830` forest bg + white text. Mark icon slot: `mark.emoji` Text render → `MarkIcon` via `resolveCounterIconType`. Both `Lock` icons: `weight="regular"` → `"duotone"`. Locked mark opacity: 0.55 → 0.45. `markName`: Satoshi 15px → `fonts.sansMedium` 16px. All raw `'Satoshi'`/`'Inter'` font strings → `fonts.*` tokens (`serif`, `sansSemibold`, `sansMedium`, `sans`). Removed dead `markEmoji` StyleSheet entry. Added imports: `fonts`, `MarkIcon`, `resolveCounterIconType`. |
+
+### Task 2 — Goal Queue screens (commit `ef60f95`)
+
+| File | Change |
+|------|--------|
+| `app/goal/queue.tsx` | **Navigation note:** this screen is navigated to from the Queue tab FAB; it contains the active-goal card and all goal-management UI. Header "Goals": `fontSize.lg` semibold → `fonts.serif` 24px. Back button: `Ionicons chevron-back` → Phosphor `CaretLeft` bold. Add button: `Ionicons add` plain icon → 36×36 forest green pill (`#1C3830` bg, white `Plus`). Active goal card: full 1px green border → 3px left border only (`borderLeftWidth: 3, borderLeftColor: '#1C3830'`). `goalTitle`: `fontWeight.semibold` 15px → `fonts.sansSemibold` 16px. Check-in counter: 10px plain → 13px `fonts.sans`. Unlock pill: split locked/unlocked paths — locked state is now a muted border-only pill with `ArrowRight` icon navigating to `/(tabs)/focus`; unlocked keeps forest green "Mark complete" action. `COMPLETED` toggle chevron: `Ionicons chevron-forward` → Phosphor `CaretRight` bold. Queued-item delete: `Ionicons trash-outline` → Phosphor `Trash` duotone. `GoalMarkRow` mark chips: emoji `Text` → `MarkIcon` via `resolveCounterIconType`; removed `MARK_LIBRARY_BY_ID` import; `fontWeight.medium` → `fonts.sansMedium`. `sectionLabel`: letterSpacing 1 → 1.5, added `fonts.sansSemibold`, `textTransform: 'uppercase'`. |
+| `app/(tabs)/queue.tsx` | **Navigation note:** this is the rendered Queue tab screen (wordmark header, hero/draggable list, SpeedDialFAB). Drag handle: `Ionicons reorder-three-outline` → Phosphor `DotsSixVertical`. |
+
+### Task 3 — Mark Detail notes section (commit `885afc3`)
+
+| File | Change |
+|------|--------|
+| `app/mark/[id]/index.tsx` | **Today's note card:** replaced "Today's note" + date flex header with `"TODAY'S NOTE"` section label (`fonts.sansSemibold` 11px uppercase letterSpacing 1.5). Placeholder: `"Write a note for today…"` → `"What did you do today?"`. TextInput: `backgroundColor: c.linen` → `c.surface`; `borderColor: c.borderLight` → `c.borderMid`; `fontSize: 14` → 15. Removed explicit Save button (auto-save via onBlur/unmount handles persistence). Actions row: char count + Save → char count OR `"Saved"` indicator (11px `c.inkMuted`, shown when `hasSavedNote && draftTrimmed === savedTrimmed`); Delete button kept. Removed dead styles: `noteTitle`, `noteDate`, `noteButtons`, `noteSaveBtn`, `noteSaveText`. **Past notes section (new):** renders only when `markNotes.length > 0`. `"PREVIOUS NOTES"` section label. Each row: date label ("Mon, Jun 9") in `fonts.sans` 12px, note text `fonts.sans` 14px with `numberOfLines={3}` + `CaretDown`/`CaretUp` expand toggle, hairline separator between rows; no delete button. Expand state tracked per-date via `Set<string>` in new `expandedNoteIds` useState. Added `CaretDown`, `CaretUp` to Phosphor imports. |
