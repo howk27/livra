@@ -510,3 +510,28 @@ No logic changes; no protected files touched. 381 tests pass; 0 type errors.
 | 17 — Notes persistence | `e18a851`, `a0040e3` | `app/mark/[id]/index.tsx` | Removed `setDraftNote('')` after save — saved text stays visible in TextInput. Added `useEffect` (with `draftNoteRef` to avoid stale closure) to sync draft when Zustand store hydrates async. |
 | 18 — Duplicate checkmark | `9ba6e4a` | `app/mark/[id]/index.tsx` | Removed `✓` character from `"Logged today ✓"` label — Phosphor `Check` icon is the sole indicator. |
 | 19 — Gear button | `497088b` | — | Verified: no floating gear button exists on mark detail screen. No code changes required. |
+
+---
+
+## 2026-06-09 — Three Logic Bug Fixes
+
+### Task 1 — Replace Ionicons checkmarks with Phosphor icons (commit `bb2a120`)
+
+| File | Change |
+|------|--------|
+| `components/MarkCard.tsx` | Removed `Ionicons` import entirely. Added `Check` from `phosphor-react-native`. Replaced `<Ionicons name="checkmark" size={24}>` on the morph button with `<Check size={22} weight="bold">` and `<Ionicons name="checkmark" size={14}>` on the compact check circle with `<Check size={13} weight="bold">`. |
+| `components/CheckinButton.tsx` | Added `CheckCircle` from `phosphor-react-native`. Replaced the `done ? 'checkmark-circle' : ...` ternary with a conditional render: Phosphor `<CheckCircle size={18} weight="bold">` for the done state; kept `<Ionicons name="radio-button-off">` for the undone state (non-checkmark icon — not replaced per spec). |
+| `components/NotificationToast.tsx` | Added `CheckCircle` from `phosphor-react-native`. Replaced `getIconName()` string-lookup + single `<Ionicons>` approach with a `renderIcon()` function: success → `<CheckCircle size={24} weight="bold">`; all other types → `<Ionicons>` (alert-circle, warning, information-circle unchanged). `close` button Ionicons left as-is. |
+| `app/(tabs)/focus.tsx` | Fixed pre-existing `StyleSheet.absoluteFillObject` → `StyleSheet.absoluteFill` TS error (unrelated to checkmarks; required to get `tsc --noEmit` clean). |
+
+### Task 2 — Auto-save note on navigation away (commit `00913c4`)
+
+| File | Change |
+|------|--------|
+| `app/mark/[id]/index.tsx` | Added `useEffect` (dep: `[draftNote]`) whose cleanup function fires on unmount and on every draft change — calls `useDailyTrackingStore.getState().upsertDailyLogNote(...)` fire-and-forget so it never blocks React's cleanup phase. Skips the write when `draft === saved` or both are empty. Added `onBlur` to the note `TextInput` that awaits `upsertDailyLogNote` when the keyboard is dismissed (user taps elsewhere). Confirmed `noteUserId = user?.id ?? 'local'` is never an empty string. |
+
+### Task 3 — Preset chip form population in Add Mark screen (commit `bbc4c95`)
+
+| File | Change |
+|------|--------|
+| `app/mark/new.tsx` | Added `PRESET_MARKS` constant (Sleep/gym, Workout/gym, Water/water, Planning/planning with hex colors). Added `sleep` and `planning` to `ICON_OPTIONS` so the icon grid reflects those selections. Replaced `handleSuggestedCounterSelect` to: look up the tapped counter by name in `PRESET_MARKS` (sets name, iconType, color, `hasManualColorOverride = true`); fall back to a reverse-emoji lookup via `ICON_TYPE_TO_EMOJI` for any counter not in the preset list; then call `setMode('custom')` and clear `pendingSuggestedCounter` so the custom form is visible and pre-filled. |
