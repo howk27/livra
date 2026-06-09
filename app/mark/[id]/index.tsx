@@ -271,6 +271,19 @@ function MarkDetailContent() {
     }, [id, todayStr]),
   );
 
+  // Auto-save note on unmount (navigation away)
+  useEffect(() => {
+    return () => {
+      const draft = draftNote.trim();
+      const saved = savedNoteText.trim();
+      if (!id || !noteUserId || draft === saved) return;
+      if (draft.length === 0 && saved.length === 0) return;
+      // Fire-and-forget — do not await in cleanup
+      useDailyTrackingStore.getState().upsertDailyLogNote(id, noteUserId, todayStr, draft);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftNote]);
+
   // Sync draft when the store hydrates from SQLite after an async load.
   // Only updates if draft is currently empty to avoid overwriting in-progress typing.
   useEffect(() => {
@@ -722,6 +735,12 @@ function MarkDetailContent() {
               multiline
               editable={!noteFieldBusy}
               onFocus={scrollNoteIntoView}
+              onBlur={async () => {
+                const draft = draftNote.trim();
+                const saved = savedNoteText.trim();
+                if (!id || !noteUserId || draft === saved) return;
+                await upsertDailyLogNote(id, noteUserId, todayStr, draft);
+              }}
               style={styles.noteInput}
               textAlignVertical="top"
             />
