@@ -197,7 +197,6 @@ export function SpeedDialFAB() {
 }
 
 const FAB_SIZE = 56;
-const FAB_BOTTOM = 96;
 const FAB_RIGHT = spacing.lg;
 const OPT_SIZE = 40;
 
