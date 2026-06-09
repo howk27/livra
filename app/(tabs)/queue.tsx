@@ -28,6 +28,7 @@ import { LivraWordmark } from '../../components/ui/LivraWordmark';
 import { QueueCard } from '../../components/ui/QueueCard';
 import { SvgLogo } from '../../components/ui/SvgLogo';
 import { SpeedDialFAB } from '../../components/ui/SpeedDialFAB';
+import { SectionLabel } from '../../components/ui/SectionLabel';
 
 // ── Existing data hooks / state — DO NOT MODIFY ───────────────────────────────
 import { useGoalsStore } from '../../state/goalsSlice';
@@ -324,6 +325,9 @@ export default function QueueScreen() {
           <Text style={[styles.sectionSubtitle, { color: c.inkMuted }]}>Your goals, one at a time.</Text>
         </View>
 
+        {/* ── YOUR QUEUE section label ── */}
+        <SectionLabel style={{ marginBottom: 12 }}>YOUR QUEUE</SectionLabel>
+
         {/* ── Empty state ── */}
         {isEmpty && (
           <View style={styles.emptyState}>
@@ -376,6 +380,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
+    flexGrow: 1,
     paddingBottom: 120,
   },
 
@@ -383,13 +388,12 @@ const styles = StyleSheet.create({
   topBlock: {
     paddingTop: 8,
     paddingHorizontal: 20,
-    paddingBottom: 0,
-    marginBottom: 24,
   },
   sectionSubtitle: {
     fontFamily: fonts.serifItalic,
     fontSize: 16,
     marginTop: 4,
+    marginBottom: 24,
   },
 
   // Hero card
@@ -419,10 +423,10 @@ const styles = StyleSheet.create({
 
   // Empty state
   emptyState: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xxl,
   },
   emptyTitle: {
     fontFamily: fonts.serifSemibold,
