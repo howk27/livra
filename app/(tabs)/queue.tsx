@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
@@ -283,6 +284,7 @@ function DraggableQueueList({
 export default function QueueScreen() {
   const theme = useEffectiveTheme();
   const c = themedColors(theme);
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
   const { isProUnlocked } = useIapSubscriptions();
@@ -320,13 +322,13 @@ export default function QueueScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* ── Brand wordmark ── */}
-        <View style={styles.topBlock}>
+        <View style={[styles.topBlock, { paddingTop: insets.top + 8 }]}>
           <LivraWordmark fontSize={28} letterSpacing={5} color={c.inkDark} />
           <Text style={[styles.sectionSubtitle, { color: c.inkMuted }]}>Your goals, one at a time.</Text>
         </View>
 
         {/* ── YOUR QUEUE section label ── */}
-        <SectionLabel style={{ marginBottom: 12 }}>YOUR QUEUE</SectionLabel>
+        <SectionLabel style={styles.queueSectionLabel}>YOUR QUEUE</SectionLabel>
 
         {/* ── Empty state ── */}
         {isEmpty && (
@@ -386,7 +388,6 @@ const styles = StyleSheet.create({
 
   // Top text block
   topBlock: {
-    paddingTop: 8,
     paddingHorizontal: 20,
   },
   sectionSubtitle: {
@@ -394,6 +395,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginTop: 4,
     marginBottom: 24,
+  },
+
+  // Section label
+  queueSectionLabel: {
+    marginBottom: 12,
+    paddingHorizontal: spacing.lg,
   },
 
   // Hero card
