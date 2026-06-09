@@ -72,7 +72,7 @@ import { useAppDateStore } from '../../../state/appDateSlice';
 import { deriveStreakForMark } from '../../../hooks/useStreaks';
 import { useGoalsStore } from '../../../state/goalsSlice';
 import { CATEGORY_MAP } from '../../../components/ui/MarkRow';
-import { resolveCounterIconType } from '../../../src/components/icons/IconResolver';
+import { resolveCounterIconType } from '@/src/components/icons/IconResolver';
 
 function toLocalDateStr(d: Date): string {
   return formatDate(d);
@@ -328,7 +328,7 @@ function MarkDetailContent() {
   }
 
   // Category data — fall back to icon resolver so marks like "email" get the right icon
-  const resolvedIconKey = resolveCounterIconType({ name: counter.name, emoji: counter.emoji ?? undefined });
+  const resolvedIconKey = resolveCounterIconType({ name: counter.name, emoji: counter.emoji });
   const catKey = libraryMark?.category ?? resolvedIconKey ?? 'custom';
   const catData = CATEGORY_MAP[catKey] ?? CATEGORY_MAP.custom;
   const accent = catData.accent;
