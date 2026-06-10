@@ -1488,6 +1488,9 @@ export const useSync = () => {
   const SYNC_THROTTLE_MS = 120000; // 2 minutes
   const SYNC_DEBOUNCE_MS = 500; // 500ms debounce for rapid button taps
   
+  // Tracks the last calendar date on which cleanup jobs ran (YYYY-MM-DD)
+  const lastCleanupDateRef = useRef<string | null>(null);
+
   // Debounce ref for rapid sync requests
   const syncDebounceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   type PendingSyncSettle = { resolve: () => void; reject: (reason: unknown) => void };
@@ -1525,6 +1528,7 @@ export const useSync = () => {
         let lastStreakRecomputeSource: StreakRecomputeSourceLabel = 'none';
 
         const { getAppDate } = await import('../lib/appDate');
+        const today = formatDate(getAppDate());
         const streakResult = await recomputeStreaksAfterSyncFromSqlite(user.id, getAppDate());
         lastStreakRecomputeSource = streakResult.source;
         if (!streakResult.ok) {
@@ -1536,80 +1540,83 @@ export const useSync = () => {
           );
         }
 
-        try {
-          const [counterCleanup, orphanCleanup, eventCleanup] = await Promise.all([
-            cleanupDuplicateCounters(user.id),
-            cleanupOrphanedStreaksAndBadges(user.id),
-            cleanupOrphanedEvents(user.id),
-          ]);
-
-          if (counterCleanup.duplicatesByID + counterCleanup.duplicatesByName > 0) {
-            logger.log(
-              `[SYNC] Cleaned up ${counterCleanup.duplicatesByID + counterCleanup.duplicatesByName} duplicate counter(s) after sync`,
-            );
-          }
-
-          if (orphanCleanup.deletedStreaks > 0 || orphanCleanup.deletedBadges > 0) {
-            logger.log(
-              `[SYNC] Cleaned up ${orphanCleanup.deletedStreaks} orphaned streak(s) and ${orphanCleanup.deletedBadges} orphaned badge(s) after sync`,
-            );
-          }
-
-          if (eventCleanup.deletedEvents > 0) {
-            logger.log(`[SYNC] Cleaned up ${eventCleanup.deletedEvents} orphaned event(s) after sync`);
-          }
-
-          let orphanBadgeCleanupPartial = false;
+        if (lastCleanupDateRef.current !== today) {
+          lastCleanupDateRef.current = today;
           try {
-            const { data: supabaseCounters, error: supabaseError } = await supabase
-              .from('marks')
-              .select('id')
-              .eq('user_id', user.id)
-              .is('deleted_at', null);
+            const [counterCleanup, orphanCleanup, eventCleanup] = await Promise.all([
+              cleanupDuplicateCounters(user.id),
+              cleanupOrphanedStreaksAndBadges(user.id),
+              cleanupOrphanedEvents(user.id),
+            ]);
 
-            if (!supabaseError && supabaseCounters) {
-              const supabaseCounterIds = new Set(supabaseCounters.map((c) => c.id));
-
-              const allLocalBadges = await query<{ id: string; counter_id: string }>(
-                'SELECT id, counter_id FROM lc_badges WHERE user_id = ? AND deleted_at IS NULL',
-                [user.id],
+            if (counterCleanup.duplicatesByID + counterCleanup.duplicatesByName > 0) {
+              logger.log(
+                `[SYNC] Cleaned up ${counterCleanup.duplicatesByID + counterCleanup.duplicatesByName} duplicate counter(s) after sync`,
               );
+            }
 
-              const orphanedBadges = allLocalBadges.filter((b) => !supabaseCounterIds.has(b.counter_id));
+            if (orphanCleanup.deletedStreaks > 0 || orphanCleanup.deletedBadges > 0) {
+              logger.log(
+                `[SYNC] Cleaned up ${orphanCleanup.deletedStreaks} orphaned streak(s) and ${orphanCleanup.deletedBadges} orphaned badge(s) after sync`,
+              );
+            }
 
-              if (orphanedBadges.length > 0) {
-                const t = new Date().toISOString();
-                let deletedCount = 0;
+            if (eventCleanup.deletedEvents > 0) {
+              logger.log(`[SYNC] Cleaned up ${eventCleanup.deletedEvents} orphaned event(s) after sync`);
+            }
 
-                for (const badge of orphanedBadges) {
-                  try {
-                    await execute(
-                      'UPDATE lc_badges SET deleted_at = ?, updated_at = ? WHERE id = ?',
-                      [t, t, badge.id],
-                    );
-                    deletedCount++;
-                  } catch (error) {
-                    logger.warn('[SYNC] Orphan badge cleanup row failed');
-                    orphanBadgeCleanupPartial = true;
+            let orphanBadgeCleanupPartial = false;
+            try {
+              const { data: supabaseCounters, error: supabaseError } = await supabase
+                .from('marks')
+                .select('id')
+                .eq('user_id', user.id)
+                .is('deleted_at', null);
+
+              if (!supabaseError && supabaseCounters) {
+                const supabaseCounterIds = new Set(supabaseCounters.map((c) => c.id));
+
+                const allLocalBadges = await query<{ id: string; counter_id: string }>(
+                  'SELECT id, counter_id FROM lc_badges WHERE user_id = ? AND deleted_at IS NULL',
+                  [user.id],
+                );
+
+                const orphanedBadges = allLocalBadges.filter((b) => !supabaseCounterIds.has(b.counter_id));
+
+                if (orphanedBadges.length > 0) {
+                  const t = new Date().toISOString();
+                  let deletedCount = 0;
+
+                  for (const badge of orphanedBadges) {
+                    try {
+                      await execute(
+                        'UPDATE lc_badges SET deleted_at = ?, updated_at = ? WHERE id = ?',
+                        [t, t, badge.id],
+                      );
+                      deletedCount++;
+                    } catch (error) {
+                      logger.warn('[SYNC] Orphan badge cleanup row failed');
+                      orphanBadgeCleanupPartial = true;
+                    }
+                  }
+
+                  if (deletedCount > 0) {
+                    logger.log(`[SYNC] Cleaned up ${deletedCount} orphaned badge(s) (remote missing counter)`);
                   }
                 }
-
-                if (deletedCount > 0) {
-                  logger.log(`[SYNC] Cleaned up ${deletedCount} orphaned badge(s) (remote missing counter)`);
-                }
               }
+            } catch (badgeCleanupError) {
+              logger.warn('[SYNC] Orphan badge cleanup batch failed');
+              orphanBadgeCleanupPartial = true;
             }
-          } catch (badgeCleanupError) {
-            logger.warn('[SYNC] Orphan badge cleanup batch failed');
-            orphanBadgeCleanupPartial = true;
-          }
 
-          if (orphanBadgeCleanupPartial) {
-            maintenanceWarnings.push('MAINT_ORPHAN_BADGE_CLEANUP_PARTIAL');
+            if (orphanBadgeCleanupPartial) {
+              maintenanceWarnings.push('MAINT_ORPHAN_BADGE_CLEANUP_PARTIAL');
+            }
+          } catch (cleanupError) {
+            logger.error('[SYNC] Error during post-sync cleanup:', cleanupError);
+            maintenanceWarnings.push('MAINT_CLEANUP_FAILED');
           }
-        } catch (cleanupError) {
-          logger.error('[SYNC] Error during post-sync cleanup:', cleanupError);
-          maintenanceWarnings.push('MAINT_CLEANUP_FAILED');
         }
 
         try {
