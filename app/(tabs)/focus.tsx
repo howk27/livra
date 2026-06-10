@@ -292,6 +292,9 @@ export default function FocusScreen() {
                   libMark?.category ??
                   resolveCounterIconType({ name: mark.name, emoji: mark.emoji ?? '' }) ??
                   'custom';
+                const goalTitle = mark.goal_id
+                  ? goals.find(g => g.id === mark.goal_id)?.title
+                  : undefined;
                 return (
                   <MarkRow
                     key={mark.id}
@@ -301,6 +304,7 @@ export default function FocusScreen() {
                     onPress={() => router.push(`/mark/${mark.id}` as any)}
                     onLog={() => handleQuickIncrement(mark.id)}
                     isLast={idx === visibleMarks.length - 1}
+                    subtitle={goalTitle}
                   />
                 );
               })}

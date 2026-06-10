@@ -98,6 +98,7 @@ export default function OnboardingScreen() {
   const router = useRouter();
   const supabase = getSupabaseClient();
   const createGoal = useGoalsStore(s => s.createGoal);
+  const linkMarkToGoal = useGoalsStore(s => s.linkMarkToGoal);
   const addMark = useMarksStore(s => s.addMark);
 
   const [step, setStep] = useState(0);
@@ -153,6 +154,18 @@ export default function OnboardingScreen() {
       return;
     }
     try {
+      // Create goal first to get its ID
+      const newGoal = await createGoal({
+        title: goalTitle.trim(),
+        userId,
+        isPro: false,
+        linked_mark_ids: [...selection.alreadyOwnedMarkIds],
+        target_mark_count: selection.unlockThreshold > 0 ? selection.unlockThreshold : null,
+        tier: selection.tier,
+        frequency: selection.frequency,
+      });
+
+      // Create new marks with goal_id set, then link them
       const newMarkIds: string[] = [];
       for (const id of selection.selectedNewMarkIds) {
         const sugg = suggestions.find(s => s.id === id);
@@ -169,19 +182,11 @@ export default function OnboardingScreen() {
           total: 0,
           enable_streak: true,
           sort_index: 0,
+          goal_id: newGoal.id,
         });
         newMarkIds.push(newMark.id);
       }
-
-      await createGoal({
-        title: goalTitle.trim(),
-        userId,
-        isPro: false,
-        linked_mark_ids: [...selection.alreadyOwnedMarkIds, ...newMarkIds],
-        target_mark_count: selection.unlockThreshold > 0 ? selection.unlockThreshold : null,
-        tier: selection.tier,
-        frequency: selection.frequency,
-      });
+      await Promise.all(newMarkIds.map(mId => linkMarkToGoal(newGoal.id, mId)));
     } catch (err) {
       logger.error('[Onboarding] goal creation failed:', err);
     } finally {

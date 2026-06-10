@@ -22,7 +22,7 @@ import Animated, {
 import { Mark } from '../types';
 import { resolveDailyTarget } from '../lib/markDailyTarget';
 import { colors } from '../theme/colors';
-import { spacing, borderRadius, fontSize, fontWeight, shadow } from '../theme/tokens';
+import { spacing, borderRadius, fontSize, fontWeight, shadow, fonts } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { AppText } from './Typography';
 import { useReducedMotion } from '../hooks/useReducedMotion';
@@ -119,6 +119,7 @@ export interface MarkCardProps {
   onAllComplete?: () => void;
   iconType?: MarkType;
   weekCompletedDays?: boolean[];
+  goalTitle?: string;
 }
 
 export type HabitRowProps = MarkCardProps;
@@ -153,6 +154,7 @@ export const MarkCard: React.FC<MarkCardProps> = ({
   onAllComplete,
   iconType,
   weekCompletedDays,
+  goalTitle,
 }) => {
   const theme = useEffectiveTheme();
   const themeColors = colors[theme];
@@ -440,6 +442,12 @@ export const MarkCard: React.FC<MarkCardProps> = ({
               )}
             </View>
 
+            {goalTitle ? (
+              <AppText numberOfLines={1} style={[styles.goalSubtitle, { color: themeColors.textTertiary }]}>
+                {goalTitle}
+              </AppText>
+            ) : null}
+
             {helperLabel !== null && (
               <AppText style={[styles.metaText, { color: isCompletedNow ? themeColors.textSecondary : themeColors.textTertiary, fontWeight: isCompletedNow ? fontWeight.medium : fontWeight.normal }]}>
                 {helperLabel}
@@ -632,6 +640,7 @@ const styles = StyleSheet.create({
   name: { fontSize: fontSize.md, lineHeight: 20, letterSpacing: -0.1 },
   noteDot: { width: 5, height: 5, borderRadius: 3, flexShrink: 0 },
   metaText: { fontSize: 10, lineHeight: 12 },
+  goalSubtitle: { fontFamily: fonts.sans, fontSize: 11, lineHeight: 14 },
   rightSection: { alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   ripple: {
     position: 'absolute',

@@ -265,6 +265,12 @@ function MarkDetailContent() {
     () => goals.filter(g => g.linked_mark_ids?.includes(id ?? '') && g.status !== 'completed' && g.status !== 'expired'),
     [goals, id],
   );
+  const workingTowardGoal = useMemo(
+    () => counter?.goal_id
+      ? (goals.find(g => g.id === counter.goal_id && g.status !== 'completed' && g.status !== 'expired') ?? null)
+      : null,
+    [goals, counter?.goal_id],
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -610,6 +616,17 @@ function MarkDetailContent() {
             <Text style={styles.heroTitle}>{counter.name}</Text>
             {counter.unit ? (
               <Text style={styles.heroMeta}>{counter.unit}</Text>
+            ) : null}
+            {workingTowardGoal ? (
+              <TouchableOpacity
+                onPress={() => router.push(`/goal/${workingTowardGoal.id}` as any)}
+                activeOpacity={0.75}
+                style={styles.heroGoalLink}
+              >
+                <Text style={[styles.heroGoalLinkText, { color: c.inkMuted }]}>
+                  Working toward: {workingTowardGoal.title} →
+                </Text>
+              </TouchableOpacity>
             ) : null}
           </View>
 
@@ -984,6 +1001,14 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     fontFamily: fonts.sans,
     fontSize: 13,
     color: c.inkMuted,
+  },
+  heroGoalLink: {
+    marginTop: 2,
+  },
+  heroGoalLinkText: {
+    fontFamily: fonts.sans,
+    fontSize: 12,
+    textDecorationLine: 'underline',
   },
 
   // Compact stat row
