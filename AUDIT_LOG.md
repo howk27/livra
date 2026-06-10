@@ -560,3 +560,16 @@ Design system enforced across three screens: CormorantGaramond serif for heading
 | File | Change |
 |------|--------|
 | `app/mark/[id]/index.tsx` | **Today's note card:** replaced "Today's note" + date flex header with `"TODAY'S NOTE"` section label (`fonts.sansSemibold` 11px uppercase letterSpacing 1.5). Placeholder: `"Write a note for today…"` → `"What did you do today?"`. TextInput: `backgroundColor: c.linen` → `c.surface`; `borderColor: c.borderLight` → `c.borderMid`; `fontSize: 14` → 15. Removed explicit Save button (auto-save via onBlur/unmount handles persistence). Actions row: char count + Save → char count OR `"Saved"` indicator (11px `c.inkMuted`, shown when `hasSavedNote && draftTrimmed === savedTrimmed`); Delete button kept. Removed dead styles: `noteTitle`, `noteDate`, `noteButtons`, `noteSaveBtn`, `noteSaveText`. **Past notes section (new):** renders only when `markNotes.length > 0`. `"PREVIOUS NOTES"` section label. Each row: date label ("Mon, Jun 9") in `fonts.sans` 12px, note text `fonts.sans` 14px with `numberOfLines={3}` + `CaretDown`/`CaretUp` expand toggle, hairline separator between rows; no delete button. Expand state tracked per-date via `Set<string>` in new `expandedNoteIds` useState. Added `CaretDown`, `CaretUp` to Phosphor imports. |
+
+---
+
+## Session 2026-06-10 — Marks & Goals Update (docs/marks-goals update.md)
+
+### Task 1 — Data Model: Link Marks to Goals (commit `5616611`)
+
+| File | Change |
+|------|--------|
+| `types/index.ts` | Added `goal_id?: string | null` to `Mark` type. |
+| `state/countersSlice.ts` | Added `goal_id` to the second UPDATE in `addMark` so it is persisted to AsyncStorage via the generic SQL parser. |
+| `state/goalsSlice.ts` | Added `markIds?: string[]` to deprecated `addGoal` interface and implementation; forwards to `createGoal` as `linked_mark_ids`. |
+| `supabase/migrations/20260609_goal_id_on_marks.sql` | Created migration adding `goal_id text` column to `counters` table (no FK — goals are client-side only). |

@@ -20,6 +20,8 @@ import {
   nextGoalToActivate,
   isMarkCountComplete,
   isDeadlineExpired,
+  calculateGoalProgress,
+  calculateUnlockThreshold,
 } from '../lib/goalLogic';
 
 export class GoalLimitError extends Error {
@@ -50,6 +52,7 @@ export interface GoalsState {
   getActiveGoal: () => Goal | undefined;
   getQueuedGoals: () => Goal[];
   getCompletedGoals: () => Goal[];
+  getGoalProgress: (goalId: string) => { progress: number; threshold: number; canComplete: boolean };
 
   /** Checks all active goals for deadline expiry. Non-blocking; call on app foreground. */
   checkAllGoalExpiry: () => void;
@@ -311,6 +314,16 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
   getActiveGoal: () => getActiveGoal(get().goals),
   getQueuedGoals: () => getQueuedGoals(get().goals),
   getCompletedGoals: () => getCompletedGoals(get().goals),
+
+  getGoalProgress: (goalId) => {
+    const goal = get().goals.find(g => g.id === goalId);
+    if (!goal) return { progress: 0, threshold: 7, canComplete: false };
+    const { useEventsStore } = require('../state/eventsSlice');
+    const events = useEventsStore.getState().events ?? [];
+    const progress = calculateGoalProgress(goal, events);
+    const threshold = calculateUnlockThreshold(goal);
+    return { progress, threshold, canComplete: progress >= threshold };
+  },
 
   checkAllGoalExpiry: () => {
     InteractionManager.runAfterInteractions(async () => {

@@ -330,6 +330,22 @@ export const useMarks = () => {
           });
         }, 0);
 
+        // Defensive: if mark has a goal_id, ensure goal's linked_mark_ids includes it.
+        try {
+          const freshMark = getMark(markId);
+          if (freshMark?.goal_id) {
+            const goalId = freshMark.goal_id;
+            import('../state/goalsSlice').then(({ useGoalsStore }) => {
+              const goal = useGoalsStore.getState().goals.find(g => g.id === goalId);
+              if (goal && !goal.linked_mark_ids?.includes(markId)) {
+                useGoalsStore.getState().linkMarkToGoal(goalId, markId).catch(() => {});
+              }
+            }).catch(() => {});
+          }
+        } catch {
+          // Never propagate
+        }
+
         logger.log('[INCREMENT] ===== END INCREMENT (background tasks started) =====', {
           markId,
           finalTotal: newTotal,

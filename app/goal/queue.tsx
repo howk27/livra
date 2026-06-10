@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { CaretLeft, CaretRight, Plus, Trash, ArrowRight } from 'phosphor-react-native';
+import { CaretLeft, CaretRight, Plus, Trash } from 'phosphor-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { format, parseISO } from 'date-fns';
 import { themedColors, spacing, fontSize, fontWeight, borderRadius, fonts } from '../../theme/tokens';
@@ -78,6 +78,7 @@ export default function GoalQueueScreen() {
   const completeGoal = useGoalsStore(s => s.completeGoal);
   const deleteGoal = useGoalsStore(s => s.deleteGoal);
   const updateGoalTargetDate = useGoalsStore(s => s.updateGoalTargetDate);
+  const getGoalProgress = useGoalsStore(s => s.getGoalProgress);
   const [showTargetPicker, setShowTargetPicker] = useState(false);
   const [targetPickerDate, setTargetPickerDate] = useState(new Date());
 
@@ -88,11 +89,8 @@ export default function GoalQueueScreen() {
   );
   const completed = useMemo(() => goals.filter(g => g.status === 'completed'), [goals]);
 
-  const isGoalUnlocked = (goal: Goal) =>
-    !goal.target_mark_count || goal.current_mark_count >= goal.target_mark_count;
-
   const handleComplete = (goal: Goal) => {
-    if (!isGoalUnlocked(goal)) return;
+    if (!getGoalProgress(goal.id).canComplete) return;
     Alert.alert(
       'Mark goal complete?',
       `"${goal.title}" will move to your history. The next goal in queue becomes active.`,
@@ -178,63 +176,58 @@ export default function GoalQueueScreen() {
               ) : null}
               <GoalMarkRow linkedMarkIds={active.linked_mark_ids} />
               {/* Progress toward unlock */}
-              {active.target_mark_count ? (
-                <View style={{ marginTop: spacing.sm, gap: 4 }}>
-                  <View style={{ height: 4, borderRadius: 2, backgroundColor: c.borderLight, overflow: 'hidden' }}>
-                    <View
-                      style={{
-                        height: '100%',
-                        borderRadius: 2,
-                        backgroundColor: c.forest,
-                        width: `${Math.min(100, (active.current_mark_count / active.target_mark_count) * 100)}%`,
-                      }}
-                    />
-                  </View>
-                  <Text style={{ fontSize: 13, fontFamily: fonts.sans, color: c.inkMuted }}>
-                    {active.current_mark_count} / {active.target_mark_count} check-ins to complete
-                  </Text>
-                </View>
-              ) : null}
-              {/* Target date row */}
-              <TouchableOpacity
-                style={[styles.targetDateRow, { borderTopColor: c.borderLight }]}
-                onPress={handleOpenTargetPicker}
-                activeOpacity={0.75}
-              >
-                <Text style={[styles.targetDateLabel, { color: c.inkMuted }]}>
-                  Target date
-                </Text>
-                <Text style={[styles.targetDateValue, { color: active?.target_date ? c.inkDark : c.inkMuted }]}>
-                  {active?.target_date
-                    ? format(parseISO(active.target_date), 'MMM d, yyyy')
-                    : 'Not set'}
-                </Text>
-              </TouchableOpacity>
               {(() => {
-                const unlocked = isGoalUnlocked(active);
-                const remaining = (active.target_mark_count ?? 0) - active.current_mark_count;
-                if (unlocked) {
-                  return (
+                const { progress, threshold, canComplete } = getGoalProgress(active.id);
+                const remaining = Math.max(0, threshold - progress);
+                return (
+                  <>
+                    <View style={{ marginTop: spacing.sm, gap: 4 }}>
+                      <View style={{ height: 4, borderRadius: 2, backgroundColor: c.borderLight, overflow: 'hidden' }}>
+                        <View
+                          style={{
+                            height: '100%',
+                            borderRadius: 2,
+                            backgroundColor: c.forest,
+                            width: `${Math.min(100, threshold > 0 ? (progress / threshold) * 100 : 0)}%`,
+                          }}
+                        />
+                      </View>
+                      <Text style={{ fontSize: 13, fontFamily: fonts.sans, color: c.inkMuted }}>
+                        {progress} / {threshold} mark logs
+                      </Text>
+                    </View>
+                    {/* Target date row */}
                     <TouchableOpacity
-                      style={[styles.completeBtn, { borderColor: c.forest }]}
-                      onPress={() => handleComplete(active)}
+                      style={[styles.targetDateRow, { borderTopColor: c.borderLight }]}
+                      onPress={handleOpenTargetPicker}
+                      activeOpacity={0.75}
                     >
-                      <Text style={[styles.completeBtnText, { color: c.forest }]}>
-                        Mark complete
+                      <Text style={[styles.targetDateLabel, { color: c.inkMuted }]}>
+                        Target date
+                      </Text>
+                      <Text style={[styles.targetDateValue, { color: active?.target_date ? c.inkDark : c.inkMuted }]}>
+                        {active?.target_date
+                          ? format(parseISO(active.target_date), 'MMM d, yyyy')
+                          : 'Not set'}
                       </Text>
                     </TouchableOpacity>
-                  );
-                }
-                return (
-                  <TouchableOpacity
-                    style={[styles.completeBtn, styles.completeBtnMuted, { borderColor: c.borderMid }]}
-                    onPress={() => router.push('/(tabs)/focus' as any)}
-                  >
-                    <Text style={[styles.completeBtnText, styles.completeBtnTextMuted, { color: c.inkMuted }]}>
-                      {`${remaining} more check-in${remaining === 1 ? '' : 's'} to unlock`}
-                    </Text>
-                    <ArrowRight size={13} color={c.inkMuted} weight="bold" />
-                  </TouchableOpacity>
+                    {canComplete ? (
+                      <TouchableOpacity
+                        style={[styles.completeBtn, { borderColor: '#1C3830', backgroundColor: '#1C3830' }]}
+                        onPress={() => handleComplete(active)}
+                      >
+                        <Text style={[styles.completeBtnText, { color: '#FFFFFF' }]}>
+                          Mark complete
+                        </Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <View style={[styles.completeBtn, styles.completeBtnMuted, { borderColor: c.borderMid }]}>
+                        <Text style={[styles.completeBtnText, styles.completeBtnTextMuted, { color: c.inkMuted }]}>
+                          {`${remaining} more log${remaining === 1 ? '' : 's'} to unlock`}
+                        </Text>
+                      </View>
+                    )}
+                  </>
                 );
               })()}
             </View>
