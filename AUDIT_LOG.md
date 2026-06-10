@@ -585,3 +585,12 @@ Design system enforced across three screens: CormorantGaramond serif for heading
 | `hooks/useCounters.ts` | Added defensive goal-link check inside `InteractionManager` block after increment (protected addition, wrapped in try/catch, never propagates). |
 | `app/checkin.tsx` | Archived → `app/checkin.tsx.archived` |
 | `components/CheckinButton.tsx` | Archived → `components/CheckinButton.tsx.archived` |
+
+### Task 3 — Goal Detail Screen (commit `f22c5f1`)
+
+| File | Change |
+|------|--------|
+| `app/goal/[id].tsx` | Created. Shows goal title (inline edit), circular SVG progress ring, target date with date picker, linked marks list, Complete button (when canComplete), Delete option. |
+| `app/goal/queue.tsx` | Wrapped active goal card in `TouchableOpacity` navigating to `goal/[active.id]`. |
+| `app/_layout.tsx` | Registered `goal/[id]` as modal stack screen (no header). |
+| `state/goalsSlice.ts` | Added `updateGoalTitle(id, newTitle)` — trims, requires ≥ 3 chars, calls `updateGoal`. |

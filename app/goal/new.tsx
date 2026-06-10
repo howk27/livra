@@ -51,6 +51,19 @@ export default function NewGoalScreen() {
     try {
       const proStatus = await checkProStatus();
 
+      // Create goal first to get its ID
+      const newGoal = await createGoal({
+        title: title.trim(),
+        description: description.trim() || undefined,
+        userId: user.id,
+        isPro: proStatus.effectiveUnlocked,
+        linked_mark_ids: [...selection.alreadyOwnedMarkIds],
+        target_mark_count: selection.unlockThreshold > 0 ? selection.unlockThreshold : null,
+        tier: selection.tier,
+        frequency: selection.frequency,
+      });
+
+      // Create new marks with goal_id set
       const newMarkIds: string[] = [];
       for (const id of selection.selectedNewMarkIds) {
         const sugg = suggestedMarks.find(s => s.id === id);
@@ -67,20 +80,16 @@ export default function NewGoalScreen() {
           total: 0,
           enable_streak: true,
           sort_index: 0,
+          goal_id: newGoal.id,
         });
         newMarkIds.push(newMark.id);
       }
 
-      await createGoal({
-        title: title.trim(),
-        description: description.trim() || undefined,
-        userId: user.id,
-        isPro: proStatus.effectiveUnlocked,
-        linked_mark_ids: [...selection.alreadyOwnedMarkIds, ...newMarkIds],
-        target_mark_count: selection.unlockThreshold > 0 ? selection.unlockThreshold : null,
-        tier: selection.tier,
-        frequency: selection.frequency,
-      });
+      // Link new marks to goal
+      if (newMarkIds.length > 0) {
+        const { useGoalsStore: gs } = await import('../../state/goalsSlice');
+        await Promise.all(newMarkIds.map(mId => gs.getState().linkMarkToGoal(newGoal.id, mId)));
+      }
 
       router.back();
     } catch (err) {

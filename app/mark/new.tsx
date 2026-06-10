@@ -10,7 +10,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../theme/colors';
 import { spacing, borderRadius, fontSize, fontWeight, shadow } from '../../theme/tokens';
@@ -19,6 +19,7 @@ import { useCounters } from '../../hooks/useCounters';
 import { SuggestedCountersList } from '../../components/SuggestedCountersList';
 import { SuggestedCounter } from '../../lib/suggestedCounters';
 import { useAuth } from '../../hooks/useAuth';
+import { useGoalsStore } from '../../state/goalsSlice';
 import { DuplicateCounterError, DuplicateMarkError } from '../../state/countersSlice';
 import type { GoalPeriod, ScheduleType, DayOfWeek } from '../../types';
 import { DuplicateCounterModal } from '../../components/DuplicateCounterModal';
@@ -101,10 +102,17 @@ export default function NewCounterScreen() {
   const theme = useEffectiveTheme();
   const themeColors = colors[theme];
   const router = useRouter();
+  const { goalId: goalIdParam } = useLocalSearchParams<{ goalId?: string }>();
   const insets = useSafeAreaInsets();
   const { createCounter, counters } = useCounters();
   const { user } = useAuth();
   const { showError, showSuccess } = useNotification();
+  const activeGoal = useGoalsStore(s => s.goals.find(g => g.status === 'active'));
+  const linkMarkToGoal = useGoalsStore(s => s.linkMarkToGoal);
+  const targetGoalId = goalIdParam ?? activeGoal?.id ?? null;
+  const targetGoalTitle = goalIdParam
+    ? useGoalsStore.getState().goals.find(g => g.id === goalIdParam)?.title
+    : activeGoal?.title;
 
   const [mode, setMode] = useState<'suggested' | 'custom'>('suggested');
   const [name, setName] = useState('');
@@ -119,6 +127,7 @@ export default function NewCounterScreen() {
   const [scheduleDays, setScheduleDays] = useState<DayOfWeek[]>([]);
   const [loading, setLoading] = useState(false);
   const [dailyTarget, setDailyTarget] = useState(1);
+  const [linkToGoal, setLinkToGoal] = useState(!!targetGoalId);
   const [pendingSuggestedCounter, setPendingSuggestedCounter] = useState<SuggestedCounter | null>(null);
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
   const [duplicateCounterName, setDuplicateCounterName] = useState('');
@@ -241,7 +250,7 @@ export default function NewCounterScreen() {
     try {
       setLoading(true);
       const emoji = ICON_TYPE_TO_EMOJI[selectedIconType] || ICON_TYPE_TO_EMOJI.gym;
-      await createCounter({
+      const savedMark = await createCounter({
         name: name.trim(),
         emoji,
         color,
@@ -253,7 +262,12 @@ export default function NewCounterScreen() {
         goal_period: goalPeriod,
         schedule_type: scheduleType,
         schedule_days: scheduleType === 'custom' ? JSON.stringify(scheduleDays) : undefined,
+        ...(linkToGoal && targetGoalId ? { goal_id: targetGoalId } : {}),
       } as any);
+
+      if (linkToGoal && targetGoalId && savedMark?.id) {
+        linkMarkToGoal(targetGoalId, savedMark.id).catch(() => {});
+      }
       showSuccess('Counter created successfully');
       setTimeout(() => {
         router.back();
@@ -619,6 +633,24 @@ export default function NewCounterScreen() {
                 <View style={[styles.toggleThumb, { backgroundColor: themeColors.surface }]} />
               </View>
             </TouchableOpacity>
+
+            {targetGoalId && targetGoalTitle ? (
+              <TouchableOpacity
+                style={[styles.card, styles.streakCard, { backgroundColor: themeColors.surface, borderColor: themeColors.border }]}
+                onPress={() => setLinkToGoal(!linkToGoal)}
+                activeOpacity={0.85}
+              >
+                <View style={styles.streakTextWrap}>
+                  <Text style={[styles.toggleLabel, { color: themeColors.text }]}>Link to goal</Text>
+                  <Text style={[styles.toggleDescription, { color: themeColors.textSecondary }]} numberOfLines={1}>
+                    {targetGoalTitle}
+                  </Text>
+                </View>
+                <View style={[styles.toggleSwitch, { backgroundColor: linkToGoal ? color : themeColors.border, alignItems: linkToGoal ? 'flex-end' : 'flex-start' }]}>
+                  <View style={[styles.toggleThumb, { backgroundColor: themeColors.surface }]} />
+                </View>
+              </TouchableOpacity>
+            ) : null}
 
             <View style={{ height: spacing.xl }} />
           </ScrollView>
