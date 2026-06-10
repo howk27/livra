@@ -1483,9 +1483,9 @@ export const useSync = () => {
     }
   }, []);
 
-  // Throttle sync to prevent excessive I/O - minimum 30 seconds between syncs
+  // Throttle sync to prevent excessive I/O - minimum 2 minutes between syncs
   const lastSyncTimeRef = useRef<number>(0);
-  const SYNC_THROTTLE_MS = 30000; // 30 seconds
+  const SYNC_THROTTLE_MS = 120000; // 2 minutes
   const SYNC_DEBOUNCE_MS = 500; // 500ms debounce for rapid button taps
   
   // Debounce ref for rapid sync requests
