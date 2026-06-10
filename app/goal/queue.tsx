@@ -167,7 +167,11 @@ export default function GoalQueueScreen() {
             <Text style={[styles.sectionLabel, { color: c.inkMuted }]}>
               ACTIVE
             </Text>
-            <View style={[styles.card, styles.activeCard, { backgroundColor: c.surface }]}>
+            <TouchableOpacity
+              style={[styles.card, styles.activeCard, { backgroundColor: c.surface }]}
+              onPress={() => router.push(`/goal/${active.id}` as any)}
+              activeOpacity={0.85}
+            >
               <Text style={[styles.goalTitle, { color: c.inkDark }]}>{active.title}</Text>
               {active.description ? (
                 <Text style={[styles.goalDesc, { color: c.inkMuted }]}>
@@ -230,7 +234,7 @@ export default function GoalQueueScreen() {
                   </>
                 );
               })()}
-            </View>
+            </TouchableOpacity>
           </View>
         ) : (
           <View style={styles.section}>

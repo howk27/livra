@@ -48,6 +48,7 @@ export interface GoalsState {
   creditMarkToGoals: (markId: string) => Promise<void>;
   checkGoalCompletion: (goalId: string) => Promise<void>;
   updateGoalTargetDate: (id: string, date: string | null) => Promise<void>;
+  updateGoalTitle: (id: string, newTitle: string) => Promise<void>;
   markMilestonesFired: (goalId: string, keys: string[]) => Promise<void>;
   getActiveGoal: () => Goal | undefined;
   getQueuedGoals: () => Goal[];
@@ -297,6 +298,12 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
 
   updateGoalTargetDate: async (id, date) => {
     await get().updateGoal(id, { deadline_date: date, target_date: date });
+  },
+
+  updateGoalTitle: async (id, newTitle) => {
+    const trimmed = newTitle.trim();
+    if (trimmed.length < 3) return;
+    await get().updateGoal(id, { title: trimmed });
   },
 
   markMilestonesFired: async (goalId, keys) => {

@@ -573,3 +573,15 @@ Design system enforced across three screens: CormorantGaramond serif for heading
 | `state/countersSlice.ts` | Added `goal_id` to the second UPDATE in `addMark` so it is persisted to AsyncStorage via the generic SQL parser. |
 | `state/goalsSlice.ts` | Added `markIds?: string[]` to deprecated `addGoal` interface and implementation; forwards to `createGoal` as `linked_mark_ids`. |
 | `supabase/migrations/20260609_goal_id_on_marks.sql` | Created migration adding `goal_id text` column to `counters` table (no FK — goals are client-side only). |
+
+### Task 2 — Replace Check-in System with Mark-Log-Based Goal Progress (commit `88477a7`)
+
+| File | Change |
+|------|--------|
+| `lib/goalLogic.ts` | Added `calculateGoalProgress(goal, events)` (counts increment events for linked marks) and `calculateUnlockThreshold(goal)` (floor(0.8×days), min 7, max 365). |
+| `state/goalsSlice.ts` | Added `getGoalProgress(goalId)` selector returning `{ progress, threshold, canComplete }`. Uses `require('../state/eventsSlice')` inside function body to avoid circular import. Imported new pure functions. |
+| `app/goal/queue.tsx` | Replaced `target_mark_count`-based progress display with `getGoalProgress`. Removed `ArrowRight` import. Complete button is forest-green filled when `canComplete`, muted border-only when not. |
+| `app/_layout.tsx` | Removed `useCheckinsStore` import and `loadCheckins` call. Removed `checkin` Stack.Screen registration. |
+| `hooks/useCounters.ts` | Added defensive goal-link check inside `InteractionManager` block after increment (protected addition, wrapped in try/catch, never propagates). |
+| `app/checkin.tsx` | Archived → `app/checkin.tsx.archived` |
+| `components/CheckinButton.tsx` | Archived → `components/CheckinButton.tsx.archived` |
