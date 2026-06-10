@@ -28,7 +28,7 @@ import { useEffectiveTheme } from '../../state/uiSlice';
 import { LivraWordmark } from '../../components/ui/LivraWordmark';
 import { QueueCard } from '../../components/ui/QueueCard';
 import { SvgLogo } from '../../components/ui/SvgLogo';
-import { SpeedDialFAB } from '../../components/ui/SpeedDialFAB';
+
 import { SectionLabel } from '../../components/ui/SectionLabel';
 
 // ── Existing data hooks / state — DO NOT MODIFY ───────────────────────────────
@@ -367,7 +367,6 @@ export default function QueueScreen() {
         <View style={styles.bottomSpacer} />
       </ScrollView>
 
-      <SpeedDialFAB />
     </View>
   );
 }

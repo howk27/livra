@@ -246,7 +246,6 @@ export default function FocusScreen() {
         {/* ── Compact Stat Strip ── */}
         <View style={[styles.statStrip, { borderTopColor: c.borderLight, borderBottomColor: c.borderLight }]}>
           {[
-            { value: `${completedMarksToday}/${todayTotal}`, label: 'TODAY' },
             { value: String(overallStreakDays), label: 'STREAK' },
             { value: String(thisWeekCount), label: 'THIS WEEK' },
             { value: String(activeGoalCount), label: 'GOALS' },

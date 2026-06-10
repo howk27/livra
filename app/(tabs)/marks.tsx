@@ -49,6 +49,7 @@ export default function MarksScreen() {
       </View>
 
       <ScrollView
+        style={{ backgroundColor: themeColors.background }}
         contentContainerStyle={[styles.content, { paddingBottom: 80 + insets.bottom }]}
         showsVerticalScrollIndicator={false}
       >
