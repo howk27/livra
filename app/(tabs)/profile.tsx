@@ -19,7 +19,7 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { GearSix, ShareNetwork } from 'phosphor-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors } from '../../theme/colors';
 import { spacing, borderRadius, fontSize, fontWeight } from '../../theme/tokens';
@@ -204,7 +204,7 @@ export default function ProfileScreen() {
             style={styles.gearBtn}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <Ionicons name="settings-outline" size={22} color={themeColors.textSecondary} />
+            <GearSix size={22} color={themeColors.textSecondary} weight="regular" />
           </TouchableOpacity>
         </View>
 
@@ -276,7 +276,7 @@ export default function ProfileScreen() {
               onPress={() => setShowShareCard(true)}
               activeOpacity={0.78}
             >
-              <Ionicons name="share-outline" size={18} color={themeColors.accent.primary} />
+              <ShareNetwork size={18} color={themeColors.accent.primary} weight="regular" />
               <AppText style={[styles.shareBtnText, { color: themeColors.accent.primary }]}>
                 Share your momentum.
               </AppText>

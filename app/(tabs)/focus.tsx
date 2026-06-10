@@ -470,6 +470,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   marksList: {
+    gap: 6,
     ...shadow.card,
   },
   emptyMarks: {
