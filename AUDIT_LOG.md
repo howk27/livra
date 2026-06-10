@@ -640,4 +640,16 @@ Design system enforced across three screens: CormorantGaramond serif for heading
 | `app/(tabs)/profile.tsx` | Replaced `Ionicons` import with `GearSix, ShareNetwork` from `phosphor-react-native`. Updated both usages. |
 | `app/(tabs)/marks.tsx` | Background already fixed in Task 6. Header typography, icons (MarkIcon with resolveCounterIconType), and section labels already consistent. No further changes needed. |
 | `app/goal/queue.tsx` | Already uses `fonts.serif` for header (24px), `fonts.sansSemibold` for section labels, `#1C3830` for left border, `fonts.sans` for progress text. No changes needed. |
+
+---
+
+## Supabase IO Optimization (2026-06-10) — d9a5c05, 7ec494a, cd66dc7
+
+| File | Change | Why |
+|------|--------|-----|
+| `supabase/migrations/20260610_fix_rls_performance.sql` | New migration — drops and recreates all RLS policies on `profiles`, `marks`/`counters`, `mark_events`/`counter_events`, `mark_streaks`/`counter_streaks`, `mark_badges`/`counter_badges`, `mark_notes`, `xp_events` using `(select auth.uid())` instead of bare `auth.uid()`. Handles pre- and post-rename table names via `DO $$` blocks. | `auth.uid()` is a volatile function; without the subselect wrapper Postgres re-executes it for every row scanned, causing excessive disk IO on the Free tier. |
+| `hooks/useSync.ts` | `SYNC_THROTTLE_MS` 30 000 → 120 000 (30 s → 2 min). | Reduces Supabase read/write frequency by 4× per user session, cutting per-request IO without changing correctness — real-time and bypass-throttle paths are unaffected. |
+| `hooks/useSync.ts` | Added `lastCleanupDateRef = useRef<string \| null>(null)`. Cleanup jobs block (`cleanupDuplicateCounters`, `cleanupOrphanedStreaksAndBadges`, `cleanupOrphanedEvents`, orphan badge sweep) gated behind `lastCleanupDateRef.current !== today` where `today = formatDate(getAppDate())`. Ref updated before entering the block. | These SQLite + Supabase cleanup queries are best-effort maintenance, not per-sync correctness. Running them on every sync (potentially dozens of times per day) created unnecessary IO load. Once-per-day cadence is sufficient. |
+
+> **Action required:** Apply `supabase/migrations/20260610_fix_rls_performance.sql` manually via the Supabase Dashboard SQL Editor or `supabase db push`. The migration is idempotent and safe to run on a live database.
 | `app/mark/[id]/index.tsx` | Notes section already uses `fonts.sansSemibold` uppercase labels, `c.surface` background, `c.borderMid` border on TextInput, date labels and separators on past notes, no delete buttons on past notes. No changes needed. |
