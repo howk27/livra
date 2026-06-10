@@ -57,7 +57,7 @@ export interface GoalsState {
   /** @deprecated Use fetchGoals */
   loadGoals: (userId: string) => Promise<void>;
   /** @deprecated Use createGoal */
-  addGoal: (params: { title: string; description?: string; userId: string; isPro: boolean }) => Promise<Goal>;
+  addGoal: (params: { title: string; description?: string; userId: string; isPro: boolean; markIds?: string[] }) => Promise<Goal>;
 }
 
 export const useGoalsStore = create<GoalsState>((set, get) => ({
@@ -325,7 +325,7 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
 
   // Backward compat
   loadGoals: async (userId) => get().fetchGoals(userId),
-  addGoal: async ({ title, description, userId, isPro }) =>
-    get().createGoal({ title, description, userId, isPro }),
+  addGoal: async ({ title, description, userId, isPro, markIds }) =>
+    get().createGoal({ title, description, userId, isPro, linked_mark_ids: markIds ?? [] }),
 }));
 

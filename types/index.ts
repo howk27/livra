@@ -32,6 +32,7 @@ export type Mark = {
   skip_tokens_month?: string;      // "YYYY-MM" of last reset
   health_kit_type?: HealthKitType | null;
   health_kit_config?: { stepGoal?: number } | null;
+  goal_id?: string | null;
 };
 
 export type MarkEvent = {

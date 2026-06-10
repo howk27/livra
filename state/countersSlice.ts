@@ -151,13 +151,14 @@ export const useMarksStore = create<MarksState>((set, get) => ({
     );
 
     await execute(
-      'UPDATE lc_counters SET dailyTarget = ?, schedule_type = ?, schedule_days = ?, goal_value = ?, goal_period = ? WHERE id = ?',
+      'UPDATE lc_counters SET dailyTarget = ?, schedule_type = ?, schedule_days = ?, goal_value = ?, goal_period = ?, goal_id = ? WHERE id = ?',
       [
         dailyTarget,
         mark.schedule_type ?? 'daily',
         mark.schedule_days ?? null,
         mark.goal_value ?? null,
         mark.goal_period ?? null,
+        mark.goal_id ?? null,
         mark.id,
       ],
     );
