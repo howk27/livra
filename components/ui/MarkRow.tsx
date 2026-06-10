@@ -61,6 +61,7 @@ interface MarkRowProps {
   showWeeklyCount?: boolean;
   weeklyCount?: number;
   weeklyTarget?: number;
+  onLongPress?: () => void;
 }
 
 export function MarkRow({
@@ -75,6 +76,7 @@ export function MarkRow({
   showWeeklyCount,
   weeklyCount = 0,
   weeklyTarget = 7,
+  onLongPress,
 }: MarkRowProps) {
   const theme = useEffectiveTheme();
   const c = themedColors(theme);
@@ -93,6 +95,7 @@ export function MarkRow({
     <TouchableOpacity
       style={[styles.row, !isLast && [styles.border, { borderBottomColor: c.borderLight }]]}
       onPress={onPress}
+      onLongPress={onLongPress}
       activeOpacity={onPress ? 0.7 : 1}
     >
       {/* Left accent bar */}

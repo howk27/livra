@@ -6,7 +6,9 @@ import {
   ScrollView,
   TouchableOpacity,
   Platform,
+  Alert,
 } from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
 import { Lightning } from 'phosphor-react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -40,7 +42,7 @@ export default function FocusScreen() {
   const c = themedColors(theme);
   const router = useRouter();
   const { user } = useAuth();
-  const { counters, loading, incrementCounter } = useCounters();
+  const { counters, loading, incrementCounter, deleteCounter } = useCounters();
   const { sync } = useSync();
   const { updateSmartNotifications, permissionGranted } = useNotifications();
 
@@ -194,6 +196,47 @@ export default function FocusScreen() {
     [user?.id, incrementCounter, permissionGranted, updateSmartNotifications, counters, todayCountsMap],
   );
 
+  const handleMarkLongPress = useCallback((markId: string, markName: string) => {
+    Alert.alert(
+      markName,
+      undefined,
+      [
+        { text: 'View details', onPress: () => router.push(`/mark/${markId}` as any) },
+        { text: 'Edit', onPress: () => router.push(`/mark/${markId}` as any) },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Remove mark?',
+              `"${markName}" will be permanently removed.`,
+              [
+                { text: 'Keep it', style: 'cancel' },
+                { text: 'Remove', style: 'destructive', onPress: () => { deleteCounter(markId).catch(() => {}); } },
+              ],
+            );
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    );
+  }, [router, deleteCounter]);
+
+  const handleDeleteMark = useCallback((markId: string, markName: string) => {
+    Alert.alert(
+      'Remove mark?',
+      `"${markName}" will be permanently removed.`,
+      [
+        { text: 'Keep it', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => { deleteCounter(markId).catch(() => {}); },
+        },
+      ],
+    );
+  }, [deleteCounter]);
+
   const visibleMarks = useMemo(() => activeCounters.slice(0, 5), [activeCounters]);
 
   return (
@@ -295,16 +338,30 @@ export default function FocusScreen() {
                   ? goals.find(g => g.id === mark.goal_id)?.title
                   : undefined;
                 return (
-                  <MarkRow
+                  <Swipeable
                     key={mark.id}
-                    title={mark.name}
-                    category={category}
-                    loggedToday={loggedToday}
-                    onPress={() => router.push(`/mark/${mark.id}` as any)}
-                    onLog={() => handleQuickIncrement(mark.id)}
-                    isLast={idx === visibleMarks.length - 1}
-                    subtitle={goalTitle}
-                  />
+                    renderRightActions={() => (
+                      <TouchableOpacity
+                        style={[styles.swipeDelete, { backgroundColor: c.danger }]}
+                        onPress={() => handleDeleteMark(mark.id, mark.name)}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={styles.swipeDeleteText}>Delete</Text>
+                      </TouchableOpacity>
+                    )}
+                    rightThreshold={80}
+                  >
+                    <MarkRow
+                      title={mark.name}
+                      category={category}
+                      loggedToday={loggedToday}
+                      onPress={() => router.push(`/mark/${mark.id}` as any)}
+                      onLog={() => handleQuickIncrement(mark.id)}
+                      onLongPress={() => handleMarkLongPress(mark.id, mark.name)}
+                      isLast={idx === visibleMarks.length - 1}
+                      subtitle={goalTitle}
+                    />
+                  </Swipeable>
                 );
               })}
             </View>
@@ -428,6 +485,17 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
+  swipeDelete: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 80,
+    paddingHorizontal: spacing.sm,
+  },
+  swipeDeleteText: {
+    fontFamily: fonts.sansSemibold,
+    fontSize: 13,
+    color: '#FFFFFF',
+  },
   bottomSpacer: {
     height: 160,
   },

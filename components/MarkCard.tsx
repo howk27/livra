@@ -120,6 +120,7 @@ export interface MarkCardProps {
   iconType?: MarkType;
   weekCompletedDays?: boolean[];
   goalTitle?: string;
+  onLongPress?: (markId: string) => void;
 }
 
 export type HabitRowProps = MarkCardProps;
@@ -155,6 +156,7 @@ export const MarkCard: React.FC<MarkCardProps> = ({
   iconType,
   weekCompletedDays,
   goalTitle,
+  onLongPress,
 }) => {
   const theme = useEffectiveTheme();
   const themeColors = colors[theme];
@@ -396,6 +398,7 @@ export const MarkCard: React.FC<MarkCardProps> = ({
     <Animated.View style={[styles.cardOuter, cardOuterStyle, tokens.glowShadow ?? {}]}>
       <Pressable
         onPress={onPress}
+        onLongPress={onLongPress ? () => onLongPress(mark.id) : undefined}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         android_ripple={{ color: 'rgba(128,128,128,0.06)' }}

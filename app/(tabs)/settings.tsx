@@ -292,20 +292,13 @@ export default function SettingsScreen() {
     if (!user?.id) return;
     Alert.alert(
       'Delete Account',
-      'Are you sure? This will permanently delete all your data. This action cannot be undone.',
+      'To permanently delete your account and all associated data, email support@getlivra.app from your registered address. We will process your request within 48 hours. Your account will remain active until deletion is confirmed.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Delete Account',
-          style: 'destructive',
+          text: 'Email Support',
           onPress: () => {
-            if (isDeletingAccount) return;
-            setIsDeletingAccount(true);
-            router.replace('/auth/signin');
-            setTimeout(async () => {
-              try { await authSignOut(); } catch { /* ignore */ }
-              setIsDeletingAccount(false);
-            }, 100);
+            Linking.openURL('mailto:support@getlivra.app?subject=Account%20Deletion%20Request').catch(() => {});
           },
         },
       ]
