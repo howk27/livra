@@ -594,3 +594,50 @@ Design system enforced across three screens: CormorantGaramond serif for heading
 | `app/goal/queue.tsx` | Wrapped active goal card in `TouchableOpacity` navigating to `goal/[active.id]`. |
 | `app/_layout.tsx` | Registered `goal/[id]` as modal stack screen (no header). |
 | `state/goalsSlice.ts` | Added `updateGoalTitle(id, newTitle)` — trims, requires ≥ 3 chars, calls `updateGoal`. |
+
+### Task 4 — Goal-Aware Mark Suggestion Engine (commit `8d3a8c7`)
+
+| File | Change |
+|------|--------|
+| `lib/goalMarkSuggestions.ts` | Already had `getMarksForGoal` (token-scoring suggestion engine). No changes needed. |
+| `app/goal/new.tsx` | Changed creation order: creates goal first to get its ID, then creates marks with `goal_id: newGoal.id`. Calls `linkMarkToGoal` for each new mark after creation. |
+| `app/mark/new.tsx` | Added `goalId` route param support. Added `linkToGoal` toggle (defaults to on when `goalId` param passed or active goal exists). Passes `goal_id` to `createCounter` and calls `linkMarkToGoal` after save. |
+
+## Task 5: Wire goal_id through all creation paths (0e78f06)
+
+| File | Change |
+|------|--------|
+| `app/onboarding.tsx` | Reversed creation order: goal created first with `alreadyOwnedMarkIds`, then marks created with `goal_id: newGoal.id`, then `linkMarkToGoal` called for each new mark. Added `linkMarkToGoal` to store subscriptions. |
+| `app/mark/[id]/index.tsx` | Added `workingTowardGoal` useMemo (finds goal by `counter.goal_id`, active/queued only). Added tappable "Working toward: [title] →" line in hero section. Added `heroGoalLink` / `heroGoalLinkText` styles. |
+| `components/MarkCard.tsx` | Added `goalTitle?: string` prop to `MarkCardProps`. Added `fonts` import. Renders goalTitle as DM Sans 11px muted subtitle below mark name in identitySection. Added `goalSubtitle` style. |
+| `app/(tabs)/focus.tsx` | Derives `goalTitle` per mark in visibleMarks.map using `goals.find(g => g.id === mark.goal_id)?.title`. Passes as `subtitle` prop to `MarkRow`. |
+
+## Task 6: Bug fixes — splash, See All, duplicate stat, gear FAB (d3e6b10)
+
+| File | Change |
+|------|--------|
+| `components/LoadingScreen.tsx` | Removed ActivityIndicator + showSpinner prop. Reduced logo from 180→80px. Added Reanimated breathing pulse (scale 1.0↔1.06, 1400ms cycle, -1 repeat). |
+| `app/(tabs)/marks.tsx` | Added `backgroundColor: themeColors.background` to ScrollView to prevent black background in light mode. |
+| `app/(tabs)/focus.tsx` | Removed TODAY cell from stat strip (banner already shows completedMarksToday/todayTotal). Strip now shows STREAK / THIS WEEK / GOALS. |
+| `app/(tabs)/queue.tsx` | Removed SpeedDialFAB import and usage — Goals screen already has a header + button for new goals. |
+
+## Task 7: Consumer UX — delete account, swipe-delete, long-press (2bdf0e8)
+
+| File | Change |
+|------|--------|
+| `app/(tabs)/settings.tsx` | Updated `handleDeleteAccount` to explain email flow (support@getlivra.app) per App Store requirements. Replaced "Delete Account" destructive action with "Email Support" that opens mailto link. |
+| `app/(tabs)/focus.tsx` | Added `Swipeable` from `react-native-gesture-handler` wrapping each `MarkRow`. Right action shows red "Delete" panel → Alert confirmation. Added `handleMarkLongPress` callback showing Alert with View details/Edit/Delete. Added `deleteCounter` from `useCounters`. |
+| `components/MarkCard.tsx` | Added `onLongPress?: (markId: string) => void` prop wired to card Pressable. |
+| `components/ui/MarkRow.tsx` | Added `onLongPress?: () => void` prop wired to TouchableOpacity. |
+| `app/settings/appearance.tsx` | Already had 3-way Light/System/Dark selector (no changes needed). |
+| `app/goal/[id].tsx` | Already had inline title editing from Task 3 (no changes needed). |
+
+## Task 8: UI Consistency Pass — Material Warmth (bd4470d)
+
+| File | Change |
+|------|--------|
+| `app/(tabs)/focus.tsx` | Added `gap: 6` to `marksList` style — 6px gap between mark cards per spec. |
+| `app/(tabs)/profile.tsx` | Replaced `Ionicons` import with `GearSix, ShareNetwork` from `phosphor-react-native`. Updated both usages. |
+| `app/(tabs)/marks.tsx` | Background already fixed in Task 6. Header typography, icons (MarkIcon with resolveCounterIconType), and section labels already consistent. No further changes needed. |
+| `app/goal/queue.tsx` | Already uses `fonts.serif` for header (24px), `fonts.sansSemibold` for section labels, `#1C3830` for left border, `fonts.sans` for progress text. No changes needed. |
+| `app/mark/[id]/index.tsx` | Notes section already uses `fonts.sansSemibold` uppercase labels, `c.surface` background, `c.borderMid` border on TextInput, date labels and separators on past notes, no delete buttons on past notes. No changes needed. |
