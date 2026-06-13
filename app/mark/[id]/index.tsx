@@ -58,6 +58,7 @@ import {
 import { themedColors, spacing, borderRadius, fontSize, fontWeight, shadow, fonts } from '../../../theme/tokens';
 import { useEffectiveTheme } from '../../../state/uiSlice';
 import { LivraHeader } from '../../../components/ui/LivraHeader';
+import { MarkFrequencyPicker } from '../../../components/ui/MarkFrequencyPicker';
 import { PillButton } from '../../../components/ui/PillButton';
 import { SectionLabel } from '../../../components/ui/SectionLabel';
 import { useCounters } from '../../../hooks/useCounters';
@@ -575,6 +576,11 @@ function MarkDetailContent() {
     ]);
   };
 
+  const handleFrequencyChange = useCallback((target: number) => {
+    if (!id) return;
+    updateMark(id, { weekly_target: target });
+  }, [id, updateMark]);
+
   // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
@@ -813,6 +819,20 @@ function MarkDetailContent() {
                   </View>
                 );
               })}
+            </View>
+          )}
+
+          {/* ── Frequency ─────────────────────────────────────────────────── */}
+          {counter.frequency_min != null && (
+            <View style={styles.settingCard}>
+              <View style={styles.settingRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.settingLabel}>Frequency</Text>
+                  <View style={{ marginTop: spacing.sm }}>
+                    <MarkFrequencyPicker mark={counter} onChange={handleFrequencyChange} />
+                  </View>
+                </View>
+              </View>
             </View>
           )}
 

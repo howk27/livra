@@ -24,6 +24,7 @@ import { DuplicateCounterError, DuplicateMarkError } from '../../state/countersS
 import type { GoalPeriod, ScheduleType, DayOfWeek } from '../../types';
 import { DuplicateCounterModal } from '../../components/DuplicateCounterModal';
 import { DailyTargetStepper } from '../../components/DailyTargetStepper';
+import { MarkFrequencyPicker } from '../../components/ui/MarkFrequencyPicker';
 import { useNotification } from '../../contexts/NotificationContext';
 import { logger } from '../../lib/utils/logger';
 import CounterIcon from '@/src/components/icons/CounterIcon';
@@ -129,6 +130,7 @@ export default function NewCounterScreen() {
   const [dailyTarget, setDailyTarget] = useState(1);
   const [linkToGoal, setLinkToGoal] = useState(!!targetGoalId);
   const [pendingSuggestedCounter, setPendingSuggestedCounter] = useState<SuggestedCounter | null>(null);
+  const [weeklyTarget, setWeeklyTarget] = useState<number | null>(null);
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
   const [duplicateCounterName, setDuplicateCounterName] = useState('');
   const [existingCounterId, setExistingCounterId] = useState<string | null>(null);
@@ -203,7 +205,8 @@ export default function NewCounterScreen() {
         user_id: user?.id!,
         dailyTarget,
         frequency_kind: pendingSuggestedCounter.frequencyKind,
-      });
+        weekly_target: weeklyTarget ?? pendingSuggestedCounter.frequency_recommended ?? 3,
+      } as any);
       showSuccess('Counter created successfully');
       setPendingSuggestedCounter(null);
       setTimeout(() => {
@@ -408,6 +411,20 @@ export default function NewCounterScreen() {
                 label={null}
                 helperText="TIMES"
               />
+              {pendingSuggestedCounter.frequency_min != null && (
+                <MarkFrequencyPicker
+                  mark={{
+                    name: pendingSuggestedCounter.name,
+                    frequency_min: pendingSuggestedCounter.frequency_min,
+                    frequency_recommended: pendingSuggestedCounter.frequency_recommended,
+                    frequency_max: pendingSuggestedCounter.frequency_max,
+                    frequency_kind: pendingSuggestedCounter.frequencyKind,
+                    weekly_target: weeklyTarget,
+                  }}
+                  onChange={setWeeklyTarget}
+                />
+              )}
+              {/* TODO: show a custom frequency stepper for marks with no frequency range */}
               <TouchableOpacity
                 style={[
                   styles.footerCta,
