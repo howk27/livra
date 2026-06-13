@@ -12,52 +12,28 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-} from 'react-native-reanimated';
 import { Feather } from '@expo/vector-icons';
+import { Check } from 'phosphor-react-native';
 import { useRouter } from 'expo-router';
 import { SvgLogo } from '../components/ui/SvgLogo';
 import { LivraWordmark } from '../components/ui/LivraWordmark';
 import { PillButton } from '../components/ui/PillButton';
 import { SectionLabel } from '../components/ui/SectionLabel';
-import { CommitmentScreen, CommitmentSelection } from '../components/CommitmentScreen';
 import { themedColors, fonts, spacing, radius } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
-import { useGoalsStore } from '../state/goalsSlice';
-import { useMarksStore } from '../state/countersSlice';
-import { getMarksForGoal } from '../lib/goalMarkSuggestions';
-import { MarkDefinition } from '../lib/suggestedCounters';
+import { useOnboardingStore, CommitmentLevel } from '../state/onboardingSlice';
+import { getMarksForCommitment, CommitmentMarkSelection } from '../lib/onboarding/commitmentEngine';
+import { frequencyLabel } from '../components/ui/MarkFrequencyPicker';
 import { getSupabaseClient } from '../lib/supabase';
 import { logger } from '../lib/utils/logger';
 
-const HOW_IT_WORKS = [
-  {
-    num: '1',
-    title: 'Set your goals',
-    body: 'Add what you want to achieve, in order.',
-  },
-  {
-    num: '2',
-    title: 'Log your marks',
-    body: 'Small daily actions that build toward each goal.',
-  },
-  {
-    num: '3',
-    title: 'Work the queue',
-    body: 'One goal at a time. Finish what you start.',
-  },
-];
+// ─── Step dots ───────────────────────────────────────────────────────────────
 
-// Animated step dot — only shown for steps 0–2
-function StepDots({ step }: { step: number }) {
+function StepDots({ step, total }: { step: number; total: number }) {
   const c = themedColors(useEffectiveTheme());
-  if (step > 2) return null;
   return (
     <View style={dotStyles.dotsRow}>
-      {[0, 1, 2].map((i) => {
+      {Array.from({ length: total }, (_, i) => {
         const active = i === step;
         return (
           <View
@@ -91,30 +67,72 @@ const dotStyles = StyleSheet.create({
   dotInactive: { width: 6 },
 });
 
+// ─── Pace option ─────────────────────────────────────────────────────────────
+
+type PaceOption = {
+  value: CommitmentLevel;
+  label: string;
+};
+
+const PACE_OPTIONS: PaceOption[] = [
+  { value: 'easing', label: "I'm easing back in." },
+  { value: 'steady', label: "I'm ready for a steady rhythm." },
+  { value: 'push', label: 'I want to push myself.' },
+];
+
+// ─── Main screen ─────────────────────────────────────────────────────────────
+
 export default function OnboardingScreen() {
   const theme = useEffectiveTheme();
   const c = themedColors(theme);
   const styles = useMemo(() => createStyles(c), [c]);
   const router = useRouter();
   const supabase = getSupabaseClient();
-  const createGoal = useGoalsStore(s => s.createGoal);
-  const linkMarkToGoal = useGoalsStore(s => s.linkMarkToGoal);
-  const addMark = useMarksStore(s => s.addMark);
+
+  const store = useOnboardingStore();
 
   const [step, setStep] = useState(0);
 
-  // Step 2 — auth state
+  // Auth state (Step 4 only — not persisted to slice)
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [newUserId, setNewUserId] = useState<string | null>(null);
 
-  // Steps 3–4 — goal state
-  const [goalTitle, setGoalTitle] = useState('');
-  const [suggestions, setSuggestions] = useState<MarkDefinition[]>([]);
+  // Computed marks for the marks screen (derived on entry to Step 3)
+  const [marksForScreen, setMarksForScreen] = useState<CommitmentMarkSelection[]>([]);
+  // Locally selected state within the marks screen (mirrors slice on advance)
+  const [marksSelected, setMarksSelected] = useState<Set<string>>(new Set());
 
-  const advance = useCallback(() => setStep((s) => Math.min(4, s + 1)), []);
+  const advance = useCallback(() => setStep((s) => s + 1), []);
+
+  // ── Step 1 → 2: commit goalTitle to slice ───────────────────────────────
+
+  const handleGoalTitleNext = useCallback(() => {
+    const trimmed = store.goalTitle.trim();
+    if (!trimmed) return;
+    advance();
+  }, [store.goalTitle, advance]);
+
+  // ── Step 2 → 3: commit commitment, compute marks ────────────────────────
+
+  const handlePaceNext = useCallback(() => {
+    const level = store.commitment ?? 'steady';
+    const computed = getMarksForCommitment(store.goalTitle.trim() || '', level);
+    setMarksForScreen(computed);
+    const defaultSelected = new Set(computed.map((r) => r.mark.id));
+    setMarksSelected(defaultSelected);
+    advance();
+  }, [store.commitment, store.goalTitle, advance]);
+
+  // ── Step 3 → 4: persist selected mark IDs to slice ──────────────────────
+
+  const handleMarksNext = useCallback(() => {
+    store.setSelectedMarkIds(Array.from(marksSelected));
+    advance();
+  }, [marksSelected, store, advance]);
+
+  // ── Step 4: sign up ──────────────────────────────────────────────────────
 
   const handleSignUp = async () => {
     if (!email.trim() || !password) {
@@ -128,9 +146,10 @@ export default function OnboardingScreen() {
         password,
       });
       if (error) throw error;
-      const uid = data.user?.id ?? null;
-      setNewUserId(uid);
-      advance(); // go to step 3 (goal title)
+      const userId = data.user?.id ?? null;
+      if (!userId) throw new Error('Sign up succeeded but no user ID returned.');
+      // Persist is handled by Task 4 — navigate to persist handler
+      await handlePersistAndComplete(userId);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Sign up failed.';
       logger.error('[Onboarding] signUp error:', err);
@@ -140,60 +159,15 @@ export default function OnboardingScreen() {
     }
   };
 
-  const handleGoalTitleNext = () => {
-    const trimmed = goalTitle.trim();
-    if (!trimmed) return;
-    setSuggestions(getMarksForGoal(trimmed));
-    advance(); // go to step 4 (CommitmentScreen)
+  // handlePersistAndComplete is defined in Task 4 block below — forward ref via
+  // the module-level variable pattern used by Expo screens.
+  // Defined inline here so it has access to all hooks in scope:
+  const handlePersistAndComplete = async (_userId: string) => {
+    // Task 4 wires this body — forward stub that navigates on success
+    router.replace('/(tabs)/focus' as any);
   };
 
-  const handleOnboardingConfirm = async (selection: CommitmentSelection) => {
-    const userId = newUserId;
-    if (!userId) {
-      router.replace('/(tabs)/focus' as any);
-      return;
-    }
-    try {
-      // Create goal first to get its ID
-      const newGoal = await createGoal({
-        title: goalTitle.trim(),
-        userId,
-        isPro: false,
-        linked_mark_ids: [...selection.alreadyOwnedMarkIds],
-        target_mark_count: selection.unlockThreshold > 0 ? selection.unlockThreshold : null,
-        tier: selection.tier,
-        frequency: selection.frequency,
-      });
-
-      // Create new marks with goal_id set, then link them
-      const newMarkIds: string[] = [];
-      for (const id of selection.selectedNewMarkIds) {
-        const sugg = suggestions.find(s => s.id === id);
-        if (!sugg) continue;
-        const newMark = await addMark({
-          name: sugg.name,
-          emoji: sugg.emoji,
-          color: sugg.color,
-          unit: sugg.unit,
-          user_id: userId,
-          goal_period: 'day',
-          schedule_type: 'daily',
-          dailyTarget: 1,
-          total: 0,
-          enable_streak: true,
-          sort_index: 0,
-          goal_id: newGoal.id,
-          frequency_kind: sugg.frequencyKind,
-        });
-        newMarkIds.push(newMark.id);
-      }
-      await Promise.all(newMarkIds.map(mId => linkMarkToGoal(newGoal.id, mId)));
-    } catch (err) {
-      logger.error('[Onboarding] goal creation failed:', err);
-    } finally {
-      router.replace('/(tabs)/focus' as any);
-    }
-  };
+  // ─── Step renders ──────────────────────────────────────────────────────────
 
   // Step 0 — Welcome
   const renderStep0 = () => (
@@ -204,46 +178,17 @@ export default function OnboardingScreen() {
       </View>
       <Text style={styles.tagline}>Build with intention.</Text>
       <Text style={styles.body}>
-        {'Track your marks. Work toward your goals.\nOne step at a time.'}
+        {"The graveyard of abandoned goals is full of people who meant well.\nLet's make this one different."}
       </Text>
-      <PillButton
-        label="Get Started"
-        onPress={advance}
-        style={styles.primaryBtn}
-      />
+      <PillButton label="Get Started" onPress={advance} style={styles.primaryBtn} />
       <TouchableOpacity onPress={() => router.push('/signin' as any)}>
         <Text style={styles.secondaryLink}>I already have an account</Text>
       </TouchableOpacity>
     </View>
   );
 
-  // Step 1 — How it works
+  // Step 1 — Your first goal (AI hatch stubbed/hidden)
   const renderStep1 = () => (
-    <View style={styles.stepContent}>
-      <Text style={styles.stepTitle}>How Livra works.</Text>
-      <View style={styles.featureList}>
-        {HOW_IT_WORKS.map((item) => (
-          <View key={item.num} style={styles.featureRow}>
-            <View style={styles.numCircle}>
-              <Text style={styles.numText}>{item.num}</Text>
-            </View>
-            <View style={styles.featureText}>
-              <Text style={styles.featureTitle}>{item.title}</Text>
-              <Text style={styles.featureBody}>{item.body}</Text>
-            </View>
-          </View>
-        ))}
-      </View>
-      <PillButton
-        label="Next"
-        onPress={advance}
-        style={styles.primaryBtn}
-      />
-    </View>
-  );
-
-  // Step 2 — Sign up
-  const renderStep2 = () => (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -253,9 +198,173 @@ export default function OnboardingScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.stepTitle}>Let's begin.</Text>
+        <Text style={styles.stepTitle}>{"What's the goal you're after?"}</Text>
+        <Text style={styles.stepSubtitle}>Be specific. "Run a marathon" beats "get fit."</Text>
+
+        <View style={styles.fieldBlock}>
+          <TextInput
+            style={styles.input}
+            value={store.goalTitle}
+            onChangeText={store.setGoalTitle}
+            placeholder="Run a marathon, save $10k, learn Spanish…"
+            placeholderTextColor={c.inkMuted}
+            autoFocus
+            maxLength={80}
+            returnKeyType="next"
+            onSubmitEditing={handleGoalTitleNext}
+          />
+        </View>
+
+        {/* AI escape hatch — STUBBED/HIDDEN in 4a; wired in 4b */}
+        {/* <TouchableOpacity style={styles.aiHatch}>
+          <Text style={styles.aiHatchText}>✦ Let AI suggest a plan</Text>
+        </TouchableOpacity> */}
+
+        <PillButton
+          label="Next →"
+          onPress={handleGoalTitleNext}
+          disabled={!store.goalTitle.trim()}
+          style={{ ...styles.primaryBtn, opacity: store.goalTitle.trim() ? 1 : 0.4 }}
+        />
+
+        <TouchableOpacity
+          onPress={() => router.replace('/(tabs)/focus' as any)}
+          style={{ alignItems: 'center', marginTop: spacing.md }}
+        >
+          <Text style={styles.secondaryLink}>Skip for now</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+
+  // Step 2 — Pace ("What feels right for now?")
+  const renderStep2 = () => (
+    <ScrollView
+      contentContainerStyle={styles.stepContent}
+      showsVerticalScrollIndicator={false}
+    >
+      <Text style={styles.stepTitle}>{"What feels right for now?"}</Text>
+
+      <View style={styles.paceList}>
+        {PACE_OPTIONS.map((opt) => {
+          const selected = (store.commitment ?? 'steady') === opt.value;
+          return (
+            <TouchableOpacity
+              key={opt.value}
+              style={[styles.paceRow, selected && { borderColor: c.forest, borderWidth: 2 }]}
+              activeOpacity={0.75}
+              onPress={() => store.setCommitment(opt.value)}
+            >
+              <Text style={[styles.paceLabel, selected && { color: c.forest, fontFamily: fonts.sansMedium }]}>
+                {opt.label}
+              </Text>
+              <View
+                style={[
+                  styles.paceRadio,
+                  selected ? { backgroundColor: c.forest, borderColor: c.forest } : { borderColor: c.borderMid },
+                ]}
+              >
+                {selected && <Check size={12} weight="bold" color={c.inkInverse} />}
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      <Text style={styles.paceFootnote}>You can change this anytime.</Text>
+
+      <PillButton label="Continue" onPress={handlePaceNext} style={styles.primaryBtn} />
+    </ScrollView>
+  );
+
+  // Step 3 — Your marks
+  const renderStep3 = () => {
+    const commitment = store.commitment ?? 'steady';
+    const freqPosition =
+      commitment === 'easing' ? 'minimum' : commitment === 'steady' ? 'recommended' : 'maximum';
+
+    return (
+      <ScrollView
+        contentContainerStyle={styles.stepContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={styles.stepTitle}>Here are some marks to get started.</Text>
         <Text style={styles.stepSubtitle}>
-          Create an account to sync your progress across all your devices.
+          These are small actions that build toward your goal. Deselect any you want to skip.
+        </Text>
+
+        <View style={styles.marksList}>
+          {marksForScreen.map(({ mark, weeklyTarget }) => {
+            const selected = marksSelected.has(mark.id);
+            return (
+              <TouchableOpacity
+                key={mark.id}
+                style={[styles.markRow, !selected && styles.markRowDeselected]}
+                activeOpacity={0.75}
+                onPress={() => {
+                  setMarksSelected((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(mark.id)) {
+                      if (next.size > 1) next.delete(mark.id);
+                    } else {
+                      next.add(mark.id);
+                    }
+                    return next;
+                  });
+                }}
+              >
+                <Text style={styles.markEmoji}>{mark.emoji}</Text>
+                <View style={styles.markInfo}>
+                  <Text style={[styles.markName, !selected && { color: c.inkMuted }]}>
+                    {mark.name}
+                  </Text>
+                  <Text style={styles.markFreq}>
+                    {frequencyLabel(weeklyTarget)} · {freqPosition}
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.markCheck,
+                    selected
+                      ? { backgroundColor: c.forest, borderColor: c.forest }
+                      : { borderColor: c.borderMid },
+                  ]}
+                >
+                  {selected && <Check size={12} weight="bold" color={c.inkInverse} />}
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <Text style={styles.paceFootnote}>
+          Free tier includes up to 3 marks per goal.
+        </Text>
+
+        <PillButton
+          label="Continue"
+          onPress={handleMarksNext}
+          disabled={marksSelected.size === 0}
+          style={styles.primaryBtn}
+        />
+      </ScrollView>
+    );
+  };
+
+  // Step 4 — Sign up (value-first: goal + marks already chosen)
+  const renderStep4 = () => (
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <ScrollView
+        contentContainerStyle={styles.stepContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={styles.stepTitle}>{"Almost there. Create your account."}</Text>
+        <Text style={styles.stepSubtitle}>
+          Your goal and marks will sync once you sign up.
         </Text>
 
         <View style={styles.fieldBlock}>
@@ -288,11 +397,7 @@ export default function OnboardingScreen() {
               onPress={() => setShowPassword((v) => !v)}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Feather
-                name={showPassword ? 'eye-off' : 'eye'}
-                size={18}
-                color={c.inkMuted}
-              />
+              <Feather name={showPassword ? 'eye-off' : 'eye'} size={18} color={c.inkMuted} />
             </TouchableOpacity>
           </View>
         </View>
@@ -328,73 +433,7 @@ export default function OnboardingScreen() {
     </KeyboardAvoidingView>
   );
 
-  // Step 3 — Goal title
-  const renderStep3 = () => (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <ScrollView
-        contentContainerStyle={styles.stepContent}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        <Text style={styles.stepTitle}>What's the goal you're after?</Text>
-        <Text style={styles.stepSubtitle}>
-          Be specific. "Run a marathon" beats "get fit."
-        </Text>
-
-        <View style={styles.fieldBlock}>
-          <TextInput
-            style={styles.input}
-            value={goalTitle}
-            onChangeText={setGoalTitle}
-            placeholder="Run a marathon, save $10k, learn Spanish…"
-            placeholderTextColor={c.inkMuted}
-            autoFocus
-            maxLength={80}
-            returnKeyType="next"
-            onSubmitEditing={handleGoalTitleNext}
-          />
-        </View>
-
-        <PillButton
-          label="Next →"
-          onPress={handleGoalTitleNext}
-          disabled={!goalTitle.trim()}
-          style={{ ...styles.primaryBtn, opacity: goalTitle.trim() ? 1 : 0.4 }}
-        />
-
-        <TouchableOpacity
-          onPress={() => router.replace('/(tabs)/focus' as any)}
-          style={{ alignItems: 'center', marginTop: spacing.md }}
-        >
-          <Text style={styles.secondaryLink}>Skip for now</Text>
-        </TouchableOpacity>
-      </ScrollView>
-    </KeyboardAvoidingView>
-  );
-
-  // Step 4 — CommitmentScreen
-  const renderStep4 = () => (
-    <CommitmentScreen
-      goalTitle={goalTitle}
-      suggestedMarks={suggestions}
-      userMarks={[]}
-      onConfirm={handleOnboardingConfirm}
-      onBack={() => setStep(3)}
-      isOnboarding
-    />
-  );
-
-  // For steps 3–4, render without the SafeAreaView wrapper (CommitmentScreen handles its own scroll)
-  if (step === 4) {
-    return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: c.linen }}>
-        {renderStep4()}
-      </SafeAreaView>
-    );
-  }
+  // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -403,197 +442,243 @@ export default function OnboardingScreen() {
         {step === 1 && renderStep1()}
         {step === 2 && renderStep2()}
         {step === 3 && renderStep3()}
+        {step === 4 && renderStep4()}
       </View>
-      <StepDots step={step} />
+      {/* Dots for pre-auth steps only */}
+      {step < 4 && <StepDots step={step} total={4} />}
     </SafeAreaView>
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 function createStyles(c: ReturnType<typeof themedColors>) {
   return StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: c.linen,
-  },
-  fill: {
-    flex: 1,
-  },
+    screen: {
+      flex: 1,
+      backgroundColor: c.linen,
+    },
+    fill: {
+      flex: 1,
+    },
 
-  // Step 0 — centered
-  stepCenter: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: spacing.xl,
-    paddingBottom: 80,
-  },
-  tagline: {
-    fontFamily: fonts.serifItalic,
-    fontSize: 26,
-    lineHeight: 34,
-    color: c.inkDark,
-    textAlign: 'center',
-    marginTop: spacing.xl,
-  },
-  body: {
-    fontFamily: fonts.sans,
-    fontSize: 15,
-    lineHeight: 24,
-    color: c.inkMid,
-    textAlign: 'center',
-    marginTop: spacing.md,
-  },
-  primaryBtn: {
-    marginTop: spacing.xxl,
-    height: 52,
-    width: '100%',
-  },
-  secondaryLink: {
-    fontFamily: fonts.sans,
-    fontSize: 14,
-    color: c.inkMid,
-    textAlign: 'center',
-    marginTop: spacing.md,
-  },
-  secondaryLinkBold: {
-    fontFamily: fonts.sansMedium,
-    color: c.forest,
-  },
+    // Step 0 — centered
+    stepCenter: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: spacing.xl,
+      paddingBottom: 80,
+    },
+    tagline: {
+      fontFamily: fonts.serifItalic,
+      fontSize: 26,
+      lineHeight: 34,
+      color: c.inkDark,
+      textAlign: 'center',
+      marginTop: spacing.xl,
+    },
+    body: {
+      fontFamily: fonts.sans,
+      fontSize: 15,
+      lineHeight: 24,
+      color: c.inkMid,
+      textAlign: 'center',
+      marginTop: spacing.md,
+    },
+    primaryBtn: {
+      marginTop: spacing.xxl,
+      height: 52,
+      width: '100%',
+    },
+    secondaryLink: {
+      fontFamily: fonts.sans,
+      fontSize: 14,
+      color: c.inkMid,
+      textAlign: 'center',
+      marginTop: spacing.md,
+    },
+    secondaryLinkBold: {
+      fontFamily: fonts.sansMedium,
+      color: c.forest,
+    },
 
-  // Step 1 & 2 & 3 — top-padded
-  stepContent: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xl,
-    paddingBottom: 100,
-  },
-  stepTitle: {
-    fontFamily: fonts.serif,
-    fontSize: 28,
-    color: c.inkDark,
-    marginTop: spacing.xl,
-  },
-  stepSubtitle: {
-    fontFamily: fonts.sans,
-    fontSize: 15,
-    color: c.inkMid,
-    lineHeight: 22,
-    marginTop: spacing.sm,
-  },
+    // Steps 1–4 — scrollable
+    stepContent: {
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.xl,
+      paddingBottom: 100,
+    },
+    stepTitle: {
+      fontFamily: fonts.serif,
+      fontSize: 28,
+      color: c.inkDark,
+      marginTop: spacing.xl,
+    },
+    stepSubtitle: {
+      fontFamily: fonts.sans,
+      fontSize: 15,
+      color: c.inkMid,
+      lineHeight: 22,
+      marginTop: spacing.sm,
+    },
 
-  // Feature rows
-  featureList: {
-    marginTop: spacing.xl,
-    gap: spacing.lg,
-  },
-  featureRow: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    alignItems: 'flex-start',
-  },
-  numCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: c.forest,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  numText: {
-    fontFamily: fonts.serif,
-    fontSize: 20,
-    color: c.inkInverse,
-  },
-  featureText: {
-    flex: 1,
-    paddingTop: spacing.xs,
-  },
-  featureTitle: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 15,
-    color: c.inkDark,
-  },
-  featureBody: {
-    fontFamily: fonts.sans,
-    fontSize: 13,
-    color: c.inkMuted,
-    marginTop: 2,
-  },
+    // Fields
+    fieldBlock: {
+      marginTop: spacing.xl,
+      gap: spacing.xs,
+    },
+    input: {
+      height: 48,
+      backgroundColor: c.surfaceAlt,
+      borderRadius: radius.md,
+      paddingHorizontal: spacing.md,
+      fontFamily: fonts.sans,
+      fontSize: 15,
+      color: c.inkDark,
+      borderWidth: 1,
+      borderColor: c.borderLight,
+    },
+    passwordWrap: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    eyeBtn: {
+      position: 'absolute',
+      right: spacing.md,
+    },
 
-  // Fields
-  fieldBlock: {
-    marginTop: spacing.xl,
-    gap: spacing.xs,
-  },
-  input: {
-    height: 48,
-    backgroundColor: c.surfaceAlt,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    fontFamily: fonts.sans,
-    fontSize: 15,
-    color: c.inkDark,
-    borderWidth: 1,
-    borderColor: c.borderLight,
-  },
-  passwordWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  eyeBtn: {
-    position: 'absolute',
-    right: spacing.md,
-  },
+    // Pace screen
+    paceList: {
+      marginTop: spacing.xl,
+      gap: spacing.sm,
+    },
+    paceRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.md,
+      backgroundColor: c.surface,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: c.borderLight,
+    },
+    paceLabel: {
+      fontFamily: fonts.sans,
+      fontSize: 16,
+      color: c.inkDark,
+      flex: 1,
+    },
+    paceRadio: {
+      width: 22,
+      height: 22,
+      borderRadius: 11,
+      borderWidth: 2,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    paceFootnote: {
+      fontFamily: fonts.sans,
+      fontSize: 13,
+      color: c.inkMuted,
+      textAlign: 'center',
+      marginTop: spacing.md,
+    },
 
-  // Divider
-  dividerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: spacing.lg,
-    gap: spacing.md,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: c.borderLight,
-  },
-  dividerText: {
-    fontFamily: fonts.sans,
-    fontSize: 13,
-    color: c.inkMuted,
-  },
+    // Marks screen
+    marksList: {
+      marginTop: spacing.xl,
+      gap: spacing.sm,
+    },
+    markRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.md,
+      backgroundColor: c.surface,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: c.borderLight,
+    },
+    markRowDeselected: {
+      opacity: 0.45,
+    },
+    markEmoji: {
+      fontSize: 24,
+      lineHeight: 28,
+    },
+    markInfo: {
+      flex: 1,
+    },
+    markName: {
+      fontFamily: fonts.sansMedium,
+      fontSize: 15,
+      color: c.inkDark,
+    },
+    markFreq: {
+      fontFamily: fonts.sans,
+      fontSize: 12,
+      color: c.inkMuted,
+      marginTop: 2,
+    },
+    markCheck: {
+      width: 22,
+      height: 22,
+      borderRadius: 4,
+      borderWidth: 2,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
 
-  // Google button
-  googleBtn: {
-    height: 52,
-    borderRadius: radius.full,
-    backgroundColor: c.surface,
-    borderWidth: 1,
-    borderColor: c.borderMid,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    marginTop: spacing.lg,
-    marginBottom: spacing.md,
-  },
-  googleLogo: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#4285F4',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  googleLogoText: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 12,
-    color: c.inkInverse,
-  },
-  googleBtnText: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 15,
-    color: c.inkDark,
-  },
+    // Auth screen
+    dividerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginTop: spacing.lg,
+      gap: spacing.md,
+    },
+    dividerLine: {
+      flex: 1,
+      height: 1,
+      backgroundColor: c.borderLight,
+    },
+    dividerText: {
+      fontFamily: fonts.sans,
+      fontSize: 13,
+      color: c.inkMuted,
+    },
+    googleBtn: {
+      height: 52,
+      borderRadius: radius.full,
+      backgroundColor: c.surface,
+      borderWidth: 1,
+      borderColor: c.borderMid,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: spacing.sm,
+      marginTop: spacing.lg,
+      marginBottom: spacing.md,
+    },
+    googleLogo: {
+      width: 20,
+      height: 20,
+      borderRadius: 10,
+      backgroundColor: '#4285F4',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    googleLogoText: {
+      fontFamily: fonts.sansMedium,
+      fontSize: 12,
+      color: c.inkInverse,
+    },
+    googleBtnText: {
+      fontFamily: fonts.sansMedium,
+      fontSize: 15,
+      color: c.inkDark,
+    },
   });
 }
