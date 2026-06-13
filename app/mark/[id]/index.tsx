@@ -69,6 +69,7 @@ import { logger } from '../../../lib/utils/logger';
 import { useDailyTrackingStore } from '../../../state/dailyTrackingSlice';
 import { MARK_LIBRARY } from '@/lib/suggestedCounters';
 import { resolveDailyTarget } from '../../../lib/markDailyTarget';
+import { currentWeekDates, markWeeklyState, computeCompletionsThisWeek } from '../../../lib/features';
 import { getAppDate } from '../../../lib/appDate';
 import { formatDate } from '../../../lib/date';
 import { useAppDateStore } from '../../../state/appDateSlice';
@@ -180,6 +181,19 @@ function MarkDetailContent() {
 
   const dailyTarget = useMemo(() => (counter ? resolveDailyTarget(counter) : 1), [counter]);
   const completedToday = todayCount >= dailyTarget;
+
+  const weekDates = useMemo(() => currentWeekDates(), [appDateKey]);
+
+  const completionsThisWeek = useMemo(
+    () => (counter ? computeCompletionsThisWeek(counter, events, weekDates) : 0),
+    [counter, events, weekDates],
+  );
+
+  const weeklyState = useMemo(
+    () => (counter ? markWeeklyState(counter, completionsThisWeek) : 'due'),
+    [counter, completionsThisWeek],
+  );
+
   const allTimeTotal = useMemo(
     () => events.filter(e => e.event_type === 'increment').reduce((s, e) => s + (e.amount ?? 1), 0),
     [events],
@@ -685,6 +699,22 @@ function MarkDetailContent() {
             </View>
           )}
 
+          {/* ── Done for week ────────────────────────────────────────────── */}
+          {weeklyState === 'doneForWeek' && counter?.frequency_kind === 'variable' && (
+            <View style={styles.doneForWeekWrap}>
+              <Text style={[styles.doneForWeekText, { color: c.inkMuted }]}>
+                {`You've hit your ${counter.weekly_target ?? 3} this week. Rest is part of it — but if you want one more, go for it.`}
+              </Text>
+              <TouchableOpacity
+                onPress={handleLog}
+                activeOpacity={0.75}
+                style={styles.bonusLogBtn}
+              >
+                <Text style={[styles.bonusLogBtnText, { color: c.inkMuted }]}>One more this week</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {/* ── Linked Goals ────────────────────────────────────────────── */}
           <View style={styles.section}>
             <SectionLabel style={styles.sectionLabelPad}>FEEDING INTO</SectionLabel>
@@ -1103,6 +1133,28 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     width: 1,
     height: 14,
     backgroundColor: c.borderMid,
+  },
+
+  // Done for week
+  doneForWeekWrap: {
+    marginTop: spacing.md,
+    paddingHorizontal: spacing.lg,
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  doneForWeekText: {
+    fontSize: 13,
+    fontFamily: fonts.sans,
+    textAlign: 'center',
+    lineHeight: 19,
+  },
+  bonusLogBtn: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  bonusLogBtnText: {
+    fontSize: 13,
+    fontFamily: fonts.sans,
   },
 
   // Linked goals

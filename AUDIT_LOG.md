@@ -643,6 +643,225 @@ Design system enforced across three screens: CormorantGaramond serif for heading
 
 ---
 
+## Phase 1 (Redesign) — Task 1 Audit: Mark Frequency Model (2026-06-12)
+
+**Status: AUDIT COMPLETE — awaiting go-ahead before Task 2**
+
+---
+
+### 1. Existing Mark Type — Cadence/Frequency Fields (`types/index.ts:8-36`)
+
+| Field | Type | Semantics | Read sites |
+|-------|------|-----------|------------|
+| `unit` | `'sessions' \| 'days' \| 'items'` | What kind of thing is being tracked. Also displayed raw as the subtitle on mark cards (the "items" bug). | `app/(tabs)/marks.tsx:123`, `app/mark/[id]/index.tsx:618`, `lib/suggestedCounters.ts` library, `app/mark/[id]/edit.tsx:108` as form default |
+| `dailyTarget` | `number \| null` | How many taps/increments complete ONE daily occurrence (1–99, default 1). Not a weekly count. | `lib/markDailyTarget.ts:resolveDailyTarget/normalizeDailyTargetInput`, `state/countersSlice.ts:123,154,179-182`, `hooks/useCounters.ts` (protected) |
+| `schedule_type` | `'daily' \| 'weekly' \| 'custom'` | Cadence descriptor — whether the mark is due every day, N specified days/week, or a custom day pattern. | `lib/features.ts:isDueToday`, `hooks/useCounters.ts` (protected) |
+| `schedule_days` | `string` (JSON array) | Weekday indices `[0-6]` for `weekly`/`custom` schedule types. | `lib/features.ts:parseScheduleDays`, `hooks/useCounters.ts` (protected) |
+| `goal_value` | `number \| null` | Optional quantity target. E.g. "8 glasses of water per day" → `goal_value=8`. When `goal_period='week'` it doubles as a weekly frequency target. | `lib/features.ts:getPeriodTotal/getGoalProgress/getGoalLabel` |
+| `goal_period` | `'day' \| 'week' \| 'month' \| null` | Period for `goal_value`. When `'week'`, semantically overlaps with the proposed `weekly_target`. | Same as above |
+| `enable_streak` | `boolean` | Streak counting on/off per mark. | `state/countersSlice.ts`, streak hooks |
+| `total` | `number` | All-time increment total. | Displayed on mark cards and detail screen |
+| `health_kit_type` | `HealthKitType \| null` | HealthKit metric identifier. | `hooks/useCounters.ts` (protected), `lib/health/` |
+| `health_kit_config` | `{ stepGoal?: number } \| null` | HealthKit goal configuration. | Same |
+| `goal_id` | `string \| null` | Linked goal ID. | `state/goalsSlice.ts`, `app/mark/[id]/index.tsx`, `app/(tabs)/focus.tsx` |
+
+---
+
+### 2. Database Architecture — CRITICAL DISCOVERY
+
+**The database in `lib/db/index.ts` is NOT SQLite.** It is an in-memory mock backed by AsyncStorage JSON blobs. The `CREATE TABLE IF NOT EXISTS` SQL at `initDatabase()` is decorative — it only triggers `storage.set('counters', [])`. No SQL engine parses it.
+
+**Implications for Task 2:**
+- The "idempotent column-existence guard" described in the spec **does not exist and cannot be reused**. It must be built as a one-time migration function in the same style as `migrateCountersStorageKey()` (`lib/db/index.ts:41-59`): read a flag from AsyncStorage, run once, set flag.
+- Adding a new field means: (a) documenting it in the `CREATE TABLE` comment block, (b) adding it to the `newCounter` object in all `INSERT INTO lc_counters` branches in `runAsync` (currently dispatches by `params.length` — a new mandatory param would shift all param indices), (c) handling it in the generic UPDATE SQL parser (lines 393–416 handle unknown field counts).
+- **Recommendation**: add new fields to the in-memory object with defaults (`null` / `undefined`) so they survive the param-length branches without being counted as SQL params. Wire them only through the generic `SET/WHERE` parser at line 393, not by adding a new param-count branch.
+- The Supabase migration file is still required for the cloud DB.
+
+---
+
+### 3. Collision / Overlap Report
+
+#### COLLISION A — `schedule_type` + `schedule_days` vs `frequency_recommended / weekly_target` ⚠️ HIGH
+
+`schedule_type + schedule_days` already half-expresses weekly frequency:
+- `schedule_type='daily'` = 7 days/week ≈ `weekly_target=7`
+- `schedule_type='weekly', schedule_days='[1,3,5]'` = 3 days/week ≈ `weekly_target=3`
+- `schedule_type='custom', schedule_days='[0,2,4,6]'` = 4 days/week ≈ `weekly_target=4`
+
+However the semantics are fundamentally different: the current model is **day-assigned** (WHICH days), the new model is **count-based** (HOW MANY days, any days). They cannot be reconciled by renaming — they are different behaviors. Phase 1 must explicitly supersede `schedule_type/schedule_days` with `weekly_target` and the count-based rest logic. The schedule fields should be left in the type for backward compat but marked deprecated; Phase 2 must not read them for consistency math.
+
+**Flag**: `parseScheduleDays()` and `isDueToday()` in `lib/features.ts` (lines 58–134) — both are in a non-protected file. Phase 1's `markWeeklyState` selector replaces `isDueToday` for the new surfaces but `lib/features.ts` is still read by `hooks/useCounters.ts` (protected). Task 2 must NOT modify `hooks/useCounters.ts` — flag for Phase 2.
+
+#### COLLISION B — `goal_value` + `goal_period='week'` vs `weekly_target` ⚠️ MEDIUM
+
+When a mark has `goal_period='week'`, `goal_value` is semantically identical to the proposed `weekly_target`. Example: `goal_value=3, goal_period='week'` = "3 times this week."
+
+These are NOT the same field because `goal_value` is optional and serves a broader purpose (counting units like "8 glasses of water/day"). `weekly_target` is mandatory and specific to frequency. But the weekly-goal case is genuinely redundant after Phase 1. Resolution: keep both; `weekly_target` drives the frequency chip UI and done-for-week state; `goal_value/goal_period` remain as the legacy quantity-goal display in `getGoalLabel`. No data migration needed — they can coexist.
+
+#### NON-COLLISION — `dailyTarget` vs `weekly_target` ✅ SAFE
+
+`dailyTarget` = per-session tap count (1–99). `weekly_target` = occurrence count per week (1–7). These are orthogonal dimensions. `dailyTarget` answers "how many taps to log one session"; `weekly_target` answers "how many sessions this week." They do not conflict. **Do not derive `weekly_target` from `dailyTarget`** during backfill — use `schedule_type/schedule_days` instead.
+
+---
+
+### 4. Reconciliation Recommendation
+
+**Extend with new fields; do not repurpose existing ones.**
+
+Add to the `Mark` type:
+- `frequency_min?: number | null` — lower bound of the mark's range
+- `frequency_recommended?: number | null` — recommended weekly frequency (default for new marks)
+- `frequency_max?: number | null` — upper bound
+- `weekly_target?: number | null` — user's chosen count (defaults to `frequency_recommended`)
+
+`isFixed` is derived (`frequency_min === frequency_max`), not stored.
+
+Backfill for existing marks (one-time migration at app startup, guarded by AsyncStorage flag `@livra_migration_freq_v1`):
+```
+weekly_target =
+  schedule_type === 'daily'                    → 7
+  (schedule_type === 'weekly' ||
+   schedule_type === 'custom') &&
+   schedule_days is parseable                  → JSON.parse(schedule_days).length
+  fallback                                     → 3
+
+frequency_recommended = weekly_target (backfilled value)
+frequency_min         = 1
+frequency_max         = 7
+```
+
+**Risk note**: existing marks with `schedule_type='daily'` get `weekly_target=7`, which may feel more demanding under count-based rest (a "daily" workout mark previously showed as "due" every day; it will now show as done-for-the-week only at 7/7). This is an intentional redesign UX change. Users can adjust via the new `MarkFrequencyPicker` on the mark detail screen (Task 3).
+
+---
+
+### 5. Subtitle ("items") Bug — All Render Sites
+
+| Location | Line | What renders | Fix needed |
+|----------|------|--------------|------------|
+| `app/(tabs)/marks.tsx` | 121–124 | `{mark.unit}` as `<Text style={markUnit}>` below mark name | Replace with frequency phrase or goal name |
+| `app/mark/[id]/index.tsx` | 617–618 | `{counter.unit}` as `<Text style={heroMeta}>` below hero title | Same |
+| `components/CounterTile.tsx` | 625 | `prevProps.counter.unit === nextProps.counter.unit` | Memo comparison only — no render change needed, but update after unit display is removed |
+| `components/MarkCard.tsx` | 599 | `prev.counter.unit === next.counter.unit` | Same — memo only |
+| `app/mark/[id]/edit.tsx` | 108 | `(counter?.unit as ...) \|\| 'sessions'` | Form default — unrelated to display subtitle; leave until edit screen is redesigned |
+| `app/onboarding.tsx` | 177 | `unit: sugg.unit` | Mark creation param — not a display issue |
+| `app/goal/new.tsx` | 75 | `unit: sugg.unit` | Same |
+
+**Task 5 scope**: only the two render sites (`marks.tsx:121-124` and `mark/[id]/index.tsx:617-618`) need to change. The memo comparisons can remain unchanged without breaking anything.
+
+---
+
+### 6. Weekly-Window Helper Inventory
+
+Three inconsistent implementations exist; Phase 2 must pick one:
+
+| Location | Boundary | Export | Used by |
+|----------|----------|--------|---------|
+| `lib/review/weeklyReview.ts:48` | **Trailing 7 days** (today − 6 → today) | `getWeekRange` (exported) | Weekly reflection, weekly review seed query, `notificationSystem.ts` |
+| `lib/features.ts:22` | **Sunday-start** calendar week | `startOfWeekISO` (private) | `getPeriodTotal` (for `goal_period='week'`), `getGoalLabel` |
+| `lib/notificationSystem.ts:28` | **Monday-start** calendar week | `startOfWeekMonday` (private) | Notification scheduling |
+
+None of these is a clean "Monday → Sunday calendar week" window. The Phase 1 `markWeeklyState` selector needs to count `completionsThisWeek` — it must define "this week." **Recommendation**: create a new exported helper `currentWeekDates(): string[]` that returns the 7 ISO date strings for the current Mon–Sun calendar week, placed in `lib/features.ts` alongside the existing date utils. Phase 2 adopts this as the canonical week definition.
+
+---
+
+### 7. Mark Library — Frequency Gaps (`lib/suggestedCounters.ts`)
+
+All 44 marks in `MARK_LIBRARY` lack `frequency_min/recommended/max` and `frequencyKind`. Proposed values for confirmation (to be added in Task 2).
+
+**⚠️ Prior draft had errors: abstinence marks were assigned 3/5/7 variable; cognitive marks were assigned 3/5/7 instead of 3/4/6. Both corrected below.**
+
+| Mark | id | min | rec | max | frequencyKind | Notes |
+|------|----|-----|-----|-----|---------------|-------|
+| Sleep | sleep | 7 | 7 | 7 | fixed | Daily necessity |
+| Stretch | stretch | 3 | 5 | 7 | variable | |
+| Rest Day | rest | 1 | 2 | 3 | variable | Recovery inverse |
+| Workout | workout | 2 | 3 | 5 | variable | |
+| Steps | steps | 5 | 7 | 7 | variable | Near-daily |
+| Run | run | 2 | 3 | 5 | variable | |
+| Swim | swim | 2 | 3 | 5 | variable | |
+| Cycling | cycling | 2 | 3 | 5 | variable | |
+| Water | water | 5 | 7 | 7 | variable | Near-daily |
+| Nutrition | nutrition | 3 | 5 | 7 | variable | |
+| Vitamins | vitamins | 5 | 7 | 7 | variable | Near-daily |
+| Calories | calories | 5 | 7 | 7 | variable | ⚠️ AMBIGUOUS: daily tracking (5/7/7 like Water) vs. lighter 3/5/7 — flag for confirmation |
+| No Alcohol | no-alcohol | 7 | 7 | 7 | abstinence | Maps to spec `no_beer`; you don't rest from sobriety |
+| Meal Prep | meal-prep | 1 | 2 | 3 | variable | Done once or twice a week |
+| Meditation | meditation | 3 | 5 | 7 | variable | |
+| Journaling | journaling | 3 | 5 | 7 | variable | |
+| Gratitude | gratitude | 3 | 5 | 7 | variable | |
+| Breathwork | breathwork | 3 | 5 | 7 | variable | |
+| Affirmations | affirmations | 3 | 5 | 7 | variable | |
+| Focus | focus | 3 | 4 | 6 | variable | Cognitive (taxing) archetype |
+| Planning | planning | 3 | 5 | 7 | variable | Productivity |
+| Reading | reading | 3 | 5 | 7 | variable | |
+| Practice | practice | 3 | 4 | 6 | variable | ⚠️ AMBIGUOUS: cognitive taxing (3/4/6) vs. light wellness (3/5/7) |
+| Study | study | 3 | 4 | 6 | variable | Cognitive (taxing) |
+| Deep Work | deep-work | 3 | 4 | 6 | variable | Cognitive (taxing) |
+| No Phone | no-phone | 7 | 7 | 7 | abstinence | Maps to spec `screen_free` |
+| Writing | writing | 3 | 4 | 6 | variable | ⚠️ AMBIGUOUS: cognitive taxing (3/4/6) vs. light wellness (3/5/7) |
+| Language | language | 3 | 4 | 6 | variable | ⚠️ AMBIGUOUS: cognitive taxing (3/4/6) vs. light wellness (3/5/7) |
+| Finance | finance | 3 | 5 | 7 | variable | ⚠️ AMBIGUOUS: productivity (3/5/7) vs. low-frequency 2/3/5 |
+| Saving | saving | 3 | 5 | 7 | variable | ⚠️ AMBIGUOUS: same as Finance |
+| No Spend | no-spend | 7 | 7 | 7 | abstinence | Maps to spec `no_spending` |
+| Invest | invest | 2 | 3 | 5 | variable | Lower frequency appropriate |
+| Side Hustle | side-hustle | 2 | 3 | 5 | variable | |
+| Cold Shower | cold-shower | 3 | 5 | 7 | variable | |
+| Wake Early | wake-early | 5 | 7 | 7 | variable | ⚠️ AMBIGUOUS: near-daily variable (5/7/7) vs. fixed daily necessity (7/7/7) |
+| No Sugar | no-sugar | 7 | 7 | 7 | abstinence | Maps to spec `no_sugar` |
+| Screen Time | screen-time | 3 | 5 | 7 | variable | ⚠️ AMBIGUOUS: variable tracking vs. abstinence (7/7/7) if it means screen-free days |
+| Cooking | cooking | 2 | 3 | 5 | variable | |
+| Posture | posture | 3 | 5 | 7 | variable | |
+| Socialize | socialize | 1 | 2 | 4 | variable | |
+| Family Time | family | 2 | 3 | 5 | variable | |
+| Networking | networking | 1 | 2 | 3 | variable | |
+| Volunteer | volunteer | 1 | 1 | 2 | variable | |
+| Creative | creative | 2 | 3 | 5 | variable | |
+
+**Marks requiring confirmation before Task 2 begins library changes:**
+- **Calories** — 5/7/7 (near-daily tracking) or 3/5/7?
+- **Practice / Writing / Language** — cognitive taxing (3/4/6) or light wellness (3/5/7)?
+- **Finance / Saving** — productivity ladder (3/5/7) or low-frequency (2/3/5)?
+- **Wake Early** — variable near-daily (5/7/7) or fixed daily necessity (7/7/7)?
+- **Screen Time** — variable (3/5/7) or abstinence (7/7/7)?
+
+Sleep (7/7/7 fixed) and the four abstinence marks (No Alcohol, No Phone, No Spend, No Sugar) are not ambiguous — confirm before Task 2 executes.
+
+---
+
+### 8. Migration Risk Summary
+
+| Risk | Severity | Notes |
+|------|----------|-------|
+| Existing marks missing new fields | Medium | Handled by one-time startup migration. Backfill expression documented above. |
+| `schedule_type='daily'` → `weekly_target=7` shift | Low–Medium | Intended UX change; users can adjust on detail screen. |
+| AsyncStorage mock `params.length` branching | Medium | New fields must NOT be added as positional SQL params. Use generic parser path. |
+| No real SQLite column-existence guard | Medium | Migration pattern must be built from scratch using AsyncStorage flag (same as `migrateCountersStorageKey`). |
+| Three inconsistent week definitions | Medium | Phase 2 will need a canonical `currentWeekDates()` helper; Phase 1 Task 4 must be consistent with what Phase 2 will build. |
+| Supabase cloud DB | Low | Migration file needed but applied manually; no app code reads frequency fields from Supabase yet. |
+
+---
+
+**STOP — awaiting go-ahead before Task 2.**
+
+---
+
+## Phase 1 Task 2 — Frequency Fields + Migration (2026-06-12) — 91aed7b, b400687
+
+| File | Change | Why |
+|------|--------|-----|
+| `types/index.ts` | Added `FrequencyKind` type export (`'variable' \| 'fixed' \| 'abstinence'`). Added `frequency_min`, `frequency_recommended`, `frequency_max`, `weekly_target`, `frequency_kind` as optional nullable fields to `Mark` type. | Frequency model fields required by Phase 1 spec. |
+| `lib/suggestedCounters.ts` | Added `frequency_min`, `frequency_recommended`, `frequency_max`, `frequencyKind` to `MarkDefinition` type. Populated all 44 marks with approved values (see Section 7 above). | Mark library must carry frequency ranges to default new marks correctly. |
+| `lib/db/index.ts` | Added `migrateFrequencyFields()` — one-time AsyncStorage migration guarded by `@livra_migration_freq_v1` flag. Backfills `weekly_target` from `schedule_type`/`schedule_days` (never `dailyTarget`). Sets `frequency_recommended = weekly_target`, `frequency_min = 1`, `frequency_max = 7`, `frequency_kind = 'variable'`. Called in `initDatabase()` after `migrateCountersStorageKey()`. Fixed pre-existing bug: generic UPDATE parser regex now uses dotAll flag (`/is`) so multi-line SQL template literals are parsed correctly. | New fields must be backfilled for existing users. Regex bug silently discarded all updateMark field writes. |
+| `state/countersSlice.ts` | `addMark`: adds a third UPDATE (6 params: frequency_min/recommended/max/weekly_target/frequency_kind/id) routed through generic SQL parser — avoids 11-param branch conflict. `updateMark`: added all 5 new fields to existing large UPDATE SQL. | New fields must persist through all creation/update paths. |
+| `hooks/useCounters.ts` | ⚠️ **Controlled exception to protected-file rule**: added `frequency_kind` to the input type and passthrough in `createMark`. 2-line change, no logic modification. Required to prevent abstinence/fixed marks from having their `frequencyKind` silently overwritten to `'variable'` on creation. | Without this, library marks with `frequencyKind='abstinence'` would be stored as `'variable'`. |
+| `app/mark/new.tsx`, `app/onboarding.tsx`, `app/goal/new.tsx` | Added `frequency_kind: sugg.frequencyKind` to all call sites that convert a `MarkDefinition` suggestion into an `addMark` payload. | Ensures library frequency kind propagates through all creation UI paths. |
+| `supabase/migrations/20260612_frequency_fields.sql` | New migration file. Adds 5 columns to `marks` table. Includes idempotent backfill UPDATE (`WHERE weekly_target IS NULL`). **Not applied — run manually via `supabase db push`.** | Cloud DB must match local schema. |
+| `tests/unit/frequencyMigration.test.ts` | 8 tests: flag guard, daily→7, custom-days by count, empty-days→3, null schedule→3, correct min/rec/max/kind defaults, clamping to 1–7, non-fatal on error. | TDD coverage for migration guard. |
+
+**Tests:** 389/389 passing. **Type-check:** 0 errors.
+
+---
+
 ## Supabase IO Optimization (2026-06-10) — d9a5c05, 7ec494a, cd66dc7
 
 | File | Change | Why |
@@ -653,3 +872,17 @@ Design system enforced across three screens: CormorantGaramond serif for heading
 
 > **Action required:** Apply `supabase/migrations/20260610_fix_rls_performance.sql` manually via the Supabase Dashboard SQL Editor or `supabase db push`. The migration is idempotent and safe to run on a live database.
 | `app/mark/[id]/index.tsx` | Notes section already uses `fonts.sansSemibold` uppercase labels, `c.surface` background, `c.borderMid` border on TextInput, date labels and separators on past notes, no delete buttons on past notes. No changes needed. |
+
+---
+
+## Phase 1 Task 4 — Weekly State: due / doneForWeek / bonus (2026-06-12)
+
+| File | Change | Why |
+|------|--------|-----|
+| `lib/features.ts` | Added `currentWeekDates(): string[]` — exported, returns 7 ISO strings for Mon–Sun of the current week using inline Monday-start logic (mirrors notificationSystem.ts private helper). Added `markWeeklyState(mark, completionsThisWeek): 'due' \| 'doneForWeek'` — pure selector; returns `'doneForWeek'` when `completionsThisWeek >= (weekly_target ?? 3)`. Added `computeCompletionsThisWeek(mark, events, weekDates): number` — counts distinct days in the week where sum of increment amounts meets `resolveDailyTarget(mark)`. | Weekly state logic needed by detail screen and future home screen badges. |
+| `app/mark/[id]/index.tsx` | Imported `currentWeekDates`, `markWeeklyState`, `computeCompletionsThisWeek` from `lib/features`. Added `weekDates`, `completionsThisWeek`, `weeklyState` derived memos in `MarkDetailContent`. Added "done for week" UI block (after secondary actions) shown only for `frequency_kind === 'variable'` marks at `doneForWeek` state — displays motivational copy and a "One more this week" bonus log button. Added `doneForWeekWrap`, `doneForWeekText`, `bonusLogBtn`, `bonusLogBtnText` to `createStyles`. | Surface weekly completion state for variable-frequency marks. |
+| `tests/unit/weeklyState.test.ts` | 20 tests: `currentWeekDates` (7 strings, Mon start, Mon/Sat/Sun entry days, consecutive), `markWeeklyState` (due/doneForWeek at/above/below target, null target defaults, fixed kind passthrough), `computeCompletionsThisWeek` (empty, 3-logs-same-day, multiple days, bar>1 partial, outside week, deleted, decrement). Phase 2 passthrough test documents that raw count is uncapped here; Phase 2 will cap at `weekly_target` for consistency math. | TDD coverage for all three new helpers. |
+
+**Flag:** `startOfWeekISO()` in `lib/features.ts` (line ~24) is Sunday-start and still used by `getPeriodTotal` for `'week'` period goals. `currentWeekDates()` and `computeCompletionsThisWeek` use Monday-start logic. **Phase 2 must reconcile** whether `getPeriodTotal` week period should also shift to Monday-start or whether the two functions intentionally use different week anchors.
+
+**Tests:** 20/20 passing (weeklyState.test.ts). **Type-check:** 0 errors.

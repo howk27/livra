@@ -6,6 +6,7 @@ import { STREAK_MILESTONES } from '../types';
 import { getAppDate } from './appDate';
 import { formatDate } from './date';
 import { logger } from './utils/logger';
+import { resolveDailyTarget } from './markDailyTarget';
 
 const warnedScheduleParseIds = new Set<string>();
 
@@ -28,6 +29,63 @@ function startOfWeekISO(): string {
 function startOfMonthISO(): string {
   const d = getAppDate();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+}
+
+/**
+ * Returns 7 ISO date strings ('yyyy-MM-dd') for the current Monday-start ISO week
+ * (Mon, Tue, Wed, Thu, Fri, Sat, Sun).
+ */
+export function currentWeekDates(): string[] {
+  const d = getAppDate();
+  const dow = d.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+  const daysFromMonday = dow === 0 ? 6 : dow - 1;
+  const monday = new Date(d);
+  monday.setDate(d.getDate() - daysFromMonday);
+  const result: string[] = [];
+  for (let i = 0; i < 7; i++) {
+    const day = new Date(monday);
+    day.setDate(monday.getDate() + i);
+    result.push(formatDate(day));
+  }
+  return result;
+}
+
+/**
+ * Returns 'doneForWeek' when completionsThisWeek >= mark.weekly_target (default 3).
+ * Returns 'due' otherwise.
+ * Pure selector — caller gates UI copy for fixed/abstinence kinds.
+ */
+export function markWeeklyState(
+  mark: Pick<Mark, 'weekly_target' | 'frequency_kind'>,
+  completionsThisWeek: number,
+): 'due' | 'doneForWeek' {
+  const target = mark.weekly_target ?? 3;
+  return completionsThisWeek >= target ? 'doneForWeek' : 'due';
+}
+
+/**
+ * Count of distinct days in weekDates on which the mark met its daily bar.
+ * Daily bar = resolveDailyTarget(mark). A day is met when sum of amount for
+ * increment events on that date >= bar.
+ */
+export function computeCompletionsThisWeek(
+  mark: Pick<Mark, 'id' | 'dailyTarget'>,
+  events: MarkEvent[],
+  weekDates: string[],
+): number {
+  const bar = resolveDailyTarget(mark);
+  const weekSet = new Set(weekDates);
+  // Sum increment amounts per day
+  const dayTotals = new Map<string, number>();
+  for (const e of events) {
+    if (e.event_type !== 'increment' || e.deleted_at || !weekSet.has(e.occurred_local_date)) continue;
+    dayTotals.set(e.occurred_local_date, (dayTotals.get(e.occurred_local_date) ?? 0) + (e.amount ?? 1));
+  }
+  let count = 0;
+  for (const total of dayTotals.values()) {
+    if (total >= bar) count++;
+  }
+  return count;
 }
 
 // ── Feature 1: Goal Progress ──────────────────────────────
