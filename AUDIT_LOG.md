@@ -1357,3 +1357,43 @@ Confirmed: `app/(tabs)/focus.tsx` exists. `handleOnboardingConfirm` in current c
 **Conflicts with locked decisions:** None found. All open items from the redesign index are consistent with what's in the codebase.
 
 **No code written. Audit complete. STOP.**
+
+---
+
+## Phase 4a — Onboarding Sequence EXECUTION
+
+Auth = Option B (value-first, signup at screen 5). No AI in this phase — AI hatch stubbed/hidden.
+
+### Task 2 — Slice wiring + field changes (commit `7822616`)
+
+| File | Change | Why |
+|------|--------|-----|
+| `state/onboardingSlice.ts` | Dropped `FocusArea` type, `focusArea`, `identitySelections`, `setFocusArea`, `setIdentitySelections`. Added `CommitmentLevel` type (`'easing'|'steady'|'push'`), `AIGoalPackage` placeholder type, `commitment`, `selectedMarkIds`, `aiPackageDraft`, `aiRegenerationsUsed` fields, and matching actions `setCommitment`, `setSelectedMarkIds`, `setAiPackageDraft`, `incrementAiRegenerations`. | Slice was dead code (never wired to screen); drop 2026-05-28 artifacts; add Phase 4 fields. |
+| `state/uiSlice.ts` | `completeOnboarding` meta signature: `{ focusArea?: string }` → `{ commitment?: string; completedAt?: string }`. Internal mapping: `meta.commitment → profileUpdate.onboarding_focus_area`. DB column name unchanged. | Repurpose focus-area column for commitment value per audit spec. |
+| `lib/onboarding/markRecommendations.ts` | Removed `import type { FocusArea }` from slice; defined `FocusArea` locally (legacy `getRecommendedMarks` only). | `FocusArea` removed from slice; legacy function unchanged. |
+| `tests/unit/onboarding/onboardingSlice.test.ts` | Rewrote to cover new fields: initial state, setCommitment, setSelectedMarkIds, setAiPackageDraft, incrementAiRegenerations, reset, absence of old fields. | TDD — 12/12 pass. |
+
+**Tests:** 444/444 passing. **Type-check:** 0 errors.
+
+---
+
+### Task 3 — Screen sequence + pace + marks (commit `b8fb8d3`)
+
+| File | Change | Why |
+|------|--------|-----|
+| `lib/onboarding/commitmentEngine.ts` | New pure module. `getMarksForCommitment(goalTitle, commitment)` → `CommitmentMarkSelection[]`. Filters `getMarksForGoal` results to `frequencyKind === 'variable'`; selects top 2 (easing/steady) or top 3 (push) marks; maps `weekly_target` to `frequency_min / frequency_recommended / frequency_max` per commitment. Daily-friendly marks not clamped. | Testable, pure logic for the Marks screen. |
+| `app/onboarding.tsx` | Full 5-screen rebuild: **Step 0 Welcome** (graveyard copy, get started), **Step 1 Goal input** (bound to `useOnboardingStore.goalTitle`, AI hatch placeholder commented out), **Step 2 Pace screen** (new `PACE_OPTIONS` chips for easing/steady/push, default = steady via `commitment ?? 'steady'`), **Step 3 Marks screen** (computed from `getMarksForCommitment`, frequency as stated text `"Twice a week · recommended"`, deselect allowed min 1, cap 3), **Step 4 Sign-up** (auth UI, value-first position). Dots show for pre-auth steps 0–3 only. Slice is source of truth for `goalTitle`, `commitment`, `selectedMarkIds`. `CommitmentScreen` component not used (separate new component). | Replaces old 5-step flow with new 5-screen spec. |
+| `tests/unit/onboarding/commitmentEngine.test.ts` | 9 tests: easing/2/min, steady/2/rec, push/3/max, no fixed/abstinence, weeklyTarget range 1–7, no clamp on daily-friendly, fallback marks, easing ≤ 2, valid library IDs. | TDD — 9/9 pass. |
+
+**Tests:** 444/444 passing. **Type-check:** 0 errors.
+
+---
+
+### Task 4 — Auth placement + persist (commit `0a708d1`)
+
+| File | Change | Why |
+|------|--------|-----|
+| `app/onboarding.tsx` | `handlePersistAndComplete(userId)` fully implemented. (1) `completeOnboarding(userId, { commitment, completedAt })` — writes `profiles.onboarding_completed = true` via Supabase (fixes the never-called bug). (2) `createGoal({ title, userId, isPro: false })` from slice draft. (3) `addMark(...)` for each `selectedMarkId`: `goal_id`, all 5 frequency fields, `weekly_target` derived from commitment (easing→min, steady→rec, push→max). (4) `linkMarkToGoal` for each new mark. (5) `store.reset()` clears draft. (6) `router.replace('/(tabs)/focus')`. | `completeOnboarding` was never called — `onboarding_completed` never set cross-device. `createGoal`/`addMark` must fire with the signup userId, not before. |
+| `tests/unit/onboarding/persistFlow.test.ts` | 10 tests: draft survives across steps, reset clears draft, no isOnboarded on store, easing/steady/push weekly_target mapping, no daily-friendly mark clamp, resolveWeeklyTarget matches engine, `completeOnboarding` signature accepts `{ commitment }`, `isOnboarded` set locally after call. | TDD — 10/10 pass. |
+
+**Tests:** 454/454 passing. **Type-check:** 0 errors. AI hatch present but inert (commented placeholder). Focus route confirmed `/(tabs)/focus`.
