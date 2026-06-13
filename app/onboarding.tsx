@@ -20,8 +20,11 @@ import { LivraWordmark } from '../components/ui/LivraWordmark';
 import { PillButton } from '../components/ui/PillButton';
 import { SectionLabel } from '../components/ui/SectionLabel';
 import { themedColors, fonts, spacing, radius } from '../theme/tokens';
-import { useEffectiveTheme } from '../state/uiSlice';
+import { useEffectiveTheme, useUIStore } from '../state/uiSlice';
 import { useOnboardingStore, CommitmentLevel } from '../state/onboardingSlice';
+import { useGoalsStore } from '../state/goalsSlice';
+import { useMarksStore } from '../state/countersSlice';
+import { MARK_LIBRARY } from '../lib/suggestedCounters';
 import { getMarksForCommitment, CommitmentMarkSelection } from '../lib/onboarding/commitmentEngine';
 import { frequencyLabel } from '../components/ui/MarkFrequencyPicker';
 import { getSupabaseClient } from '../lib/supabase';
@@ -90,6 +93,10 @@ export default function OnboardingScreen() {
   const supabase = getSupabaseClient();
 
   const store = useOnboardingStore();
+  const completeOnboarding = useUIStore(s => s.completeOnboarding);
+  const createGoal = useGoalsStore(s => s.createGoal);
+  const linkMarkToGoal = useGoalsStore(s => s.linkMarkToGoal);
+  const addMark = useMarksStore(s => s.addMark);
 
   const [step, setStep] = useState(0);
 
@@ -159,11 +166,63 @@ export default function OnboardingScreen() {
     }
   };
 
-  // handlePersistAndComplete is defined in Task 4 block below — forward ref via
-  // the module-level variable pattern used by Expo screens.
-  // Defined inline here so it has access to all hooks in scope:
-  const handlePersistAndComplete = async (_userId: string) => {
-    // Task 4 wires this body — forward stub that navigates on success
+  const handlePersistAndComplete = async (userId: string) => {
+    const { goalTitle, commitment, selectedMarkIds } = useOnboardingStore.getState();
+    const level = commitment ?? 'steady';
+
+    // 1. Mark onboarding complete — sets profiles.onboarding_completed in Supabase
+    await completeOnboarding(userId, {
+      commitment: level,
+      completedAt: new Date().toISOString(),
+    });
+
+    try {
+      // 2. Create the goal
+      const newGoal = await createGoal({
+        title: goalTitle.trim() || 'My first goal',
+        userId,
+        isPro: false,
+      });
+
+      // 3. Create each selected mark with goal_id + weekly_target derived from commitment
+      for (const markId of selectedMarkIds) {
+        const sugg = MARK_LIBRARY.find((m) => m.id === markId);
+        if (!sugg) continue;
+        const weeklyTarget =
+          level === 'easing'
+            ? (sugg.frequency_min ?? 1)
+            : level === 'steady'
+            ? (sugg.frequency_recommended ?? 3)
+            : (sugg.frequency_max ?? 7);
+
+        const newMark = await addMark({
+          name: sugg.name,
+          emoji: sugg.emoji,
+          color: sugg.color,
+          unit: sugg.unit,
+          user_id: userId,
+          goal_period: 'day',
+          schedule_type: 'daily',
+          dailyTarget: 1,
+          total: 0,
+          enable_streak: true,
+          sort_index: 0,
+          goal_id: newGoal.id,
+          frequency_kind: sugg.frequencyKind,
+          frequency_min: sugg.frequency_min,
+          frequency_recommended: sugg.frequency_recommended,
+          frequency_max: sugg.frequency_max,
+          weekly_target: weeklyTarget,
+        });
+        await linkMarkToGoal(newGoal.id, newMark.id);
+      }
+    } catch (err) {
+      logger.error('[Onboarding] goal/mark creation failed:', err);
+      // Non-fatal — user is onboarded, they can add marks manually
+    }
+
+    // 4. Reset draft + navigate to Focus
+    useOnboardingStore.getState().reset();
     router.replace('/(tabs)/focus' as any);
   };
 
