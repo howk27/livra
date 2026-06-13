@@ -29,6 +29,11 @@ import { getMarksForCommitment, CommitmentMarkSelection } from '../lib/onboardin
 import { frequencyLabel } from '../components/ui/MarkFrequencyPicker';
 import { getSupabaseClient } from '../lib/supabase';
 import { logger } from '../lib/utils/logger';
+import {
+  generateGoalPackage, MIN_GOAL_LENGTH, resolveMarkForAIIcon,
+  writeGoalPackageCache, incrementAiUsesCount,
+  type AIGoalMark,
+} from '../lib/ai/goalGeneration';
 
 // ─── Step dots ───────────────────────────────────────────────────────────────
 
@@ -111,7 +116,80 @@ export default function OnboardingScreen() {
   // Locally selected state within the marks screen (mirrors slice on advance)
   const [marksSelected, setMarksSelected] = useState<Set<string>>(new Set());
 
+  // AI state
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiReviewActive, setAiReviewActive] = useState(false);
+  const [reviewTitle, setReviewTitle] = useState('');
+  const [reviewWeeks, setReviewWeeks] = useState(12);
+  const [reviewMarks, setReviewMarks] = useState<AIGoalMark[]>([]);
+  const [reviewMarkSelected, setReviewMarkSelected] = useState<Set<number>>(new Set());
+
   const advance = useCallback(() => setStep((s) => s + 1), []);
+
+  // ── AI hatch: generate → review ─────────────────────────────────────────
+
+  const handleAIGenerate = useCallback(async () => {
+    const goalText = store.goalTitle.trim();
+    setAiLoading(true);
+    setAiError(null);
+
+    const result = await generateGoalPackage(goalText);
+    setAiLoading(false);
+
+    if (result.ok) {
+      const pkg = result.package;
+      store.setAiPackageDraft(pkg);
+      setReviewTitle(pkg.goalTitle);
+      setReviewWeeks(pkg.timeframeWeeks);
+      setReviewMarks(pkg.marks);
+      setReviewMarkSelected(new Set(pkg.marks.map((_, i) => i)));
+      setAiReviewActive(true);
+    } else {
+      const msgs: Record<string, string> = {
+        low_confidence: "Couldn't make sense of that — try describing your goal in one sentence.",
+        no_api_key: 'AI suggestions unavailable right now. Continue manually.',
+        invalid_output: 'Something went wrong — continue manually below.',
+        network_error: "Couldn't reach Livra AI — check your connection or continue manually.",
+        goal_too_short: '',
+      };
+      setAiError(msgs[result.reason] ?? 'Something went wrong.');
+    }
+  }, [store]);
+
+  const handleAIRegen = useCallback(async () => {
+    if (store.aiRegenerationsUsed >= 2) return;
+    store.incrementAiRegenerations();
+    setAiReviewActive(false);
+    await handleAIGenerate();
+  }, [store, handleAIGenerate]);
+
+  const handleAIReviewConfirm = useCallback(() => {
+    const selectedAIMarks = reviewMarks.filter((_, i) => reviewMarkSelected.has(i));
+    if (selectedAIMarks.length === 0) return;
+
+    const finalTitle = reviewTitle.trim() || store.goalTitle;
+    store.setGoalTitle(finalTitle);
+
+    const aiMarkSelections: CommitmentMarkSelection[] = selectedAIMarks.flatMap((m) => {
+      const resolved = resolveMarkForAIIcon(m.icon);
+      const libraryMark = MARK_LIBRARY.find((l) => l.id === resolved.markId);
+      if (!libraryMark) return [];
+      return [{ mark: { ...libraryMark, name: m.name }, weeklyTarget: m.frequency }];
+    });
+    if (aiMarkSelections.length === 0) return;
+
+    setMarksForScreen(aiMarkSelections);
+    setMarksSelected(new Set(aiMarkSelections.map((r) => r.mark.id)));
+    setAiReviewActive(false);
+    setStep(3); // Skip pace step
+  }, [reviewMarks, reviewMarkSelected, reviewTitle, store]);
+
+  const handleAIReviewDismiss = useCallback(() => {
+    setAiReviewActive(false);
+    store.setAiPackageDraft(null);
+    // Goal text is preserved in slice; no usage spent
+  }, [store]);
 
   // ── Step 1 → 2: commit goalTitle to slice ───────────────────────────────
 
@@ -132,12 +210,18 @@ export default function OnboardingScreen() {
     advance();
   }, [store.commitment, store.goalTitle, advance]);
 
-  // ── Step 3 → 4: persist selected mark IDs to slice ──────────────────────
+  // ── Step 3 → 4: persist selected mark IDs + per-mark targets to slice ──
 
   const handleMarksNext = useCallback(() => {
-    store.setSelectedMarkIds(Array.from(marksSelected));
+    const ids = Array.from(marksSelected);
+    store.setSelectedMarkIds(ids);
+    const targets: Record<string, number> = {};
+    for (const { mark, weeklyTarget } of marksForScreen) {
+      if (marksSelected.has(mark.id)) targets[mark.id] = weeklyTarget;
+    }
+    store.setSelectedMarkTargets(targets);
     advance();
-  }, [marksSelected, store, advance]);
+  }, [marksSelected, marksForScreen, store, advance]);
 
   // ── Step 4: sign up ──────────────────────────────────────────────────────
 
@@ -167,10 +251,13 @@ export default function OnboardingScreen() {
   };
 
   const handlePersistAndComplete = async (userId: string) => {
-    const { goalTitle, commitment, selectedMarkIds } = useOnboardingStore.getState();
+    const {
+      goalTitle, commitment, selectedMarkIds, aiPackageDraft, selectedMarkTargets,
+    } = useOnboardingStore.getState();
+    const isAIPath = aiPackageDraft !== null && Object.keys(selectedMarkTargets).length > 0;
     const level = commitment ?? 'steady';
 
-    // 1. Mark onboarding complete — sets profiles.onboarding_completed in Supabase
+    // 1. Mark onboarding complete
     await completeOnboarding(userId, {
       commitment: level,
       completedAt: new Date().toISOString(),
@@ -184,19 +271,25 @@ export default function OnboardingScreen() {
         isPro: false,
       });
 
-      // 3. Create each selected mark with goal_id + weekly_target derived from commitment
+      // 3. Create each selected mark
       for (const markId of selectedMarkIds) {
         const sugg = MARK_LIBRARY.find((m) => m.id === markId);
         if (!sugg) continue;
-        const weeklyTarget =
-          level === 'easing'
-            ? (sugg.frequency_min ?? 1)
-            : level === 'steady'
-            ? (sugg.frequency_recommended ?? 3)
-            : (sugg.frequency_max ?? 7);
+
+        const weeklyTarget = isAIPath
+          ? (selectedMarkTargets[markId] ?? 3)
+          : level === 'easing'
+          ? (sugg.frequency_min ?? 1)
+          : level === 'steady'
+          ? (sugg.frequency_recommended ?? 3)
+          : (sugg.frequency_max ?? 7);
+
+        const markName = isAIPath
+          ? (marksForScreen.find((m) => m.mark.id === markId)?.mark.name ?? sugg.name)
+          : sugg.name;
 
         const newMark = await addMark({
-          name: sugg.name,
+          name: markName,
           emoji: sugg.emoji,
           color: sugg.color,
           unit: sugg.unit,
@@ -216,14 +309,139 @@ export default function OnboardingScreen() {
         });
         await linkMarkToGoal(newGoal.id, newMark.id);
       }
+
+      // 4. AI path only: write cache + increment usage counter on confirm+activate
+      if (isAIPath && aiPackageDraft) {
+        await writeGoalPackageCache(userId, goalTitle.trim(), aiPackageDraft);
+        await incrementAiUsesCount(userId);
+      }
     } catch (err) {
       logger.error('[Onboarding] goal/mark creation failed:', err);
-      // Non-fatal — user is onboarded, they can add marks manually
     }
 
-    // 4. Reset draft + navigate to Focus
+    // 5. Reset draft + navigate to Focus
     useOnboardingStore.getState().reset();
     router.replace('/(tabs)/focus' as any);
+  };
+
+  // ─── AI Review render ─────────────────────────────────────────────────────
+
+  const renderAIReview = () => {
+    const canRegen = store.aiRegenerationsUsed < 2;
+    return (
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={styles.stepContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <Text style={styles.stepTitle}>Here's what Livra suggests.</Text>
+          <Text style={styles.stepSubtitle}>Edit anything before you commit.</Text>
+
+          {/* Editable goal title */}
+          <View style={styles.fieldBlock}>
+            <Text style={styles.reviewLabel}>GOAL</Text>
+            <TextInput
+              style={styles.input}
+              value={reviewTitle}
+              onChangeText={setReviewTitle}
+              maxLength={80}
+              placeholder="Goal title"
+              placeholderTextColor={c.inkMuted}
+            />
+          </View>
+
+          {/* Timeframe (display only) */}
+          <View style={{ marginTop: spacing.md }}>
+            <Text style={styles.reviewLabel}>TIMEFRAME</Text>
+            <Text style={styles.reviewTimeframe}>{reviewWeeks} weeks</Text>
+          </View>
+
+          {/* Marks with why */}
+          <View style={{ marginTop: spacing.xl }}>
+            <Text style={styles.reviewLabel}>SUGGESTED MARKS</Text>
+            <View style={styles.marksList}>
+              {reviewMarks.map((m, i) => {
+                const selected = reviewMarkSelected.has(i);
+                const resolved = resolveMarkForAIIcon(m.icon);
+                return (
+                  <TouchableOpacity
+                    key={i}
+                    style={[styles.reviewMarkRow, !selected && styles.markRowDeselected]}
+                    activeOpacity={0.75}
+                    onPress={() => {
+                      setReviewMarkSelected((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(i)) {
+                          if (next.size > 1) next.delete(i);
+                        } else {
+                          next.add(i);
+                        }
+                        return next;
+                      });
+                    }}
+                  >
+                    <Text style={styles.markEmoji}>{resolved.emoji}</Text>
+                    <View style={styles.markInfo}>
+                      <Text style={[styles.markName, !selected && { color: c.inkMuted }]}>
+                        {m.name} · {m.frequency}×/wk
+                      </Text>
+                      <Text style={styles.reviewMarkWhy}>{m.why}</Text>
+                    </View>
+                    <View
+                      style={[
+                        styles.markCheck,
+                        selected
+                          ? { backgroundColor: c.forest, borderColor: c.forest }
+                          : { borderColor: c.borderMid },
+                      ]}
+                    >
+                      {selected && <Check size={12} weight="bold" color={c.inkInverse} />}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
+          <PillButton
+            label="Looks good →"
+            onPress={handleAIReviewConfirm}
+            disabled={reviewMarkSelected.size === 0}
+            style={{ ...styles.primaryBtn, opacity: reviewMarkSelected.size === 0 ? 0.4 : 1 }}
+          />
+
+          {/* Regenerate or cap message */}
+          {canRegen ? (
+            <TouchableOpacity
+              style={{ alignItems: 'center', marginTop: spacing.md }}
+              onPress={handleAIRegen}
+              disabled={aiLoading}
+            >
+              {aiLoading ? (
+                <ActivityIndicator size="small" color={c.forest} />
+              ) : (
+                <Text style={styles.secondaryLink}>↺ Try a different suggestion</Text>
+              )}
+            </TouchableOpacity>
+          ) : (
+            <Text style={[styles.paceFootnote, { marginTop: spacing.md }]}>
+              Edit these or set it up yourself below.
+            </Text>
+          )}
+
+          <TouchableOpacity
+            style={{ alignItems: 'center', marginTop: spacing.sm }}
+            onPress={handleAIReviewDismiss}
+          >
+            <Text style={styles.secondaryLink}>Set it up myself</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
   };
 
   // ─── Step renders ──────────────────────────────────────────────────────────
@@ -274,10 +492,29 @@ export default function OnboardingScreen() {
           />
         </View>
 
-        {/* AI escape hatch — STUBBED/HIDDEN in 4a; wired in 4b */}
-        {/* <TouchableOpacity style={styles.aiHatch}>
-          <Text style={styles.aiHatchText}>✦ Let AI suggest a plan</Text>
-        </TouchableOpacity> */}
+        {/* AI escape hatch */}
+        <TouchableOpacity
+          style={[
+            styles.aiHatch,
+            (aiLoading || store.goalTitle.trim().length < MIN_GOAL_LENGTH) && { opacity: 0.4 },
+          ]}
+          onPress={handleAIGenerate}
+          disabled={aiLoading || store.goalTitle.trim().length < MIN_GOAL_LENGTH}
+          activeOpacity={0.75}
+        >
+          {aiLoading ? (
+            <ActivityIndicator size="small" color={c.forest} />
+          ) : (
+            <Text style={styles.aiHatchText}>✦ Let Livra suggest a plan</Text>
+          )}
+        </TouchableOpacity>
+        {aiError ? (
+          <Text style={styles.aiError}>{aiError}</Text>
+        ) : (
+          <Text style={styles.aiHatchSub}>
+            Describe it above — Livra suggests a goal and marks. You edit before committing.
+          </Text>
+        )}
 
         <PillButton
           label="Next →"
@@ -497,14 +734,17 @@ export default function OnboardingScreen() {
   return (
     <SafeAreaView style={styles.screen}>
       <View style={styles.fill}>
-        {step === 0 && renderStep0()}
-        {step === 1 && renderStep1()}
-        {step === 2 && renderStep2()}
-        {step === 3 && renderStep3()}
-        {step === 4 && renderStep4()}
+        {aiReviewActive ? renderAIReview() : (
+          <>
+            {step === 0 && renderStep0()}
+            {step === 1 && renderStep1()}
+            {step === 2 && renderStep2()}
+            {step === 3 && renderStep3()}
+            {step === 4 && renderStep4()}
+          </>
+        )}
       </View>
-      {/* Dots for pre-auth steps only */}
-      {step < 4 && <StepDots step={step} total={4} />}
+      {!aiReviewActive && step < 4 && <StepDots step={step} total={4} />}
     </SafeAreaView>
   );
 }
@@ -689,6 +929,74 @@ function createStyles(c: ReturnType<typeof themedColors>) {
       borderWidth: 2,
       alignItems: 'center',
       justifyContent: 'center',
+    },
+
+    // AI hatch
+    aiHatch: {
+      marginTop: spacing.lg,
+      paddingVertical: spacing.sm,
+      paddingHorizontal: spacing.md,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: c.forest,
+      borderStyle: 'dashed' as const,
+      alignItems: 'center' as const,
+      justifyContent: 'center' as const,
+      minHeight: 44,
+    },
+    aiHatchText: {
+      fontFamily: fonts.sansMedium,
+      fontSize: 14,
+      color: c.forest,
+    },
+    aiHatchSub: {
+      fontFamily: fonts.sans,
+      fontSize: 12,
+      color: c.inkMuted,
+      textAlign: 'center' as const,
+      marginTop: spacing.xs,
+      lineHeight: 18,
+    },
+    aiError: {
+      fontFamily: fonts.sans,
+      fontSize: 12,
+      color: '#C0392B',
+      textAlign: 'center' as const,
+      marginTop: spacing.xs,
+      lineHeight: 18,
+    },
+
+    // AI review
+    reviewLabel: {
+      fontFamily: fonts.sansMedium,
+      fontSize: 11,
+      color: c.inkMuted,
+      letterSpacing: 0.8,
+      marginBottom: spacing.xs,
+    },
+    reviewTimeframe: {
+      fontFamily: fonts.sans,
+      fontSize: 15,
+      color: c.inkDark,
+      paddingVertical: spacing.xs,
+    },
+    reviewMarkRow: {
+      flexDirection: 'row' as const,
+      alignItems: 'flex-start' as const,
+      gap: spacing.md,
+      paddingVertical: spacing.md,
+      paddingHorizontal: spacing.md,
+      backgroundColor: c.surface,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: c.borderLight,
+    },
+    reviewMarkWhy: {
+      fontFamily: fonts.sans,
+      fontSize: 12,
+      color: c.inkMuted,
+      marginTop: 2,
+      lineHeight: 17,
     },
 
     // Auth screen

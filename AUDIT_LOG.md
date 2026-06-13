@@ -1397,3 +1397,40 @@ Auth = Option B (value-first, signup at screen 5). No AI in this phase — AI ha
 | `tests/unit/onboarding/persistFlow.test.ts` | 10 tests: draft survives across steps, reset clears draft, no isOnboarded on store, easing/steady/push weekly_target mapping, no daily-friendly mark clamp, resolveWeeklyTarget matches engine, `completeOnboarding` signature accepts `{ commitment }`, `isOnboarded` set locally after call. | TDD — 10/10 pass. |
 
 **Tests:** 454/454 passing. **Type-check:** 0 errors. AI hatch present but inert (commented placeholder). Focus route confirmed `/(tabs)/focus`.
+
+---
+
+## Phase 4b — AI Goal Generation
+
+### Task 1 — Generation core + migration (commit `91e98a4`)
+
+| File | Change | Why |
+|------|--------|-----|
+| `lib/ai/goalGeneration.ts` | New module. `generateGoalPackage(goalText)` → `GenerationResult`: (1) cache check via `checkCache(normalizedText)`; (2) API key guard; (3) `callAnthropicAPI` with one silent retry; (4) `validateAIGoalPackage` — off-model icon → `FALLBACK_ICON`, out-of-range frequency dropped, >3 marks truncated, null if no valid marks; (5) `confidence:'low'` → `low_confidence`. Also: `normalizeGoalText` (lowercase, stop-word strip, sort), `resolveMarkForAIIcon`, `writeGoalPackageCache`, `getAiUsesCount`, `incrementAiUsesCount` (RPC + fallback). Model: `claude-haiku-4-5-20251001`, 14s timeout, 512 max_tokens. No new packages — `fetch` only. | Greenfield AI module per Phase 4b spec. |
+| `supabase/migrations/20260613_ai_uses.sql` | New migration (NOT applied). Adds `ai_uses_count` integer to `profiles`; creates `increment_ai_uses_count` RPC; creates `ai_goal_packages` table with `goal_text_normalized`, `package_json` jsonb, `confirmed` boolean, RLS. Unique index on `(goal_text_normalized, user_id)`; partial index on `goal_text_normalized WHERE confirmed = true`. | Cache layer + usage counter per spec. Run `supabase db push` to apply. |
+| `state/onboardingSlice.ts` | Added `selectedMarkTargets: Record<string, number>` + `setSelectedMarkTargets`. `AIGoalPackage` imported from `lib/ai/goalGeneration` (replaces placeholder type). | Needed for AI path: per-mark `weekly_target` = AI frequency, not commitment-derived. |
+| `tests/unit/onboarding/goalGeneration.test.ts` | 27 new tests: `validateAIGoalPackage` (valid, off-model icon repair, >3 truncation, bad envelope, frequency drop/round, all VALID_ICONS), `normalizeGoalText` (lowercase, stop-word, sort, punctuation, single-char, empty-output, semantic dedup), `resolveMarkForAIIcon` (known icons, unknown fallback, all VALID_ICONS). | TDD — 27/27 pass. |
+| `tests/unit/onboarding/onboardingSlice.test.ts` | +4 tests for `selectedMarkTargets`: initial empty, set, replace, reset clears. | 16/16 pass. |
+
+**Tests:** 80/80 passing (onboarding suite). **Type-check:** 0 errors.
+
+---
+
+### Task 2 — Free-use, cache, regen cap (commit `5a48dd1`)
+
+| File | Change | Why |
+|------|--------|-----|
+| `tests/unit/onboarding/goalGenerationFlow.test.ts` | 24 new tests: cache hit skips fetch; cache miss calls API; cache error swallowed; `generateGoalPackage` never calls RPC (no usage on generation); network/HTTP failure doesn't call RPC; `incrementAiUsesCount` uses RPC then falls back; `getAiUsesCount` returns value; `writeGoalPackageCache` upserts with `confirmed:true` and correct normalized text, no-ops on empty userId or stop-word-only goal; regen cap slice tests (starts 0, increments, cap at >=2, reset); `goal_too_short`/`no_api_key`/`low_confidence`/`network_error` guards. | Verifies free-use-on-confirm-only, cache-before-call, and regen-cap contracts. |
+
+**Tests:** 518/518 passing (full suite). **Type-check:** 0 errors. Logic already in `goalGeneration.ts` from Task 1; Task 2 is tests-only.
+
+---
+
+### Task 3 — Wire hatch + review screen (commit pending)
+
+| File | Change | Why |
+|------|--------|-----|
+| `app/onboarding.tsx` | (1) Un-stubbed AI hatch in Step 1 — dashed-border button "✦ Let Livra suggest a plan"; disabled when `goalTitle.trim().length < MIN_GOAL_LENGTH`; shows `ActivityIndicator` while generating; inline error on failure (goal preserved). (2) Added `renderAIReview()` — editable goal title TextInput, timeframe display (weeks), marks list with per-mark "why" and toggle, "Looks good →" confirm, "↺ Try a different suggestion" regen (hidden at cap ≥2, shows "Edit these or set it up yourself"), "Set it up myself" dismiss. (3) `handleAIGenerate` calls `generateGoalPackage`; on success sets `aiReviewActive=true` with review state. (4) `handleAIRegen` increments `aiRegenerationsUsed`, triggers new generate. (5) `handleAIReviewConfirm` maps AI marks → `CommitmentMarkSelection` via `MARK_LIBRARY` (name override); skips Step 2 (pace), jumps to Step 3 with AI marks. (6) `handleAIReviewDismiss` clears draft, preserves goal text. (7) `handleMarksNext` updated: also stores `selectedMarkTargets` per mark. (8) `handlePersistAndComplete` updated: AI path uses `selectedMarkTargets` for `weekly_target`, AI mark name for `addMark.name`; on confirm+activate calls `writeGoalPackageCache` + `incrementAiUsesCount`. (9) Render: `aiReviewActive ? renderAIReview() : (steps…)`. Dots hidden during review. | Un-stubs Phase 4a hatch per spec. Every failure falls back to manual with goal preserved. Nothing auto-activates — review is mandatory. |
+| `tests/unit/onboarding/aiReview.test.ts` | 15 new tests: `setAiPackageDraft` stores without auto-activating; draft doesn't affect title or commitment; clear draft dismisses without usage spend; only `incrementAiRegenerations` increments session counter; `selectedMarkTargets` reflects AI frequencies on confirm; AI targets differ from commitment-derived; reset clears all AI fields together; `resolveMarkForAIIcon` for all VALID_ICONS; regen cap detection. | TDD contracts for review screen. |
+
+**Tests:** pending (commit after aiReview tests pass). **Type-check:** 0 errors.
