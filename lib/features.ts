@@ -22,7 +22,8 @@ export function currentMonthISO(): string {
 
 function startOfWeekISO(): string {
   const d = getAppDate();
-  d.setDate(d.getDate() - d.getDay());
+  const dow = d.getDay();
+  d.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1));
   return formatDate(d);
 }
 
