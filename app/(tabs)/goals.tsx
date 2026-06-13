@@ -5,11 +5,14 @@ import {
   ScrollView,
   StyleSheet,
   Platform,
+  ActivityIndicator,
+  TouchableOpacity,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { DotsSixVertical } from 'phosphor-react-native';
+import { format, parseISO } from 'date-fns';
+import { DotsSixVertical, CaretRight } from 'phosphor-react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
@@ -19,35 +22,99 @@ import Animated, {
   runOnJS,
   type SharedValue,
 } from 'react-native-reanimated';
-
-// ── Design tokens ─────────────────────────────────────────────────────────────
-import { fonts, spacing, themedColors } from '../../theme/tokens';
+import { fonts, spacing, radius, themedColors } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
-
-// ── New UI components ─────────────────────────────────────────────────────────
 import { LivraWordmark } from '../../components/ui/LivraWordmark';
 import { QueueCard } from '../../components/ui/QueueCard';
 import { SvgLogo } from '../../components/ui/SvgLogo';
-
 import { SectionLabel } from '../../components/ui/SectionLabel';
-
-// ── Existing data hooks / state — DO NOT MODIFY ───────────────────────────────
 import { useGoalsStore } from '../../state/goalsSlice';
-import { useAuth } from '../../hooks/useAuth';
-import { useIapSubscriptions } from '../../hooks/useIapSubscriptions';
 import type { Goal } from '../../types/goal';
 
 // ── Drag-to-reorder constants ─────────────────────────────────────────────────
-// Vertical gap between draggable queue cards (matches styles.queueCard marginTop).
 const CARD_GAP = spacing.md;
 const ACTIVE_SCALE = 1.03;
 
-/**
- * Clamp a value between a lower and upper bound. Used on the UI thread.
- */
 function clamp(value: number, lower: number, upper: number): number {
   'worklet';
   return Math.max(lower, Math.min(value, upper));
+}
+
+// ── Active goal progress card ─────────────────────────────────────────────────
+
+interface ActiveGoalCardProps {
+  goal: Goal;
+  progress: number;
+  threshold: number;
+  canComplete: boolean;
+  onPress: () => void;
+}
+
+function ActiveGoalCard({ goal, progress, threshold, canComplete, onPress }: ActiveGoalCardProps) {
+  const theme = useEffectiveTheme();
+  const c = themedColors(theme);
+  const pct = threshold > 0 ? Math.min(100, (progress / threshold) * 100) : 0;
+  const deadlineStr = goal.deadline_date ?? goal.target_date ?? null;
+
+  return (
+    <TouchableOpacity
+      style={[styles.activeCard, { backgroundColor: c.forest }]}
+      onPress={onPress}
+      activeOpacity={0.85}
+    >
+      <View style={styles.activeTopRow}>
+        <View style={[styles.activeBadge, { backgroundColor: c.mint + '33' }]}>
+          <View style={[styles.activeDot, { backgroundColor: c.mint }]} />
+          <Text style={[styles.activeBadgeText, { color: c.inkInverseMuted }]}>ACTIVE</Text>
+        </View>
+        <CaretRight size={18} color={c.inkInverseMuted} weight="bold" />
+      </View>
+
+      <Text style={[styles.activeTitle, { color: c.inkInverse }]} numberOfLines={2}>
+        {goal.title}
+      </Text>
+
+      {goal.description ? (
+        <Text style={[styles.activeDescription, { color: c.inkInverseMuted }]} numberOfLines={2}>
+          {goal.description}
+        </Text>
+      ) : null}
+
+      {/* Progress bar */}
+      {threshold > 0 && (
+        <View style={styles.progressSection}>
+          <View style={[styles.progressTrack, { backgroundColor: c.inkInverse + '22' }]}>
+            <View
+              style={[
+                styles.progressFill,
+                { backgroundColor: c.mint, width: `${pct}%` as any },
+              ]}
+            />
+          </View>
+          <Text style={[styles.progressLabel, { color: c.inkInverseMuted }]}>
+            {progress} / {threshold} check-ins
+          </Text>
+        </View>
+      )}
+
+      {/* Deadline */}
+      {deadlineStr ? (
+        <Text style={[styles.activeDeadline, { color: c.inkInverseMuted }]}>
+          Due {format(parseISO(deadlineStr), 'MMM d, yyyy')}
+        </Text>
+      ) : null}
+
+      {/* Ready to complete */}
+      {canComplete && (
+        <View style={[styles.completeCta, { backgroundColor: c.inkInverse + '15' }]}>
+          <Text style={[styles.completeCtaText, { color: c.inkInverse }]}>
+            Ready to complete
+          </Text>
+          <CaretRight size={14} color={c.inkInverse} weight="bold" />
+        </View>
+      )}
+    </TouchableOpacity>
+  );
 }
 
 // ── Draggable row ─────────────────────────────────────────────────────────────
@@ -55,21 +122,13 @@ function clamp(value: number, lower: number, upper: number): number {
 interface DraggableRowProps {
   goal: Goal;
   sequenceNumber: number;
-  /** Index of this row within the draggable list. */
   index: number;
-  /** Total number of draggable rows. */
   count: number;
-  /** Shared slot height (card height + gap). 0 until measured. */
   slotHeight: SharedValue<number>;
-  /**
-   * Live ordering: positions[goalId] = current slot index. Mutating this
-   * shared value reflows every other row during a drag.
-   */
   positions: SharedValue<Record<string, number>>;
-  /** Id of the row currently being dragged, or null. */
   activeId: SharedValue<string | null>;
   onMeasure: (height: number) => void;
-  onAdd: () => void;
+  onPress: () => void;
   onReorder: () => void;
 }
 
@@ -82,15 +141,13 @@ function DraggableRow({
   positions,
   activeId,
   onMeasure,
-  onAdd,
+  onPress,
   onReorder,
 }: DraggableRowProps) {
   const theme = useEffectiveTheme();
   const c = themedColors(theme);
-  // translateY relative to this row's resting slot position.
   const translateY = useSharedValue(0);
   const isActive = useSharedValue(false);
-  // Captures the slot index at the moment the drag started.
   const startSlot = useSharedValue(index);
 
   const triggerHaptic = useCallback(() => {
@@ -104,8 +161,6 @@ function DraggableRow({
   }, [onReorder]);
 
   const pan = Gesture.Pan()
-    // Long-press threshold before the drag activates so vertical scrolling
-    // still works on a quick swipe.
     .activateAfterLongPress(220)
     .onStart(() => {
       isActive.value = true;
@@ -116,16 +171,11 @@ function DraggableRow({
     .onUpdate((e) => {
       if (slotHeight.value <= 0) return;
       translateY.value = e.translationY;
-
-      // Which slot does the row's center currently overlap?
       const currentSlot = positions.value[goal.id] ?? index;
       const shift = Math.round(e.translationY / slotHeight.value);
       const targetSlot = clamp(startSlot.value + shift, 0, count - 1);
-
       if (targetSlot !== currentSlot) {
         const next = { ...positions.value };
-        // Find whoever currently occupies targetSlot and swap it toward the
-        // vacated slot, shifting intermediate rows by one.
         for (const id in next) {
           if (id === goal.id) continue;
           const slot = next[id];
@@ -141,7 +191,6 @@ function DraggableRow({
     })
     .onEnd(() => {
       const finalSlot = positions.value[goal.id] ?? index;
-      // Snap the dragged row into its resting slot.
       translateY.value = withSpring(0, { damping: 20, stiffness: 200 });
       isActive.value = false;
       activeId.value = null;
@@ -150,7 +199,6 @@ function DraggableRow({
       }
     })
     .onFinalize(() => {
-      // Safety reset if the gesture is cancelled/interrupted mid-drag.
       if (isActive.value) {
         translateY.value = withSpring(0, { damping: 20, stiffness: 200 });
         isActive.value = false;
@@ -161,17 +209,16 @@ function DraggableRow({
   const animatedStyle = useAnimatedStyle(() => {
     const slot = positions.value[goal.id] ?? index;
     const dragging = isActive.value;
-    // Resting offset = distance from the row's natural index to its live slot.
     const restingOffset = (slot - index) * slotHeight.value;
-    const y = dragging ? translateY.value : withSpring(restingOffset, { damping: 22, stiffness: 220 });
-
+    const y = dragging
+      ? translateY.value
+      : withSpring(restingOffset, { damping: 22, stiffness: 220 });
     return {
       transform: [
         { translateY: y },
         { scale: dragging ? withTiming(ACTIVE_SCALE, { duration: 120 }) : withTiming(1, { duration: 120 }) },
       ],
       zIndex: dragging ? 100 : 1,
-      // Elevated shadow while dragging.
       shadowColor: '#1C3830',
       shadowOffset: { width: 0, height: dragging ? 8 : 0 },
       shadowOpacity: withTiming(dragging ? 0.18 : 0, { duration: 120 }),
@@ -192,7 +239,9 @@ function DraggableRow({
       style={[styles.draggableRow, animatedStyle]}
       onLayout={index === 0 ? handleLayout : undefined}
     >
-      <QueueCard title={goal.title} sequenceNumber={sequenceNumber} onAdd={onAdd} />
+      <TouchableOpacity onPress={onPress} activeOpacity={0.8}>
+        <QueueCard title={goal.title} sequenceNumber={sequenceNumber} />
+      </TouchableOpacity>
       {count > 1 && (
         <GestureDetector gesture={pan}>
           <Animated.View style={styles.dragHandle} hitSlop={spacing.sm}>
@@ -207,25 +256,12 @@ function DraggableRow({
 // ── Draggable list ────────────────────────────────────────────────────────────
 
 interface DraggableQueueListProps {
-  /** Ordered list of draggable goals (resting order). */
   goals: Goal[];
-  /** Sequence number offset (hero is 1, so first draggable is offset+1). */
   sequenceOffset: number;
-  /**
-   * Queued goal ids that precede the draggable list and must stay fixed at the
-   * front of the order passed to reorderQueue (e.g. the hero when no goal is
-   * active). Empty when an active goal occupies the hero slot.
-   */
-  fixedPrefixIds: string[];
-  onAdd: () => void;
+  onPressGoal: (goalId: string) => void;
 }
 
-function DraggableQueueList({
-  goals,
-  sequenceOffset,
-  fixedPrefixIds,
-  onAdd,
-}: DraggableQueueListProps) {
+function DraggableQueueList({ goals, sequenceOffset, onPressGoal }: DraggableQueueListProps) {
   const reorderQueue = useGoalsStore((s) => s.reorderQueue);
 
   const slotHeight = useSharedValue(0);
@@ -234,8 +270,6 @@ function DraggableQueueList({
     Object.fromEntries(goals.map((g, i) => [g.id, i])),
   );
 
-  // Keep the positions map in sync when the underlying goal list changes
-  // (e.g. after a reorder commit or a goal added/removed/completed).
   const goalIdsKey = goals.map((g) => g.id).join('|');
   React.useEffect(() => {
     positions.value = Object.fromEntries(goals.map((g, i) => [g.id, i]));
@@ -250,13 +284,11 @@ function DraggableQueueList({
   );
 
   const handleReorder = useCallback(() => {
-    // Build the new draggable order from the live positions map.
     const ordered = [...goals].sort(
       (a, b) => (positions.value[a.id] ?? 0) - (positions.value[b.id] ?? 0),
     );
-    const orderedIds = [...fixedPrefixIds, ...ordered.map((g) => g.id)];
-    void reorderQueue(orderedIds);
-  }, [goals, fixedPrefixIds, positions, reorderQueue]);
+    void reorderQueue(ordered.map((g) => g.id));
+  }, [goals, positions, reorderQueue]);
 
   return (
     <View style={styles.listWrapper}>
@@ -271,7 +303,7 @@ function DraggableQueueList({
           positions={positions}
           activeId={activeId}
           onMeasure={handleMeasure}
-          onAdd={onAdd}
+          onPress={() => onPressGoal(goal.id)}
           onReorder={handleReorder}
         />
       ))}
@@ -279,40 +311,50 @@ function DraggableQueueList({
   );
 }
 
-// ── Main Screen ───────────────────────────────────────────────────────────────
+// ── Goals Screen ──────────────────────────────────────────────────────────────
 
-export default function QueueScreen() {
+export default function GoalsScreen() {
   const theme = useEffectiveTheme();
   const c = themedColors(theme);
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user } = useAuth();
-  const { isProUnlocked } = useIapSubscriptions();
+
   const goals = useGoalsStore((s) => s.goals);
   const isLoading = useGoalsStore((s) => s.isLoading);
+  const error = useGoalsStore((s) => s.error);
+  const getGoalProgress = useGoalsStore((s) => s.getGoalProgress);
+  const getActiveGoal = useGoalsStore((s) => s.getActiveGoal);
+  const getQueuedGoals = useGoalsStore((s) => s.getQueuedGoals);
+  const getCompletedGoals = useGoalsStore((s) => s.getCompletedGoals);
 
-  const active = useMemo(() => goals.find((g) => g.status === 'active'), [goals]);
-  const queued = useMemo(
-    () => goals.filter((g) => g.status === 'queued').sort((a, b) => a.sort_index - b.sort_index),
-    [goals],
+  const active = useMemo(() => getActiveGoal(), [getActiveGoal, goals]);
+  const queued = useMemo(() => getQueuedGoals(), [getQueuedGoals, goals]);
+  const completedCount = useMemo(() => getCompletedGoals().length, [getCompletedGoals, goals]);
+
+  const activeProgress = useMemo(
+    () => (active ? getGoalProgress(active.id) : null),
+    [active, getGoalProgress],
   );
 
-  const isEmpty = !active && queued.length === 0;
+  const isEmpty = !isLoading && !active && queued.length === 0;
 
   const handleAddGoal = useCallback(() => {
-    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    router.push({ pathname: '/goal/queue' });
+    if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push('/goal/new');
   }, [router]);
 
-  const heroGoal = active ?? queued[0] ?? null;
-  // When an active goal occupies the hero, all queued goals are draggable.
-  // Otherwise the hero is queued[0] and the rest are draggable.
-  const draggableGoals = active ? queued : queued.slice(1);
-  // If queued[0] is the hero (no active goal), it must remain first in the
-  // order we send to reorderQueue.
-  const fixedPrefixIds = active ? [] : queued.slice(0, 1).map((g) => g.id);
+  const handleOpenGoal = useCallback(
+    (goalId: string) => {
+      router.push(`/goal/${goalId}` as any);
+    },
+    [router],
+  );
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  const handleViewCompleted = useCallback(() => {
+    router.push('/goal/history');
+  }, [router]);
+
+  // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
     <View style={[styles.screen, { backgroundColor: c.linen }]}>
@@ -321,52 +363,100 @@ export default function QueueScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* ── Brand wordmark ── */}
+        {/* Header */}
         <View style={[styles.topBlock, { paddingTop: insets.top + 8 }]}>
-          <LivraWordmark fontSize={28} letterSpacing={5} color={c.inkDark} />
-          <Text style={[styles.sectionSubtitle, { color: c.inkMuted }]}>Your goals, one at a time.</Text>
+          <View style={styles.topRow}>
+            <LivraWordmark fontSize={28} letterSpacing={5} color={c.inkDark} />
+            <TouchableOpacity
+              style={[styles.addBtn, { backgroundColor: c.forest }]}
+              onPress={handleAddGoal}
+              activeOpacity={0.85}
+            >
+              <Text style={[styles.addBtnText, { color: c.inkInverse }]}>+ Goal</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={[styles.subtitle, { color: c.inkMuted }]}>Your goals, one at a time.</Text>
         </View>
 
-        {/* ── YOUR QUEUE section label ── */}
-        <SectionLabel style={styles.queueSectionLabel}>YOUR QUEUE</SectionLabel>
+        {/* Error banner */}
+        {error ? (
+          <View style={[styles.errorBanner, { backgroundColor: c.danger + '22' }]}>
+            <Text style={[styles.errorText, { color: c.danger }]}>{error}</Text>
+          </View>
+        ) : null}
 
-        {/* ── Empty state ── */}
-        {isEmpty && (
-          <View style={styles.emptyState}>
-            <View style={{ opacity: 0.4 }}>
-              <SvgLogo color={c.inkMuted} width={32} height={16} />
-            </View>
-            <Text style={[styles.emptyTitle, { color: c.inkDark }]}>No goals yet.</Text>
-            <Text style={[styles.emptySubtitle, { color: c.inkMuted }]}>Add your first goal to begin.</Text>
+        {/* Loading */}
+        {isLoading && (
+          <View style={styles.loadingState}>
+            <ActivityIndicator size="small" color={c.forest} />
           </View>
         )}
 
-        {/* ── Hero card (first / active goal) ── */}
-        {heroGoal && (
-          <QueueCard
-            isHero
-            title={heroGoal.title}
-            description={heroGoal.description}
-            sequenceNumber={1}
-            onAdd={handleAddGoal}
-            style={styles.heroCard}
-          />
+        {/* Empty state */}
+        {isEmpty && (
+          <View style={styles.emptyState}>
+            <View style={{ opacity: 0.35 }}>
+              <SvgLogo color={c.inkMuted} width={32} height={16} />
+            </View>
+            <Text style={[styles.emptyTitle, { color: c.inkDark }]}>No goals yet.</Text>
+            <Text style={[styles.emptySubtitle, { color: c.inkMuted }]}>
+              Add your first goal to begin.
+            </Text>
+            <TouchableOpacity
+              style={[styles.emptyAddBtn, { backgroundColor: c.forest }]}
+              onPress={handleAddGoal}
+              activeOpacity={0.85}
+            >
+              <Text style={[styles.emptyAddBtnText, { color: c.inkInverse }]}>Add a goal</Text>
+            </TouchableOpacity>
+          </View>
         )}
 
-        {/* ── Draggable queue cards (remaining goals) ── */}
-        {draggableGoals.length > 0 && (
-          <DraggableQueueList
-            goals={draggableGoals}
-            sequenceOffset={1}
-            fixedPrefixIds={fixedPrefixIds}
-            onAdd={handleAddGoal}
-          />
+        {/* Active goal */}
+        {active && activeProgress && (
+          <>
+            <SectionLabel style={styles.sectionLabel}>ACTIVE</SectionLabel>
+            <ActiveGoalCard
+              goal={active}
+              progress={activeProgress.progress}
+              threshold={activeProgress.threshold}
+              canComplete={activeProgress.canComplete}
+              onPress={() => handleOpenGoal(active.id)}
+            />
+          </>
         )}
 
-        {/* Bottom padding for FAB + tab bar */}
+        {/* Up next (queued, draggable) */}
+        {queued.length > 0 && (
+          <>
+            <SectionLabel style={styles.sectionLabel}>UP NEXT</SectionLabel>
+            <DraggableQueueList
+              goals={queued}
+              sequenceOffset={active ? 1 : 0}
+              onPressGoal={handleOpenGoal}
+            />
+          </>
+        )}
+
+        {/* Completed */}
+        {completedCount > 0 && (
+          <>
+            <SectionLabel style={styles.sectionLabel}>COMPLETED</SectionLabel>
+            <TouchableOpacity
+              style={[styles.completedRow, { backgroundColor: c.surface }]}
+              onPress={handleViewCompleted}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.completedLabel, { color: c.inkMid }]}>
+                {completedCount} goal{completedCount !== 1 ? 's' : ''} completed
+              </Text>
+              <CaretRight size={16} color={c.inkMuted} weight="regular" />
+            </TouchableOpacity>
+          </>
+        )}
+
         <View style={styles.bottomSpacer} />
       </ScrollView>
-
     </View>
   );
 }
@@ -374,47 +464,118 @@ export default function QueueScreen() {
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-  },
-  scroll: {
-    flex: 1,
-  },
-  content: {
-    flexGrow: 1,
-    paddingBottom: 120,
-  },
+  screen: { flex: 1 },
+  scroll: { flex: 1 },
+  content: { flexGrow: 1, paddingBottom: 120 },
 
-  // Top text block
-  topBlock: {
-    paddingHorizontal: 20,
+  topBlock: { paddingHorizontal: spacing.lg },
+  topRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
-  sectionSubtitle: {
+  subtitle: {
     fontFamily: fonts.serifItalic,
     fontSize: 16,
     marginTop: 4,
     marginBottom: 24,
   },
+  addBtn: {
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  addBtnText: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 13,
+  },
 
-  // Section label
-  queueSectionLabel: {
+  sectionLabel: {
     marginBottom: 12,
     paddingHorizontal: spacing.lg,
   },
 
-  // Hero card
-  heroCard: {
+  // Active card
+  activeCard: {
     marginHorizontal: spacing.lg,
+    borderRadius: radius.xl,
+    padding: spacing.lg,
+  },
+  activeTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  activeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+  },
+  activeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  activeBadgeText: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 10,
+    letterSpacing: 0.8,
+  },
+  activeTitle: {
+    fontFamily: fonts.serif,
+    fontSize: 28,
+    lineHeight: 34,
+  },
+  activeDescription: {
+    fontFamily: fonts.sans,
+    fontSize: 14,
+    marginTop: spacing.xs,
+  },
+  progressSection: {
+    marginTop: spacing.md,
+    gap: spacing.xs,
+  },
+  progressTrack: {
+    height: 4,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 2,
+  },
+  progressLabel: {
+    fontFamily: fonts.sans,
+    fontSize: 12,
+  },
+  activeDeadline: {
+    fontFamily: fonts.sans,
+    fontSize: 12,
+    marginTop: spacing.sm,
+  },
+  completeCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.md,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  completeCtaText: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 13,
   },
 
   // Draggable list
-  listWrapper: {
-    marginTop: spacing.md,
-  },
+  listWrapper: { marginTop: spacing.sm },
   draggableRow: {
     marginHorizontal: spacing.lg,
     marginTop: CARD_GAP,
-    // Position the drag handle on the right edge of the card.
     justifyContent: 'center',
   },
   dragHandle: {
@@ -427,12 +588,46 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
+  // Completed row
+  completedRow: {
+    marginHorizontal: spacing.lg,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  completedLabel: {
+    fontFamily: fonts.sans,
+    fontSize: 14,
+  },
+
+  // Error banner
+  errorBanner: {
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+    borderRadius: radius.md,
+    padding: spacing.md,
+  },
+  errorText: {
+    fontFamily: fonts.sans,
+    fontSize: 13,
+  },
+
+  // Loading
+  loadingState: {
+    paddingVertical: spacing.xxl,
+    alignItems: 'center',
+  },
+
   // Empty state
   emptyState: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xxl,
   },
   emptyTitle: {
     fontFamily: fonts.serifSemibold,
@@ -446,8 +641,16 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: spacing.sm,
   },
-  // Bottom spacer
-  bottomSpacer: {
-    height: spacing.xxl,
+  emptyAddBtn: {
+    marginTop: spacing.lg,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
   },
+  emptyAddBtnText: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 15,
+  },
+
+  bottomSpacer: { height: spacing.xxl },
 });

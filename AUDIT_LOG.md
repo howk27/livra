@@ -1119,3 +1119,14 @@ Audit approved. UI/navigation only — no `state/` or protected paths modified. 
 **Not touched (per spec):** `/goal/queue` (management screen — different route, merged in Task 2), `app/onboarding.tsx` final `router.replace('/(tabs)/focus')` (Phase 4), `focus.tsx:315` dead `See all → /(tabs)/marks` (removed in Task 3 per spec). Grep confirmed `(tabs)/queue` and `(tabs)/home` have no remaining refs; the only `(tabs)/marks` ref is the focus.tsx See-all (Task 3).
 
 **Tests:** 439/439 passing. **Type-check:** 0 errors.
+
+---
+
+### Task 2 — Goals planning view (rewrite of `app/(tabs)/goals.tsx`)
+
+| File | Change | Why |
+|------|--------|-----|
+| `app/(tabs)/goals.tsx` | Full rewrite. Screen renamed `GoalsScreen` (was `QueueScreen`). Added `ActiveGoalCard` inline component: forest bg, progress bar (`getGoalProgress → progress/threshold`), deadline date, "Ready to complete" CTA row when `canComplete`, tappable → `/goal/[id]`. Updated `DraggableRow`: removed `onAdd` prop; wrapped `QueueCard` in `TouchableOpacity` to wire `onPress` → `/goal/[id]` (QueueCard has no `onPress` prop in its interface). Updated `DraggableQueueList`: replaced `onAdd`/`fixedPrefixIds` with `onPressGoal`; `reorderQueue` now receives queued-only IDs (active is separate above, no fixed prefix needed). `handleAddGoal` → `router.push('/goal/new')` (was `/goal/queue` modal). Added `getCompletedGoals` selector; completed count row → `router.push('/goal/history')`. Loading: `ActivityIndicator`. Error: banner with `c.danger`. Empty: logo + copy + CTA button. ACTIVE / UP NEXT / COMPLETED section labels. Add-goal button in header. Removed `useIapSubscriptions` / `useAuth` (not needed in planning view). |
+| — | No `state/` or protected paths modified. `getGoalProgress`, `getCompletedGoals`, `getQueuedGoals`, `getActiveGoal` are all existing selectors on `useGoalsStore`. | UI/navigation only per Phase 3 constraint. |
+
+**Tests:** 439/439. **Type-check:** 0 errors.
