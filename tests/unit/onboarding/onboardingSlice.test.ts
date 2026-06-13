@@ -44,6 +44,27 @@ describe('useOnboardingStore', () => {
     expect(useOnboardingStore.getState().selectedMarkIds).toEqual(['run']);
   });
 
+  test('initial state has empty selectedMarkTargets', () => {
+    expect(useOnboardingStore.getState().selectedMarkTargets).toEqual({});
+  });
+
+  test('setSelectedMarkTargets stores per-mark targets', () => {
+    useOnboardingStore.getState().setSelectedMarkTargets({ workout: 3, sleep: 7 });
+    expect(useOnboardingStore.getState().selectedMarkTargets).toEqual({ workout: 3, sleep: 7 });
+  });
+
+  test('setSelectedMarkTargets replaces on second call', () => {
+    useOnboardingStore.getState().setSelectedMarkTargets({ workout: 3 });
+    useOnboardingStore.getState().setSelectedMarkTargets({ run: 4, water: 7 });
+    expect(useOnboardingStore.getState().selectedMarkTargets).toEqual({ run: 4, water: 7 });
+  });
+
+  test('reset clears selectedMarkTargets', () => {
+    useOnboardingStore.getState().setSelectedMarkTargets({ workout: 5 });
+    useOnboardingStore.getState().reset();
+    expect(useOnboardingStore.getState().selectedMarkTargets).toEqual({});
+  });
+
   test('setAiPackageDraft stores a package', () => {
     const pkg = { goalTitle: 'Test goal', marks: [{ id: 'run', name: 'Run', emoji: '🏃', weeklyTarget: 3 }] };
     useOnboardingStore.getState().setAiPackageDraft(pkg);
@@ -68,6 +89,7 @@ describe('useOnboardingStore', () => {
     store.setGoalTitle('Something');
     store.setCommitment('push');
     store.setSelectedMarkIds(['run', 'sleep']);
+    store.setSelectedMarkTargets({ run: 4, sleep: 7 });
     store.setAiPackageDraft({ goalTitle: 'x', marks: [] });
     store.incrementAiRegenerations();
     store.reset();
@@ -75,6 +97,7 @@ describe('useOnboardingStore', () => {
     expect(after.goalTitle).toBe('');
     expect(after.commitment).toBeNull();
     expect(after.selectedMarkIds).toEqual([]);
+    expect(after.selectedMarkTargets).toEqual({});
     expect(after.aiPackageDraft).toBeNull();
     expect(after.aiRegenerationsUsed).toBe(0);
   });
