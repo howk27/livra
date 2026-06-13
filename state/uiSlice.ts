@@ -28,7 +28,7 @@ interface UIState {
   /** Returns false if logged-in cloud update failed (local completion still applied). */
   completeOnboarding: (
     userId?: string,
-    meta?: { focusArea?: string; completedAt?: string }
+    meta?: { commitment?: string; completedAt?: string }
   ) => Promise<boolean>;
   loadUIState: (userId?: string) => Promise<void>;
   getEffectiveTheme: () => 'light' | 'dark';
@@ -62,7 +62,7 @@ export const useUIStore = create<UIState>((set, get) => ({
 
   completeOnboarding: async (
     userId?: string,
-    meta?: { focusArea?: string; completedAt?: string }
+    meta?: { commitment?: string; completedAt?: string }
   ) => {
     const supabase = getSupabaseClient();
     const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
@@ -73,7 +73,7 @@ export const useUIStore = create<UIState>((set, get) => ({
     if (userId && isSupabaseConfigured) {
       try {
         const profileUpdate: Record<string, unknown> = { onboarding_completed: true };
-        if (meta?.focusArea) profileUpdate.onboarding_focus_area = meta.focusArea;
+        if (meta?.commitment) profileUpdate.onboarding_focus_area = meta.commitment;
         if (meta?.completedAt) profileUpdate.onboarding_completed_at = meta.completedAt;
 
         const { error } = await supabase

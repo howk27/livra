@@ -1,5 +1,7 @@
-import type { FocusArea } from '@/state/onboardingSlice';
 import { MARK_LIBRARY, type MarkDefinition } from '@/lib/suggestedCounters';
+
+// Local copy — FocusArea was removed from onboardingSlice in Phase 4a (legacy path only).
+type FocusArea = 'health' | 'career' | 'creativity' | 'learning' | 'relationships' | 'finances';
 
 export type { MarkDefinition as MarkTemplate };
 
