@@ -823,7 +823,7 @@ function MarkDetailContent() {
           )}
 
           {/* ── Frequency ─────────────────────────────────────────────────── */}
-          {counter.frequency_min != null && (
+          {counter.frequency_min != null && counter.frequency_max != null && (
             <View style={styles.settingCard}>
               <View style={styles.settingRow}>
                 <View style={{ flex: 1 }}>

@@ -173,21 +173,8 @@ export default function NewCounterScreen() {
   };
 
   const handleSuggestedCounterSelect = (counter: SuggestedCounter) => {
-    const preset = PRESET_MARKS.find(p => p.name === counter.name);
-    if (preset) {
-      setName(preset.name);
-      setSelectedIconType(preset.iconType);
-      setColor(preset.color);
-      setHasManualColorOverride(true);
-    } else {
-      setName(counter.name);
-      const entry = Object.entries(ICON_TYPE_TO_EMOJI).find(([, emoji]) => emoji === counter.emoji);
-      if (entry) setSelectedIconType(entry[0] as Exclude<MarkType, 'custom'>);
-      setHasManualColorOverride(false);
-    }
-    setDailyTarget((prev) => prev || 1);
-    setPendingSuggestedCounter(null);
-    setMode('custom');
+    setWeeklyTarget(null); // reset any stale target from prior selection
+    setPendingSuggestedCounter(counter); // show the confirmation footer
   };
 
   const handleConfirmSuggestedCounter = async () => {
