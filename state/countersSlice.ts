@@ -125,6 +125,7 @@ export const useMarksStore = create<MarksState>((set, get) => ({
     const frequency_recommended = markData.frequency_recommended ?? 3;
     const frequency_max = markData.frequency_max ?? 7;
     const weekly_target = markData.weekly_target ?? markData.frequency_recommended ?? 3;
+    const frequency_kind = markData.frequency_kind ?? 'variable';
     const mark: Mark = {
       ...markData,
       id: uuidv4(),
@@ -136,6 +137,7 @@ export const useMarksStore = create<MarksState>((set, get) => ({
       frequency_recommended,
       frequency_max,
       weekly_target,
+      frequency_kind,
     };
 
     await execute(
@@ -172,12 +174,13 @@ export const useMarksStore = create<MarksState>((set, get) => ({
     );
 
     await execute(
-      'UPDATE lc_counters SET frequency_min = ?, frequency_recommended = ?, frequency_max = ?, weekly_target = ? WHERE id = ?',
+      'UPDATE lc_counters SET frequency_min = ?, frequency_recommended = ?, frequency_max = ?, weekly_target = ?, frequency_kind = ? WHERE id = ?',
       [
         mark.frequency_min ?? 1,
         mark.frequency_recommended ?? 3,
         mark.frequency_max ?? 7,
         mark.weekly_target ?? 3,
+        mark.frequency_kind ?? 'variable',
         mark.id,
       ],
     );
@@ -214,6 +217,7 @@ export const useMarksStore = create<MarksState>((set, get) => ({
         schedule_type = ?, schedule_days = ?, goal_value = ?, goal_period = ?,
         health_kit_type = ?, health_kit_config = ?,
         frequency_min = ?, frequency_recommended = ?, frequency_max = ?, weekly_target = ?,
+        frequency_kind = ?,
         updated_at = ?
       WHERE id = ?`,
         [
@@ -236,6 +240,7 @@ export const useMarksStore = create<MarksState>((set, get) => ({
           updated.frequency_recommended ?? null,
           updated.frequency_max ?? null,
           updated.weekly_target ?? null,
+          updated.frequency_kind ?? 'variable',
           updated.updated_at,
           id,
         ]

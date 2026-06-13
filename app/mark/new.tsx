@@ -202,6 +202,7 @@ export default function NewCounterScreen() {
         enable_streak: true,
         user_id: user?.id!,
         dailyTarget,
+        frequency_kind: pendingSuggestedCounter.frequencyKind,
       });
       showSuccess('Counter created successfully');
       setPendingSuggestedCounter(null);

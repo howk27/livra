@@ -83,7 +83,7 @@ describe('migrateFrequencyFields', () => {
     expect(result[0].frequency_recommended).toBe(7);
     expect(result[0].frequency_min).toBe(1);
     expect(result[0].frequency_max).toBe(7);
-    expect(result[0].frequencyKind).toBe('variable');
+    expect(result[0].frequency_kind).toBe('variable');
 
     // custom [1,3,5] → weekly_target=3
     expect(result[1].frequency_recommended).toBe(3);
@@ -114,8 +114,10 @@ describe('migrateFrequencyFields', () => {
       .spyOn(AsyncStorage, 'getItem')
       .mockRejectedValueOnce(new Error('storage error'));
 
-    await expect(migrateFrequencyFields()).resolves.toBeUndefined();
-
-    spy.mockRestore();
+    try {
+      await expect(migrateFrequencyFields()).resolves.toBeUndefined();
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

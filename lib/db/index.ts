@@ -82,7 +82,11 @@ export const migrateFrequencyFields = async (): Promise<void> => {
         ) {
           try {
             const days: unknown[] = JSON.parse(mark.schedule_days);
-            weekly_target = Math.min(7, Math.max(1, days.length));
+            if (Array.isArray(days) && days.length > 0) {
+              weekly_target = Math.max(1, Math.min(7, days.length));
+            } else {
+              weekly_target = 3; // fallback: same as null schedule
+            }
           } catch {
             weekly_target = 3;
           }
@@ -96,7 +100,7 @@ export const migrateFrequencyFields = async (): Promise<void> => {
           frequency_recommended: weekly_target,
           frequency_min: 1,
           frequency_max: 7,
-          frequencyKind: 'variable',
+          frequency_kind: 'variable',
         };
       });
       await AsyncStorage.setItem(STORAGE_KEYS.counters, JSON.stringify(updated));
@@ -446,7 +450,7 @@ const createMockDb = (): MockDatabase => ({
             
             // Try to extract field names from SQL and match with params
             // SQL format: UPDATE lc_counters SET field1 = ?, field2 = ?, ... WHERE id = ?
-            const setMatch = sql.match(/SET\s+(.+?)\s+WHERE/i);
+            const setMatch = sql.match(/SET\s+(.+?)\s+WHERE/is);
             if (setMatch) {
               const assignments = setMatch[1].split(',').map(s => s.trim());
               assignments.forEach((assignment, i) => {

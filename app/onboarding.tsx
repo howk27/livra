@@ -183,6 +183,7 @@ export default function OnboardingScreen() {
           enable_streak: true,
           sort_index: 0,
           goal_id: newGoal.id,
+          frequency_kind: sugg.frequencyKind,
         });
         newMarkIds.push(newMark.id);
       }

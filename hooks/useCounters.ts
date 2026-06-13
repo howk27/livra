@@ -81,6 +81,7 @@ export const useMarks = () => {
       schedule_days?: string;
       goal_value?: number | null;
       goal_period?: string | null;
+      frequency_kind?: 'variable' | 'fixed' | 'abstinence' | null;
       skipSync?: boolean; // Optional flag to skip sync (useful for batch operations)
     }) => {
       // Check counter limit for free users (skip check if skipSync is true - used for onboarding)
@@ -109,6 +110,7 @@ export const useMarks = () => {
         schedule_days: data.schedule_days,
         goal_value: data.goal_value,
         goal_period: data.goal_period as any,
+        frequency_kind: data.frequency_kind ?? 'variable',
       });
 
       // Sync to Supabase after creating mark

@@ -40,6 +40,7 @@ export type Mark = {
   frequency_recommended?: number | null;
   frequency_max?: number | null;
   weekly_target?: number | null;
+  frequency_kind?: FrequencyKind | null;
 };
 
 export type MarkEvent = {
