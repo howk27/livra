@@ -1172,4 +1172,188 @@ The initial Task 3 commit dimmed doneForWeek marks but did not render the rest l
 **Fix 4 — /goal/[id] route confirmed pre-existing.**
 `app/goal/[id].tsx` was created in commit `f22c5f1` ("feat(goals): add goal detail screen with progress ring, linked marks, and edit actions") — before Phase 3's first commit (`39ef69a`). The goal card header's `router.push('/goal/${goal.id}')` navigates to this pre-existing screen. No new goal-detail screen was built in Phase 3.
 
-**Type-check:** 0 errors. **Tests:** pending (background run).
+**Type-check:** 0 errors. **Tests:** 439/439 passing.
+
+---
+
+## Phase 4 — Onboarding, Commitment & AI (Task 1 Audit — read-only)
+
+### 1. Screen diff — current vs. Phase 4 target
+
+**Current flow (`app/onboarding.tsx`):** Single file, internal `useState` step counter (0–4). No `app/onboarding/` directory exists.
+
+| Step | Current | Phase 4 target | Action |
+|------|---------|----------------|--------|
+| 0 | Welcome (logo, "Build with intention.", tagline) | Screen 1: Welcome (same structure; add "graveyard of abandoned goals" copy) | Keep — update copy |
+| 1 | "How Livra works" (numbered feature rows) | Not in sequence | **Drop** |
+| 2 | Sign up (email/password + Google stub) | Not in sequence (auth removed from flow) | **Drop / relocate** — see auth position note |
+| 3 | "What's the goal you're after?" (free text) | Screen 2: Your first goal + AI escape hatch inline | **Repurpose** — add AI button + escape hatch |
+| 4 | `CommitmentScreen` component (old tier+frequency UI) | Replaced by Screen 3 + Screen 4 | **Replace** entirely |
+| — | — | Screen 3: "What feels right for now?" (easing/steady/push) | **Build new** |
+| — | — | Screen 4: Your marks (review, "why" lines, deselect, cap 3) | **Build new** |
+
+**2026-05-28 spec reconciliation:** The `focus-area` and `daily-identity` screens were **never built as route files**. They existed only as `onboardingSlice` fields (`focusArea: FocusArea | null`, `identitySelections: string[]`) and the legacy `getRecommendedMarks(selections, focusArea)` function (already self-marked as "Legacy" in `markRecommendations.ts`). Phase 4 drops both — remove from slice in Task 2.
+
+**CommitmentScreen (`components/CommitmentScreen.tsx`) used in two places:**
+- `app/onboarding.tsx` Step 4 — replaced by Phase 4's new pace + marks screens
+- `app/goal/new.tsx` — the goal-creation flow outside onboarding; **KEEP for this use**. The old `TierId`/`FrequencyId`/`TIERS`/`FREQUENCIES` system in `goalMarkSuggestions.ts` stays intact for `goal/new.tsx`. Phase 4 builds a separate pace screen, not a replacement of the component.
+
+**Auth position (open question):** Current onboarding embeds sign-up at Step 2 (before goal). Phase 4's 4-screen sequence contains no auth step. The current `handleOnboardingConfirm` needs a `userId` to call `createGoal`/`addMark`. Phase 4 must resolve: auth before onboarding (sign-up wall at app open), or auth after (optimistic local write then sync on sign-up). Flag for Task 2 decision — don't build onboarding screens until resolved.
+
+---
+
+### 2. `state/onboardingSlice.ts` — current fields + required changes
+
+**Current fields:**
+```ts
+goalTitle: string              // kept — goal text must survive AI path; never lost
+focusArea: FocusArea | null    // DROP — 2026-05-28 artifact, superseded by Phase 4
+identitySelections: string[]   // DROP — 2026-05-28 artifact, superseded by Phase 4
+```
+
+**Current actions:** `setGoalTitle`, `setFocusArea`, `setIdentitySelections`, `reset`
+
+**Phase 4 additions needed:**
+```ts
+commitment: 'easing' | 'steady' | 'push' | null   // new — pace screen answer
+aiPackageDraft: AIGoalPackage | null                // AI result held until confirm+activate
+aiRegenerationsUsed: number                          // cap tracker; blocks generate at ≥ 2
+```
+
+New actions: `setCommitment`, `setAiPackageDraft`, `incrementAiRegenerations`
+Drop: `setFocusArea`, `setIdentitySelections`
+Drop type: `FocusArea` (exported from slice, used only by `markRecommendations.ts` legacy path)
+
+**Critical gap — slice is not connected to `onboarding.tsx`:** The screen uses local `useState` for all step state (`goalTitle`, `email`, `password`, etc.). `useOnboardingStore` is imported nowhere in `onboarding.tsx`. The slice is effectively dead code. Task 2 must wire screen state through the slice.
+
+---
+
+### 3. `completeOnboarding` in `state/uiSlice.ts`
+
+**Current signature:**
+```ts
+completeOnboarding(userId?: string, meta?: { focusArea?: string; completedAt?: string }): Promise<boolean>
+```
+
+Writes to `profiles`: `onboarding_completed: true`, `onboarding_focus_area` (if meta.focusArea), `onboarding_completed_at` (if meta.completedAt).
+
+**Critical gap — `completeOnboarding` is never called in `onboarding.tsx`:** `handleOnboardingConfirm` does `router.replace('/(tabs)/focus')` but never calls `completeOnboarding`. This means `profiles.onboarding_completed` is never set to `true` in the current implementation — cross-device state is wrong. Fix in Task 2 alongside screen rebuild.
+
+**Changes for Phase 4:**
+- `meta.focusArea` → repurpose as `commitment` value (column is text, stores `'easing'|'steady'|'push'`). The DB column name `onboarding_focus_area` stays — no migration needed. The meta key should be renamed internally to `commitment` (rename the field in the call site, not the column).
+- No structural changes to `completeOnboarding` itself. The AI-package cache write is a separate operation on confirm+activate, not in this function.
+
+---
+
+### 4. Recommendation engine
+
+**`getMarksForGoal(goalTitle: string): MarkDefinition[]`** in `lib/goalMarkSuggestions.ts`:
+- Keyword-tokenizes the goal title, scores marks by tag overlap, returns top 5 (or fallback set).
+- This is the manual path engine — feeds Screen 4 on non-AI path. Already used at Step 3→4 transition in current code. **Keep as-is.**
+
+**`MarkDefinition` in `lib/suggestedCounters.ts`** already has:
+```ts
+frequency_min: number;        // e.g. 3
+frequency_recommended: number; // e.g. 5
+frequency_max: number;        // e.g. 7
+frequencyKind: 'variable' | 'fixed' | 'abstinence';
+```
+
+**Commitment mapping reads these fields directly:**
+- `easing` → top 2 variable marks, `frequency_min` as `weekly_target`
+- `steady` → top 2 variable marks, `frequency_recommended` as `weekly_target`
+- `push` → top 3 variable marks, `frequency_max` as `weekly_target`
+- Fixed marks (`frequencyKind === 'fixed'`) ignore commitment, keep their fixed target.
+- Abstinence marks ignore commitment per spec.
+
+**Tuning conflict:** Several `frequency_recommended` values are 5–7×/week (e.g., `water` = 7, `steps` = 7, `vitamins` = 7, `nutrition` = 7). The spec requires "steady" to land in the **3–4× zone**. Marks with `frequency_recommended ≥ 5` violate this for the "steady" band. Task 3 must audit and tune `MARK_LIBRARY` recommended values — or apply a clamp `Math.min(frequency_recommended, 4)` for the steady commitment band.
+
+---
+
+### 5. AI call path
+
+**Status: does not exist.** No AI generation code anywhere in the codebase. Files searched: `app/`, `lib/`, `hooks/`, `state/`.
+
+**Proposed path for Task 4:**
+- New service: `lib/ai/goalGeneration.ts`
+- Uses `@anthropic-ai/sdk` (check if installed; not seen in `package.json` search — likely needs adding, but spec says "no new packages." Use `fetch` directly against the Anthropic Messages API, or check if `@anthropic-ai/sdk` is available).
+- Call: `POST /v1/messages` with `claude-sonnet-4-6`, system prompt including Phosphor icon list + mark library names + `AIGoalPackage` JSON schema, user message = goal text.
+- Validate output contract before review screen; fallback to manual on any failure.
+- One silent retry on malformed JSON; second failure → manual.
+
+**BLOCKED — package check:** `@anthropic-ai/sdk` presence in `package.json` must be confirmed before Task 4. If absent, use `fetch` directly (no new package). Flag for Task 2 pre-check.
+
+---
+
+### 6. Free-use counter
+
+**Status: does not exist.** No `ai_uses_count`, `ai_free_uses`, or equivalent in AsyncStorage keys, state slices, or Supabase columns.
+
+**Required:** 1 free AI generation per user (ever), across all entry points. Onboarding's first-goal generation is that free use for everyone. Second attempt is soft gate (Livra+ only).
+
+**Proposed location:** `profiles.ai_uses_count integer DEFAULT 0` in Supabase (authoritative, cross-device, reinstall-proof) + AsyncStorage key `@livra_ai_free_uses` as read-through cache.
+
+**Write path:** Increment `ai_uses_count` only on **confirm + activate** (user lands on Focus with marks created). A failed, abandoned, or manual-fallback generation does NOT count.
+
+**Proposed migration (do not run):**
+```sql
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS ai_uses_count integer NOT NULL DEFAULT 0;
+```
+
+---
+
+### 7. Cache table
+
+**Status: does not exist.** No `ai_goal_packages`, `goal_template_cache`, or equivalent Supabase table.
+
+**Shape:** Stores confirmed+activated `AIGoalPackage` records for semantic cache lookup (same goal text → skip API call).
+
+**Lookup key:** Normalized, lowercased, stripped goal text hash (SHA-256 or similar). Semantic — not exact match. Task 4 decides normalization level.
+
+**Proposed migration (do not run):**
+```sql
+CREATE TABLE IF NOT EXISTS public.ai_goal_packages (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  goal_text_hash text NOT NULL,     -- SHA-256 of normalized goal text
+  goal_text      text NOT NULL,     -- original (debug only)
+  package_json   jsonb NOT NULL,    -- AIGoalPackage shape
+  user_id        uuid REFERENCES auth.users(id) ON DELETE CASCADE,
+  created_at     timestamptz DEFAULT now()
+);
+CREATE INDEX ai_goal_packages_hash_idx ON public.ai_goal_packages (goal_text_hash);
+ALTER TABLE public.ai_goal_packages ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "ai_goal_packages_select" ON public.ai_goal_packages
+  FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "ai_goal_packages_insert" ON public.ai_goal_packages
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+```
+
+---
+
+### 8. Phase 3 landing route
+
+Confirmed: `app/(tabs)/focus.tsx` exists. `handleOnboardingConfirm` in current code already does `router.replace('/(tabs)/focus')`. No change needed here.
+
+---
+
+### Summary table
+
+| Item | Status | Action for Task 2 |
+|------|--------|-------------------|
+| `app/onboarding/` directory | Does not exist — single file | Rebuild sequence in `app/onboarding.tsx` or split to `app/onboarding/` dir |
+| Step 1 "How Livra works" | Present | Drop |
+| Step 2 Sign up | Embedded at Step 2 | Relocate; auth-position decision needed first |
+| `focus-area` + `daily-identity` screens | Never built; fields only in slice | Drop slice fields |
+| `onboardingSlice` → slice unused | Slice exists, not wired | Wire to screen; add commitment/aiPackageDraft/aiRegenerationsUsed |
+| `completeOnboarding` never called | Gap in current flow | Call it on confirm; rename meta.focusArea → commitment |
+| Old `CommitmentScreen` (tier/freq) | Used in goal/new.tsx too | Keep for goal/new; build new pace screen separately |
+| `frequency_recommended` tuning | Several marks > 4×/week | Task 3: audit + clamp or tune to 3-4× for steady band |
+| AI call path | Does not exist | Task 4: `lib/ai/goalGeneration.ts` via fetch or SDK |
+| Free-use counter | Does not exist | Task 4: `profiles.ai_uses_count` + AsyncStorage cache |
+| Cache table | Does not exist | Task 4: `ai_goal_packages` migration (write, do not run) |
+| Focus landing route | `/(tabs)/focus` confirmed | No change |
+
+**Conflicts with locked decisions:** None found. All open items from the redesign index are consistent with what's in the codebase.
+
+**No code written. Audit complete. STOP.**
