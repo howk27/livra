@@ -121,6 +121,10 @@ export const useMarksStore = create<MarksState>((set, get) => ({
 
     const now = new Date().toISOString();
     const dailyTarget = normalizeDailyTargetInput(markData.dailyTarget);
+    const frequency_min = markData.frequency_min ?? 1;
+    const frequency_recommended = markData.frequency_recommended ?? 3;
+    const frequency_max = markData.frequency_max ?? 7;
+    const weekly_target = markData.weekly_target ?? markData.frequency_recommended ?? 3;
     const mark: Mark = {
       ...markData,
       id: uuidv4(),
@@ -128,6 +132,10 @@ export const useMarksStore = create<MarksState>((set, get) => ({
       updated_at: now,
       total: 0,
       dailyTarget,
+      frequency_min,
+      frequency_recommended,
+      frequency_max,
+      weekly_target,
     };
 
     await execute(
@@ -163,6 +171,17 @@ export const useMarksStore = create<MarksState>((set, get) => ({
       ],
     );
 
+    await execute(
+      'UPDATE lc_counters SET frequency_min = ?, frequency_recommended = ?, frequency_max = ?, weekly_target = ? WHERE id = ?',
+      [
+        mark.frequency_min ?? 1,
+        mark.frequency_recommended ?? 3,
+        mark.frequency_max ?? 7,
+        mark.weekly_target ?? 3,
+        mark.id,
+      ],
+    );
+
     set((state) => ({
       marks: [...state.marks, mark],
     }));
@@ -194,6 +213,7 @@ export const useMarksStore = create<MarksState>((set, get) => ({
         sort_index = ?, total = ?, last_activity_date = ?, dailyTarget = ?,
         schedule_type = ?, schedule_days = ?, goal_value = ?, goal_period = ?,
         health_kit_type = ?, health_kit_config = ?,
+        frequency_min = ?, frequency_recommended = ?, frequency_max = ?, weekly_target = ?,
         updated_at = ?
       WHERE id = ?`,
         [
@@ -212,6 +232,10 @@ export const useMarksStore = create<MarksState>((set, get) => ({
           updated.goal_period ?? null,
           updated.health_kit_type ?? null,
           updated.health_kit_config ? JSON.stringify(updated.health_kit_config) : null,
+          updated.frequency_min ?? null,
+          updated.frequency_recommended ?? null,
+          updated.frequency_max ?? null,
+          updated.weekly_target ?? null,
           updated.updated_at,
           id,
         ]

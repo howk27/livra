@@ -5,6 +5,8 @@ export type GoalPeriod = 'day' | 'week' | 'month';
 export type ScheduleType = 'daily' | 'weekly' | 'custom';
 export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6; // 0 = Sunday
 
+export type FrequencyKind = 'variable' | 'fixed' | 'abstinence';
+
 export type Mark = {
   id: string;
   user_id: string;
@@ -33,6 +35,11 @@ export type Mark = {
   health_kit_type?: HealthKitType | null;
   health_kit_config?: { stepGoal?: number } | null;
   goal_id?: string | null;
+  // Phase 1: Frequency model
+  frequency_min?: number | null;
+  frequency_recommended?: number | null;
+  frequency_max?: number | null;
+  weekly_target?: number | null;
 };
 
 export type MarkEvent = {

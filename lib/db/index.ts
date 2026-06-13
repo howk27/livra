@@ -32,6 +32,7 @@ const STORAGE_KEYS = {
 
 const MIGRATION_V2_FLAG = '@livra_migration_v2_complete';
 const LEGACY_COUNTERS_KEY = '@livra_db_counters';
+const MIGRATION_FREQ_V1_FLAG = '@livra_migration_freq_v1';
 
 /**
  * One-time migration: copies data from the old @livra_db_counters key to @livra_db_marks.
@@ -55,6 +56,55 @@ export const migrateCountersStorageKey = async (): Promise<void> => {
     await AsyncStorage.setItem(MIGRATION_V2_FLAG, '1');
   } catch (error) {
     logger.error('[DB] Storage key migration failed (non-fatal):', error);
+  }
+};
+
+/**
+ * One-time migration: backfills frequency fields on all existing marks.
+ * Derives weekly_target from schedule_type/schedule_days — never from dailyTarget.
+ * Guarded by @livra_migration_freq_v1 flag. Non-fatal on error.
+ */
+export const migrateFrequencyFields = async (): Promise<void> => {
+  try {
+    const alreadyDone = await AsyncStorage.getItem(MIGRATION_FREQ_V1_FLAG);
+    if (alreadyDone) return;
+
+    const marksJson = await AsyncStorage.getItem(STORAGE_KEYS.counters);
+    if (marksJson) {
+      const marks: any[] = JSON.parse(marksJson);
+      const updated = marks.map((mark) => {
+        let weekly_target: number;
+        if (mark.schedule_type === 'daily') {
+          weekly_target = 7;
+        } else if (
+          (mark.schedule_type === 'weekly' || mark.schedule_type === 'custom') &&
+          mark.schedule_days
+        ) {
+          try {
+            const days: unknown[] = JSON.parse(mark.schedule_days);
+            weekly_target = Math.min(7, Math.max(1, days.length));
+          } catch {
+            weekly_target = 3;
+          }
+        } else {
+          weekly_target = 3;
+        }
+
+        return {
+          ...mark,
+          weekly_target,
+          frequency_recommended: weekly_target,
+          frequency_min: 1,
+          frequency_max: 7,
+          frequencyKind: 'variable',
+        };
+      });
+      await AsyncStorage.setItem(STORAGE_KEYS.counters, JSON.stringify(updated));
+    }
+
+    await AsyncStorage.setItem(MIGRATION_FREQ_V1_FLAG, '1');
+  } catch (error) {
+    logger.error('[DB] Frequency fields migration failed (non-fatal):', error);
   }
 };
 
@@ -1050,6 +1100,8 @@ export const initDatabase = async (): Promise<MockDatabase> => {
 
   // Migrate old storage key before reading any data
   await migrateCountersStorageKey();
+  // Backfill frequency fields on existing marks
+  await migrateFrequencyFields();
 
   // Load existing data from AsyncStorage first
   await loadFromStorage();
