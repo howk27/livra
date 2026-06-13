@@ -1130,3 +1130,28 @@ Audit approved. UI/navigation only — no `state/` or protected paths modified. 
 | — | No `state/` or protected paths modified. `getGoalProgress`, `getCompletedGoals`, `getQueuedGoals`, `getActiveGoal` are all existing selectors on `useGoalsStore`. | UI/navigation only per Phase 3 constraint. |
 
 **Tests:** 439/439. **Type-check:** 0 errors.
+
+---
+
+### Task 3 — Focus tab redesign (`app/(tabs)/focus.tsx`)
+
+| Change | Detail |
+|--------|--------|
+| **Removed `overallStreakDays` memo** (was lines 101–117) | Raw-activity daily streak computation deleted entirely. |
+| **Removed streak haptic effect + `prevStreakRef`** (was lines 156–166) | Effect that fired `Haptics.Light` on streak increase deleted. |
+| **Removed banner streak right side** (was lines 273–278) | `<View style={bannerStreak}>` with `Lightning` icon + `{overallStreakDays} day streak` removed. Banner now shows today fraction (left) + THIS WEEK count (right, from `consistencyResult.counted`). |
+| **Removed stat strip entirely** (was lines 282–299) | `STREAK` / `THIS WEEK` / `GOALS` cells all removed. THIS WEEK migrates into banner right side + inline per-mark `showWeeklyCount` on MarkRow. |
+| **Removed "See all → /(tabs)/marks"** (was lines 314–320) | Dead route after Marks tab archived. Section header and `TouchableOpacity` deleted. |
+| **Removed unused imports** | `Lightning` (phosphor), `subDays` (date-fns), `useRef` (React). |
+| **Added `markWeeklyState` import** | From `lib/features` — drives per-mark done/due state. |
+| **Replaced `visibleMarks` flat list** | Marks grouped by `goal_id`. ≤2 active goals get an inline goal card with `MarkRow` rows driven by weekly state. `markWeeklyState` replaces daily `loggedToday` as the primary done signal. |
+| **Goal card layout** | Goal title header → tappable to `/goal/[id]`; due marks (max 4 + "X more" expander); done-for-week marks dimmed (opacity 0.45) below a divider. `showWeeklyCount/weeklyCount/weeklyTarget` on every `MarkRow` — THIS WEEK context lives inline. |
+| **`handleQuickIncrement` simplified** | Daily target guard removed; bonus logging after `doneForWeek` allowed. |
+| **Forgiveness line** | Preserved at screen level below banner — "Still on track. You need N more check-in(s) this week." |
+| **"All done" banner** | Appears when every active mark is `doneForWeek`: "That's today done. See you tomorrow." |
+| **Daily habits section** | Goal-less marks (`!mark.goal_id`) collapsed behind "Show N" toggle. |
+| **FAB** | Unchanged — `<SpeedDialFAB />` still present. |
+
+**Protected paths not touched:** `state/`, `lib/db/`, `hooks/useCounters.ts`, `lib/goalLogic.ts`, `supabase/`.
+
+**Tests:** 439/439. **Type-check:** 0 errors.

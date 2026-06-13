@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -9,8 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
-import { Lightning } from 'phosphor-react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 
 import { fonts, spacing, radius, borderRadius, shadow, themedColors } from '../../theme/tokens';
@@ -29,15 +28,20 @@ import { useAppDateStore } from '../../state/appDateSlice';
 import { useGoalsStore } from '../../state/goalsSlice';
 import { getAppDate } from '../../lib/appDate';
 import { formatDate } from '../../lib/date';
-import { subDays } from 'date-fns';
 import { resolveDailyTarget } from '../../lib/markDailyTarget';
-import { currentWeekDates, computeCompletionsThisWeek } from '../../lib/features';
+import {
+  currentWeekDates,
+  computeCompletionsThisWeek,
+  markWeeklyState,
+} from '../../lib/features';
 import { computeWeek } from '../../lib/consistency';
 import { logger } from '../../lib/utils/logger';
 import { MARK_LIBRARY } from '../../lib/suggestedCounters';
 import { resolveCounterIconType } from '../../src/components/icons/IconResolver';
 
 import type { Counter } from '../../types';
+
+const MAX_MARKS_PER_CARD = 4;
 
 export default function FocusScreen() {
   const theme = useEffectiveTheme();
@@ -55,17 +59,17 @@ export default function FocusScreen() {
 
   const uniqueCounters = useMemo(() => {
     const map = new Map<string, Counter>();
-    for (const c of counters) {
-      const existing = map.get(c.id);
-      if (!existing || new Date(c.updated_at) > new Date(existing.updated_at)) {
-        map.set(c.id, c);
+    for (const cnt of counters) {
+      const existing = map.get(cnt.id);
+      if (!existing || new Date(cnt.updated_at) > new Date(existing.updated_at)) {
+        map.set(cnt.id, cnt);
       }
     }
     return Array.from(map.values());
   }, [counters]);
 
   const activeCounters = useMemo(
-    () => uniqueCounters.filter((c) => !c.deleted_at),
+    () => uniqueCounters.filter((cnt) => !cnt.deleted_at),
     [uniqueCounters],
   );
 
@@ -79,61 +83,83 @@ export default function FocusScreen() {
     return map;
   }, [allEvents, todayStr]);
 
-  const getActiveGoal = useGoalsStore((s) => s.getActiveGoal);
   const goals = useGoalsStore((s) => s.goals);
-  const activeGoal = useMemo(() => getActiveGoal(), [getActiveGoal, goals]);
-  const activeGoalCount = useMemo(
-    () => goals.filter((g) => g.status === 'active').length,
+  const activeGoals = useMemo(
+    () => goals.filter((g) => g.status === 'active').slice(0, 2),
     [goals],
   );
 
+  // ── Weekly state per mark ─────────────────────────────────────────────────
+
+  const weekDates = useMemo(() => currentWeekDates(), [appDateKey]);
+
+  const weeklyCountsMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const mark of activeCounters) {
+      const markEvents = allEvents.filter((e) => e.mark_id === mark.id && !e.deleted_at);
+      map.set(mark.id, computeCompletionsThisWeek(mark, markEvents, weekDates));
+    }
+    return map;
+  }, [activeCounters, allEvents, weekDates]);
+
+  const consistencyResult = useMemo(() => {
+    if (activeCounters.length === 0) return null;
+    const completionsByMark: Record<string, number> = {};
+    for (const mark of activeCounters) {
+      completionsByMark[mark.id] = weeklyCountsMap.get(mark.id) ?? 0;
+    }
+    return computeWeek(activeCounters, completionsByMark, weekDates);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCounters, weeklyCountsMap, weekDates]);
+
+  // ── Daily progress (for banner) ───────────────────────────────────────────
+
   const completedMarksToday = useMemo(() => {
     let n = 0;
-    activeCounters.forEach((c) => {
-      const todayCount = todayCountsMap.get(c.id) ?? 0;
-      if (todayCount >= resolveDailyTarget(c)) n++;
+    activeCounters.forEach((cnt) => {
+      if ((todayCountsMap.get(cnt.id) ?? 0) >= resolveDailyTarget(cnt)) n++;
     });
     return n;
   }, [activeCounters, todayCountsMap]);
 
   const todayTotal = activeCounters.length;
 
-  const overallStreakDays = useMemo(() => {
-    let streak = 0;
-    const anchor = getAppDate();
-    for (let i = 0; i < 365; i++) {
-      const dateStr = formatDate(subDays(anchor, i));
-      const hasActivity = allEvents.some(
-        (e) =>
-          e.occurred_local_date === dateStr &&
-          !e.deleted_at &&
-          e.event_type === 'increment',
-      );
-      if (hasActivity) streak++;
-      else break;
-    }
-    return streak;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allEvents, appDateKey]);
+  // ── Grouped marks ─────────────────────────────────────────────────────────
 
-  const weekDates = useMemo(() => currentWeekDates(), [appDateKey]);
+  const marksForGoal = useCallback(
+    (goalId: string) => activeCounters.filter((m) => m.goal_id === goalId),
+    [activeCounters],
+  );
 
-  const consistencyResult = useMemo(() => {
-    if (activeCounters.length === 0) return null;
-    const completionsByMark: Record<string, number> = {};
-    for (const mark of activeCounters) {
-      const markEvents = allEvents.filter(e => e.mark_id === mark.id && !e.deleted_at);
-      completionsByMark[mark.id] = computeCompletionsThisWeek(mark, markEvents, weekDates);
-    }
-    return computeWeek(activeCounters, completionsByMark, weekDates);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeCounters, allEvents, weekDates]);
+  const goallessMarks = useMemo(
+    () => activeCounters.filter((m) => !m.goal_id),
+    [activeCounters],
+  );
 
-  const heroProgress = useMemo(() => {
-    if (!activeGoal) return 0;
-    if (todayTotal === 0) return 0;
-    return completedMarksToday / todayTotal;
-  }, [activeGoal, completedMarksToday, todayTotal]);
+  // True when every active mark is doneForWeek
+  const allDoneForWeek = useMemo(() => {
+    if (activeCounters.length === 0) return false;
+    return activeCounters.every((m) => {
+      const count = weeklyCountsMap.get(m.id) ?? 0;
+      return markWeeklyState(m, count) === 'doneForWeek';
+    });
+  }, [activeCounters, weeklyCountsMap]);
+
+  // ── Expander state (per-goal "X more" collapse) ───────────────────────────
+
+  const [expandedGoalIds, setExpandedGoalIds] = useState<Set<string>>(new Set());
+  const [dailyHabitsExpanded, setDailyHabitsExpanded] = useState(false);
+
+  const toggleGoalExpand = useCallback((goalId: string) => {
+    setExpandedGoalIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(goalId)) next.delete(goalId);
+      else next.add(goalId);
+      return next;
+    });
+  }, []);
+
+  // ── User info ─────────────────────────────────────────────────────────────
 
   const firstName = useMemo(() => {
     const full: string =
@@ -146,6 +172,8 @@ export default function FocusScreen() {
     return 'Your journey continues today.';
   }, [firstName]);
 
+  // ── Side effects ──────────────────────────────────────────────────────────
+
   useEffect(() => {
     if (!permissionGranted || counters.length === 0) return;
     updateSmartNotifications(user?.id).catch((e) =>
@@ -153,28 +181,12 @@ export default function FocusScreen() {
     );
   }, [counters, permissionGranted, user?.id, updateSmartNotifications]);
 
-  const prevStreakRef = useRef<number | null>(null);
-  useEffect(() => {
-    if (prevStreakRef.current === null) {
-      prevStreakRef.current = overallStreakDays;
-      return;
-    }
-    if (overallStreakDays > prevStreakRef.current && Platform.OS !== 'web') {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    prevStreakRef.current = overallStreakDays;
-  }, [overallStreakDays]);
+  // ── Handlers ──────────────────────────────────────────────────────────────
 
   const handleQuickIncrement = useCallback(
     async (markId: string) => {
       if (!user?.id) return;
       try {
-        const counter = counters.find((c) => c.id === markId);
-        if (counter) {
-          const target = resolveDailyTarget(counter);
-          const currentToday = todayCountsMap.get(markId) ?? 0;
-          if (currentToday >= target) return;
-        }
         await incrementCounter(markId, user.id, 1);
         if (permissionGranted) {
           updateSmartNotifications(user?.id).catch((e) =>
@@ -185,7 +197,7 @@ export default function FocusScreen() {
         logger.error('Error incrementing mark:', error);
       }
     },
-    [user?.id, incrementCounter, permissionGranted, updateSmartNotifications, counters, todayCountsMap],
+    [user?.id, incrementCounter, permissionGranted, updateSmartNotifications],
   );
 
   const handleMarkLongPress = useCallback((markId: string, markName: string) => {
@@ -204,7 +216,11 @@ export default function FocusScreen() {
               `"${markName}" will be permanently removed.`,
               [
                 { text: 'Keep it', style: 'cancel' },
-                { text: 'Remove', style: 'destructive', onPress: () => { deleteCounter(markId).catch(() => {}); } },
+                {
+                  text: 'Remove',
+                  style: 'destructive',
+                  onPress: () => { deleteCounter(markId).catch(() => {}); },
+                },
               ],
             );
           },
@@ -229,7 +245,54 @@ export default function FocusScreen() {
     );
   }, [deleteCounter]);
 
-  const visibleMarks = useMemo(() => activeCounters.slice(0, 5), [activeCounters]);
+  // ── Mark row renderer (shared) ────────────────────────────────────────────
+
+  const renderMarkRow = useCallback(
+    (mark: Counter, isLast: boolean, dimmed = false) => {
+      const weeklyCount = weeklyCountsMap.get(mark.id) ?? 0;
+      const weeklyTarget = mark.weekly_target ?? 3;
+      const isDoneForWeek = markWeeklyState(mark, weeklyCount) === 'doneForWeek';
+      const libMark = MARK_LIBRARY.find((m) => m.emoji === mark.emoji);
+      const category =
+        libMark?.category ??
+        resolveCounterIconType({ name: mark.name, emoji: mark.emoji ?? '' }) ??
+        'custom';
+
+      return (
+        <Swipeable
+          key={mark.id}
+          renderRightActions={() => (
+            <TouchableOpacity
+              style={[styles.swipeDelete, { backgroundColor: c.danger }]}
+              onPress={() => handleDeleteMark(mark.id, mark.name)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.swipeDeleteText}>Delete</Text>
+            </TouchableOpacity>
+          )}
+          rightThreshold={80}
+        >
+          <View style={dimmed || isDoneForWeek ? styles.doneMarkWrap : undefined}>
+            <MarkRow
+              title={mark.name}
+              category={category}
+              loggedToday={isDoneForWeek}
+              onPress={() => router.push(`/mark/${mark.id}` as any)}
+              onLog={() => handleQuickIncrement(mark.id)}
+              onLongPress={() => handleMarkLongPress(mark.id, mark.name)}
+              isLast={isLast}
+              showWeeklyCount
+              weeklyCount={weeklyCount}
+              weeklyTarget={weeklyTarget}
+            />
+          </View>
+        </Swipeable>
+      );
+    },
+    [weeklyCountsMap, c, handleDeleteMark, handleMarkLongPress, handleQuickIncrement, router],
+  );
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <View style={[styles.screen, { backgroundColor: c.linen }]}>
@@ -252,53 +315,36 @@ export default function FocusScreen() {
             borderColor: theme === 'dark' ? 'rgba(141,181,168,0.15)' : 'rgba(28,60,52,0.15)',
           },
         ]}>
-          {/* Glass overlay */}
-          <View
-            style={[
-              StyleSheet.absoluteFill,
-              {
-                borderRadius: borderRadius.card,
-                backgroundColor: theme === 'dark'
-                  ? 'rgba(141,181,168,0.08)'
-                  : 'rgba(28,60,52,0.08)',
-              },
-            ]}
-          />
+          <View style={[
+            StyleSheet.absoluteFill,
+            {
+              borderRadius: borderRadius.card,
+              backgroundColor: theme === 'dark'
+                ? 'rgba(141,181,168,0.08)'
+                : 'rgba(28,60,52,0.08)',
+            },
+          ]} />
           <View>
             <Text style={[styles.bannerFraction, { color: theme === 'dark' ? c.inkInverse : c.forest }]}>
               {completedMarksToday}/{todayTotal}
             </Text>
-            <Text style={[styles.bannerFractionLabel, { color: theme === 'dark' ? c.inkInverseMuted : c.inkMuted }]}>marks</Text>
-          </View>
-          <View style={styles.bannerStreak}>
-            <Lightning size={14} color={c.mint} weight="duotone" />
-            <Text style={[styles.bannerStreakText, { color: c.mint }]}>
-              {overallStreakDays} day streak
+            <Text style={[styles.bannerFractionLabel, { color: theme === 'dark' ? c.inkInverseMuted : c.inkMuted }]}>
+              marks today
             </Text>
           </View>
-        </View>
-
-        {/* ── Compact Stat Strip ── */}
-        <View style={[styles.statStrip, { borderTopColor: c.borderLight, borderBottomColor: c.borderLight }]}>
-          {[
-            { value: String(overallStreakDays), label: 'STREAK' },
-            { value: String(consistencyResult?.counted ?? 0), label: 'THIS WEEK' },
-            { value: String(activeGoalCount), label: 'GOALS' },
-          ].map((item, idx, arr) => (
-            <View
-              key={item.label}
-              style={[
-                styles.statCell,
-                idx < arr.length - 1 && [styles.statCellBorder, { borderRightColor: c.borderLight }],
-              ]}
-            >
-              <Text style={[styles.statValue, { color: c.inkDark }]}>{item.value}</Text>
-              <Text style={[styles.statLabel, { color: c.inkMuted }]}>{item.label}</Text>
+          {consistencyResult != null && (
+            <View style={styles.bannerWeekly}>
+              <Text style={[styles.bannerWeeklyValue, { color: theme === 'dark' ? c.inkInverse : c.forest }]}>
+                {consistencyResult.counted}
+              </Text>
+              <Text style={[styles.bannerWeeklyLabel, { color: theme === 'dark' ? c.inkInverseMuted : c.inkMuted }]}>
+                this week
+              </Text>
             </View>
-          ))}
+          )}
         </View>
 
-        {/* ── Forgiveness line (in-progress week, sub-threshold) ── */}
+        {/* ── Forgiveness line ── */}
         {consistencyResult && !consistencyResult.strong && consistencyResult.remaining > 0 && (
           <Text style={[styles.forgivenessLine, { color: c.inkMuted }]}>
             {'Still on track. You need '}
@@ -307,67 +353,114 @@ export default function FocusScreen() {
           </Text>
         )}
 
-        {/* ── Your Marks ── */}
-        <View style={styles.marksSection}>
-          <View style={styles.marksSectionHeader}>
-            <SectionLabel>YOUR MARKS</SectionLabel>
-            <TouchableOpacity
-              onPress={() => router.push('/(tabs)/marks' as any)}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Text style={[styles.seeAll, { color: c.forest }]}>See all</Text>
-            </TouchableOpacity>
+        {/* ── All done for the week ── */}
+        {allDoneForWeek && activeCounters.length > 0 && (
+          <View style={[styles.allDoneBanner, { backgroundColor: c.surface }]}>
+            <Text style={[styles.allDoneText, { color: c.inkMid }]}>
+              {"That's today done. See you tomorrow."}
+            </Text>
           </View>
+        )}
 
-          {visibleMarks.length === 0 ? (
-            <View style={[styles.emptyMarks, { backgroundColor: c.surface }]}>
-              <Text style={[styles.emptyMarksText, { color: c.inkMuted }]}>
-                No marks yet — tap + to add your first one.
-              </Text>
-            </View>
-          ) : (
-            <View style={[styles.marksList, { backgroundColor: c.surface }]}>
-              {visibleMarks.map((mark, idx) => {
-                const loggedToday =
-                  (todayCountsMap.get(mark.id) ?? 0) >= resolveDailyTarget(mark);
-                const libMark = MARK_LIBRARY.find(m => m.emoji === mark.emoji);
-                const category =
-                  libMark?.category ??
-                  resolveCounterIconType({ name: mark.name, emoji: mark.emoji ?? '' }) ??
-                  'custom';
-                const goalTitle = mark.goal_id
-                  ? goals.find(g => g.id === mark.goal_id)?.title
-                  : undefined;
-                return (
-                  <Swipeable
-                    key={mark.id}
-                    renderRightActions={() => (
-                      <TouchableOpacity
-                        style={[styles.swipeDelete, { backgroundColor: c.danger }]}
-                        onPress={() => handleDeleteMark(mark.id, mark.name)}
-                        activeOpacity={0.85}
-                      >
-                        <Text style={styles.swipeDeleteText}>Delete</Text>
-                      </TouchableOpacity>
-                    )}
-                    rightThreshold={80}
+        {/* ── Goal cards (≤2 active goals with their marks) ── */}
+        {activeGoals.length > 0 && (
+          <View style={styles.goalCardsSection}>
+            <SectionLabel style={styles.sectionLabel}>YOUR GOALS</SectionLabel>
+            {activeGoals.map((goal) => {
+              const marks = marksForGoal(goal.id);
+              if (marks.length === 0) return null;
+
+              const dueMarks = marks.filter(
+                (m) => markWeeklyState(m, weeklyCountsMap.get(m.id) ?? 0) === 'due',
+              );
+              const doneMarks = marks.filter(
+                (m) => markWeeklyState(m, weeklyCountsMap.get(m.id) ?? 0) === 'doneForWeek',
+              );
+
+              const isExpanded = expandedGoalIds.has(goal.id);
+              const visibleDue = isExpanded ? dueMarks : dueMarks.slice(0, MAX_MARKS_PER_CARD);
+              const hiddenCount = dueMarks.length - visibleDue.length;
+
+              return (
+                <View key={goal.id} style={[styles.goalCard, { backgroundColor: c.surface }]}>
+                  <TouchableOpacity
+                    onPress={() => router.push(`/goal/${goal.id}` as any)}
+                    activeOpacity={0.7}
+                    style={styles.goalCardHeader}
                   >
-                    <MarkRow
-                      title={mark.name}
-                      category={category}
-                      loggedToday={loggedToday}
-                      onPress={() => router.push(`/mark/${mark.id}` as any)}
-                      onLog={() => handleQuickIncrement(mark.id)}
-                      onLongPress={() => handleMarkLongPress(mark.id, mark.name)}
-                      isLast={idx === visibleMarks.length - 1}
-                      subtitle={goalTitle}
-                    />
-                  </Swipeable>
-                );
-              })}
-            </View>
-          )}
-        </View>
+                    <Text style={[styles.goalCardTitle, { color: c.inkDark }]} numberOfLines={1}>
+                      {goal.title}
+                    </Text>
+                    <Text style={[styles.goalCardMeta, { color: c.inkMuted }]}>
+                      {marks.length} mark{marks.length !== 1 ? 's' : ''}
+                    </Text>
+                  </TouchableOpacity>
+
+                  {/* Due marks */}
+                  {visibleDue.map((mark, idx) =>
+                    renderMarkRow(mark, idx === visibleDue.length - 1 && doneMarks.length === 0 && hiddenCount === 0)
+                  )}
+
+                  {/* "X more" expander */}
+                  {hiddenCount > 0 && (
+                    <TouchableOpacity
+                      style={styles.expanderRow}
+                      onPress={() => toggleGoalExpand(goal.id)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.expanderText, { color: c.forest }]}>
+                        {hiddenCount} more mark{hiddenCount !== 1 ? 's' : ''}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {/* Done marks (dimmed) */}
+                  {doneMarks.length > 0 && (
+                    <>
+                      <View style={[styles.doneDivider, { backgroundColor: c.borderLight }]} />
+                      {doneMarks.map((mark, idx) =>
+                        renderMarkRow(mark, idx === doneMarks.length - 1, true)
+                      )}
+                    </>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        )}
+
+        {/* ── Daily habits (goal-less marks, collapsible) ── */}
+        {goallessMarks.length > 0 && (
+          <View style={styles.dailyHabitsSection}>
+            <TouchableOpacity
+              style={styles.dailyHabitsHeader}
+              onPress={() => setDailyHabitsExpanded((v) => !v)}
+              activeOpacity={0.7}
+            >
+              <SectionLabel style={styles.sectionLabel}>DAILY HABITS</SectionLabel>
+              <Text style={[styles.dailyHabitsToggle, { color: c.forest }]}>
+                {dailyHabitsExpanded ? 'Hide' : `Show ${goallessMarks.length}`}
+              </Text>
+            </TouchableOpacity>
+
+            {dailyHabitsExpanded && (
+              <View style={[styles.marksList, { backgroundColor: c.surface }]}>
+                {goallessMarks.map((mark, idx) =>
+                  renderMarkRow(mark, idx === goallessMarks.length - 1)
+                )}
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* ── Empty state (no marks at all) ── */}
+        {activeCounters.length === 0 && !loading && (
+          <View style={[styles.emptyMarks, { backgroundColor: c.surface }]}>
+            <Text style={[styles.emptyMarksText, { color: c.inkMuted }]}>
+              No marks yet — tap + to add your first one.
+            </Text>
+          </View>
+        )}
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
@@ -378,17 +471,10 @@ export default function FocusScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-  },
-  scroll: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: spacing.xxl,
-  },
+  screen: { flex: 1 },
+  scroll: { flex: 1 },
+  scrollContent: { paddingBottom: spacing.xxl },
 
-  // Greeting
   greeting: {
     fontFamily: fonts.serifItalic,
     fontSize: 22,
@@ -397,7 +483,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
 
-  // Compact progress banner
+  // Progress banner
   progressBanner: {
     marginHorizontal: spacing.lg,
     marginTop: spacing.lg,
@@ -419,40 +505,19 @@ const styles = StyleSheet.create({
     fontFamily: fonts.sans,
     fontSize: 12,
   },
-  bannerStreak: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
+  bannerWeekly: {
+    alignItems: 'flex-end',
   },
-  bannerStreakText: {
-    fontFamily: fonts.sansMedium,
-    fontSize: 13,
+  bannerWeeklyValue: {
+    fontFamily: fonts.serif,
+    fontSize: 26,
+    lineHeight: 32,
+    textAlign: 'right',
   },
-  // Compact stat strip
-  statStrip: {
-    flexDirection: 'row',
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.md,
-    height: 44,
-    borderTopWidth: 0.5,
-    borderBottomWidth: 0.5,
-  },
-  statCell: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  statCellBorder: {
-    borderRightWidth: 0.5,
-  },
-  statValue: {
-    fontFamily: fonts.sansSemibold,
-    fontSize: 16,
-  },
-  statLabel: {
+  bannerWeeklyLabel: {
     fontFamily: fonts.sans,
-    fontSize: 10,
-    letterSpacing: 0.5,
+    fontSize: 12,
+    textAlign: 'right',
   },
 
   forgivenessLine: {
@@ -463,27 +528,92 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
 
-  // Marks section
-  marksSection: {
+  allDoneBanner: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    alignItems: 'center',
+  },
+  allDoneText: {
+    fontFamily: fonts.serifItalic,
+    fontSize: 15,
+    textAlign: 'center',
+  },
+
+  // Goal cards section
+  goalCardsSection: {
     marginTop: spacing.xl,
   },
-  marksSectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  sectionLabel: {
     marginBottom: spacing.sm,
     paddingHorizontal: spacing.lg,
   },
-  seeAll: {
+  goalCard: {
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+    borderRadius: radius.xl,
+    overflow: 'hidden',
+    ...shadow.card,
+  },
+  goalCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  goalCardTitle: {
+    fontFamily: fonts.serifSemibold,
+    fontSize: 18,
+    flex: 1,
+    marginRight: spacing.sm,
+  },
+  goalCardMeta: {
+    fontFamily: fonts.sans,
+    fontSize: 12,
+  },
+  expanderRow: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+  },
+  expanderText: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 13,
+  },
+  doneDivider: {
+    height: 0.5,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.xs,
+  },
+  doneMarkWrap: {
+    opacity: 0.45,
+  },
+
+  // Daily habits
+  dailyHabitsSection: {
+    marginTop: spacing.xl,
+  },
+  dailyHabitsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  dailyHabitsToggle: {
     fontFamily: fonts.sansMedium,
     fontSize: 12,
   },
+
   marksList: {
     gap: 6,
     ...shadow.card,
   },
+
   emptyMarks: {
     marginHorizontal: spacing.lg,
+    marginTop: spacing.xl,
     borderRadius: radius.lg,
     padding: spacing.lg,
     alignItems: 'center',
@@ -506,7 +636,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#FFFFFF',
   },
-  bottomSpacer: {
-    height: 160,
-  },
+
+  bottomSpacer: { height: 160 },
 });
