@@ -31,6 +31,8 @@ import { getAppDate } from '../../lib/appDate';
 import { formatDate } from '../../lib/date';
 import { subDays } from 'date-fns';
 import { resolveDailyTarget } from '../../lib/markDailyTarget';
+import { currentWeekDates, computeCompletionsThisWeek } from '../../lib/features';
+import { computeWeek } from '../../lib/consistency';
 import { logger } from '../../lib/utils/logger';
 import { MARK_LIBRARY } from '../../lib/suggestedCounters';
 import { resolveCounterIconType } from '../../src/components/icons/IconResolver';
@@ -114,28 +116,18 @@ export default function FocusScreen() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allEvents, appDateKey]);
 
-  const thisWeekCount = useMemo(() => {
-    const anchor = getAppDate();
-    const dow = anchor.getDay();
-    const monday = new Date(anchor);
-    monday.setDate(anchor.getDate() - ((dow + 6) % 7));
-    monday.setHours(0, 0, 0, 0);
-    const dates = new Set(
-      Array.from({ length: 7 }, (_, i) => {
-        const d = new Date(monday);
-        d.setDate(monday.getDate() + i);
-        return formatDate(d);
-      }),
-    );
-    let total = 0;
-    allEvents.forEach((e) => {
-      if (!e.deleted_at && e.event_type === 'increment' && dates.has(e.occurred_local_date)) {
-        total += e.amount ?? 1;
-      }
-    });
-    return total;
+  const weekDates = useMemo(() => currentWeekDates(), [appDateKey]);
+
+  const consistencyResult = useMemo(() => {
+    if (activeCounters.length === 0) return null;
+    const completionsByMark: Record<string, number> = {};
+    for (const mark of activeCounters) {
+      const markEvents = allEvents.filter(e => e.mark_id === mark.id && !e.deleted_at);
+      completionsByMark[mark.id] = computeCompletionsThisWeek(mark, markEvents, weekDates);
+    }
+    return computeWeek(activeCounters, completionsByMark, weekDates);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allEvents, appDateKey]);
+  }, [activeCounters, allEvents, weekDates]);
 
   const heroProgress = useMemo(() => {
     if (!activeGoal) return 0;
@@ -290,7 +282,7 @@ export default function FocusScreen() {
         <View style={[styles.statStrip, { borderTopColor: c.borderLight, borderBottomColor: c.borderLight }]}>
           {[
             { value: String(overallStreakDays), label: 'STREAK' },
-            { value: String(thisWeekCount), label: 'THIS WEEK' },
+            { value: String(consistencyResult?.counted ?? 0), label: 'THIS WEEK' },
             { value: String(activeGoalCount), label: 'GOALS' },
           ].map((item, idx, arr) => (
             <View
@@ -305,6 +297,15 @@ export default function FocusScreen() {
             </View>
           ))}
         </View>
+
+        {/* ── Forgiveness line (in-progress week, sub-threshold) ── */}
+        {consistencyResult && !consistencyResult.strong && consistencyResult.remaining > 0 && (
+          <Text style={[styles.forgivenessLine, { color: c.inkMuted }]}>
+            {'Still on track. You need '}
+            <Text style={{ color: c.inkDark }}>{consistencyResult.remaining}</Text>
+            {` more check-in${consistencyResult.remaining !== 1 ? 's' : ''} this week.`}
+          </Text>
+        )}
 
         {/* ── Your Marks ── */}
         <View style={styles.marksSection}>
@@ -452,6 +453,14 @@ const styles = StyleSheet.create({
     fontFamily: fonts.sans,
     fontSize: 10,
     letterSpacing: 0.5,
+  },
+
+  forgivenessLine: {
+    fontFamily: fonts.sans,
+    fontSize: 13,
+    lineHeight: 18,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.sm,
   },
 
   // Marks section

@@ -2,7 +2,7 @@
  * Tracking screen — Livra 2.0 Layer 4.
  * Calendar heatmap hero + week sentiment header + streak timeline + insight line.
  */
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../theme/colors';
@@ -23,6 +23,7 @@ import { StreakTimeline, type StreakRecord } from '../../components/StreakTimeli
 import { getWeekSentimentHeader } from '../../lib/copy';
 import { getWeeklyInsight } from '../../lib/insights';
 import { currentWeekDates } from '../../lib/features';
+import { appendCompletedWeeks, weeksStrong, type ConsistencyHistoryEntry } from '../../lib/consistency';
 import { applyOpacity } from '@/src/components/icons/color';
 
 export default function StatsScreen() {
@@ -36,6 +37,17 @@ export default function StatsScreen() {
   const activeCounters = useMemo(() => counters.filter(c => !c.deleted_at), [counters]);
   const today = getAppDate();
   const totalMarks = activeCounters.length;
+
+  // ── Consistency history (weeks strong) ──────────────────────────────────
+  const [consistencyHistory, setConsistencyHistory] = useState<ConsistencyHistoryEntry[]>([]);
+  useEffect(() => {
+    if (activeCounters.length === 0) return;
+    appendCompletedWeeks(activeCounters, allEvents)
+      .then(setConsistencyHistory)
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appDateKey]);
+  const weeksStrongCount = useMemo(() => weeksStrong(consistencyHistory), [consistencyHistory]);
 
   // ── Week stats ─────────────────────────────────────────────────────────
   const { weekLoggedDays, isAfterComeback } = useMemo(() => {
@@ -179,6 +191,7 @@ export default function StatsScreen() {
             <StatCard label="Best streak" value={`${statCards.bestStreak.longest} days`} themeColors={themeColors} isDark={isDark} />
             <StatCard label="Total logged" value={String(statCards.totalLogged)} themeColors={themeColors} isDark={isDark} />
             <StatCard label="Best day" value={statCards.bestDay} themeColors={themeColors} isDark={isDark} />
+            <StatCard label="Weeks strong" value={String(weeksStrongCount)} themeColors={themeColors} isDark={isDark} />
           </View>
 
         </ScrollView>

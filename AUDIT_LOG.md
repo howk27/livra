@@ -959,3 +959,39 @@ The `weeksStrong` history must be stored. No AsyncStorage key exists yet. **Phas
 ### 6. No collisions with locked formula
 
 The `computeWeek` formula fields (`weekly_target`, `completions`, `weekDates`) all exist and are unprotected. No field touches `schedule_type`, `schedule_days`, `dailyTarget`, `goal_value`, or `goal_period`. No protected file needs modification for Phase 2.
+
+---
+
+## Phase 2 Task 2 — `lib/consistency.ts` (commit `8354aeb`)
+
+| File | Change | Why |
+|------|--------|-----|
+| `lib/consistency.ts` | Created. Exports `computeWeek(marks, completionsByMark, weekDates)` → `{ expected, counted, required, strong, remaining }` per the locked formula. Exports `weeksStrong(history)` — total (not consecutive) strong-week count. Exports `appendCompletedWeeks(marks, allEvents)` — async thin layer: reads `@livra_consistency_history`, finds completed Mon–Sun weeks not yet recorded, evaluates each with `computeWeek` (never the in-progress week), appends and persists. Backfills up to 12 weeks on empty history. | Weekly consistency engine per Phase 2 spec. |
+| `tests/unit/consistency.test.ts` | 16 tests: formula fields, per-mark cap (bonus logs excluded), remaining = copy number, low-volume rounding (expected=2→required=1), empty marks, all-met week, default weekly_target=3, weeksStrong variants, appendCompletedWeeks (skip in-progress, one missed, multiple missed backfill, no re-record, max-12 on empty). Written before implementation (TDD). | |
+
+**Tests:** 16/16. **Type-check:** 0 errors.
+
+---
+
+## Phase 2 Task 3 — Week-helper consolidation (commit `c0cdd5a`)
+
+| File | Change | Why |
+|------|--------|-----|
+| `app/(tabs)/tracking.tsx` | Removed private `getWeekDatesMondayFirst()` (lines 88–96). Added `currentWeekDates` import from `lib/features`. Replaced `getWeekDatesMondayFirst(getAppDate())` at line 164 with `currentWeekDates()`. Pure dedup — same Monday-start logic, no behavior change. | Duplicate eliminated; single canonical definition. |
+| `app/(tabs)/stats.tsx` | Replaced inline Monday-start block (lines 40–47 computing `weekLoggedDays`/`isAfterComeback`) with `currentWeekDates()`. Logic preserved; previous-week dates now derived from `dates[0] - 7 days`. Pure dedup. | Same. |
+| `hooks/useWeeklyReview.ts` | **Behavior change**: replaced `getWeekRange(ref)` (trailing-7 days) with last completed ISO Mon–Sun week. New logic: `currentMonday = currentWeekDates()[0]`, `lastSunday = currentMonday - 1 day`. Passes `lastSunday` to `getWeekRange`, yielding `weekStart = lastSunday - 6 = last Monday`. Removed `referenceDate` parameter (no callers). | Weekly review must target a complete Mon–Sun week, never a partial in-progress stub. |
+
+**Behavior note (useWeeklyReview):** Reviews are recomputed on the fly (not stored snapshots). Changing the window from trailing-7 to ISO Mon–Sun means past history entries under trailing-7 keys remain in `livra_weekly_review_history` but are superseded by new ISO-keyed entries. Cosmetic boundary shift; no stored review was rewritten.
+
+**Tests:** 402/402. **Type-check:** 0 errors.
+
+---
+
+## Phase 2 Task 4 — Copy wiring (commit pending)
+
+| File | Change | Why |
+|------|--------|-----|
+| `app/(tabs)/focus.tsx` | Removed `thisWeekCount` memo (inline Monday-start block). Added `weekDates` memo via `currentWeekDates()`. Added `consistencyResult` memo: calls `computeCompletionsThisWeek` per active mark, then `computeWeek` for the current week. Replaced `thisWeekCount` in stat strip with `consistencyResult?.counted ?? 0`. Added forgiveness line below stat strip: "Still on track. You need {remaining} more check-in(s) this week." — only when `!strong && remaining > 0`. No red/negative styling on any element. | Forgiveness copy wired to consistency engine. THIS WEEK stat shows completion days (not raw event sum). |
+| `app/(tabs)/stats.tsx` | Added `useEffect` to call `appendCompletedWeeks` on mount (app-open trigger for history persistence). Added `weeksStrongCount` from `weeksStrong(consistencyHistory)`. Added "Weeks strong" stat card to the stat row. | `weeksStrong` appears in stats view only per spec. |
+
+**Tests:** 439/439. **Type-check:** 0 errors.
