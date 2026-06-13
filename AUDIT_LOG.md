@@ -1155,3 +1155,21 @@ Audit approved. UI/navigation only — no `state/` or protected paths modified. 
 **Protected paths not touched:** `state/`, `lib/db/`, `hooks/useCounters.ts`, `lib/goalLogic.ts`, `supabase/`.
 
 **Tests:** 439/439. **Type-check:** 0 errors.
+
+---
+
+### Phase 3 Task 3 — Post-review fixes (commit `6528d1b`)
+
+**Fix 1 — THIS WEEK aggregate removed from banner.**
+The banner right-side block (`bannerWeekly`: `consistencyResult.counted` + "this week" label) was still present after the initial Task 3 commit. Removed in this fix. The `justifyContent: 'space-between'` banner style was also removed (single child). The `consistencyResult` computation itself was preserved — it still feeds the forgiveness line. Per-mark `showWeeklyCount` on `MarkRow` rows also preserved.
+
+**Fix 2 — "That's today done." trigger corrected.**
+The initial implementation used `allDoneForWeek` (every mark is `doneForWeek`) — a weekly completion event that almost never fires. The spec requires a *daily* payoff: fires when nothing is still loggable today. Replaced with `allDoneForDay`: every active mark is either `markWeeklyState === 'doneForWeek'` OR `todayCountsMap count >= resolveDailyTarget(m)`.
+
+**Fix 3 — doneForWeek rest line + bonus log (ADDED — was missing).**
+The initial Task 3 commit dimmed doneForWeek marks but did not render the rest line or bonus-log button called for by the spec. Added inline below each doneForWeek `MarkRow`: "You've hit your N this week. Rest is part of it — but if you want one more, go for it." + a quiet "Log one more" button that calls `handleQuickIncrement`. Gate: `frequency_kind !== 'abstinence' && frequency_kind !== 'fixed'` — abstinence and fixed marks never show rest copy. Note: `checkGatingRules` referenced in the spec does not exist in the codebase; the bonus button calls `handleQuickIncrement` directly (same path used by normal logging).
+
+**Fix 4 — /goal/[id] route confirmed pre-existing.**
+`app/goal/[id].tsx` was created in commit `f22c5f1` ("feat(goals): add goal detail screen with progress ring, linked marks, and edit actions") — before Phase 3's first commit (`39ef69a`). The goal card header's `router.push('/goal/${goal.id}')` navigates to this pre-existing screen. No new goal-detail screen was built in Phase 3.
+
+**Type-check:** 0 errors. **Tests:** pending (background run).
