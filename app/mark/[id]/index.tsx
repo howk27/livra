@@ -58,7 +58,7 @@ import {
 import { themedColors, spacing, borderRadius, fontSize, fontWeight, shadow, fonts } from '../../../theme/tokens';
 import { useEffectiveTheme } from '../../../state/uiSlice';
 import { LivraHeader } from '../../../components/ui/LivraHeader';
-import { MarkFrequencyPicker } from '../../../components/ui/MarkFrequencyPicker';
+import { MarkFrequencyPicker, frequencyLabel } from '../../../components/ui/MarkFrequencyPicker';
 import { PillButton } from '../../../components/ui/PillButton';
 import { SectionLabel } from '../../../components/ui/SectionLabel';
 import { useCounters } from '../../../hooks/useCounters';
@@ -90,6 +90,19 @@ function hexToRgba(hex: string, alpha: number): string {
   const g = parseInt(h.substring(2, 4), 16);
   const b = parseInt(h.substring(4, 6), 16);
   return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function markSubtitle(mark: Pick<import('../../../types').Mark, 'frequency_kind' | 'weekly_target' | 'frequency_recommended' | 'name'>): string | null {
+  if (!mark.frequency_kind) return null;
+  if (mark.frequency_kind === 'abstinence') return 'Every day';
+  if (mark.frequency_kind === 'fixed') {
+    const nameLower = mark.name.toLowerCase();
+    if (nameLower.includes('sleep') || nameLower.includes('rest')) return 'Every night';
+    return 'Every day';
+  }
+  const target = mark.weekly_target ?? mark.frequency_recommended ?? null;
+  if (target == null) return null;
+  return frequencyLabel(target);
 }
 
 export default function MarkDetailScreen() {
@@ -634,9 +647,13 @@ function MarkDetailContent() {
               <CatIcon size={32} color={accent} weight="duotone" />
             </View>
             <Text style={styles.heroTitle}>{counter.name}</Text>
-            {counter.unit ? (
-              <Text style={styles.heroMeta}>{counter.unit}</Text>
-            ) : null}
+            {(() => {
+              const sub = markSubtitle(counter);
+              const goalName = workingTowardGoal?.title ?? null;
+              const display = sub ?? goalName;
+              if (!display) return null;
+              return <Text style={styles.heroMeta}>{display}</Text>;
+            })()}
             {workingTowardGoal ? (
               <TouchableOpacity
                 onPress={() => router.push(`/goal/${workingTowardGoal.id}` as any)}

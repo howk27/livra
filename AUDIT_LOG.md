@@ -886,3 +886,14 @@ Sleep (7/7/7 fixed) and the four abstinence marks (No Alcohol, No Phone, No Spen
 **Flag:** `startOfWeekISO()` in `lib/features.ts` (line ~24) is Sunday-start and still used by `getPeriodTotal` for `'week'` period goals. `currentWeekDates()` and `computeCompletionsThisWeek` use Monday-start logic. **Phase 2 must reconcile** whether `getPeriodTotal` week period should also shift to Monday-start or whether the two functions intentionally use different week anchors.
 
 **Tests:** 20/20 passing (weeklyState.test.ts). **Type-check:** 0 errors.
+
+---
+
+## Phase 1 Task 5 — Subtitle Fix: replace `unit` string with frequency phrasing (2026-06-12)
+
+| File | Change | Why |
+|------|--------|-----|
+| `app/(tabs)/marks.tsx` | Added `import { frequencyLabel } from '../../components/ui/MarkFrequencyPicker'` and `import type { Mark } from '../../types'`. Added `markSubtitle()` helper (lines 24–35). Replaced `mark.unit ? <Text>{mark.unit}</Text>` (was lines 121–125) with an IIFE calling `markSubtitle(mark)` — renders frequency phrasing or nothing. | The `unit` field (`'sessions'`, `'items'`, etc.) was never intended as a display subtitle. The marks list now shows human-readable frequency text (e.g., "Twice a week", "Every day") or nothing if the mark lacks frequency data. |
+| `app/mark/[id]/index.tsx` | Added `frequencyLabel` to the existing `MarkFrequencyPicker` import (line 61). Added `markSubtitle()` helper using `Pick<import('../../../types').Mark, ...>` inline type (lines 95–106). Replaced `counter.unit ? <Text>{counter.unit}</Text>` (was lines 637–639) with an IIFE that shows `markSubtitle(counter)` first, falls back to `workingTowardGoal?.title` if no frequency data, or renders nothing. | Same `unit` bug on the mark detail hero area. Fall-back to linked goal title ensures old marks (without frequency fields) still show useful context. Raw `unit` string no longer renders. |
+
+**Type-check:** 0 errors.

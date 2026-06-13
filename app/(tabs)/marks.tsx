@@ -18,6 +18,21 @@ import { useIapSubscriptions } from '../../hooks/useIapSubscriptions';
 import { applyOpacity } from '@/src/components/icons/color';
 import MarkIcon from '@/src/components/icons/CounterIcon';
 import { resolveCounterIconType } from '@/src/components/icons/IconResolver';
+import { frequencyLabel } from '../../components/ui/MarkFrequencyPicker';
+import type { Mark } from '../../types';
+
+function markSubtitle(mark: Pick<Mark, 'frequency_kind' | 'weekly_target' | 'frequency_recommended' | 'name'>): string | null {
+  if (!mark.frequency_kind) return null;
+  if (mark.frequency_kind === 'abstinence') return 'Every day';
+  if (mark.frequency_kind === 'fixed') {
+    const nameLower = mark.name.toLowerCase();
+    if (nameLower.includes('sleep') || nameLower.includes('rest')) return 'Every night';
+    return 'Every day';
+  }
+  const target = mark.weekly_target ?? mark.frequency_recommended ?? null;
+  if (target == null) return null;
+  return frequencyLabel(target);
+}
 
 const FOREST = '#1C3830';
 const FREE_MARK_LIMIT = 3;
@@ -118,11 +133,15 @@ export default function MarksScreen() {
                     <Text style={[styles.markName, { color: themeColors.text }]} numberOfLines={1}>
                       {mark.name}
                     </Text>
-                    {mark.unit ? (
-                      <Text style={[styles.markUnit, { color: themeColors.textSecondary }]} numberOfLines={1}>
-                        {mark.unit}
-                      </Text>
-                    ) : null}
+                    {(() => {
+                      const sub = markSubtitle(mark);
+                      if (!sub) return null;
+                      return (
+                        <Text style={[styles.markUnit, { color: themeColors.textSecondary }]} numberOfLines={1}>
+                          {sub}
+                        </Text>
+                      );
+                    })()}
                   </View>
 
                   {/* Lock badge */}
