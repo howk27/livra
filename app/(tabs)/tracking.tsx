@@ -16,6 +16,7 @@ import {
   pickStreakHighlightForWeek,
   pickBestDayForWeek,
 } from '../../lib/topMarkWeekly';
+import { currentWeekDates } from '../../lib/features';
 import type { BestDayResult } from '../../lib/topMarkWeekly';
 import { WeeklyReflectionCard } from '../../components/WeeklyReflectionCard';
 import { buildReflectionItems, type ReflectionItem } from '../../lib/weeklyReflectionLogic';
@@ -85,16 +86,6 @@ function toLocalDateStr(d: Date): string {
   return formatDate(d);
 }
 
-function getWeekDatesMondayFirst(anchor: Date): string[] {
-  const today = anchor;
-  const mondayOffset = (today.getDay() + 6) % 7;
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(today);
-    d.setDate(today.getDate() - mondayOffset + i);
-    return toLocalDateStr(d);
-  });
-}
-
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
@@ -161,7 +152,7 @@ export default function TrackingScreen() {
     else setCalMonth(m => m + 1);
   };
 
-  const weekDates = useMemo(() => getWeekDatesMondayFirst(getAppDate()), [appDateKey]);
+  const weekDates = useMemo(() => currentWeekDates(), [appDateKey]);
 
   const weekEvents = useMemo(
     () =>

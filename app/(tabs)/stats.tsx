@@ -22,6 +22,7 @@ import { CalendarHeatmap } from '../../components/CalendarHeatmap';
 import { StreakTimeline, type StreakRecord } from '../../components/StreakTimeline';
 import { getWeekSentimentHeader } from '../../lib/copy';
 import { getWeeklyInsight } from '../../lib/insights';
+import { currentWeekDates } from '../../lib/features';
 import { applyOpacity } from '@/src/components/icons/color';
 
 export default function StatsScreen() {
@@ -38,20 +39,16 @@ export default function StatsScreen() {
 
   // ── Week stats ─────────────────────────────────────────────────────────
   const { weekLoggedDays, isAfterComeback } = useMemo(() => {
-    const dow = today.getDay();
-    const monday = new Date(today);
-    monday.setDate(today.getDate() - ((dow + 6) % 7));
-    monday.setHours(0, 0, 0, 0);
-    const dates = Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(monday); d.setDate(monday.getDate() + i); return formatDate(d);
-    });
+    const dates = currentWeekDates();
     const active = new Set(
       allEvents.filter(e => !e.deleted_at && e.event_type === 'increment' && dates.includes(e.occurred_local_date))
         .map(e => e.occurred_local_date),
     );
     // Coming back after a gap: previous week had 0 but this week already has logs
+    const prevMonday = new Date(dates[0] + 'T00:00:00');
+    prevMonday.setDate(prevMonday.getDate() - 7);
     const prevWeekDates = Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(monday); d.setDate(monday.getDate() - 7 + i); return formatDate(d);
+      const d = new Date(prevMonday); d.setDate(prevMonday.getDate() + i); return formatDate(d);
     });
     const prevActive = new Set(
       allEvents.filter(e => !e.deleted_at && e.event_type === 'increment' && prevWeekDates.includes(e.occurred_local_date))
