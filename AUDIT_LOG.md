@@ -897,3 +897,65 @@ Sleep (7/7/7 fixed) and the four abstinence marks (No Alcohol, No Phone, No Spen
 | `app/mark/[id]/index.tsx` | Added `frequencyLabel` to the existing `MarkFrequencyPicker` import (line 61). Added `markSubtitle()` helper using `Pick<import('../../../types').Mark, ...>` inline type (lines 95–106). Replaced `counter.unit ? <Text>{counter.unit}</Text>` (was lines 637–639) with an IIFE that shows `markSubtitle(counter)` first, falls back to `workingTowardGoal?.title` if no frequency data, or renders nothing. | Same `unit` bug on the mark detail hero area. Fall-back to linked goal title ensures old marks (without frequency fields) still show useful context. Raw `unit` string no longer renders. |
 
 **Type-check:** 0 errors.
+
+---
+
+## Phase 2 — Consistency Engine Audit (2026-06-12)
+
+### 1. `currentWeekDates()` — confirmed present
+
+`lib/features.ts` exports `currentWeekDates(): string[]` (Monday-start ISO, added Phase 1 Task 4). It is the canonical week definition. The consistency engine **must use this and nothing else.**
+
+### 2. Completions query — exact read-only call
+
+`lib/features.ts` also exports `computeCompletionsThisWeek(mark, events, weekDates): number` (Phase 1 Task 4). It counts **distinct days in `weekDates` where sum of increment `amount` ≥ `resolveDailyTarget(mark)`** — exactly the Phase 1 definition. Events come from `useEventsStore(s => s.events || [])`.
+
+The consistency engine call pattern per mark:
+
+```ts
+const weekDates = currentWeekDates();
+const markEvents = allEvents.filter(e => e.mark_id === mark.id && !e.deleted_at);
+const completions = computeCompletionsThisWeek(mark, markEvents, weekDates);
+const capped = Math.min(completions, mark.weekly_target ?? 3);
+```
+
+No protected files need to be touched. `useEventsStore` is already read in the tracking tab and mark detail screen — the consistency engine reads it the same way.
+
+### 3. Weekly-reflection feature — reconciliation onto `currentWeekDates()`
+
+Four week helpers exist in the codebase. Three are legacy; one is canonical:
+
+| Helper | File | Anchor | Status |
+|--------|------|--------|--------|
+| `currentWeekDates()` | `lib/features.ts:38` | **Monday-start ISO** ✅ | **Canonical — use this** |
+| `getWeekDatesMondayFirst(anchor)` | `app/(tabs)/tracking.tsx:88` | Monday-start (same logic as canonical) | ⚠️ Private duplicate — **Phase 2 must replace with `currentWeekDates()` import** |
+| `getWeekRange(referenceDate)` | `lib/review/weeklyReview.ts:48` | **Trailing 7 days** (today − 6) | ❌ Different semantic — used by `useWeeklyReview.ts`. The weekly-reflection panel shows the trailing window, not the ISO week. **Phase 2 must migrate `hooks/useWeeklyReview.ts` to use `currentWeekDates()`** so the reflection panel and consistency engine agree on week boundaries. |
+| `startOfWeekMonday(d)` | `lib/notificationSystem.ts:28` | Monday-start | Private to notification scheduling — not a concern for consistency. |
+| stats.tsx inline | `app/(tabs)/stats.tsx:40–47` | Monday-start (inline) | ⚠️ Duplicate inline — replace with `currentWeekDates()` call in Phase 2. |
+
+**Reconciliation required for Phase 2:**
+- `app/(tabs)/tracking.tsx`: replace `getWeekDatesMondayFirst(getAppDate())` (line 164) with `currentWeekDates()`.
+- `hooks/useWeeklyReview.ts`: replace `getWeekRange(ref)` with `currentWeekDates()` to align the reflection panel to the ISO week.
+- `app/(tabs)/stats.tsx`: replace inline Monday-start block (lines 40–47) with `currentWeekDates()`.
+
+### 4. "Weeks strong" — current state
+
+**"Weeks strong" does not exist anywhere in the codebase** — no component, no utility, no copy string. Phase 2 Task 3 will introduce it for the stats view only. No migration needed; it is net-new.
+
+The `weeksStrong` history must be stored. No AsyncStorage key exists yet. **Phase 2 must define `@livra_consistency_history`**: `{ weekStart: string; strong: boolean }[]`. `weeksStrong(history)` = count of entries where `strong === true` (total, not consecutive — see Phase 2 Task 2 note).
+
+### 5. Daily streak as primary metric — surfaces Phase 3 must clean up
+
+| Location | What renders | Spec says |
+|----------|-------------|-----------|
+| `app/(tabs)/focus.tsx:284` | `{overallStreakDays} day streak` in the Focus banner | **Remove from Focus** (Phase 3) |
+| `app/(tabs)/focus.tsx:292` | `STREAK` stat strip on Focus | **Remove from Focus** (Phase 3) |
+| `app/(tabs)/tracking.tsx:259–265` | Per-mark day-streak motivation copy | Phase 3 decision (tracking panel replaced by consistency copy) |
+| `app/(tabs)/stats.tsx:182` | "Best streak" stat card — all-time best consecutive days | **Keep in stats** — historical, not weekly consistency |
+| `app/(tabs)/profile.tsx:258` | "Best streak" per-mark | Review in Phase 3 |
+
+`overallStreakDays` (focus.tsx:99–115) counts consecutive days with any increment event — it is a raw-activity daily streak, unrelated to the weekly consistency model. Phase 3 removes it from the daily surface.
+
+### 6. No collisions with locked formula
+
+The `computeWeek` formula fields (`weekly_target`, `completions`, `weekDates`) all exist and are unprotected. No field touches `schedule_type`, `schedule_days`, `dailyTarget`, `goal_value`, or `goal_period`. No protected file needs modification for Phase 2.
