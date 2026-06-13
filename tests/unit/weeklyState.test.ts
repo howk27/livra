@@ -22,6 +22,10 @@ import type { MarkEvent } from '../../types';
 
 const mockGetAppDate = getAppDate as jest.MockedFunction<typeof getAppDate>;
 
+afterEach(() => {
+  mockGetAppDate.mockReset();
+});
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 function setFakeDate(isoDate: string): void {

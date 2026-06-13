@@ -700,7 +700,7 @@ function MarkDetailContent() {
           )}
 
           {/* ── Done for week ────────────────────────────────────────────── */}
-          {weeklyState === 'doneForWeek' && counter?.frequency_kind === 'variable' && (
+          {weeklyState === 'doneForWeek' && counter?.frequency_kind === 'variable' && completedToday && (
             <View style={styles.doneForWeekWrap}>
               <Text style={[styles.doneForWeekText, { color: c.inkMuted }]}>
                 {`You've hit your ${counter.weekly_target ?? 3} this week. Rest is part of it — but if you want one more, go for it.`}
