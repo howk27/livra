@@ -15,7 +15,7 @@ type IconProps = { focused: boolean; color: string };
 function FocusIcon({ focused, color }: IconProps) {
   return <Feather name="sun" size={22} color={color} style={focused ? { opacity: 1 } : { opacity: 0.7 }} />;
 }
-function QueueIcon({ focused, color }: IconProps) {
+function GoalsIcon({ focused, color }: IconProps) {
   return <Feather name="list" size={22} color={color} style={focused ? { opacity: 1 } : { opacity: 0.7 }} />;
 }
 function SettingsIcon({ focused, color }: IconProps) {
@@ -89,11 +89,11 @@ export default function TabLayout() {
             }}
           />
           <Tabs.Screen
-            name="queue"
+            name="goals"
             options={{
-              title: 'Queue',
+              title: 'Goals',
               tabBarIcon: ({ focused, color }) => (
-                <QueueIcon focused={focused} color={color as string} />
+                <GoalsIcon focused={focused} color={color as string} />
               ),
             }}
           />
@@ -108,7 +108,6 @@ export default function TabLayout() {
           />
 
           {/* Hidden routes — accessible programmatically */}
-          <Tabs.Screen name="marks" options={{ href: null }} />
           <Tabs.Screen name="stats" options={{ href: null }} />
           <Tabs.Screen name="tracking" options={{ href: null }} />
           <Tabs.Screen name="profile" options={{ href: null }} />

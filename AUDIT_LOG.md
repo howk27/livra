@@ -995,3 +995,127 @@ The `computeWeek` formula fields (`weekly_target`, `completions`, `weekDates`) a
 | `app/(tabs)/stats.tsx` | Added `useEffect` to call `appendCompletedWeeks` on mount (app-open trigger for history persistence). Added `weeksStrongCount` from `weeksStrong(consistencyHistory)`. Added "Weeks strong" stat card to the stat row. | `weeksStrong` appears in stats view only per spec. |
 
 **Tests:** 439/439. **Type-check:** 0 errors.
+
+---
+
+## Phase 3 — IA Restructure Audit (2026-06-12) — READ-ONLY, NO CODE CHANGED
+
+**Status: AUDIT COMPLETE — awaiting go-ahead before any Task.** Mapping of current state vs. `prompt-03-ia-restructure.md`. No source files were modified.
+
+### 1. What `app/(tabs)/focus.tsx` renders today
+
+Phase-5 rebuild + Phase-2 wiring. Top-to-bottom:
+1. `LivraHeader` (centerLogo, showAvatar).
+2. Greeting line (serif italic).
+3. **Compact progress banner** (56px): `{completedMarksToday}/{todayTotal} marks` on the left; **daily streak** (`{overallStreakDays} day streak` + Lightning icon) on the right (lines 273–278).
+4. **Compact stat strip** (44px, 3 cells): `STREAK` / `THIS WEEK` / `GOALS` (lines 283–286). `THIS WEEK` = `consistencyResult.counted` (Phase 2). `GOALS` = active goal count.
+5. **Forgiveness line** (Phase 2 Task 4, lines 302–308): "Still on track. You need {remaining} more check-in(s) this week." Renders only when `consistencyResult && !strong && remaining > 0`. Neutral styling. **Must be preserved by the redesign.**
+6. **YOUR MARKS** section + "See all" → `router.push('/(tabs)/marks')` (line 315). Flat list of `activeCounters.slice(0,5)` (line 232), each a `Swipeable` → `MarkRow` with inline `CheckinButton` (`onLog` → `handleQuickIncrement` → `incrementCounter`). Long-press = View/Edit/Delete alert. Empty state handled.
+7. `SpeedDialFAB`.
+
+**Integration constraints for the redesign:**
+- There is **NO daily ring** on Focus anymore (Phase 5 replaced the old SVG ring with the banner). Grep for `ring|Svg|Circle` in focus.tsx is empty. Spec Task 3 "remove the daily ring" is **already satisfied** — nothing to remove.
+- The **THIS WEEK stat (`consistencyResult.counted`) and the forgiveness line are Phase-2 consistency surfaces.** Spec says consistency lives in stats, daily surface stays neutral — but these were *just* added in Phase 2 Task 4 and wired to the locked copy. **DECISION NEEDED:** does Phase 3 keep the forgiveness line + THIS WEEK on Focus (they are neutral/forgiving, not streaks), or move them to stats? The prompt says integrate, not clobber — flag this conflict rather than silently delete.
+
+### 2. Daily streak removal sites (prompt referenced focus.tsx:284,292 — line numbers have SHIFTED)
+
+The prompt's `284,292` came from the Phase 2 audit; focus.tsx changed in Phase 2 Task 4. **Current actual streak sites:**
+
+| Site | Current line(s) | What |
+|------|-----------------|------|
+| `overallStreakDays` memo (computation) | **101–117** | Counts consecutive days with any increment event. Raw-activity daily streak. |
+| Streak haptic effect + `prevStreakRef` | **156–166** | Fires haptic when streak increases. Becomes dead once streak removed. |
+| Banner streak line | **273–278** | `{overallStreakDays} day streak` + `Lightning` icon in the progress banner. |
+| `STREAK` stat cell | **284** | `{ value: String(overallStreakDays), label: 'STREAK' }` in stat strip. (Line 284 still matches.) |
+
+**Line 292 is NOT a streak site in the current file** — it is `borderRightColor` styling inside the stat-strip `.map`. The second streak site is the banner at 273–278. If streak is removed: delete memo (101–117), effect (156–166), banner block (273–278), STREAK cell (284), plus now-unused imports (`Lightning`, `subDays`, `Haptics` streak usage, `prevStreakRef`).
+
+### 3. Marks tab — what it does + every breaking reference if removed
+
+`app/(tabs)/marks.tsx` (282 lines): full mark list (all `activeCounters`, not sliced), header "Your marks" + add button → `/mark/new`, per-mark card → `/mark/[id]` (or `/paywall` if locked), **free-tier gating** (`FREE_MARK_LIMIT = 3`, marks beyond index 3 locked for non-Pro), Livra+ upsell row, frequency subtitle via local `markSubtitle()` helper. Uses legacy `theme/colors` (not `themedColors`). Registered hidden at `_layout.tsx:111` (`href: null`).
+
+**References that break if the tab/file is removed:**
+| Ref | Location | Impact |
+|-----|----------|--------|
+| `router.push('/(tabs)/marks')` | `app/(tabs)/focus.tsx:315` (See all) | **Breaks** — dead route. Must repoint (e.g. to Goals or a marks list) or remove the "See all" affordance. |
+| `<Tabs.Screen name="marks" href:null />` | `app/(tabs)/_layout.tsx:111` | Remove this registration. |
+
+No other code imports `marks.tsx`. **Gating note:** the `FREE_MARK_LIMIT=3` lock UI + Livra+ upsell currently live ONLY in marks.tsx. Removing the tab orphans that paywall surface — Phase 5 (premium gating) is supposed to move mark-cap to per-goal; flag that the only existing mark-cap UI disappears here.
+
+### 4. Shared components between Marks and Focus
+
+Almost none at the component level. Marks tab uses `MarkIcon` + `resolveCounterIconType` directly and a **local** `markSubtitle()`; Focus uses `MarkRow` (ui), `SpeedDialFAB`, `LivraHeader`, `SectionLabel`. Both consume the `useCounters` hook and `useIapSubscriptions`/event data. The `markSubtitle()` frequency helper is **duplicated** in `marks.tsx` (lines 24–35) and `app/mark/[id]/index.tsx` — removing the Marks tab does not lose it (still in mark detail), but the duplication should eventually consolidate to `MarkFrequencyPicker.frequencyLabel`. No shared component is *uniquely* coupling the two screens; removing Marks is low-blast-radius UI-wise.
+
+### 5. Current queue screen — TWO distinct "queue" surfaces (critical)
+
+There are **two** files and they split the "Goals planning view" the spec wants:
+
+| File | Role | Renders |
+|------|------|---------|
+| `app/(tabs)/queue.tsx` (453 ln) | **The Queue TAB** (→ becomes Goals) | LivraWordmark header, "YOUR QUEUE" label, empty state, hero `QueueCard` (active/first goal), drag-to-reorder `DraggableQueueList` of remaining queued goals. **Title only — no progress, no completed goals, no add-goal-here beyond the card `+`.** Card `+` and `handleAddGoal` both `router.push('/goal/queue')`. |
+| `app/goal/queue.tsx` (412 ln) | **Goal MANAGEMENT modal** (stack screen, reached from the tab) | ACTIVE card (progress bar `progress/threshold mark logs`, target-date picker, Mark-complete / "N more logs to unlock"), UP NEXT list (delete), COMPLETED toggle → `/goal/history`, full empty state, add → `/goal/new`. |
+
+**Spec's Goals tab (Task 2: "active + upcoming + completed, reorder, add-goal") = a MERGE of these two.** The tab has reorder; the modal has active/upcoming/completed + progress + complete/delete + add. **DECISION NEEDED:** does Phase 3 (a) fold `goal/queue.tsx`'s richer planning content into the tab and drop the modal, or (b) keep the tab thin and keep navigating to the modal? Spec Task 2 says "repurpose the former queue screen" — but the former queue screen (the tab) lacks completed-goals and progress entirely. Executing Task 2 literally would still leave the real planning UI stranded in the modal.
+
+### 6. Route-rename impact: `queue` → `goals`
+
+If the tab file is renamed `app/(tabs)/queue.tsx` → `goals.tsx` (route `/(tabs)/queue` → `/(tabs)/goals`):
+| Ref | Location | Action |
+|-----|----------|--------|
+| `Tabs.Screen name="queue" title:'Queue'` | `app/(tabs)/_layout.tsx:91–99` | Rename to `goals`, title → "Goals". |
+| `<Redirect href='/(tabs)/queue' />` | `app/weekly-review.tsx:8` | Repoint to `/(tabs)/goals`. |
+
+**Do NOT confuse** `/(tabs)/queue` (the tab) with `/goal/queue` (the management modal). Refs to `/goal/queue` — `(tabs)/queue.tsx:304`, `goal/complete.tsx:106`, `components/ActiveGoalBanner.tsx:37` — are a different route and are unaffected by the tab rename. (Title can change without renaming the file/route; the spec only mandates the **title** "Goals" + removing Marks. Renaming the route is optional and carries the redirect cost above.)
+
+### 7. Goal-card / inline-mark UI — does any exist? **NO (net-new build)**
+
+No component renders a goal card with inline *checkable* marks. Inventory of the building blocks:
+- `components/ui/QueueCard.tsx` — goal card (hero/standard) by **title + sequence only**, no marks. Used by the Queue tab.
+- `app/goal/queue.tsx` `GoalMarkRow` — linked-mark **chips** that `router.push('/mark/[id]')` (navigate, NOT checkable in place).
+- `components/ui/MarkRow.tsx` — a mark row WITH inline `CheckinButton` (checkable via `onLog`), but flat, not grouped under a goal. Supports `subtitle`, `showWeeklyCount`/`weeklyCount`/`weeklyTarget` (a weekly-count display mode already exists).
+- `components/MarkCard.tsx` (666 ln) and `components/ActiveGoalBanner.tsx` exist but are **NOT rendered anywhere** in the live 3-tab nav (orphaned; MarkCard only re-exported via `components/HabitRow.tsx`).
+
+**The Task 3 goal-card-with-inline-marks must be composed new** from `MarkRow` (checkable) + goal grouping (`mark.goal_id` / `goal.linked_mark_ids`) + `getGoalProgress`. Data exists; the composed component does not.
+
+### 8. Focus redesign gaps vs. current behavior (Task 3)
+
+| Spec requirement | Current state |
+|------------------|---------------|
+| ≤2 active goal cards, marks grouped under them | Focus shows a **flat** `activeCounters.slice(0,5)` list, ungrouped. |
+| Max 4 marks/card + "X more" expander | No expander; hard slice of 5. |
+| Completed marks sink/dim at card bottom | No sink/dim; `loggedToday` only toggles the CheckinButton state. |
+| `doneForWeek` marks show rest line + bonus log, sink for the day | Focus uses **daily** `loggedToday` (`resolveDailyTarget`), NOT Phase-1 `markWeeklyState`/`computeCompletionsThisWeek`. Weekly state is wired on the **mark detail** screen only, not Focus. |
+| "Daily habits" collapsed section for goal-less marks | Does not exist. |
+| Last-due-mark → "That's today done. See you tomorrow." + Reanimated transition | Does not exist. |
+| No streak/weeks-strong on Focus | Streak present (banner + STREAK cell). THIS WEEK + forgiveness line present (Phase 2). See §1 decision. |
+
+### 9. FAB wiring
+
+`SpeedDialFAB` (self-contained) renders on Focus (focus.tsx:375) and opens `AddMarkSheet` ("New Mark", `check-circle` icon) / `AddGoalSheet` ("New Goal", `flag` icon) bottom sheets. First-launch peek hint via AsyncStorage `fab_hint_shown`. It was **removed from the Queue tab** in the Marks-Goals Task 6 (queue.tsx has no FAB now; it adds goals via card `+`/header). Spec Task 3 says "keep the FAB" on Focus — already present, no change needed.
+
+### Open decisions to resolve before executing Phase 3
+1. **§1/§8:** Keep or relocate the Phase-2 THIS WEEK stat + forgiveness line on Focus? (Just shipped; spec wants neutral daily surface.)
+2. **§5:** Merge `goal/queue.tsx` (management modal) into the Goals tab, or keep the tab→modal split? Task 2 as written under-specifies the real planning UI's home.
+3. **§3:** Removing the Marks tab orphans the only `FREE_MARK_LIMIT=3` lock + Livra+ upsell surface. Confirm Phase 5 absorbs this, or retain gating somewhere in the interim.
+4. **§6:** Rename the route `queue`→`goals` (file rename + redirect repoint) or only change the tab **title**? Spec mandates title + Marks removal, not necessarily a route rename.
+
+**STOP — awaiting go-ahead before executing any Phase 3 Task.**
+
+---
+
+## Phase 3 — IA Restructure EXECUTION (2026-06-12)
+
+Audit approved. UI/navigation only — no `state/` or protected paths modified. Tab set is now **Focus / Goals / Settings**.
+
+### Task 1 — Tab set (route rename + Marks removal)
+
+| File | Change | Why |
+|------|--------|-----|
+| `app/(tabs)/queue.tsx` → `app/(tabs)/goals.tsx` | `git mv` — full route rename `queue` → `goals`. Content unchanged in this task (rebuilt in Task 2). | Locked IA renames the Queue tab to Goals; route + file renamed so tab label, route, and filename agree. |
+| `app/(tabs)/marks.tsx` → `app/(tabs)/marks.tsx.archived` | `git mv` — removed from the route group (archived in place, matching the existing `checkin.tsx.archived` precedent). | Removing only the `href:null` registration would leave the `.tsx` file in `(tabs)/`, which expo-router would auto-surface as a visible tab. Archiving removes it as a route while preserving the `FREE_MARK_LIMIT=3` gating UI for Phase 5 to repurpose. |
+| `app/(tabs)/_layout.tsx` | Renamed `QueueIcon` → `GoalsIcon`; `Tabs.Screen name="queue" title="Queue"` → `name="goals" title="Goals"`; removed `<Tabs.Screen name="marks" href:null />`. | Three-tab set: Focus / Goals / Settings. |
+| `app/weekly-review.tsx` | Redirect `/(tabs)/queue` → `/(tabs)/goals`; comment updated. | Only deep-link/redirect pointing at the renamed tab route. |
+
+**Not touched (per spec):** `/goal/queue` (management screen — different route, merged in Task 2), `app/onboarding.tsx` final `router.replace('/(tabs)/focus')` (Phase 4), `focus.tsx:315` dead `See all → /(tabs)/marks` (removed in Task 3 per spec). Grep confirmed `(tabs)/queue` and `(tabs)/home` have no remaining refs; the only `(tabs)/marks` ref is the focus.tsx See-all (Task 3).
+
+**Tests:** 439/439 passing. **Type-check:** 0 errors.

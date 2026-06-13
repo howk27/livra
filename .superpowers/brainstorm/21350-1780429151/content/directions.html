@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Livra – New Visual Directions</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0a0a0a;
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    min-height: 100vh;
+    padding: 40px 24px 80px;
+  }
+
+  .page-header {
+    text-align: center;
+    margin-bottom: 48px;
+  }
+  .page-header h1 {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    color: #fff;
+    margin-bottom: 8px;
+  }
+  .page-header p {
+    font-size: 15px;
+    color: #888;
+  }
+
+  /* ── Three columns ─────────────────────────────────────────── */
+  .grid {
+    display: flex;
+    gap: 32px;
+    justify-content: center;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    cursor: pointer;
+    flex: 0 0 auto;
+  }
+
+  .col-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #555;
+  }
+
+  .col-name {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+    color: #fff;
+    text-align: center;
+  }
+
+  .col-desc {
+    font-size: 13px;
+    color: #777;
+    text-align: center;
+    max-width: 220px;
+    line-height: 1.5;
+  }
+
+  /* Selection ring */
+  .phone-wrap {
+    border-radius: 48px;
+    padding: 3px;
+    background: transparent;
+    border: 2px solid transparent;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .col:hover .phone-wrap {
+    border-color: rgba(255,255,255,0.12);
+  }
+  .col.selected .phone-wrap {
+    border-color: #FEB729;
+    box-shadow: 0 0 0 4px rgba(254,183,41,0.15);
+  }
+  .col.selected .col-name { color: #FEB729; }
+
+  /* ── Phone frame ───────────────────────────────────────────── */
+  .phone {
+    width: 240px;
+    height: 480px;
+    border-radius: 44px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 32px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.06);
+  }
+
+  /* ── DIRECTION A: Warm Canvas ──────────────────────────────── */
+  .phone-a {
+    background: #F5F0EA;
+  }
+
+  .a-status {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px 0;
+  }
+  .a-status-time { font-size: 13px; font-weight: 700; color: #1A1A1A; }
+  .a-status-icons { display: flex; gap: 4px; }
+  .a-dot { width: 6px; height: 6px; border-radius: 3px; background: #1A1A1A; opacity: 0.4; }
+
+  .a-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 20px 6px;
+  }
+  .a-brand {
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    color: #1A1A1A;
+  }
+  .a-avatar {
+    width: 28px; height: 28px; border-radius: 14px;
+    background: #D4CBC0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; color: #7A6F66;
+  }
+
+  .a-hero {
+    margin: 4px 16px 0;
+    background: #1A1A1A;
+    border-radius: 20px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .a-hero-left {}
+  .a-hero-label { font-size: 9px; font-weight: 600; letter-spacing: 1.5px; color: #888; text-transform: uppercase; }
+  .a-hero-number { font-size: 28px; font-weight: 800; color: #fff; letter-spacing: -1px; line-height: 1; margin-top: 2px; }
+  .a-hero-sub { font-size: 10px; color: #666; margin-top: 2px; }
+  .a-ring {
+    width: 48px; height: 48px; border-radius: 24px;
+    border: 4px solid #333;
+    position: relative;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .a-ring::before {
+    content: '';
+    position: absolute; inset: -4px;
+    border-radius: 28px;
+    border: 4px solid transparent;
+    border-top-color: #FEB729;
+    border-right-color: #FEB729;
+    transform: rotate(-30deg);
+  }
+  .a-ring-num { font-size: 14px; font-weight: 800; color: #fff; }
+
+  .a-section-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    color: #B5ADA4;
+    text-transform: uppercase;
+    padding: 10px 20px 6px;
+  }
+
+  .a-cards { padding: 0 16px; display: flex; flex-direction: column; gap: 8px; }
+
+  .a-card {
+    border-radius: 16px;
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .a-card-icon {
+    width: 32px; height: 32px; border-radius: 10px;
+    background: rgba(255,255,255,0.5);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; flex-shrink: 0;
+  }
+  .a-card-body { flex: 1; min-width: 0; }
+  .a-card-name { font-size: 12px; font-weight: 700; color: #1A1A1A; line-height: 1.2; }
+  .a-card-meta { font-size: 10px; color: rgba(26,26,26,0.5); margin-top: 2px; }
+  .a-card-progress {
+    display: flex; gap: 3px;
+  }
+  .a-pip { width: 8px; height: 8px; border-radius: 4px; background: rgba(255,255,255,0.4); }
+  .a-pip.filled { background: rgba(26,26,26,0.5); }
+
+  .a-card-check {
+    width: 22px; height: 22px; border-radius: 11px;
+    border: 2px solid rgba(26,26,26,0.25);
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; color: #1A1A1A;
+  }
+  .a-card-check.done { background: rgba(26,26,26,0.85); border-color: transparent; color: #fff; }
+
+  .a-tabbar {
+    position: absolute; bottom: 12px; left: 16px; right: 16px;
+    height: 52px;
+    background: #1A1A1A;
+    border-radius: 26px;
+    display: flex; align-items: center; justify-content: space-around;
+    padding: 0 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  }
+  .a-tab {
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    flex: 1; padding: 6px 4px;
+  }
+  .a-tab-dot { width: 20px; height: 20px; border-radius: 10px; background: #444; }
+  .a-tab-dot.active { background: #FEB729; }
+  .a-tab-pill {
+    width: 4px; height: 4px; border-radius: 2px;
+    background: transparent;
+  }
+  .a-tab-pill.active { background: #FEB729; }
+  .a-tab-icon { font-size: 16px; opacity: 0.4; }
+  .a-tab-icon.active { opacity: 1; }
+
+  .a-fab {
+    position: absolute;
+    bottom: 24px;
+    right: 20px;
+    /* placed before tabbar in this mockup — shown separately below */
+  }
+
+  /* ── DIRECTION B: Night Drive ──────────────────────────────── */
+  .phone-b { background: #0C0C0E; }
+
+  .b-status {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px 0;
+  }
+  .b-status-time { font-size: 13px; font-weight: 700; color: #fff; }
+  .b-status-icons { display: flex; gap: 3px; opacity: 0.5; }
+  .b-dot { width: 5px; height: 5px; border-radius: 3px; background: #fff; }
+
+  .b-topbar {
+    padding: 10px 20px 4px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .b-brand { font-size: 18px; font-weight: 800; color: #fff; letter-spacing: -0.5px; }
+  .b-brand span { color: #7C6EFF; }
+  .b-avatar {
+    width: 28px; height: 28px; border-radius: 14px;
+    background: linear-gradient(135deg, #7C6EFF, #4ECDC4);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700; color: #fff;
+  }
+
+  .b-hero {
+    margin: 6px 16px 0;
+    border-radius: 20px;
+    padding: 16px;
+    background: linear-gradient(135deg, #7C6EFF22, #4ECDC422);
+    border: 1px solid rgba(124,110,255,0.2);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .b-hero-label { font-size: 9px; font-weight: 600; letter-spacing: 1.5px; color: #7C6EFF; text-transform: uppercase; }
+  .b-hero-big { font-size: 30px; font-weight: 800; color: #fff; letter-spacing: -1px; line-height: 1.1; margin-top: 2px; }
+  .b-hero-sub { font-size: 10px; color: #555; margin-top: 2px; }
+  .b-streak {
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 12px; padding: 8px 12px;
+  }
+  .b-streak-num { font-size: 18px; font-weight: 800; color: #fff; }
+  .b-streak-lbl { font-size: 8px; color: #555; letter-spacing: 1px; text-transform: uppercase; }
+
+  .b-bars { padding: 10px 16px; display: flex; gap: 3px; align-items: flex-end; height: 32px; }
+  .b-bar { flex: 1; background: #1A1A1E; border-radius: 3px; }
+  .b-bar.active { background: linear-gradient(to top, #7C6EFF, #9B8FFF); }
+  .b-bar.done { background: #2A2A30; }
+
+  .b-cards { padding: 0 16px; display: flex; flex-direction: column; gap: 6px; }
+  .b-card {
+    background: #141418;
+    border-radius: 14px;
+    padding: 10px 12px;
+    display: flex; align-items: center; gap: 10px;
+    border-left: 3px solid transparent;
+  }
+  .b-card.c1 { border-left-color: #7C6EFF; }
+  .b-card.c2 { border-left-color: #4ECDC4; }
+  .b-card.c3 { border-left-color: #FF6B6B; }
+  .b-card.c4 { border-left-color: #FEB729; }
+  .b-card-icon { font-size: 16px; flex-shrink: 0; }
+  .b-card-body { flex: 1; min-width: 0; }
+  .b-card-name { font-size: 12px; font-weight: 600; color: #E8E8E8; }
+  .b-card-meta { font-size: 10px; color: #444; margin-top: 1px; }
+  .b-progress { display: flex; gap: 2px; margin-top: 5px; }
+  .b-seg { height: 3px; flex: 1; border-radius: 2px; background: #222; }
+  .b-seg.filled { background: #7C6EFF; }
+  .b-seg.filled2 { background: #4ECDC4; }
+  .b-seg.filled3 { background: #FF6B6B; }
+  .b-seg.filled4 { background: #FEB729; }
+  .b-card-count { font-size: 14px; font-weight: 800; color: #fff; flex-shrink: 0; }
+
+  .b-tabbar {
+    position: absolute; bottom: 12px; left: 16px; right: 16px;
+    height: 52px;
+    background: #1A1A1E;
+    border-radius: 26px;
+    display: flex; align-items: center; justify-content: space-around;
+    border: 1px solid rgba(255,255,255,0.06);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+  }
+  .b-tab-icon { font-size: 16px; opacity: 0.3; }
+  .b-tab-icon.active { opacity: 1; color: #7C6EFF; }
+
+  /* ── DIRECTION C: Pure Stone ────────────────────────────────── */
+  .phone-c { background: #F8F7F4; }
+
+  .c-status {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px 0;
+  }
+  .c-status-time { font-size: 13px; font-weight: 700; color: #1C1C1E; }
+  .c-dots { display: flex; gap: 3px; }
+  .c-dot { width: 5px; height: 5px; border-radius: 3px; background: #1C1C1E; opacity: 0.3; }
+
+  .c-topbar {
+    padding: 8px 20px 4px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .c-brand { font-size: 20px; font-weight: 800; color: #1C1C1E; letter-spacing: -0.8px; }
+  .c-date { font-size: 11px; color: #999; font-weight: 500; }
+
+  .c-progress-row {
+    margin: 8px 16px 0;
+    display: flex; gap: 6px;
+  }
+  .c-pill {
+    flex: 1; height: 5px; border-radius: 3px;
+    background: #E8E4DE;
+  }
+  .c-pill.done { background: #1C1C1E; }
+  .c-pill.partial { background: linear-gradient(to right, #1C1C1E 60%, #E8E4DE 60%); }
+
+  .c-summary {
+    padding: 8px 16px 4px;
+    display: flex; align-items: baseline; gap: 6px;
+  }
+  .c-summary-big { font-size: 32px; font-weight: 800; color: #1C1C1E; letter-spacing: -1.5px; line-height: 1; }
+  .c-summary-of { font-size: 14px; color: #BBBBBB; font-weight: 500; }
+
+  .c-cards { padding: 4px 16px 0; display: flex; flex-direction: column; gap: 6px; }
+  .c-card {
+    background: #fff;
+    border-radius: 14px;
+    padding: 10px 12px;
+    display: flex; align-items: center; gap: 10px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+  .c-card-icon {
+    width: 32px; height: 32px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; flex-shrink: 0;
+  }
+  .c-card-body { flex: 1; min-width: 0; }
+  .c-card-name { font-size: 12px; font-weight: 700; color: #1C1C1E; }
+  .c-card-meta { font-size: 10px; color: #BBBBBB; margin-top: 1px; }
+  .c-card-right { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+  .c-card-count { font-size: 15px; font-weight: 800; color: #1C1C1E; }
+  .c-card-bar { width: 36px; height: 3px; border-radius: 2px; background: #EEE; overflow: hidden; }
+  .c-card-fill { height: 100%; border-radius: 2px; }
+
+  .c-tabbar {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    height: 56px;
+    background: rgba(248,247,244,0.94);
+    border-top: 1px solid rgba(0,0,0,0.06);
+    display: flex; align-items: center; justify-content: space-around;
+    padding: 0 8px 4px;
+  }
+  .c-tab {
+    display: flex; flex-direction: column; align-items: center; gap: 2px; flex: 1;
+  }
+  .c-tab-icon { font-size: 18px; opacity: 0.3; }
+  .c-tab-icon.active { opacity: 1; }
+  .c-tab-label { font-size: 9px; font-weight: 600; color: #999; letter-spacing: 0.5px; }
+  .c-tab-label.active { color: #1C1C1E; }
+
+  /* ── Select button ─────────────────────────────────────────── */
+  .select-btn {
+    display: block; width: 100%;
+    padding: 10px 0;
+    border-radius: 12px;
+    border: 1.5px solid rgba(255,255,255,0.1);
+    background: transparent;
+    color: #555;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: inherit;
+    max-width: 240px;
+  }
+  .select-btn:hover { border-color: #FEB729; color: #FEB729; }
+  .col.selected .select-btn { background: #FEB729; border-color: #FEB729; color: #000; }
+
+  /* ── Footer note ───────────────────────────────────────────── */
+  .footer-note {
+    text-align: center;
+    margin-top: 48px;
+    color: #444;
+    font-size: 13px;
+  }
+
+  /* ── Interactive badges ─────────────────────────────────────── */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .badge-a { background: rgba(245,240,234,0.15); color: #C4A882; border: 1px solid rgba(245,240,234,0.15); }
+  .badge-b { background: rgba(124,110,255,0.15); color: #9B8FFF; border: 1px solid rgba(124,110,255,0.2); }
+  .badge-c { background: rgba(255,255,255,0.07); color: #999; border: 1px solid rgba(255,255,255,0.08); }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>Livra – New Visual Direction</h1>
+  <p>Three distinct aesthetics for the goal execution app. Click one to select.</p>
+</div>
+
+<div class="grid">
+
+  <!-- ═══ DIRECTION A ═════════════════════════════════════════ -->
+  <div class="col" id="col-a" onclick="select('a')">
+    <div class="badge badge-a">Direction A</div>
+    <div class="col-name">Warm Canvas</div>
+    <div class="col-desc">Inviting, editorial, like a premium planner. Soft warmth keeps daily use gentle.</div>
+
+    <div class="phone-wrap">
+      <div class="phone phone-a">
+
+        <div class="a-status">
+          <span class="a-status-time">9:41</span>
+          <div class="a-status-icons">
+            <div class="a-dot"></div><div class="a-dot"></div><div class="a-dot"></div>
+          </div>
+        </div>
+
+        <div class="a-topbar">
+          <div class="a-brand">Livra</div>
+          <div class="a-avatar">J</div>
+        </div>
+
+        <!-- Hero card -->
+        <div class="a-hero">
+          <div class="a-hero-left">
+            <div class="a-hero-label">Today</div>
+            <div class="a-hero-number">2/4</div>
+            <div class="a-hero-sub">marks complete · 3 day streak</div>
+          </div>
+          <div class="a-ring">
+            <div class="a-ring-num">50%</div>
+          </div>
+        </div>
+
+        <div class="a-section-label">Your Marks</div>
+
+        <!-- Mark cards -->
+        <div class="a-cards">
+          <div class="a-card" style="background:#A8D8CF;">
+            <div class="a-card-icon">🏃</div>
+            <div class="a-card-body">
+              <div class="a-card-name">Morning Run</div>
+              <div class="a-card-meta">3 km · daily</div>
+              <div class="a-card-progress">
+                <div class="a-pip filled"></div>
+                <div class="a-pip filled"></div>
+                <div class="a-pip filled"></div>
+                <div class="a-pip"></div>
+                <div class="a-pip"></div>
+              </div>
+            </div>
+            <div class="a-card-check done">✓</div>
+          </div>
+
+          <div class="a-card" style="background:#F5C07A;">
+            <div class="a-card-icon">📖</div>
+            <div class="a-card-body">
+              <div class="a-card-name">Read 20 pages</div>
+              <div class="a-card-meta">0 / 1 today</div>
+              <div class="a-card-progress">
+                <div class="a-pip"></div>
+                <div class="a-pip"></div>
+                <div class="a-pip"></div>
+              </div>
+            </div>
+            <div class="a-card-check"></div>
+          </div>
+
+          <div class="a-card" style="background:#C4A8E0;">
+            <div class="a-card-icon">💧</div>
+            <div class="a-card-body">
+              <div class="a-card-name">Drink Water</div>
+              <div class="a-card-meta">4 / 8 glasses</div>
+              <div class="a-card-progress">
+                <div class="a-pip filled"></div>
+                <div class="a-pip filled"></div>
+                <div class="a-pip filled"></div>
+                <div class="a-pip filled"></div>
+                <div class="a-pip"></div>
+              </div>
+            </div>
+            <div class="a-card-check"></div>
+          </div>
+
+          <div class="a-card" style="background:#9AC4E8;">
+            <div class="a-card-icon">✍️</div>
+            <div class="a-card-body">
+              <div class="a-card-name">Journal</div>
+              <div class="a-card-meta">0 / 1 today</div>
+              <div class="a-card-progress">
+                <div class="a-pip"></div>
+                <div class="a-pip"></div>
+                <div class="a-pip"></div>
+              </div>
+            </div>
+            <div class="a-card-check"></div>
+          </div>
+        </div>
+
+        <!-- Floating pill tab bar -->
+        <div class="a-tabbar">
+          <div class="a-tab">
+            <span style="font-size:15px;">🏠</span>
+          </div>
+          <div class="a-tab" style="opacity:0.35;">
+            <span style="font-size:15px;">🎯</span>
+          </div>
+          <div class="a-tab" style="opacity:0.35;">
+            <span style="font-size:15px;">✓</span>
+          </div>
+          <div class="a-tab" style="opacity:0.35;">
+            <span style="font-size:15px;">⚙️</span>
+          </div>
+        </div>
+
+      </div><!-- /phone-a -->
+    </div><!-- /phone-wrap -->
+
+    <button class="select-btn" onclick="event.stopPropagation(); select('a')">Select A</button>
+  </div>
+
+  <!-- ═══ DIRECTION B ═════════════════════════════════════════ -->
+  <div class="col" id="col-b" onclick="select('b')">
+    <div class="badge badge-b">Direction B</div>
+    <div class="col-name">Night Drive</div>
+    <div class="col-desc">High contrast, electric. Built for people who execute. Serious momentum energy.</div>
+
+    <div class="phone-wrap">
+      <div class="phone phone-b">
+
+        <div class="b-status">
+          <span class="b-status-time" style="color:#fff">9:41</span>
+          <div class="b-status-icons">
+            <div class="b-dot"></div><div class="b-dot"></div><div class="b-dot"></div>
+          </div>
+        </div>
+
+        <div class="b-topbar">
+          <div class="b-brand">Li<span>vra</span></div>
+          <div class="b-avatar">J</div>
+        </div>
+
+        <!-- Hero -->
+        <div class="b-hero">
+          <div>
+            <div class="b-hero-label">Today's Progress</div>
+            <div class="b-hero-big">2 / 4</div>
+            <div class="b-hero-sub">marks complete</div>
+          </div>
+          <div class="b-streak">
+            <div class="b-streak-num">🔥 3</div>
+            <div class="b-streak-lbl">streak</div>
+          </div>
+        </div>
+
+        <!-- Activity bars -->
+        <div class="b-bars">
+          <div class="b-bar done" style="height:40%;"></div>
+          <div class="b-bar done" style="height:65%;"></div>
+          <div class="b-bar active" style="height:100%;"></div>
+          <div class="b-bar active" style="height:80%;"></div>
+          <div class="b-bar" style="height:0%;"></div>
+          <div class="b-bar" style="height:0%;"></div>
+          <div class="b-bar" style="height:0%;"></div>
+        </div>
+
+        <div style="padding: 2px 16px 6px; font-size:9px; color:#444; letter-spacing:1px; text-transform:uppercase;">This week</div>
+
+        <!-- Mark cards -->
+        <div class="b-cards">
+          <div class="b-card c1">
+            <div class="b-card-icon">🏃</div>
+            <div class="b-card-body">
+              <div class="b-card-name">Morning Run</div>
+              <div class="b-progress">
+                <div class="b-seg filled"></div>
+                <div class="b-seg filled"></div>
+                <div class="b-seg filled"></div>
+                <div class="b-seg filled"></div>
+                <div class="b-seg filled"></div>
+              </div>
+            </div>
+            <div class="b-card-count" style="color:#7C6EFF">✓</div>
+          </div>
+
+          <div class="b-card c2">
+            <div class="b-card-icon">📖</div>
+            <div class="b-card-body">
+              <div class="b-card-name">Read 20 pages</div>
+              <div class="b-progress">
+                <div class="b-seg filled2"></div>
+                <div class="b-seg filled2"></div>
+                <div class="b-seg"></div>
+                <div class="b-seg"></div>
+                <div class="b-seg"></div>
+              </div>
+            </div>
+            <div class="b-card-count" style="color:#fff">2</div>
+          </div>
+
+          <div class="b-card c3">
+            <div class="b-card-icon">💧</div>
+            <div class="b-card-body">
+              <div class="b-card-name">Drink Water</div>
+              <div class="b-progress">
+                <div class="b-seg filled3"></div>
+                <div class="b-seg filled3"></div>
+                <div class="b-seg filled3"></div>
+                <div class="b-seg filled3"></div>
+                <div class="b-seg"></div>
+              </div>
+            </div>
+            <div class="b-card-count" style="color:#fff">4</div>
+          </div>
+
+          <div class="b-card c4">
+            <div class="b-card-icon">✍️</div>
+            <div class="b-card-body">
+              <div class="b-card-name">Journal Entry</div>
+              <div class="b-progress">
+                <div class="b-seg"></div>
+                <div class="b-seg"></div>
+                <div class="b-seg"></div>
+              </div>
+            </div>
+            <div class="b-card-count" style="color:#555">0</div>
+          </div>
+        </div>
+
+        <!-- Floating pill tab bar -->
+        <div class="b-tabbar">
+          <div style="flex:1;display:flex;align-items:center;justify-content:center;">
+            <span class="b-tab-icon active">⬡</span>
+          </div>
+          <div style="flex:1;display:flex;align-items:center;justify-content:center;">
+            <span class="b-tab-icon">⊞</span>
+          </div>
+          <div style="flex:1;display:flex;align-items:center;justify-content:center;">
+            <span class="b-tab-icon">◇</span>
+          </div>
+          <div style="flex:1;display:flex;align-items:center;justify-content:center;">
+            <span class="b-tab-icon">○</span>
+          </div>
+        </div>
+
+      </div><!-- /phone-b -->
+    </div><!-- /phone-wrap -->
+
+    <button class="select-btn" onclick="event.stopPropagation(); select('b')">Select B</button>
+  </div>
+
+  <!-- ═══ DIRECTION C ═════════════════════════════════════════ -->
+  <div class="col" id="col-c" onclick="select('c')">
+    <div class="badge badge-c">Direction C</div>
+    <div class="col-name">Stone Light</div>
+    <div class="col-desc">Precision and calm. Clean typographic hierarchy. Every number is sharp, nothing competes.</div>
+
+    <div class="phone-wrap">
+      <div class="phone phone-c">
+
+        <div class="c-status">
+          <span class="c-status-time">9:41</span>
+          <div class="c-dots">
+            <div class="c-dot"></div><div class="c-dot"></div><div class="c-dot"></div>
+          </div>
+        </div>
+
+        <div class="c-topbar">
+          <div class="c-brand">Livra</div>
+          <div class="c-date">Tue, Jun 2</div>
+        </div>
+
+        <!-- Progress pills -->
+        <div class="c-progress-row">
+          <div class="c-pill done"></div>
+          <div class="c-pill partial"></div>
+          <div class="c-pill"></div>
+          <div class="c-pill"></div>
+        </div>
+
+        <!-- Summary -->
+        <div class="c-summary">
+          <div class="c-summary-big">2</div>
+          <div class="c-summary-of">of 4 done today</div>
+        </div>
+
+        <!-- Cards -->
+        <div class="c-cards">
+          <div class="c-card">
+            <div class="c-card-icon" style="background:#E8F5E9;">🏃</div>
+            <div class="c-card-body">
+              <div class="c-card-name">Morning Run</div>
+              <div class="c-card-meta">3 km · streak 3d</div>
+            </div>
+            <div class="c-card-right">
+              <div class="c-card-count" style="color:#4CAF50;">✓</div>
+              <div class="c-card-bar"><div class="c-card-fill" style="width:100%;background:#4CAF50;"></div></div>
+            </div>
+          </div>
+
+          <div class="c-card">
+            <div class="c-card-icon" style="background:#FFF8E1;">📖</div>
+            <div class="c-card-body">
+              <div class="c-card-name">Read 20 pages</div>
+              <div class="c-card-meta">0 / 1 today</div>
+            </div>
+            <div class="c-card-right">
+              <div class="c-card-count" style="color:#1C1C1E;">0</div>
+              <div class="c-card-bar"><div class="c-card-fill" style="width:0%;background:#1C1C1E;"></div></div>
+            </div>
+          </div>
+
+          <div class="c-card">
+            <div class="c-card-icon" style="background:#E3F2FD;">💧</div>
+            <div class="c-card-body">
+              <div class="c-card-name">Drink Water</div>
+              <div class="c-card-meta">4 / 8 glasses</div>
+            </div>
+            <div class="c-card-right">
+              <div class="c-card-count" style="color:#2196F3;">4</div>
+              <div class="c-card-bar"><div class="c-card-fill" style="width:50%;background:#2196F3;"></div></div>
+            </div>
+          </div>
+
+          <div class="c-card">
+            <div class="c-card-icon" style="background:#F3E5F5;">✍️</div>
+            <div class="c-card-body">
+              <div class="c-card-name">Journal Entry</div>
+              <div class="c-card-meta">0 / 1 today</div>
+            </div>
+            <div class="c-card-right">
+              <div class="c-card-count" style="color:#1C1C1E;">0</div>
+              <div class="c-card-bar"><div class="c-card-fill" style="width:0%;background:#9C27B0;"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Standard tab bar -->
+        <div class="c-tabbar">
+          <div class="c-tab">
+            <span class="c-tab-icon active" style="color:#1C1C1E;">⌂</span>
+            <span class="c-tab-label active">Home</span>
+          </div>
+          <div class="c-tab">
+            <span class="c-tab-icon" style="">⬒</span>
+            <span class="c-tab-label">Queue</span>
+          </div>
+          <div class="c-tab">
+            <span class="c-tab-icon">✓</span>
+            <span class="c-tab-label">Marks</span>
+          </div>
+          <div class="c-tab">
+            <span class="c-tab-icon">⊙</span>
+            <span class="c-tab-label">Settings</span>
+          </div>
+        </div>
+
+      </div><!-- /phone-c -->
+    </div><!-- /phone-wrap -->
+
+    <button class="select-btn" onclick="event.stopPropagation(); select('c')">Select C</button>
+  </div>
+
+</div>
+
+<p class="footer-note">Each direction can be further refined once you pick a base. Click a direction or its button to select.</p>
+
+<script>
+  function select(choice) {
+    document.querySelectorAll('.col').forEach(el => el.classList.remove('selected'));
+    document.getElementById('col-' + choice).classList.add('selected');
+    window.__SELECTION__ = choice;
+    if (window.recordChoice) recordChoice(choice, document.getElementById('col-' + choice).querySelector('.col-name').textContent);
+  }
+</script>
+
+</body>
+</html>
