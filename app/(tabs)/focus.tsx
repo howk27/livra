@@ -136,14 +136,15 @@ export default function FocusScreen() {
     [activeCounters],
   );
 
-  // True when every active mark is doneForWeek
-  const allDoneForWeek = useMemo(() => {
+  // True when nothing is still loggable today: every mark is doneForWeek OR already hit daily target
+  const allDoneForDay = useMemo(() => {
     if (activeCounters.length === 0) return false;
     return activeCounters.every((m) => {
-      const count = weeklyCountsMap.get(m.id) ?? 0;
-      return markWeeklyState(m, count) === 'doneForWeek';
+      const weeklyCount = weeklyCountsMap.get(m.id) ?? 0;
+      if (markWeeklyState(m, weeklyCount) === 'doneForWeek') return true;
+      return (todayCountsMap.get(m.id) ?? 0) >= resolveDailyTarget(m);
     });
-  }, [activeCounters, weeklyCountsMap]);
+  }, [activeCounters, weeklyCountsMap, todayCountsMap]);
 
   // ── Expander state (per-goal "X more" collapse) ───────────────────────────
 
@@ -258,35 +259,55 @@ export default function FocusScreen() {
         resolveCounterIconType({ name: mark.name, emoji: mark.emoji ?? '' }) ??
         'custom';
 
+      const showRestLine =
+        isDoneForWeek &&
+        mark.frequency_kind !== 'abstinence' &&
+        mark.frequency_kind !== 'fixed';
+
       return (
-        <Swipeable
-          key={mark.id}
-          renderRightActions={() => (
-            <TouchableOpacity
-              style={[styles.swipeDelete, { backgroundColor: c.danger }]}
-              onPress={() => handleDeleteMark(mark.id, mark.name)}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.swipeDeleteText}>Delete</Text>
-            </TouchableOpacity>
+        <View key={mark.id}>
+          <Swipeable
+            renderRightActions={() => (
+              <TouchableOpacity
+                style={[styles.swipeDelete, { backgroundColor: c.danger }]}
+                onPress={() => handleDeleteMark(mark.id, mark.name)}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.swipeDeleteText}>Delete</Text>
+              </TouchableOpacity>
+            )}
+            rightThreshold={80}
+          >
+            <View style={dimmed || isDoneForWeek ? styles.doneMarkWrap : undefined}>
+              <MarkRow
+                title={mark.name}
+                category={category}
+                loggedToday={isDoneForWeek}
+                onPress={() => router.push(`/mark/${mark.id}` as any)}
+                onLog={() => handleQuickIncrement(mark.id)}
+                onLongPress={() => handleMarkLongPress(mark.id, mark.name)}
+                isLast={isLast}
+                showWeeklyCount
+                weeklyCount={weeklyCount}
+                weeklyTarget={weeklyTarget}
+              />
+            </View>
+          </Swipeable>
+          {showRestLine && (
+            <View style={styles.restLineRow}>
+              <Text style={[styles.restLineText, { color: c.inkMuted }]}>
+                {`You've hit your ${mark.weekly_target ?? 3} this week. Rest is part of it — but if you want one more, go for it.`}
+              </Text>
+              <TouchableOpacity
+                style={styles.bonusButton}
+                onPress={() => handleQuickIncrement(mark.id)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.bonusButtonText, { color: c.forest }]}>Log one more</Text>
+              </TouchableOpacity>
+            </View>
           )}
-          rightThreshold={80}
-        >
-          <View style={dimmed || isDoneForWeek ? styles.doneMarkWrap : undefined}>
-            <MarkRow
-              title={mark.name}
-              category={category}
-              loggedToday={isDoneForWeek}
-              onPress={() => router.push(`/mark/${mark.id}` as any)}
-              onLog={() => handleQuickIncrement(mark.id)}
-              onLongPress={() => handleMarkLongPress(mark.id, mark.name)}
-              isLast={isLast}
-              showWeeklyCount
-              weeklyCount={weeklyCount}
-              weeklyTarget={weeklyTarget}
-            />
-          </View>
-        </Swipeable>
+        </View>
       );
     },
     [weeklyCountsMap, c, handleDeleteMark, handleMarkLongPress, handleQuickIncrement, router],
@@ -332,16 +353,6 @@ export default function FocusScreen() {
               marks today
             </Text>
           </View>
-          {consistencyResult != null && (
-            <View style={styles.bannerWeekly}>
-              <Text style={[styles.bannerWeeklyValue, { color: theme === 'dark' ? c.inkInverse : c.forest }]}>
-                {consistencyResult.counted}
-              </Text>
-              <Text style={[styles.bannerWeeklyLabel, { color: theme === 'dark' ? c.inkInverseMuted : c.inkMuted }]}>
-                this week
-              </Text>
-            </View>
-          )}
         </View>
 
         {/* ── Forgiveness line ── */}
@@ -353,8 +364,8 @@ export default function FocusScreen() {
           </Text>
         )}
 
-        {/* ── All done for the week ── */}
-        {allDoneForWeek && activeCounters.length > 0 && (
+        {/* ── All done for today ── */}
+        {allDoneForDay && activeCounters.length > 0 && (
           <View style={[styles.allDoneBanner, { backgroundColor: c.surface }]}>
             <Text style={[styles.allDoneText, { color: c.inkMid }]}>
               {"That's today done. See you tomorrow."}
@@ -493,7 +504,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     height: 56,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
   },
   bannerFraction: {
@@ -505,19 +515,27 @@ const styles = StyleSheet.create({
     fontFamily: fonts.sans,
     fontSize: 12,
   },
-  bannerWeekly: {
-    alignItems: 'flex-end',
+  restLineRow: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  bannerWeeklyValue: {
-    fontFamily: fonts.serif,
-    fontSize: 26,
-    lineHeight: 32,
-    textAlign: 'right',
-  },
-  bannerWeeklyLabel: {
+  restLineText: {
     fontFamily: fonts.sans,
     fontSize: 12,
-    textAlign: 'right',
+    lineHeight: 17,
+    flex: 1,
+    marginRight: spacing.sm,
+  },
+  bonusButton: {
+    paddingVertical: 4,
+    paddingHorizontal: spacing.sm,
+  },
+  bonusButtonText: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 12,
   },
 
   forgivenessLine: {
