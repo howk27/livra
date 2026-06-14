@@ -588,7 +588,13 @@ function RootNavigator() {
         <Stack.Screen name="mark/[id]" options={{ presentation: 'modal' }} />
         <Stack.Screen name="onboarding" options={{ presentation: 'fullScreenModal' }} />
         <Stack.Screen name="paywall" options={{ presentation: 'modal' }} />
-        <Stack.Screen name="auth" options={{ presentation: 'modal' }} />
+        {/* AUTH-3: full-screen + non-dismissible so an unauthenticated (null) session
+            cannot swipe the auth modal down to reach the tab navigator underneath.
+            The redirect gate lives in app/index.tsx; this closes the swipe bypass. */}
+        <Stack.Screen
+          name="auth"
+          options={{ presentation: 'fullScreenModal', gestureEnabled: false }}
+        />
         <Stack.Screen name="iap-dashboard" options={{ presentation: 'modal' }} />
         <Stack.Screen name="goal/new" options={{ presentation: 'modal', title: 'New Goal', headerShown: false }} />
         <Stack.Screen name="goal/queue" options={{ title: 'Goals', headerShown: false }} />
