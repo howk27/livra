@@ -1843,9 +1843,11 @@ Audit + fixes across the auth surface. Type-check clean; 553/553 tests pass. Wor
 ### Fix 6 — Name field validation (AUTH-7)
 `app/auth/signin.tsx`: label "Full name" → "Your name"; validation `!fullName.trim()` → `fullName.trim().length < 2` with message "Please enter your name (at least 2 characters)". No last-name enforcement (placeholder was already "Your name", `autoCapitalize="words"`).
 
+## Deploy status (updated 2026-06-14)
+- **Edge Function `delete-account`** — DEPLOYED 2026-06-14, manually by the user.
+- **Migration `20260614_delete_account_cascade_check.sql`** — APPLIED 2026-06-14, manually by the user (verification-only cascade check; non-destructive).
+
 ## Could not be completed / out of scope
-- **Edge Function deploy** — NOT deployed (per instructions and no `supabase`/`deno` CLI in this env). User must run: `supabase functions deploy delete-account --project-ref <REF>`. `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` are auto-injected.
-- **Migration** — written, NOT applied (verification-only; safe to run any time).
 - **Local SQLite cleanup on deletion** — `AsyncStorage.clear()` is done per spec; the local `expo-sqlite` DB (marks/events) is not wiped here. Sign-out + login re-scopes data by `user_id`, but a full local DB purge on account deletion is a possible follow-up.
 - **`app/signin.tsx`** (a second, unused-by-default sign-in screen) and `app/auth/signing-out.tsx` were left as-is — not the login/sign-up screens reached by the auth gate; signing-out still uses `theme/colors.ts` for its transient spinner background.
 

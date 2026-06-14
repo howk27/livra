@@ -22,6 +22,7 @@
 //
 // Deploy:  supabase functions deploy delete-account
 // Secrets: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are injected automatically.
+// STATUS:  DEPLOYED 2026-06-14 — deployed manually by the user.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 

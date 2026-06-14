@@ -1,5 +1,5 @@
 -- AUTH-1 — Account deletion data-cleanup contract (verification only).
--- STATUS: NOT APPLIED
+-- STATUS: APPLIED 2026-06-14 — applied manually by the user (cascade check passed).
 --
 -- The delete-account Edge Function (supabase/functions/delete-account) removes a
 -- user by calling auth.admin.deleteUser(userId). It relies on every user-owned
