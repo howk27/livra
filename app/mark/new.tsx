@@ -217,8 +217,8 @@ export default function NewCounterScreen() {
         logger.warn('[Counter] Subscription status unknown');
         showError('Unable to verify your subscription. Please check your connection and try again.');
       } else if (error instanceof Error && error.message.includes('FREE_COUNTER_LIMIT_REACHED')) {
-        logger.warn('[Counter] Counter limit reached for free user');
-        showError('Counter limit reached. Upgrade to Livra+ to create unlimited counters.');
+        logger.warn('[Counter] Per-goal mark limit reached for free user');
+        showError('That’s 3 marks on this goal. Livra+ lets you add more.');
         setTimeout(() => {
           router.replace('/paywall');
         }, 2000);
@@ -281,8 +281,8 @@ export default function NewCounterScreen() {
         logger.warn('[Counter] Subscription status unknown');
         showError('Unable to verify your subscription. Please check your connection and try again.');
       } else if (error instanceof Error && error.message.includes('FREE_COUNTER_LIMIT_REACHED')) {
-        logger.warn('[Counter] Counter limit reached for free user');
-        showError('Counter limit reached. Upgrade to Livra+ to create unlimited counters.');
+        logger.warn('[Counter] Per-goal mark limit reached for free user');
+        showError('That’s 3 marks on this goal. Livra+ lets you add more.');
         setTimeout(() => {
           router.replace('/paywall');
         }, 2000);

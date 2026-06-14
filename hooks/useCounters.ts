@@ -13,7 +13,7 @@ import { logger } from '../lib/utils/logger';
 import { getAppDate, getAppDateTime, isDebugAppDateActive } from '../lib/appDate';
 import { useAppDateStore } from '../state/appDateSlice';
 import { scheduleContextualDailyNotification } from '../lib/notificationSystem';
-import { canAddMark } from '../lib/gating';
+import { canAddMarkToGoal, countMarksInGoal } from '../lib/gating';
 
 // Helper function to validate UUID
 const isValidUUID = (str: string): boolean => {
@@ -81,18 +81,22 @@ export const useMarks = () => {
       schedule_days?: string;
       goal_value?: number | null;
       goal_period?: string | null;
+      goal_id?: string | null; // Goal this mark feeds — drives the per-goal free cap
       frequency_kind?: 'variable' | 'fixed' | 'abstinence' | null;
       skipSync?: boolean; // Optional flag to skip sync (useful for batch operations)
     }) => {
-      // Check counter limit for free users (skip check if skipSync is true - used for onboarding)
-      if (!data.skipSync && !isProUnlocked) {
+      // Per-goal free cap: a free user may keep 3 marks per goal (not a global ceiling).
+      // Marks with no goal_id are uncapped — the core loop is never blocked.
+      // Skip the check entirely for batch operations (onboarding) or Pro users.
+      if (!data.skipSync && !isProUnlocked && data.goal_id) {
         if (proStatus.verification === 'unverified' && proStatus.status === 'unknown') {
           throw new Error('PRO_STATUS_UNKNOWN: Unable to verify subscription. Please try again.');
         }
-        // Count only active (non-deleted) counters
-        const activeCounters = marks.filter((m) => !m.deleted_at);
-        if (!canAddMark(isProUnlocked, activeCounters.length)) {
-          throw new Error('FREE_COUNTER_LIMIT_REACHED: Upgrade to Livra+ to create more than 3 marks');
+        const marksInGoal = countMarksInGoal(marks, data.goal_id);
+        if (!canAddMarkToGoal(isProUnlocked, marksInGoal)) {
+          throw new Error(
+            "FREE_COUNTER_LIMIT_REACHED: You've added 3 marks to this goal. Livra+ lets you add more."
+          );
         }
       }
 
@@ -110,6 +114,7 @@ export const useMarks = () => {
         schedule_days: data.schedule_days,
         goal_value: data.goal_value,
         goal_period: data.goal_period as any,
+        goal_id: data.goal_id ?? null,
         frequency_kind: data.frequency_kind ?? 'variable',
       });
 

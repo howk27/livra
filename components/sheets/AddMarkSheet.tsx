@@ -19,6 +19,7 @@ import Animated, {
   runOnJS,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { PillButton } from '../ui/PillButton';
 import { SectionLabel } from '../ui/SectionLabel';
@@ -26,6 +27,7 @@ import { fonts, spacing, radius, shadow, themedColors } from '../../theme/tokens
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useCounters } from '../../hooks/useCounters';
 import { useAuth } from '../../hooks/useAuth';
+import { useGoalsStore } from '../../state/goalsSlice';
 import { logger } from '../../lib/utils/logger';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
@@ -61,9 +63,12 @@ interface AddMarkSheetProps {
 
 export function AddMarkSheet({ visible, onClose }: AddMarkSheetProps) {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const tc = themedColors(useEffectiveTheme());
   const { user } = useAuth();
   const { createCounter } = useCounters();
+  const activeGoal = useGoalsStore((s) => s.goals.find((g) => g.status === 'active'));
+  const linkMarkToGoal = useGoalsStore((s) => s.linkMarkToGoal);
 
   const [name, setName] = useState('');
   const [category, setCategory] = useState<string>('custom');
@@ -112,12 +117,17 @@ export function AddMarkSheet({ visible, onClose }: AddMarkSheetProps) {
     setSaving(true);
     try {
       const selectedCat = CATEGORIES.find(c => c.key === category);
-      await createCounter({
+      const goalId = activeGoal?.id ?? null;
+      const savedMark = await createCounter({
         name: name.trim(),
         user_id: user.id,
         dailyTarget: target > 0 ? target : null,
         color: selectedCat?.accent,
-      });
+        ...(goalId ? { goal_id: goalId } : {}),
+      } as any);
+      if (goalId && savedMark?.id) {
+        linkMarkToGoal(goalId, savedMark.id).catch(() => {});
+      }
       setName('');
       setCategory('custom');
       setTarget(1);
@@ -125,7 +135,15 @@ export function AddMarkSheet({ visible, onClose }: AddMarkSheetProps) {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Could not create mark.';
       if (msg.includes('FREE_COUNTER_LIMIT_REACHED')) {
-        Alert.alert('Upgrade to Pro', 'Upgrade to Livra+ to create more than 3 marks.');
+        // Soft, per-goal upsell — never a wall on the core loop.
+        Alert.alert(
+          "That's 3 marks on this goal",
+          'Three focused marks per goal keeps things doable. Livra+ lets you add more when you want to.',
+          [
+            { text: 'Not now', style: 'cancel' },
+            { text: 'See Livra+', onPress: () => router.push('/paywall') },
+          ]
+        );
       } else {
         Alert.alert('Error', msg);
       }

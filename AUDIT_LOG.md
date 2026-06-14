@@ -1434,3 +1434,85 @@ Auth = Option B (value-first, signup at screen 5). No AI in this phase — AI ha
 | `tests/unit/onboarding/aiReview.test.ts` | 15 new tests: `setAiPackageDraft` stores without auto-activating; draft doesn't affect title or commitment; clear draft dismisses without usage spend; only `incrementAiRegenerations` increments session counter; `selectedMarkTargets` reflects AI frequencies on confirm; AI targets differ from commitment-derived; reset clears all AI fields together; `resolveMarkForAIIcon` for all VALID_ICONS; regen cap detection. | TDD contracts for review screen. |
 
 **Tests:** pending (commit after aiReview tests pass). **Type-check:** 0 errors.
+
+---
+
+## Phase 5 — Livra+ Premium Gating Realignment
+
+### Task 1 — AUDIT ONLY (read-only, no code changed)
+
+**Run date:** 2026-06-13. **Mode:** audit-only per `prompt-05-premium-gating.md`. No files modified.
+
+#### 1. Mark cap — `FREE_COUNTER_LIMIT` is GLOBAL today
+
+- **Source of truth:** `lib/gating.ts` — `FREE_MARK_LIMIT = 3` + `canAddMark(isPro, totalMarkCount) => isPro || totalMarkCount < 3`. Note the constant is named `FREE_MARK_LIMIT`, not `FREE_COUNTER_LIMIT`; the error *string* uses `FREE_COUNTER_LIMIT_REACHED`.
+- **Enforcement:** `hooks/useCounters.ts` `createMark` (lines 88–97). Counts **all active marks app-wide**: `const activeCounters = marks.filter((m) => !m.deleted_at)` then `canAddMark(isProUnlocked, activeCounters.length)`. **No `goal_id` awareness** — it's a flat global count across every mark the user owns. Throws `FREE_COUNTER_LIMIT_REACHED: Upgrade to Livra+ to create more than 3 marks`.
+- **Bypasses:** `data.skipSync` (onboarding batch) skips the check entirely; `isProUnlocked` bypasses; unknown pro status (`verification==='unverified' && status==='unknown'`) hard-throws `PRO_STATUS_UNKNOWN`.
+- **Per-goal change path:** to become "3 marks per the goal this mark feeds," the check must filter by the target goal's linked marks instead of `marks.length`. `createMark` does **not currently receive a `goalId`/`goal_id`** in its `data` param — the mark→goal link is established *after* creation (see `useCounters.ts` increment path `linkMarkToGoal`, and `goalsSlice.linkMarkToGoal`). **Gap to resolve in Task 2:** the add-mark flow must pass the goal context into `createMark` (or check link count before create). A mark with no goal: spec says counts against nothing / sensible default — confirm in Task 2.
+- **Error string consumers (will need copy/relocation):** `app/mark/new.tsx:219,283` (redirects to `/paywall`), `components/sheets/AddMarkSheet.tsx:127` (`Alert.alert('Upgrade to Pro', 'Upgrade to Livra+ to create more than 3 marks.')`), `hooks/useSync.ts:71`.
+
+#### 2. Goal cap — currently 3 free, must drop to 2
+
+- **Source of truth:** `lib/gating.ts` — `FREE_GOAL_LIMIT = 3` + `canAddGoal(isPro, totalGoalCount) => isPro || totalGoalCount < 3`. Re-exported via `lib/goalLogic.ts:4`.
+- **Enforcement:** `state/goalsSlice.ts` `createGoal` (lines 82–85). Counts **non-completed, non-expired** goals: `const nonCompleted = current.filter(g => g.status !== 'completed' && g.status !== 'expired')` → `canAddGoal(isPro, nonCompleted.length)`. Throws `GoalLimitError` ("Free plan allows up to 3 goals. Upgrade to Livra+ for unlimited.", lines 27–32).
+- **Completed/expired already excluded** from the cap — matches the locked "completed don't count against active cap" requirement. ✓
+- **Change for Task 3:** drop `FREE_GOAL_LIMIT` 3→2 (or introduce a dedicated active-goal cap), update `GoalLimitError` copy ("up to 3" → "up to 2"). Surfaced today at `app/goal/new.tsx:103` ("Upgrade" → `/paywall`) and `components/sheets/AddGoalSheet.tsx` (passes `isPro: isProUnlocked` into `createGoal`).
+
+#### 3. Paywall `PRO_FEATURES` — delta vs locked split
+
+`app/paywall.tsx:38–54`. Current list (6 items) and `SHIPPED_PREMIUM_FEATURE_TITLES` (same 6):
+
+| Current `PRO_FEATURES` | In locked Livra+ list? |
+|---|---|
+| Unlimited Goals | ✓ (unlimited goal queue) |
+| Unlimited Marks | ✓ (unlimited marks per goal) |
+| Mark Reordering | ✓ |
+| Apple Health | ✓ (health integrations) |
+| Custom Reminders | ✓ (custom reminder times per mark) |
+| CSV Export | ✓ |
+
+**MISSING from paywall vs locked split (3):** **Share card** (weekly progress image), **Pace projection**, **AI custom goal + mark creation / repeat use**. Task 5 must add these to `PRO_FEATURES` + `SHIPPED_PREMIUM_FEATURE_TITLES` (a dev-only `useEffect` at lines 200–210 warns if the two arrays drift, so keep them in sync). Headline today: "Everything you need to finish what you start." CTA: "Start Livra+".
+
+#### 4. CRITICAL — history / stats / presets / charts gating
+
+**Finding: NONE are gated today. No un-gating work required — they are already free.** Greps for `isPro*`/`FREE_`/`paywall`/`checkProStatus` against history/stats/preset/template/chart surfaces returned **zero gates**:
+- `app/goal/history.tsx` — no pro check.
+- `app/stats.tsx` (hidden tab) — no pro check.
+- Presets/templates (`lib/goalMarkSuggestions.ts`, `lib/markCategory.ts`, `components/SuggestedCountersList.tsx`, `components/ui/MarkFrequencyPicker.tsx`, onboarding/goal/mark `new` screens) — no pro check.
+- Charts/weekly consistency (`components/WeeklySummaryStrip.tsx`, `components/DailyProgressCard.tsx`, weekly-review) — no pro check.
+- The only `isPro*` references in the whole app are the gates enumerated in §1–3 and §5. So the "never gate history/stats/presets" principle already holds; Task 4's "un-gate anything wrongly gated" is a **no-op** on current code — but document so no regression is introduced.
+
+#### 5. Feature gate entry points — exist vs not-yet-built
+
+| Plus feature | Entry point | Gated today? |
+|---|---|---|
+| **Health connect** | `app/mark/[id]/index.tsx:548–551` `handleConnectHealth`; `components/HealthConnectBanner.tsx:42–46` | ✅ Gated — `checkProStatus()` → `/paywall` if `!effectiveUnlocked`. (Already correct.) |
+| **Share card** | `app/goal/complete.tsx:113–120` `handleSharePress`; `components/ShareCard.tsx`, `GoalCompletionShareCard.tsx`, `lib/sharing/generateShareCard.ts`, `components/SharePreviewModal.tsx`; also surfaced in `app/(tabs)/profile.tsx` | ✅ Gated at goal-complete (`checkProStatus` → `/paywall`). Verify the profile.tsx share surface is gated too in Task 4. |
+| **Custom reminder times** | `app/mark/[id]/index.tsx` `handleReminderToggle`/`handleReminderTimeChange` (267–287), UI block 886–918; `lib/notifications/markReminder.ts`; `app/settings/notifications.tsx` | ❌ **NOT gated** — any free user can toggle a per-mark daily reminder + pick a time. Task 4 must add `isProUnlocked` gate + soft upsell. |
+| **CSV export** | `app/(tabs)/settings.tsx:308–319` `handleExportMarks` (rows at 435 "Export Marks", 441 "Export Goals" = TODO `console.log`); `lib/csv.ts` `generateAllCountersCSV` | ❌ **NOT gated** — `handleExportMarks` runs with no pro check (currently only logs + "sharing coming soon" toast). Task 4 must gate. |
+| **Mark reordering** | Components `components/SortableMarkList.tsx` + `SortableMarkRow.tsx` exist but are **NOT rendered anywhere** (grep: zero usages in `app/`). | ⚠️ **Built but unwired.** No live entry point → no gate to add yet. Flag as out-of-scope-if-absent per spec; if Phase 3's Focus/goal screens later render a sortable mark list, gate it then. NB: the draggable list in `app/(tabs)/goals.tsx` (`DraggableQueueList`) reorders the **goal queue**, not marks, and is **ungated** — decide in Task 4 whether goal-queue reorder counts as the gated "reordering" or stays free. |
+| **Pace projection** | `components/PaceBanner.tsx` exists but is **NOT rendered anywhere** (grep: zero usages). | ⚠️ **Built but unwired.** No live entry point → no gate yet. Out-of-scope-if-absent; gate when wired. |
+
+#### Summary of work implied for Tasks 2–5
+- **Task 2 (mark cap → per-goal):** real change. Requires plumbing goal context into `createMark` (not currently passed). Relocate orphaned upsell into `AddMarkSheet`/add-mark-in-goal flow (`marks.tsx` removed in Phase 3). Decide no-goal-mark behavior.
+- **Task 3 (goal cap 3→2):** trivial constant + `GoalLimitError` copy; completed/expired already excluded. ✓
+- **Task 4 (feature gates):** ADD gates to **custom reminders** and **CSV export** (currently free). Health + share-card-at-complete already gated. Mark-reorder + pace are unwired → out of scope until rendered. Un-gating history/stats/presets = **no-op** (none gated).
+- **Task 5 (paywall copy):** add **Share card**, **Pace projection**, **AI** to `PRO_FEATURES` + `SHIPPED_PREMIUM_FEATURE_TITLES`; refresh headline/subhead/CTA. Do not touch product IDs.
+
+**Protected-files note:** Task 2 touches `hooks/useCounters.ts` and Task 3 touches `state/goalsSlice.ts` — both authorized by the Phase 5 PROTECTED-FILES EXCEPTION. `lib/gating.ts` is **not** protected (free to edit). No `lib/db/`, `lib/goalLogic.ts`, or `supabase/` change appears required.
+
+**STOP — audit only. No code modified. Awaiting review before Task 2.**
+
+### Task 2 — Mark cap: global → per-goal (EXECUTED)
+
+| File | Change | Why |
+|------|--------|-----|
+| `lib/gating.ts` | Added `FREE_MARKS_PER_GOAL = 3`, `canAddMarkToGoal(isPro, marksInGoalCount)`, `countMarksInGoal(marks, goalId)` (excludes deleted + unlinked). Marked `canAddMark`/`FREE_MARK_LIMIT` `@deprecated` (kept for back-compat). `FREE_GOAL_LIMIT` unchanged here (Task 3). | Centralized, unit-testable per-goal predicate. |
+| `hooks/useCounters.ts` (PROTECTED — authorized) | `createMark` now accepts `goal_id`; cap only fires when a `goal_id` is present and counts `countMarksInGoal(marks, goal_id)` via `canAddMarkToGoal`. Marks with no goal are **uncapped** (core loop never blocked). `goal_id` now persisted in `addMarkAction` payload (was dropped before). Kept `FREE_COUNTER_LIMIT_REACHED` machine token (consumed by `useSync`, `mark/new`, `AddMarkSheet`); message reworded per-goal. | Global→per-goal cap; per-goal isolation. |
+| `components/sheets/AddMarkSheet.tsx` | Reads active goal, passes `goal_id`, links via `linkMarkToGoal`. On `FREE_COUNTER_LIMIT_REACHED` shows **soft** per-goal upsell ("That's 3 marks on this goal" → Not now / See Livra+). Relocates the orphaned `marks.tsx` upsell into the add-mark-in-goal flow. | Per-goal upsell surface restored (Phase 3 removed `marks.tsx`). |
+| `app/mark/new.tsx` | Reworded both `FREE_COUNTER_LIMIT_REACHED` toasts from global ("unlimited counters") to per-goal soft copy. | Consistent per-goal messaging. |
+| `tests/unit/gating.test.ts` | +10 tests: `canAddMarkToGoal` (under/at/zero/pro), `countMarksInGoal` (per-goal isolation A vs B, deleted excluded, unlinked excluded, empty goal). `FREE_MARKS_PER_GOAL === 3`. | TDD — watched fail (functions absent) → green. |
+
+**Decision (from audit §1):** mark with **no `goal_id` counts against nothing** (uncapped) — chosen over a global default so the quick-add core loop is never walled. Goal-context add paths (`AddMarkSheet` active goal, `mark/new` `goalId`/active goal) carry the cap.
+
+**Tests:** 541/541 passing (was 518). **Type-check:** 0 errors. Did not touch `lib/db/`, `lib/goalLogic.ts`, `supabase/`. No IAP product IDs / purchase call sites touched.
