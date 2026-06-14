@@ -138,6 +138,9 @@ export default function SettingsScreen() {
   const [persistedSyncDiag, setPersistedSyncDiag] = useState<SyncDiagSnapshotV1 | null>(null);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [editSheetVisible, setEditSheetVisible] = useState(false);
+  const [resendingVerification, setResendingVerification] = useState(false);
+
+  const emailVerified = !!user?.email_confirmed_at;
 
   const refreshRotation = useRef(new Animated.Value(0)).current;
   const lastSyncErrorRef = useRef<string | null>(null);
@@ -353,6 +356,20 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleResendVerification = async () => {
+    if (!user?.email || resendingVerification) return;
+    setResendingVerification(true);
+    try {
+      const { error } = await supabase.auth.resend({ type: 'signup', email: user.email });
+      if (error) throw error;
+      showSuccess('Verification email sent — check your inbox.');
+    } catch (e: any) {
+      showError(e?.message || 'Could not send verification email.');
+    } finally {
+      setResendingVerification(false);
+    }
+  };
+
   const handleExportMarks = async () => {
     if (!canExportData(isProUnlocked)) {
       Alert.alert(
@@ -415,6 +432,21 @@ export default function SettingsScreen() {
             <LevelProgressBar />
           </View>
         </TouchableOpacity>
+
+        {/* ── Email-not-verified nudge ── */}
+        {user && !emailVerified ? (
+          <View style={[styles.verifyBanner, { backgroundColor: c.surface, borderColor: c.borderLight }]}>
+            <Feather name="mail" size={16} color={c.inkMid} />
+            <Text style={[styles.verifyText, { color: c.inkMid }]}>
+              Your email isn’t verified yet.
+            </Text>
+            <TouchableOpacity onPress={handleResendVerification} disabled={resendingVerification} hitSlop={8}>
+              <Text style={[styles.verifyAction, { color: c.forest }]}>
+                {resendingVerification ? 'Sending…' : 'Resend'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
 
         {/* ── ACCOUNT ── */}
         <SectionLabel style={styles.sectionLabel}>ACCOUNT</SectionLabel>
@@ -642,6 +674,27 @@ const styles = StyleSheet.create({
     fontFamily: fonts.sans,
     fontSize: 11,
     marginTop: spacing.xs,
+  },
+
+  // Email-not-verified nudge
+  verifyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    marginBottom: spacing.lg,
+  },
+  verifyText: {
+    flex: 1,
+    fontFamily: fonts.sans,
+    fontSize: 13,
+  },
+  verifyAction: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 13,
   },
 
   // Section label

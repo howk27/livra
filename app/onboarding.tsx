@@ -12,22 +12,20 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
 import { Check } from 'phosphor-react-native';
 import { useRouter } from 'expo-router';
 import { SvgLogo } from '../components/ui/SvgLogo';
 import { LivraWordmark } from '../components/ui/LivraWordmark';
 import { PillButton } from '../components/ui/PillButton';
-import { SectionLabel } from '../components/ui/SectionLabel';
 import { themedColors, fonts, spacing, radius } from '../theme/tokens';
 import { useEffectiveTheme, useUIStore } from '../state/uiSlice';
 import { useOnboardingStore, CommitmentLevel } from '../state/onboardingSlice';
 import { useGoalsStore } from '../state/goalsSlice';
 import { useMarksStore } from '../state/countersSlice';
+import { useAuth } from '../hooks/useAuth';
 import { MARK_LIBRARY } from '../lib/suggestedCounters';
 import { getMarksForCommitment, CommitmentMarkSelection } from '../lib/onboarding/commitmentEngine';
 import { frequencyLabel } from '../components/ui/MarkFrequencyPicker';
-import { getSupabaseClient } from '../lib/supabase';
 import { logger } from '../lib/utils/logger';
 import {
   generateGoalPackage, MIN_GOAL_LENGTH, resolveMarkForAIIcon,
@@ -95,7 +93,7 @@ export default function OnboardingScreen() {
   const c = themedColors(theme);
   const styles = useMemo(() => createStyles(c), [c]);
   const router = useRouter();
-  const supabase = getSupabaseClient();
+  const { user } = useAuth();
 
   const store = useOnboardingStore();
   const completeOnboarding = useUIStore(s => s.completeOnboarding);
@@ -105,10 +103,7 @@ export default function OnboardingScreen() {
 
   const [step, setStep] = useState(0);
 
-  // Auth state (Step 4 only — not persisted to slice)
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  // In-flight state for the final "complete onboarding" persist action.
   const [loading, setLoading] = useState(false);
 
   // Computed marks for the marks screen (derived on entry to Step 3)
@@ -210,9 +205,11 @@ export default function OnboardingScreen() {
     advance();
   }, [store.commitment, store.goalTitle, advance]);
 
-  // ── Step 3 → 4: persist selected mark IDs + per-mark targets to slice ──
+  // ── Step 3 (final): persist marks + complete onboarding ──────────────────
+  // Onboarding runs only after account creation, so the user is already
+  // authenticated here. Persist the goal/marks to that account and finish.
 
-  const handleMarksNext = useCallback(() => {
+  const handleMarksNext = async () => {
     const ids = Array.from(marksSelected);
     store.setSelectedMarkIds(ids);
     const targets: Record<string, number> = {};
@@ -220,31 +217,19 @@ export default function OnboardingScreen() {
       if (marksSelected.has(mark.id)) targets[mark.id] = weeklyTarget;
     }
     store.setSelectedMarkTargets(targets);
-    advance();
-  }, [marksSelected, marksForScreen, store, advance]);
 
-  // ── Step 4: sign up ──────────────────────────────────────────────────────
-
-  const handleSignUp = async () => {
-    if (!email.trim() || !password) {
-      Alert.alert('Required', 'Please enter your email and password.');
+    if (!user?.id) {
+      Alert.alert('Something went wrong', 'Please sign in again to finish setup.');
+      router.replace('/auth/signin');
       return;
     }
+
     setLoading(true);
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email: email.trim().toLowerCase(),
-        password,
-      });
-      if (error) throw error;
-      const userId = data.user?.id ?? null;
-      if (!userId) throw new Error('Sign up succeeded but no user ID returned.');
-      // Persist is handled by Task 4 — navigate to persist handler
-      await handlePersistAndComplete(userId);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Sign up failed.';
-      logger.error('[Onboarding] signUp error:', err);
-      Alert.alert('Sign up failed', msg);
+      await handlePersistAndComplete(user.id);
+    } catch (err) {
+      logger.error('[Onboarding] complete failed:', err);
+      Alert.alert('Something went wrong', 'Could not finish setup. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -459,9 +444,6 @@ export default function OnboardingScreen() {
         {"The graveyard of abandoned goals is full of people who meant well.\nLet's make this one different."}
       </Text>
       <PillButton label="Get Started" onPress={advance} style={styles.primaryBtn} />
-      <TouchableOpacity onPress={() => router.push('/signin' as any)}>
-        <Text style={styles.secondaryLink}>I already have an account</Text>
-      </TouchableOpacity>
     </View>
   );
 
@@ -639,96 +621,14 @@ export default function OnboardingScreen() {
         </Text>
 
         <PillButton
-          label="Continue"
+          label={loading ? 'Setting up…' : 'Continue'}
           onPress={handleMarksNext}
-          disabled={marksSelected.size === 0}
+          disabled={marksSelected.size === 0 || loading}
           style={styles.primaryBtn}
         />
       </ScrollView>
     );
   };
-
-  // Step 4 — Sign up (value-first: goal + marks already chosen)
-  const renderStep4 = () => (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <ScrollView
-        contentContainerStyle={styles.stepContent}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        <Text style={styles.stepTitle}>{"Almost there. Create your account."}</Text>
-        <Text style={styles.stepSubtitle}>
-          Your goal and marks will sync once you sign up.
-        </Text>
-
-        <View style={styles.fieldBlock}>
-          <SectionLabel>EMAIL</SectionLabel>
-          <TextInput
-            style={styles.input}
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-            placeholder="you@example.com"
-            placeholderTextColor={c.inkMuted}
-          />
-        </View>
-
-        <View style={styles.fieldBlock}>
-          <SectionLabel>PASSWORD</SectionLabel>
-          <View style={styles.passwordWrap}>
-            <TextInput
-              style={[styles.input, { flex: 1 }]}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPassword}
-              placeholder="At least 6 characters"
-              placeholderTextColor={c.inkMuted}
-            />
-            <TouchableOpacity
-              style={styles.eyeBtn}
-              onPress={() => setShowPassword((v) => !v)}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Feather name={showPassword ? 'eye-off' : 'eye'} size={18} color={c.inkMuted} />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        <PillButton
-          label={loading ? 'Creating account…' : 'Create Account'}
-          onPress={handleSignUp}
-          disabled={loading}
-          style={styles.primaryBtn}
-        />
-
-        <View style={styles.dividerRow}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>or</Text>
-          <View style={styles.dividerLine} />
-        </View>
-
-        {/* Google placeholder */}
-        <TouchableOpacity style={styles.googleBtn} activeOpacity={0.8}>
-          <View style={styles.googleLogo}>
-            <Text style={styles.googleLogoText}>G</Text>
-          </View>
-          <Text style={styles.googleBtnText}>Continue with Google</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity onPress={() => router.push('/signin' as any)}>
-          <Text style={styles.secondaryLink}>
-            Already have an account?{' '}
-            <Text style={styles.secondaryLinkBold}>Sign in</Text>
-          </Text>
-        </TouchableOpacity>
-      </ScrollView>
-    </KeyboardAvoidingView>
-  );
 
   // ─── Render ────────────────────────────────────────────────────────────────
 
@@ -741,11 +641,10 @@ export default function OnboardingScreen() {
             {step === 1 && renderStep1()}
             {step === 2 && renderStep2()}
             {step === 3 && renderStep3()}
-            {step === 4 && renderStep4()}
           </>
         )}
       </View>
-      {!aiReviewActive && step < 4 && <StepDots step={step} total={4} />}
+      {!aiReviewActive && <StepDots step={step} total={4} />}
     </SafeAreaView>
   );
 }
@@ -798,12 +697,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
       textAlign: 'center',
       marginTop: spacing.md,
     },
-    secondaryLinkBold: {
-      fontFamily: fonts.sansMedium,
-      color: c.forest,
-    },
-
-    // Steps 1–4 — scrollable
+    // Steps 1–3 — scrollable
     stepContent: {
       paddingHorizontal: spacing.lg,
       paddingTop: spacing.xl,
@@ -838,14 +732,6 @@ function createStyles(c: ReturnType<typeof themedColors>) {
       color: c.inkDark,
       borderWidth: 1,
       borderColor: c.borderLight,
-    },
-    passwordWrap: {
-      flexDirection: 'row',
-      alignItems: 'center',
-    },
-    eyeBtn: {
-      position: 'absolute',
-      right: spacing.md,
     },
 
     // Pace screen
@@ -998,55 +884,6 @@ function createStyles(c: ReturnType<typeof themedColors>) {
       color: c.inkMuted,
       marginTop: 2,
       lineHeight: 17,
-    },
-
-    // Auth screen
-    dividerRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginTop: spacing.lg,
-      gap: spacing.md,
-    },
-    dividerLine: {
-      flex: 1,
-      height: 1,
-      backgroundColor: c.borderLight,
-    },
-    dividerText: {
-      fontFamily: fonts.sans,
-      fontSize: 13,
-      color: c.inkMuted,
-    },
-    googleBtn: {
-      height: 52,
-      borderRadius: radius.full,
-      backgroundColor: c.surface,
-      borderWidth: 1,
-      borderColor: c.borderMid,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: spacing.sm,
-      marginTop: spacing.lg,
-      marginBottom: spacing.md,
-    },
-    googleLogo: {
-      width: 20,
-      height: 20,
-      borderRadius: 10,
-      backgroundColor: '#4285F4',
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    googleLogoText: {
-      fontFamily: fonts.sansMedium,
-      fontSize: 12,
-      color: c.inkInverse,
-    },
-    googleBtnText: {
-      fontFamily: fonts.sansMedium,
-      fontSize: 15,
-      color: c.inkDark,
     },
   });
 }

@@ -27,6 +27,7 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import { spacing, borderRadius, fontWeight, themedColors } from '../../theme/tokens';
 import {
   useEffectiveTheme,
+  useUIStore,
   ONBOARDING_COMPLETED_STORAGE_KEY,
   ONBOARDING_COMPLETED_LEGACY_KEY,
 } from '../../state/uiSlice';
@@ -153,21 +154,7 @@ export default function SignInScreen() {
         if (signInError) {
           setPasswordError(false);
           setEmailError(false);
-          if (signInError.message.includes('Email not confirmed')) {
-            Alert.alert('Email Not Verified', "Please check your email and verify your account before signing in.", [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Resend Verification Email', onPress: async () => {
-                try {
-                  setLoading(true);
-                  await supabase.auth.resend({ type: 'signup', email: email.trim() });
-                  Alert.alert('Email Sent', 'A new verification email has been sent. Please check your inbox and spam folder.');
-                } catch { Alert.alert('Error', 'Failed to send verification email. Please try again.'); }
-                finally { setLoading(false); }
-              }},
-            ]);
-            setLoading(false);
-            return;
-          } else if (signInError.message.includes('Invalid login credentials')) {
+          if (signInError.message.includes('Invalid login credentials')) {
             setPasswordError(true);
             setError('Incorrect password. Please try again.');
             setTimeout(() => { passwordInputRef.current?.focus(); setPassword(''); }, 100);
@@ -181,21 +168,10 @@ export default function SignInScreen() {
             setError(signInError.message);
           }
         } else if (data?.user) {
-          if (!data.user.email_confirmed_at) {
-            Alert.alert('Email Not Verified', "Please check your email and verify your account.", [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Resend Verification Email', onPress: async () => {
-                try {
-                  setLoading(true);
-                  await supabase.auth.resend({ type: 'signup', email: email.trim() });
-                  Alert.alert('Email Sent', 'A new verification email has been sent.');
-                } catch { Alert.alert('Error', 'Failed to send verification email.'); }
-                finally { setLoading(false); }
-              }},
-            ]);
-            setLoading(false);
-            return;
-          }
+          // Email verification is NOT required to sign in. Unverified users are
+          // let straight in and nudged to verify via the banner in Settings.
+          // (Requires Supabase "Confirm email" enforcement to be off so that a
+          // session is issued for unconfirmed accounts.)
           await ensureProfile(supabase, data.user.id, data.user);
           return;
         } else {
@@ -229,11 +205,16 @@ export default function SignInScreen() {
           }
         } else if (data?.user) {
           await ensureProfile(supabase, data.user.id, data.user, fullName.trim());
-          if (!data.user.email_confirmed_at) {
-            setPendingEmailConfirmation(true);
-            setMode('login');
-            setPassword(''); setConfirmPassword(''); setFullName('');
+          if (data.session) {
+            // Session issued → onAuthStateChange + the redirect effect take the
+            // user into onboarding. No email verification gate.
+            return;
           }
+          // No session means the server still requires email confirmation before
+          // issuing one — fall back to the verify-then-sign-in path.
+          setPendingEmailConfirmation(true);
+          setMode('login');
+          setPassword(''); setConfirmPassword(''); setFullName('');
         } else {
           setError('Could not create account. Please try again.');
         }
@@ -619,6 +600,13 @@ async function ensureProfile(supabase: any, userId: string, user: any, displayNa
         ONBOARDING_COMPLETED_STORAGE_KEY,
         ONBOARDING_COMPLETED_LEGACY_KEY,
       ]);
+      // Also reset the in-memory flag synchronously. The post-signup redirect to
+      // "/" fires before _layout's async loadUIState re-runs, so without this a
+      // stale isOnboarded=true (e.g. a prior account onboarded on this device in
+      // the same session) could send a brand-new account to Focus and skip
+      // onboarding. ensureProfile only reaches here for genuinely new inserts;
+      // returning users hit the early `return` above and are unaffected.
+      useUIStore.setState({ isOnboarded: false });
     }
   } catch (e) {
     logger.error('[Auth] ensureProfile error:', e);
