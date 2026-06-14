@@ -290,20 +290,67 @@ export default function SettingsScreen() {
   };
 
   const handleDeleteAccount = () => {
-    if (!user?.id) return;
+    if (!user?.id || isDeletingAccount) return;
     Alert.alert(
       'Delete Account',
-      'To permanently delete your account and all associated data, email support@getlivra.app from your registered address. We will process your request within 48 hours. Your account will remain active until deletion is confirmed.',
+      'This permanently deletes your account and all associated data. This cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Email Support',
+          text: 'Delete Account',
+          style: 'destructive',
           onPress: () => {
-            Linking.openURL('mailto:support@getlivra.app?subject=Account%20Deletion%20Request').catch(() => {});
+            void performAccountDeletion();
           },
         },
       ]
     );
+  };
+
+  const performAccountDeletion = async () => {
+    setIsDeletingAccount(true);
+    try {
+      // Service-role deletion of the auth user (cascades to all owned data).
+      // functions.invoke attaches the current session's JWT as the bearer token,
+      // which the Edge Function uses to resolve the caller — a user can only
+      // delete themselves.
+      const { data, error } = await supabase.functions.invoke('delete-account', {
+        method: 'POST',
+      });
+      const ok = !error && (data as { ok?: boolean } | null)?.ok === true;
+      if (!ok) {
+        logger.error('[Settings] Account deletion failed:', error?.message ?? data);
+        setIsDeletingAccount(false);
+        Alert.alert(
+          'Could not delete account',
+          'Something went wrong deleting your account. Please check your connection and try again.'
+        );
+        return;
+      }
+
+      // Clear the local session (best-effort — server already removed the user).
+      try {
+        await authSignOut();
+      } catch (signOutError) {
+        logger.warn('[Settings] signOut after deletion failed (continuing):', signOutError);
+      }
+
+      // Wipe all local AsyncStorage keys so no deleted-account state lingers.
+      try {
+        await AsyncStorage.clear();
+      } catch (storageError) {
+        logger.warn('[Settings] AsyncStorage.clear after deletion failed:', storageError);
+      }
+
+      router.replace('/auth/signin');
+    } catch (e: any) {
+      logger.error('[Settings] Account deletion threw:', e);
+      setIsDeletingAccount(false);
+      Alert.alert(
+        'Could not delete account',
+        'Something went wrong deleting your account. Please check your connection and try again.'
+      );
+    }
   };
 
   const handleExportMarks = async () => {
