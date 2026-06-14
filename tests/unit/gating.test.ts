@@ -2,11 +2,14 @@ import {
   canAddGoal,
   canAddMark,
   canAddMarkToGoal,
+  canAddHabitMark,
   countMarksInGoal,
+  countUnlinkedMarks,
   canUseCustomReminders,
   canExportData,
   canUseShareCard,
   FREE_GOAL_LIMIT,
+  FREE_HABIT_LIMIT,
   FREE_MARK_LIMIT,
   FREE_MARKS_PER_GOAL,
 } from '../../lib/gating';
@@ -20,6 +23,9 @@ describe('FREE limits', () => {
   });
   test('FREE_MARK_LIMIT (deprecated global) is 3', () => {
     expect(FREE_MARK_LIMIT).toBe(3);
+  });
+  test('FREE_HABIT_LIMIT is 3 (unlinked daily habits on free)', () => {
+    expect(FREE_HABIT_LIMIT).toBe(3);
   });
 });
 
@@ -65,6 +71,38 @@ describe('countMarksInGoal', () => {
   });
   test('ignores soft-deleted marks', () => {
     expect(countMarksInGoal([{ id: 'x', goal_id: 'A', deleted_at: 'now' }], 'A')).toBe(0);
+  });
+});
+
+describe('canAddHabitMark (unlinked daily-habit cap)', () => {
+  test('free user with 2 daily habits can add a 3rd', () =>
+    expect(canAddHabitMark(false, 2)).toBe(true));
+  test('free user with 3 daily habits is blocked', () =>
+    expect(canAddHabitMark(false, 3)).toBe(false));
+  test('free user with 0 daily habits can add', () =>
+    expect(canAddHabitMark(false, 0)).toBe(true));
+  test('pro user is never blocked', () => expect(canAddHabitMark(true, 99)).toBe(true));
+});
+
+describe('countUnlinkedMarks (daily-habit bucket)', () => {
+  const marks = [
+    { id: 'm1', goal_id: null, deleted_at: null },
+    { id: 'm2', goal_id: undefined, deleted_at: null },
+    { id: 'm3', goal_id: 'A', deleted_at: null }, // goal-linked — excluded
+    { id: 'm4', goal_id: null, deleted_at: '2026-01-01' }, // deleted — excluded
+  ];
+
+  test('counts only active marks with no goal_id', () => {
+    expect(countUnlinkedMarks(marks)).toBe(2);
+  });
+  test('goal-linked marks are a separate bucket (excluded)', () => {
+    expect(countUnlinkedMarks([{ id: 'x', goal_id: 'A', deleted_at: null }])).toBe(0);
+  });
+  test('ignores soft-deleted unlinked marks', () => {
+    expect(countUnlinkedMarks([{ id: 'x', goal_id: null, deleted_at: 'now' }])).toBe(0);
+  });
+  test('empty list counts zero', () => {
+    expect(countUnlinkedMarks([])).toBe(0);
   });
 });
 

@@ -3,6 +3,8 @@
 export const FREE_GOAL_LIMIT = 2;
 /** Marks allowed per goal on the free tier (cap is per-goal, not global). */
 export const FREE_MARKS_PER_GOAL = 3;
+/** Unlinked daily-habit marks (no goal_id) allowed on the free tier. */
+export const FREE_HABIT_LIMIT = 3;
 /** @deprecated Global mark cap. Superseded by FREE_MARKS_PER_GOAL (per-goal). Kept for back-compat. */
 export const FREE_MARK_LIMIT = 3;
 
@@ -26,6 +28,18 @@ export function countMarksInGoal(
   goalId: string
 ): number {
   return marks.filter((m) => !m.deleted_at && m.goal_id === goalId).length;
+}
+
+/** True if a free user may add another unlinked daily-habit mark. Pro bypasses. */
+export function canAddHabitMark(isPro: boolean, unlinkedMarkCount: number): boolean {
+  return isPro || unlinkedMarkCount < FREE_HABIT_LIMIT;
+}
+
+/** Count active (non-deleted) marks with no goal_id — the daily-habit bucket, separate from per-goal caps. */
+export function countUnlinkedMarks(
+  marks: ReadonlyArray<{ goal_id?: string | null; deleted_at?: string | null }>
+): number {
+  return marks.filter((m) => !m.deleted_at && !m.goal_id).length;
 }
 
 // ── Livra+ feature gates ────────────────────────────────────────────────────

@@ -13,7 +13,12 @@ import { logger } from '../lib/utils/logger';
 import { getAppDate, getAppDateTime, isDebugAppDateActive } from '../lib/appDate';
 import { useAppDateStore } from '../state/appDateSlice';
 import { scheduleContextualDailyNotification } from '../lib/notificationSystem';
-import { canAddMarkToGoal, countMarksInGoal } from '../lib/gating';
+import {
+  canAddMarkToGoal,
+  countMarksInGoal,
+  canAddHabitMark,
+  countUnlinkedMarks,
+} from '../lib/gating';
 
 // Helper function to validate UUID
 const isValidUUID = (str: string): boolean => {
@@ -85,18 +90,28 @@ export const useMarks = () => {
       frequency_kind?: 'variable' | 'fixed' | 'abstinence' | null;
       skipSync?: boolean; // Optional flag to skip sync (useful for batch operations)
     }) => {
-      // Per-goal free cap: a free user may keep 3 marks per goal (not a global ceiling).
-      // Marks with no goal_id are uncapped — the core loop is never blocked.
-      // Skip the check entirely for batch operations (onboarding) or Pro users.
-      if (!data.skipSync && !isProUnlocked && data.goal_id) {
+      // Free-tier caps: two independent buckets, both bypassed by Pro and by batch
+      // operations (onboarding) via skipSync.
+      //   • goal-linked marks  → 3 per goal_id (per-goal, not a global ceiling)
+      //   • unlinked "daily habit" marks (no goal_id) → 3 total
+      if (!data.skipSync && !isProUnlocked) {
         if (proStatus.verification === 'unverified' && proStatus.status === 'unknown') {
           throw new Error('PRO_STATUS_UNKNOWN: Unable to verify subscription. Please try again.');
         }
-        const marksInGoal = countMarksInGoal(marks, data.goal_id);
-        if (!canAddMarkToGoal(isProUnlocked, marksInGoal)) {
-          throw new Error(
-            "FREE_COUNTER_LIMIT_REACHED: You've added 3 marks to this goal. Livra+ lets you add more."
-          );
+        if (data.goal_id) {
+          const marksInGoal = countMarksInGoal(marks, data.goal_id);
+          if (!canAddMarkToGoal(isProUnlocked, marksInGoal)) {
+            throw new Error(
+              "FREE_COUNTER_LIMIT_REACHED: You've added 3 marks to this goal. Livra+ lets you add more."
+            );
+          }
+        } else {
+          const unlinkedCount = countUnlinkedMarks(marks);
+          if (!canAddHabitMark(isProUnlocked, unlinkedCount)) {
+            throw new Error(
+              "FREE_COUNTER_LIMIT_REACHED: You've added 3 daily habits. Livra+ lets you add more."
+            );
+          }
         }
       }
 

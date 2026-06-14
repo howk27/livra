@@ -1734,3 +1734,43 @@ A `WITH CHECK` failure raises Postgres `42501` ("violates row-level security pol
 
 ### Acceptance (partial — this task)
 ✅ Per-goal mark cap (3) and active-goal cap (2) enforced server-side for non-Pro via RLS; a direct PostgREST insert can no longer exceed them once applied (marks immediately; goals once goal-sync ships). ✅ Pro bypasses; legitimate upsert-updates of existing rows are not blocked.
+
+---
+
+# Phase 6 — Task 4 (EXECUTE) — Restore the Daily-habits (unlinked-mark) cap
+
+**Date:** 2026-06-14 · Fixes **Finding E** (unlinked-marks gap — only goal-linked marks were capped; a free user could add unlimited "daily habit" marks with no `goal_id`).
+
+### `lib/gating.ts`
+- Added `FREE_HABIT_LIMIT = 3`.
+- `canAddHabitMark(isPro, unlinkedMarkCount)` → `isPro || unlinkedMarkCount < FREE_HABIT_LIMIT`.
+- `countUnlinkedMarks(marks)` → active (non-deleted) marks with no `goal_id` — the daily-habit bucket, separate from the per-goal bucket.
+
+### `hooks/useCounters.ts` (createMark)
+Replaced the single per-goal branch with two independent buckets under one `!skipSync && !isProUnlocked` guard (so onboarding batch ops and Pro still bypass, and the `PRO_STATUS_UNKNOWN` verification check runs once for both):
+- `data.goal_id` present → existing per-goal cap (`canAddMarkToGoal`, 3 per goal).
+- no `goal_id` → new daily-habit cap (`canAddHabitMark`, 3 unlinked total) with soft upsell `"FREE_COUNTER_LIMIT_REACHED: You've added 3 daily habits. Livra+ lets you add more."`
+
+The two buckets are independent: goal-linked marks never count toward the habit cap and vice-versa.
+
+### Verification
+- `npm run type-check` → **0 errors**.
+- `npx jest` → **553/553 passing, 43 suites** (+9 new gating tests: `canAddHabitMark` 4, `countUnlinkedMarks` 4, `FREE_HABIT_LIMIT` 1). No regressions — onboarding batch creation uses `skipSync` and is unaffected.
+
+### Acceptance (this task)
+✅ Free user blocked from a 4th unlinked daily-habit mark with the upsell copy; goal-linked marks remain a separate 3-per-goal bucket; Pro and onboarding batch ops bypass.
+
+---
+
+# Phase 6 — Tasks 1–4 COMPLETE — summary & follow-ups
+
+**Migrations written, NOT run.** User runs `supabase db push` to apply:
+- `20260613_profiles_privileged_columns_guard.sql` (Task 1)
+- `20260613_quantity_caps_marks_goals.sql` (Task 3)
+
+**Edge Function to deploy (Task 2):** `supabase functions deploy ai-goal-generation` + `supabase secrets set ANTHROPIC_API_KEY=…`.
+
+**Open follow-ups (flagged for the user):**
+1. **Goal-sync wiring (NEW work, user-requested).** User confirmed goals should sync to Supabase alongside marks. Today `hooks/useSync.ts` syncs only marks/events/streaks/badges; goals live in AsyncStorage (`lib/db/goalsDb.ts`). The Task 3 goals cap stays **dormant** until this is wired. This touches `useSync.ts`/`mappers.ts`/`goalsSlice`/`goalsDb` — **outside the Phase 6 PROTECTED-FILES scope** — and is a real bidirectional-sync feature (push/pull/realtime/conflict resolution/cursors + tests). Recommend a dedicated task with its own plan. **Note:** `goals.id` is `uuid` (PK, FK to `auth.users` cascade) — client-generated goal ids must be valid UUIDs to sync; verify `goalsDb`/`goalStore` id generation before wiring.
+2. **Task 2 free-use behavior change** (re-flagged): free users now get exactly one usable generation and cannot regenerate (the gate+increment moved to generate-time, server-side, because the client can no longer write `ai_uses_count` after Task 1). Confirm acceptable or adjust.
+3. **RLS rejection UX** (Task 3): a capped sync raises Postgres `42501`, not the `P0001`/`FREE_COUNTER_LIMIT_REACHED` that `useSync.ts` maps to a friendly banner. Defense-in-depth only (client blocks first); add a friendly mapper if it ever surfaces to users.
