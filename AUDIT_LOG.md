@@ -1554,3 +1554,26 @@ Gates **added** to live entry points that were ungated; gates **verified** on al
 | `tests/unit/gating.test.ts` | +3 gate tests (free blocked / Pro allowed) for reminders, export, share card. |
 
 **Tests:** gating 20/20. **Type-check:** 0 errors. No protected files touched in Task 4 (all unprotected screens + `lib/gating.ts`).
+
+### Task 5 — Paywall realignment (EXECUTED)
+
+| File | Change | Why |
+|------|--------|-----|
+| `app/paywall.tsx` | Rewrote `PRO_FEATURES` (7 rows) + `SHIPPED_PREMIUM_FEATURE_TITLES` to match — kept in sync (a dev-only `useEffect` warns on drift). **Added** AI Goal Plans (`sparkles-outline`) and Share Cards (`share-social-outline`); **removed** the unwired "Mark Reordering" row; reworded Unlimited Goals/Marks to the per-goal model. Subhead → "Your history and stats are always free. Livra+ adds the room and tools to finish more." | Honest list of subscriber-usable features; reinforces "history/stats are free." |
+
+**Decision:** Paywall advertises only features a subscriber can use **today** — no dead-ends. **Mark Reordering** (`SortableMarkList` exists but unrendered) and **Pace projection** (`PaceBanner` unrendered) are deliberately **omitted** until their entry points ship; add them to `PRO_FEATURES` + `SHIPPED_PREMIUM_FEATURE_TITLES` at that time.
+
+**Untouched (as required):** product IDs (`MONTHLY_PRODUCT_ID`/`YEARLY_PRODUCT_ID`), `purchaseSubscription`/`restorePurchases` call sites, all purchase/verification logic. Copy + feature-list only.
+
+**Tests:** full suite **548/548** passing (43 suites). **Type-check:** 0 errors.
+
+---
+
+## Phase 5 — Acceptance check
+
+- ✅ Mark cap is **per-goal (3)**, not global; goals isolated (`countMarksInGoal` + `canAddMarkToGoal`). Unlinked marks uncapped (core loop never blocked).
+- ✅ Exactly **2 active goals** on free; completed/expired don't count (`FREE_GOAL_LIMIT=2`, existing `nonCompleted` filter).
+- ✅ History, stats, presets, charts reachable by free users everywhere (no gates existed; none added).
+- ✅ Every wired Plus feature gates with **soft upsell**, no dead-end buttons (reminders, CSV, share + pre-existing health/goal-share). Unwired reorder/pace deferred.
+- ✅ Paywall list matches the locked split (usable features only). Tests green; `AUDIT_LOG.md` updated.
+- ✅ Only authorized protected files touched: `hooks/useCounters.ts` (Task 2), `state/goalsSlice.ts` (Task 3). `lib/db/`, `lib/goalLogic.ts`, `supabase/` untouched. No IAP product IDs / purchase call sites changed.
