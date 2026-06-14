@@ -1700,3 +1700,37 @@ Decision 5b said the free use "burns only on confirm." That is not server-enforc
 
 ### Acceptance (partial — this task)
 ✅ No API key in the client bundle or any `EXPO_PUBLIC_*`. ✅ "1 free AI generation" enforced server-side; a modified client cannot bypass it (gate runs before the model call, increment via service-role only).
+
+---
+
+# Phase 6 — Task 3 (EXECUTE) — RLS quantity caps on marks & goals
+
+**Date:** 2026-06-14 · Fixes **Finding D** (mark/goal caps client-only; direct PostgREST insert bypasses them).
+
+### New: `supabase/migrations/20260613_quantity_caps_marks_goals.sql`
+Three SECURITY DEFINER helpers + two RESTRICTIVE INSERT policies.
+
+- `livra_is_pro(uuid)` → `profiles.pro_unlocked` (COALESCE false).
+- `livra_count_other_marks_for_goal(user, goal text, id uuid)` → active (non-deleted) marks on that `goal_id`, **excluding the row's own id**.
+- `livra_count_other_active_goals(user, id uuid)` → goals with `status NOT IN ('completed','expired')`, **excluding own id**.
+- Policy **"Free tier: max 3 marks per goal"** on `marks` (RESTRICTIVE, INSERT, `authenticated`): `goal_id IS NULL OR is_pro OR count_other(...) < 3`.
+- Policy **"Free tier: max 2 active goals"** on `goals` (RESTRICTIVE, INSERT, `authenticated`): `is_pro OR status IN ('completed','expired') OR count_other_active(...) < 2`.
+
+### Design decisions
+- **SECURITY DEFINER helpers, not inline subqueries.** An RLS policy that reads the same table it guards is filtered by its own policy / can recurse. Definer functions (fixed `search_path = public`) read with RLS bypassed. `service_role` already bypasses RLS, so the AI + IAP Edge Functions are unaffected.
+- **RESTRICTIVE, not PERMISSIVE.** A second permissive policy would be **OR**-ed with the existing `"Users manage own marks/goals" FOR ALL` and defeat the cap. Restrictive policies are **AND**-ed: own-row AND under-cap.
+- **Exclude-self counting.** Sync upserts with `onConflict:'id'`; the INSERT `WITH CHECK` is evaluated on the proposed row before conflict resolution. Counting *other* rows (`id <> p_id`) means re-pushing an existing mark/goal (already one of the N) is never falsely blocked — only a genuinely new (N+1)th row is.
+- **marks.goal_id is `text`, goals.id is `uuid`** — the mark cap groups by `goal_id` text equality; no join to `goals` needed.
+
+### ⚠️ Goals-sync dependency (surfaced to user; user confirmed goals should sync)
+`hooks/useSync.ts` currently syncs **only** `marks/mark_events/mark_streaks/mark_badges` — there is **no** `.from('goals')` push/pull, and goals live in AsyncStorage (`lib/db/goalsDb.ts`). So the goals cap is **dormant until goal-sync is wired**: the client never inserts goals to Supabase today, so the policy guards nothing yet. The marks cap **is** live (marks sync). Goal-sync wiring touches `useSync.ts`/`mappers.ts`/`goalsSlice` — **outside the Phase 6 PROTECTED-FILES scope** — so it is tracked as the next dedicated task, not folded into this migration commit. Migration written now so the cap fires the instant goals sync.
+
+### Behavior note — RLS rejection vs `isProLimitError`
+A `WITH CHECK` failure raises Postgres `42501` ("violates row-level security policy"), **not** the `P0001`/`FREE_COUNTER_LIMIT_REACHED` that `useSync.ts`'s `isProLimitError` catches. So a free user syncing a 4th goal-linked mark gets a generic sync error rather than the friendly "upgrade" banner. Acceptable for a defense-in-depth backstop (client gating in `lib/gating.ts` is the primary UX and blocks this before sync); can add a friendly mapper later if it surfaces.
+
+### Verification
+- `npm run type-check` → **0 errors** (no client/TS changes this task).
+- Migration **not run** — user runs `supabase db push` after all Phase 6 migrations are written.
+
+### Acceptance (partial — this task)
+✅ Per-goal mark cap (3) and active-goal cap (2) enforced server-side for non-Pro via RLS; a direct PostgREST insert can no longer exceed them once applied (marks immediately; goals once goal-sync ships). ✅ Pro bypasses; legitimate upsert-updates of existing rows are not blocked.
