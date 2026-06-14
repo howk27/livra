@@ -1854,3 +1854,20 @@ Audit + fixes across the auth surface. Type-check clean; 553/553 tests pass. Wor
 ## Verification
 - `npm run type-check` — passes (no errors).
 - `npm test` — 43 suites, 553/553 tests pass.
+
+---
+
+## AUTH-2 revisited — Sign-in keyboard layout (2026-06-14)
+
+Previous AUTH-2 entry claimed "no code change required," but the logo/wordmark were still crushed when the keyboard opened — they were *inside* the `ScrollView`, and a custom `keyboardOffset` shared value translated the whole form up by `-60px` on `keyboardDidShow`, fighting the `KeyboardAvoidingView`. Restructured `app/auth/signin.tsx`:
+
+- **Logo + wordmark moved OUT of the `ScrollView`** into a fixed `styles.header` rendered as a sibling above the scroll view (inside the `KeyboardAvoidingView`). They now stay pinned at the top and never move when the keyboard opens.
+- **Only the form (headline, inputs, buttons, toggle) is inside the `ScrollView`**, which keeps `keyboardShouldPersistTaps="handled"`, `showsVerticalScrollIndicator={false}`, and `contentContainerStyle={{ flexGrow: 1 }}` (`styles.scrollContent`), plus `style={styles.scroll}` (`flex: 1`).
+- **Swapped nesting**: `ScrollView` is now the outer element with `TouchableWithoutFeedback` (tap-to-dismiss) inside it, wrapping the form `content`.
+- **Removed the `keyboardOffset` hack**: deleted the `keyboardOffset` shared value, the `keyboardDidShow/Hide` listener `useEffect`, and the unused `isKeyboardVisible` state. `animatedContainerStyle` now only applies the `slideOffset` mode-transition translate. Dropped the now-unused `withTiming` import.
+- **Form bottom padding**: `styles.content` uses `paddingBottom: 48` so the bottom button clears the keyboard.
+- `KeyboardAvoidingView` retains `behavior` `padding` (iOS) / `height` (Android) and `flex: 1` (`styles.keyboardView`).
+
+Net: keyboard opens → logo/wordmark stay fixed at top, the form scrolls independently, nothing overlaps.
+
+Verification: `npm run type-check` clean; `npm test` 43 suites / 553 tests pass.

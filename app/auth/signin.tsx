@@ -21,7 +21,6 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
-  withTiming,
 } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as AppleAuthentication from 'expo-apple-authentication';
@@ -66,8 +65,6 @@ export default function SignInScreen() {
   const [isAppleLoading, setIsAppleLoading] = useState(false);
 
   const slideOffset = useSharedValue(0);
-  const keyboardOffset = useSharedValue(0);
-  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const emailInputRef = useRef<TextInput>(null);
   const passwordInputRef = useRef<TextInput>(null);
   const fullNameInputRef = useRef<TextInput>(null);
@@ -82,18 +79,6 @@ export default function SignInScreen() {
       router.replace('/');
     }
   }, [initialized, user, router]);
-
-  useEffect(() => {
-    const showSub = Keyboard.addListener('keyboardDidShow', () => {
-      setIsKeyboardVisible(true);
-      keyboardOffset.value = withTiming(-60, { duration: 250 });
-    });
-    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
-      setIsKeyboardVisible(false);
-      keyboardOffset.value = withTiming(0, { duration: 250 });
-    });
-    return () => { showSub.remove(); hideSub.remove(); };
-  }, []);
 
   useEffect(() => {
     const check = async () => {
@@ -120,7 +105,7 @@ export default function SignInScreen() {
 
   const animatedContainerStyle = useAnimatedStyle(() => ({
     transform: [
-      { translateY: slideOffset.value * -20 + keyboardOffset.value },
+      { translateY: slideOffset.value * -20 },
     ],
   }));
 
@@ -347,19 +332,20 @@ export default function SignInScreen() {
           </View>
         )}
 
-        <TouchableWithoutFeedback onPress={dismissKeyboard}>
-          <ScrollView
-            contentContainerStyle={styles.scrollContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={styles.content}>
+        {/* Fixed header — logo + wordmark stay pinned at top, never scroll */}
+        <Animated.View entering={FadeIn.duration(400)} style={styles.header}>
+          <Logo size={64} color={c.forest} />
+          <Text style={[styles.wordmark, { color: c.inkDark }]}>LIVRA</Text>
+        </Animated.View>
 
-              {/* Logo + wordmark */}
-              <Animated.View entering={FadeIn.duration(400)} style={styles.logoArea}>
-                <Logo size={64} color={c.forest} />
-                <Text style={[styles.wordmark, { color: c.inkDark }]}>LIVRA</Text>
-              </Animated.View>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <TouchableWithoutFeedback onPress={dismissKeyboard}>
+            <View style={styles.content}>
 
               {/* Headline */}
               <Animated.View entering={FadeIn.duration(400).delay(80)} style={styles.headlineArea}>
@@ -586,8 +572,8 @@ export default function SignInScreen() {
               </Animated.View>
 
             </View>
-          </ScrollView>
-        </TouchableWithoutFeedback>
+          </TouchableWithoutFeedback>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -642,17 +628,18 @@ async function ensureProfile(supabase: any, userId: string, user: any, displayNa
 const styles = StyleSheet.create({
   container: { flex: 1 },
   keyboardView: { flex: 1 },
+  header: {
+    alignItems: 'center',
+    paddingTop: spacing['3xl'],
+    paddingBottom: spacing.xl,
+    gap: spacing.md,
+  },
+  scroll: { flex: 1 },
   scrollContent: { flexGrow: 1 },
   content: {
-    flex: 1,
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing['3xl'],
-    paddingBottom: spacing['3xl'],
-  },
-  logoArea: {
-    alignItems: 'center',
-    marginBottom: spacing['3xl'],
-    gap: spacing.md,
+    paddingTop: spacing.lg,
+    paddingBottom: 48,
   },
   wordmark: {
     fontSize: 22,
