@@ -140,7 +140,7 @@ export default function SignInScreen() {
     if (!password.trim()) { setError('Please enter your password'); return; }
 
     if (mode === 'signup') {
-      if (!fullName.trim()) { setError('Please enter your full name'); return; }
+      if (fullName.trim().length < 2) { setError('Please enter your name (at least 2 characters)'); return; }
       if (!validatePassword(password)) { setError('Password must be at least 8 characters'); return; }
       if (password !== confirmPassword) { setError('Passwords do not match'); return; }
     }
@@ -379,7 +379,7 @@ export default function SignInScreen() {
                     exiting={FadeOut.duration(180)}
                     style={styles.fieldWrap}
                   >
-                    <Text style={[styles.label, { color: c.inkMid }]}>Full name</Text>
+                    <Text style={[styles.label, { color: c.inkMid }]}>Your name</Text>
                     <TextInput
                       ref={fullNameInputRef}
                       style={[styles.input, {
