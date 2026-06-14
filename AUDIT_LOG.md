@@ -1774,3 +1774,81 @@ The two buckets are independent: goal-linked marks never count toward the habit 
 1. **Goal-sync wiring (NEW work, user-requested).** User confirmed goals should sync to Supabase alongside marks. Today `hooks/useSync.ts` syncs only marks/events/streaks/badges; goals live in AsyncStorage (`lib/db/goalsDb.ts`). The Task 3 goals cap stays **dormant** until this is wired. This touches `useSync.ts`/`mappers.ts`/`goalsSlice`/`goalsDb` — **outside the Phase 6 PROTECTED-FILES scope** — and is a real bidirectional-sync feature (push/pull/realtime/conflict resolution/cursors + tests). Recommend a dedicated task with its own plan. **Note:** `goals.id` is `uuid` (PK, FK to `auth.users` cascade) — client-generated goal ids must be valid UUIDs to sync; verify `goalsDb`/`goalStore` id generation before wiring.
 2. **Task 2 free-use behavior change** (re-flagged): free users now get exactly one usable generation and cannot regenerate (the gate+increment moved to generate-time, server-side, because the client can no longer write `ai_uses_count` after Task 1). Confirm acceptable or adjust.
 3. **RLS rejection UX** (Task 3): a capped sync raises Postgres `42501`, not the `P0001`/`FREE_COUNTER_LIMIT_REACHED` that `useSync.ts` maps to a friendly banner. Defense-in-depth only (client blocks first); add a friendly mapper if it ever surfaces to users.
+
+---
+
+# AI Edge Function — provider swap: Anthropic → OpenAI (2026-06-14)
+
+AI Edge Function: swapped Anthropic claude-haiku-4-5-20251001 → OpenAI gpt-4o-mini.
+Raw HTTP call updated (endpoint, headers, response parsing).
+ANTHROPIC_API_KEY removed, OPENAI_API_KEY set. No logic changes.
+
+**File:** `supabase/functions/ai-goal-generation/index.ts`
+- `ANTHROPIC_API_URL` → `OPENAI_API_URL` = `https://api.openai.com/v1/chat/completions`
+- `MODEL` = `gpt-4o-mini`; `REQUEST_TIMEOUT_MS` unchanged (14000)
+- `callAnthropic` → `callOpenAI`: headers now `Authorization: Bearer ${apiKey}` (removed `x-api-key` + `anthropic-version`); body now Chat Completions shape (`response_format: {type:'json_object'}`, system+user `messages`); parsing `data.choices[0].message.content`
+- env read `OPENAI_API_KEY`; misconfig guard log references OPENAI_API_KEY; both call sites → `callOpenAI(...)`
+- Unchanged: `buildSystemPrompt()`, AIGoalPackage/AIGoalMark types, cache logic, free-use gate, contract validation, json() envelope, error reason strings, CORS, retry structure.
+
+**NOT executed (tooling absent in this environment):** `supabase` CLI and `deno` are not installed here, so deploy/secrets commands were not run. User must run on a machine with the Supabase CLI + project ref:
+- `supabase functions deploy ai-goal-generation --project-ref <REF>`
+- `supabase secrets set OPENAI_API_KEY=sk-... --project-ref <REF>`
+- `supabase secrets unset ANTHROPIC_API_KEY --project-ref <REF>`
+
+**Follow-up:** header doc comment (lines ~4–19) still references ANTHROPIC_API_KEY / api.anthropic.com and an outdated `supabase secrets set ANTHROPIC_API_KEY` deploy hint — left untouched per "targeted changes only", but stale.
+
+---
+
+# BATCH 1 — Auth Screen Fixes (2026-06-14)
+
+Audit + fixes across the auth surface. Type-check clean; 553/553 tests pass. Work on branch `fix/auth-batch-1`.
+
+## What was found in each file
+
+- **`app/auth/signin.tsx`** — the real combined login/sign-up screen (`app/index.tsx` redirects unauthenticated users here). Used the legacy amber palette from `theme/colors.ts`: hardcoded `#FEB729` (amber accent) on the submit button, logo, links, loading spinner, and pending-email banner; `#111111` button text; screen/input backgrounds from `themeColors.background/surface` (grey `#E8E8E8` / `#1A1A1A`), not linen. Already had `KeyboardAvoidingView` (behavior `padding` on iOS) + `ScrollView` with logo/title inside the scroll content. Name field labelled "Full name" and rejected empty only. `ensureProfile()` inserts new profiles with `onboarding_completed: false`.
+- **`app/auth/_layout.tsx`** — auth group Stack; `contentStyle` background came from `theme/colors.ts` (`colors[theme].background`, grey).
+- **`app/_layout.tsx`** (root) — `RootNavigator` registers `Stack.Screen name="auth"` with `presentation: 'modal'` (iOS swipe-to-dismiss). Auth gating itself lives in `app/index.tsx` (`!isAuthenticated → <Redirect href="/auth/signin" />`).
+- **`app/(tabs)/settings.tsx`** — `handleDeleteAccount` only showed an Alert telling the user to email support@getlivra.app. No auth-user deletion. `isDeletingAccount` state existed but was never set.
+- **`state/uiSlice.ts` / `app/index.tsx`** — onboarding is local-first: `loadUIState` resolves `isOnboarded` from AsyncStorage flags (`has_completed_onboarding` / `is_onboarded`) and deliberately does NOT downgrade on a server `false`. Root cause of AUTH-8: stale `true` flags left by a previous user on the same device make a brand-new account skip onboarding.
+- **DB schema** — every user-owned table (`profiles`, `counters`, `counter_events`, `counter_streaks`, `counter_badges`, `mark_notes`, `goals`, `ai_goal_packages`) has `REFERENCES auth.users(id) ON DELETE CASCADE`; `goal_mark_links` cascades via `goals`. So deleting the auth user wipes all data automatically.
+
+## What was changed and where
+
+### Fix 1 — Theme (AUTH-4, AUTH-5)
+`app/auth/signin.tsx` + `app/auth/_layout.tsx`. Migrated from `theme/colors.ts` to Material Warmth tokens via `themedColors(useEffectiveTheme())` from `theme/tokens.ts`:
+- `themeColors.background` → `c.linen` (`#F0EDE8` light / `#15211D` dark)
+- `themeColors.surface` → `c.surfaceAlt` (input fields — matches `app/signin.tsx`)
+- `themeColors.text/textSecondary/textTertiary` → `c.inkDark / c.inkMid / c.inkMuted`
+- `themeColors.border` → `c.borderLight`; `themeColors.error` → `c.danger`
+- Submit button: `#FEB729` bg → `c.forest` (`#1C3830`), `#111111` text → `c.inkInverse` (white). Matches `PillButton` primary convention.
+- Links ("Start here"/"Sign in"), logo, loading spinner, pending-email banner: `#FEB729` → `c.forest`.
+- Removed hardcoded `#FEB729`/`#111111` from `StyleSheet` (moved to inline dynamic styles). Dropped unused `fontSize` token import.
+- `_layout.tsx` background → `themedColors(theme).linen`.
+- Verified: no `#hex` literals and no `themeColors`/`theme/colors` references remain in `signin.tsx`.
+
+### Fix 2 — Keyboard overlap (AUTH-2)
+**No code change required** — `app/auth/signin.tsx` already wraps content in `KeyboardAvoidingView` (`behavior` `padding` on iOS, `height` else) + `ScrollView` (`keyboardShouldPersistTaps="handled"`), with the logo and title inside the scroll content so they stay visible/scrollable when the keyboard opens.
+
+### Fix 3 — Auth gate after logout (AUTH-3)
+`app/_layout.tsx`: changed the `auth` screen from `presentation: 'modal'` to `presentation: 'fullScreenModal'` + `gestureEnabled: false`. The redirect gate in `app/index.tsx` was already correct; the bypass was the swipe-down-dismissible modal that could reveal the tabs underneath after sign-out. The auth screen is now full-screen and non-dismissible — no swipe path back to the tab navigator for a null session.
+
+### Fix 4 — Delete account must delete auth user (AUTH-1)
+- **New** `supabase/functions/delete-account/index.ts` — authenticates the caller via the JWT in the `Authorization` header, resolves the caller's own id (never from the body), and calls `admin.auth.admin.deleteUser(userId)` with the service-role client. Cascades wipe all owned data.
+- **New** `supabase/migrations/20260614_delete_account_cascade_check.sql` — **STATUS: NOT APPLIED**. Non-destructive, idempotent verification migration: a `DO` block that asserts the `ON DELETE CASCADE` FKs to `auth.users` exist for every user-owned table; `RAISES EXCEPTION` if any is missing. Documents the deletion data-cleanup contract.
+- `app/(tabs)/settings.tsx` — `handleDeleteAccount` now shows a destructive confirm, then `performAccountDeletion()` calls `supabase.functions.invoke('delete-account')` (attaches the session JWT), and on success: `authSignOut()` → `AsyncStorage.clear()` → `router.replace('/auth/signin')`. On failure it resets `isDeletingAccount` and alerts.
+
+### Fix 5 — Onboarding not triggering for new accounts (AUTH-8)
+`app/auth/signin.tsx` `ensureProfile()`: track whether a profile was freshly inserted (`createdNew`, true only when the insert returns no error — not on `23505` already-exists). On a fresh insert, `AsyncStorage.multiRemove([ONBOARDING_COMPLETED_STORAGE_KEY, ONBOARDING_COMPLETED_LEGACY_KEY])` clears stale local onboarding flags so the new account (whose `profile.onboarding_completed = false`) is routed through onboarding. Fix placed at the new-account creation site, not `_layout.tsx`, because the redirect logic there was already correct — the defect was stale device-local flags.
+
+### Fix 6 — Name field validation (AUTH-7)
+`app/auth/signin.tsx`: label "Full name" → "Your name"; validation `!fullName.trim()` → `fullName.trim().length < 2` with message "Please enter your name (at least 2 characters)". No last-name enforcement (placeholder was already "Your name", `autoCapitalize="words"`).
+
+## Could not be completed / out of scope
+- **Edge Function deploy** — NOT deployed (per instructions and no `supabase`/`deno` CLI in this env). User must run: `supabase functions deploy delete-account --project-ref <REF>`. `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` are auto-injected.
+- **Migration** — written, NOT applied (verification-only; safe to run any time).
+- **Local SQLite cleanup on deletion** — `AsyncStorage.clear()` is done per spec; the local `expo-sqlite` DB (marks/events) is not wiped here. Sign-out + login re-scopes data by `user_id`, but a full local DB purge on account deletion is a possible follow-up.
+- **`app/signin.tsx`** (a second, unused-by-default sign-in screen) and `app/auth/signing-out.tsx` were left as-is — not the login/sign-up screens reached by the auth gate; signing-out still uses `theme/colors.ts` for its transient spinner background.
+
+## Verification
+- `npm run type-check` — passes (no errors).
+- `npm test` — 43 suites, 553/553 tests pass.
