@@ -26,7 +26,11 @@ import Animated, {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { spacing, borderRadius, fontWeight, themedColors } from '../../theme/tokens';
-import { useEffectiveTheme } from '../../state/uiSlice';
+import {
+  useEffectiveTheme,
+  ONBOARDING_COMPLETED_STORAGE_KEY,
+  ONBOARDING_COMPLETED_LEGACY_KEY,
+} from '../../state/uiSlice';
 import { getSupabaseClient } from '../../lib/supabase';
 import { useSync } from '../../hooks/useSync';
 import { useAuth } from '../../hooks/useAuth';
@@ -605,6 +609,7 @@ async function ensureProfile(supabase: any, userId: string, user: any, displayNa
       user?.user_metadata?.full_name ||
       user?.email?.split('@')[0] || '';
 
+    let createdNew = false;
     for (let i = 0; i < 3; i++) {
       if (i > 0) await new Promise(r => setTimeout(r, 500 * i));
       const { error: insertErr } = await supabase.from('profiles').insert({
@@ -614,8 +619,20 @@ async function ensureProfile(supabase: any, userId: string, user: any, displayNa
         onboarding_completed: false,
         pro_unlocked: false,
       });
-      if (!insertErr || insertErr.code === '23505') break;
+      if (!insertErr) { createdNew = true; break; }
+      if (insertErr.code === '23505') break; // already exists (race) — not a new account
       if (insertErr.code !== '42501') break;
+    }
+
+    // AUTH-8: a freshly inserted profile means a brand-new account. Clear any
+    // stale local onboarding flags left by a previous user on this device so
+    // loadUIState (local-first) does not skip onboarding for the new account.
+    // profile.onboarding_completed defaults to false → routes to onboarding.
+    if (createdNew) {
+      await AsyncStorage.multiRemove([
+        ONBOARDING_COMPLETED_STORAGE_KEY,
+        ONBOARDING_COMPLETED_LEGACY_KEY,
+      ]);
     }
   } catch (e) {
     logger.error('[Auth] ensureProfile error:', e);
