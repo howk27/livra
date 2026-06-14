@@ -1,14 +1,19 @@
 /**
- * AI goal generation — Phase 4b.
- * Uses fetch directly (no SDK). Requires EXPO_PUBLIC_ANTHROPIC_API_KEY.
+ * AI goal generation — Phase 4b + Phase 6 Task 2 (server proxy).
+ *
+ * The Anthropic call, the semantic cache lookup, the free-use gate, and the
+ * ai_uses_count increment all live in the `ai-goal-generation` Supabase Edge
+ * Function now. The API key is never in the client bundle. This module only:
+ *   - calls the Edge Function and maps its response
+ *   - keeps the pure helpers the UI needs (icon resolution, package validation,
+ *     normalization) and the confirm-time cache write
  *
  * Entry points:
- *   generateGoalPackage   — cache → API, with one silent retry
- *   validateAIGoalPackage — exported for tests
- *   writeGoalPackageCache — called on confirm+activate
- *   getAiUsesCount        — Supabase profile read
- *   incrementAiUsesCount  — called on confirm+activate
+ *   generateGoalPackage   — invokes the Edge Function, maps result
+ *   validateAIGoalPackage — defensive re-validation of the server package; tests
+ *   writeGoalPackageCache — called on confirm+activate (marks the package cached)
  *   resolveMarkForAIIcon  — icon → MARK_LIBRARY lookup for persist
+ *   normalizeGoalText     — semantic cache key (shared shape with the server)
  */
 
 import { getSupabaseClient } from '../supabase';
@@ -46,14 +51,15 @@ export type GenerationFailReason =
   | 'low_confidence'
   | 'network_error'
   | 'invalid_output'
-  | 'no_api_key';
+  /** Server free-use gate: non-Pro user has already spent their free generation. */
+  | 'free_use_exhausted';
 
 // ─── Valid icon list ──────────────────────────────────────────────────────────
 
 /**
  * The exhaustive list of icon values the AI is allowed to return.
  * These map to entries in MARK_LIBRARY via AI_ICON_TO_MARK_ID.
- * Passed verbatim into the system prompt so the model is constrained.
+ * Mirrors the same list in the Edge Function system prompt.
  */
 export const VALID_ICONS = [
   'gym', 'sleep', 'reading', 'meditation', 'water', 'study',
@@ -102,7 +108,11 @@ export function resolveMarkForAIIcon(icon: string): {
 // ─── Validation ───────────────────────────────────────────────────────────────
 
 /**
- * Validates raw AI output against the AIGoalPackage contract.
+ * Validates a package against the AIGoalPackage contract.
+ *
+ * The Edge Function validates server-side too; this re-validation is a defensive
+ * guard on whatever the function returns (and the cache read), so the client
+ * never trusts an unvalidated shape.
  *
  * Repair rules:
  * - Off-model icon → replaced with FALLBACK_ICON (not dropped)
@@ -164,75 +174,9 @@ export function validateAIGoalPackage(raw: unknown): AIGoalPackage | null {
   };
 }
 
-// ─── System prompt ────────────────────────────────────────────────────────────
-
-function buildSystemPrompt(): string {
-  return `You are a goal-setting assistant for Livra, a habit tracking app. Given a user's goal description, suggest a structured goal package.
-
-Valid icon values — use ONLY these exact strings: ${VALID_ICONS.join(', ')}
-
-Respond with valid JSON matching this exact schema. No markdown. No explanation. JSON only:
-{"goalTitle":"Clean specific goal title","timeframeWeeks":12,"confidence":"high","marks":[{"name":"Mark name","icon":"one_valid_icon","frequency":3,"why":"One sentence explaining why this helps the goal"}]}
-
-Rules:
-- goalTitle: specific and achievable, max 80 characters
-- timeframeWeeks: integer 1–52
-- confidence: "high" if you understand the goal clearly; "low" if it is unclear, unsafe, or contains multiple goals
-- marks: 2–3 items; frequency is times per week (integer 1–7); icon MUST be one of the listed values
-- why: one concrete sentence per mark
-- For unclear/unsafe input: set confidence:"low" and still return a plausible package
-- If multiple goals are given: scope to one; use "low" confidence`;
-}
-
-// ─── API call ─────────────────────────────────────────────────────────────────
-
-const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
-const MODEL = 'claude-haiku-4-5-20251001';
-const REQUEST_TIMEOUT_MS = 14_000;
-
-async function callAnthropicAPI(goalText: string): Promise<unknown> {
-  const apiKey = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY ?? '';
-  if (!apiKey) throw new Error('no_api_key');
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
-  let response: Response;
-  try {
-    response = await fetch(ANTHROPIC_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 512,
-        system: buildSystemPrompt(),
-        messages: [{ role: 'user', content: `Goal: ${goalText}` }],
-      }),
-      signal: controller.signal,
-    });
-  } finally {
-    clearTimeout(timeoutId);
-  }
-
-  if (!response.ok) {
-    throw new Error(`api_http_${response.status}`);
-  }
-
-  const data = await response.json() as {
-    content?: Array<{ type: string; text?: string }>;
-  };
-  const text = data.content?.[0]?.text;
-  if (!text) throw new Error('empty_response');
-
-  // throws SyntaxError on malformed JSON — triggers the silent retry
-  return JSON.parse(text);
-}
-
-// ─── Semantic cache (Supabase ai_goal_packages) ───────────────────────────────
+// ─── Semantic cache key ────────────────────────────────────────────────────────
+// Must stay byte-for-byte identical to the Edge Function's normalizer so a
+// confirm-time client write lines up with the server-side cache lookup.
 
 const STOP_WORDS = new Set([
   'a', 'an', 'the', 'and', 'or', 'to', 'i', 'my', 'want', 'get',
@@ -250,23 +194,9 @@ export function normalizeGoalText(text: string): string {
     .trim();
 }
 
-async function checkCache(normalizedText: string): Promise<AIGoalPackage | null> {
-  if (!normalizedText) return null;
-  try {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase
-      .from('ai_goal_packages')
-      .select('package_json')
-      .eq('goal_text_normalized', normalizedText)
-      .eq('confirmed', true)
-      .limit(1)
-      .maybeSingle();
-    if (error || !data) return null;
-    return validateAIGoalPackage((data as Record<string, unknown>).package_json);
-  } catch {
-    return null;
-  }
-}
+// ─── Cache write (ai_goal_packages) ────────────────────────────────────────────
+// Written by the client on confirm+activate. RLS scopes rows to the user; the
+// Edge Function reads these (confirmed=true) before spending an Anthropic call.
 
 export async function writeGoalPackageCache(
   userId: string,
@@ -292,67 +222,32 @@ export async function writeGoalPackageCache(
   }
 }
 
-// ─── ai_uses_count (profiles table) ──────────────────────────────────────────
-
-export async function getAiUsesCount(userId: string): Promise<number> {
-  if (!userId) return 0;
-  try {
-    const supabase = getSupabaseClient();
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('ai_uses_count')
-      .eq('id', userId)
-      .single();
-    if (error || !data) return 0;
-    return (data as { ai_uses_count?: number }).ai_uses_count ?? 0;
-  } catch {
-    return 0;
-  }
-}
-
-/**
- * Increments ai_uses_count in the profiles table.
- * Called only on confirm+activate — NOT on failed/abandoned attempts.
- */
-export async function incrementAiUsesCount(userId: string): Promise<void> {
-  if (!userId) return;
-  try {
-    const supabase = getSupabaseClient();
-    // Use rpc to avoid read-modify-write race; fallback to client-side if rpc missing
-    const { error } = await supabase.rpc('increment_ai_uses_count', { p_user_id: userId });
-    if (error) {
-      // Graceful degradation: try direct update (may race on concurrent sessions)
-      const { data } = await supabase
-        .from('profiles')
-        .select('ai_uses_count')
-        .eq('id', userId)
-        .single();
-      const current = (data as { ai_uses_count?: number } | null)?.ai_uses_count ?? 0;
-      await supabase
-        .from('profiles')
-        .update({ ai_uses_count: current + 1 })
-        .eq('id', userId);
-    }
-  } catch (err) {
-    logger.error('[goalGeneration] incrementAiUsesCount failed:', err);
-  }
-}
-
 // ─── Main entry point ─────────────────────────────────────────────────────────
 
 export const MIN_GOAL_LENGTH = 10;
 
+/** Shape returned by the ai-goal-generation Edge Function. */
+type EdgeResponse =
+  | { ok: true; package: unknown; source?: 'api' | 'cache' }
+  | { ok: false; reason?: string };
+
+const KNOWN_FAIL_REASONS: ReadonlySet<string> = new Set([
+  'goal_too_short',
+  'low_confidence',
+  'network_error',
+  'invalid_output',
+  'free_use_exhausted',
+]);
+
 /**
- * Attempts to generate an AIGoalPackage for the given goal text.
+ * Generates an AIGoalPackage by invoking the `ai-goal-generation` Edge Function.
  *
- * Flow:
- *   1. Return cached result if a matching confirmed package exists.
- *   2. Check API key; fail fast with 'no_api_key' if missing.
- *   3. Call Anthropic API; on malformed-JSON/network error make one silent retry.
- *   4. Validate output contract; return 'invalid_output' if unsalvageable.
- *   5. Return 'low_confidence' if AI flagged the goal as unclear/unsafe.
+ * The function authenticates the caller (JWT), checks the per-user cache,
+ * enforces the free-use gate server-side, calls Anthropic with a server-held
+ * key, validates the contract, and increments ai_uses_count via service-role.
  *
- * Does NOT write to cache or increment ai_uses_count — those happen on confirm+activate.
+ * The client never sees the API key and cannot bypass the free-use gate.
+ * The typed goal text is preserved on every failure path (caller keeps it).
  */
 export async function generateGoalPackage(goalText: string): Promise<GenerationResult> {
   const trimmed = goalText.trim();
@@ -360,44 +255,36 @@ export async function generateGoalPackage(goalText: string): Promise<GenerationR
     return { ok: false, reason: 'goal_too_short' };
   }
 
-  const normalized = normalizeGoalText(trimmed);
-
-  // 1. Cache check
-  const cached = await checkCache(normalized);
-  if (cached) {
-    return { ok: true, package: cached, source: 'cache' };
-  }
-
-  // 2. API key guard
-  if (!process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY) {
-    return { ok: false, reason: 'no_api_key' };
-  }
-
-  // 3. API call with one silent retry on any error
-  let raw: unknown;
   try {
-    raw = await callAnthropicAPI(trimmed);
-  } catch (firstErr) {
-    if (String(firstErr).includes('no_api_key')) {
-      return { ok: false, reason: 'no_api_key' };
-    }
-    try {
-      raw = await callAnthropicAPI(trimmed);
-    } catch {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase.functions.invoke('ai-goal-generation', {
+      body: { goalText: trimmed },
+    });
+
+    if (error) {
+      logger.error('[goalGeneration] edge function error:', error);
       return { ok: false, reason: 'network_error' };
     }
-  }
 
-  // 4. Validate output contract
-  const pkg = validateAIGoalPackage(raw);
-  if (!pkg) {
-    return { ok: false, reason: 'invalid_output' };
-  }
+    if (!data || typeof data !== 'object') {
+      return { ok: false, reason: 'invalid_output' };
+    }
 
-  // 5. Low-confidence → manual fallback
-  if (pkg.confidence === 'low') {
-    return { ok: false, reason: 'low_confidence' };
-  }
+    const res = data as EdgeResponse;
 
-  return { ok: true, package: pkg, source: 'api' };
+    if (res.ok === true) {
+      // Defensive: never trust an unvalidated package from the wire.
+      const pkg = validateAIGoalPackage(res.package);
+      if (!pkg) return { ok: false, reason: 'invalid_output' };
+      return { ok: true, package: pkg, source: res.source === 'cache' ? 'cache' : 'api' };
+    }
+
+    const reason = typeof res.reason === 'string' && KNOWN_FAIL_REASONS.has(res.reason)
+      ? (res.reason as GenerationFailReason)
+      : 'invalid_output';
+    return { ok: false, reason };
+  } catch (err) {
+    logger.error('[goalGeneration] generateGoalPackage failed:', err);
+    return { ok: false, reason: 'network_error' };
+  }
 }

@@ -1664,3 +1664,39 @@ Sorts after `20260613_ai_uses.sql` (which adds `ai_uses_count`), so the column e
 ✅ A signed-in free user can no longer grant themselves Pro or reset `ai_uses_count` via a direct Supabase call (once migration applied).
 
 **STOP — confirming before Task 2 (AI Edge Function), per instructions.**
+
+---
+
+# Phase 6 — Task 2 (EXECUTE) — AI server proxy + server-side free-use gate
+
+**Date:** 2026-06-13 · Fixes **Findings B & C** (key in bundle, ungated AI metering).
+
+### New: `supabase/functions/ai-goal-generation/index.ts` (Deno Edge Function)
+Same init pattern as `validate-iap-receipt`: `createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)` from `Deno.env`. `ANTHROPIC_API_KEY` also from `Deno.env` (Supabase secrets) — never the client.
+
+Flow: OPTIONS/CORS → require bearer JWT → resolve caller via `admin.auth.getUser(jwt)` (401 if missing) → `goalText` length guard → **per-user cache check** (`ai_goal_packages`, `confirmed=true`; free, no gate) → read `profiles.pro_unlocked` + `ai_uses_count` → **free-use gate** (`!isPro && ai_uses_count >= 1` → `{ok:false, reason:'free_use_exhausted'}`) → Anthropic call (server key, one silent retry) → validate `AIGoalPackage` contract → low-confidence → manual fallback → **increment `ai_uses_count` (non-Pro only)** via service-role (`increment_ai_uses_count` RPC, direct-update fallback). Service-role bypasses the Task 1 trigger guard, same as the IAP function writing `pro_unlocked`.
+
+Deploy: `supabase functions deploy ai-goal-generation`; secret: `supabase secrets set ANTHROPIC_API_KEY=…`.
+
+### Client: `lib/ai/goalGeneration.ts`
+- `generateGoalPackage` now `supabase.functions.invoke('ai-goal-generation', { body: { goalText } })` and maps the response. **Removed entirely:** `EXPO_PUBLIC_ANTHROPIC_API_KEY`, the `https://api.anthropic.com` URL, `callAnthropicAPI`, `buildSystemPrompt`, the client cache check, `getAiUsesCount`, `incrementAiUsesCount`. Kept the pure helpers (`validateAIGoalPackage` — now defensive re-validation of the wire package, `resolveMarkForAIIcon`, `normalizeGoalText`, `VALID_ICONS`) and `writeGoalPackageCache` (confirm-time cache write; `ai_goal_packages` RLS is user-scoped, unaffected by Task 1).
+- `GenerationFailReason`: dropped `no_api_key`, added `free_use_exhausted`.
+
+### Client: `app/onboarding.tsx`
+- Removed `incrementAiUsesCount` import + its call on confirm+activate (server increments at generate time).
+- Error map: dropped `no_api_key`, added `free_use_exhausted` soft-gate copy ("You've used your free AI plan. Livra+ unlocks unlimited AI goal plans — or continue manually below.").
+
+### Config
+- `tsconfig.json`: excluded `supabase/functions/**` (Deno runtime; `Deno.serve`, esm.sh imports — not part of the RN/tsc build).
+- `EXPO_PUBLIC_ANTHROPIC_API_KEY` was **not** present in `.env` or `eas.json` (only `EXPO_PUBLIC_ENV`) — nothing to remove there; key now lives solely in Supabase secrets.
+
+### Behavior note — free-use vs the old "burns only on confirm"
+Decision 5b said the free use "burns only on confirm." That is not server-enforceable once the client can no longer write `ai_uses_count` (Task 1): the billable event is the **generate** call, so the gate + increment must live there. Net effect: a free user gets exactly **one usable generation** (then `free_use_exhausted`); low-confidence/invalid/network results do **not** consume it (retry allowed). Consequence: free users effectively can't *regenerate* (the client 2-regen cap now only benefits Pro, who bypass the gate). Flagging for confirmation — tighten/loosen later if desired.
+
+### Verification
+- `npm run type-check` → **0 errors**.
+- `npx jest` → **544/544 passing, 43 suites** (was 548; net −4 from removing the deleted client `getAiUsesCount`/`incrementAiUsesCount` tests and rewriting the flow suite around the Edge Function).
+- Rewrote `tests/unit/onboarding/goalGenerationFlow.test.ts` for the proxy model (invoke mapping, free_use_exhausted/low_confidence passthrough, defensive re-validation, confirm-time cache write, regen-cap slice). `goalGeneration.test.ts` (pure helpers) unchanged and green.
+
+### Acceptance (partial — this task)
+✅ No API key in the client bundle or any `EXPO_PUBLIC_*`. ✅ "1 free AI generation" enforced server-side; a modified client cannot bypass it (gate runs before the model call, increment via service-role only).

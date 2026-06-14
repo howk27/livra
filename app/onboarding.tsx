@@ -31,7 +31,7 @@ import { getSupabaseClient } from '../lib/supabase';
 import { logger } from '../lib/utils/logger';
 import {
   generateGoalPackage, MIN_GOAL_LENGTH, resolveMarkForAIIcon,
-  writeGoalPackageCache, incrementAiUsesCount,
+  writeGoalPackageCache,
   type AIGoalMark,
 } from '../lib/ai/goalGeneration';
 
@@ -148,7 +148,7 @@ export default function OnboardingScreen() {
     } else {
       const msgs: Record<string, string> = {
         low_confidence: "Couldn't make sense of that — try describing your goal in one sentence.",
-        no_api_key: 'AI suggestions unavailable right now. Continue manually.',
+        free_use_exhausted: 'You’ve used your free AI plan. Livra+ unlocks unlimited AI goal plans — or continue manually below.',
         invalid_output: 'Something went wrong — continue manually below.',
         network_error: "Couldn't reach Livra AI — check your connection or continue manually.",
         goal_too_short: '',
@@ -310,10 +310,11 @@ export default function OnboardingScreen() {
         await linkMarkToGoal(newGoal.id, newMark.id);
       }
 
-      // 4. AI path only: write cache + increment usage counter on confirm+activate
+      // 4. AI path only: write the confirmed package to the cache on confirm+activate.
+      // The free-use counter is incremented server-side by the ai-goal-generation
+      // Edge Function at generation time (not here — the client can't write it).
       if (isAIPath && aiPackageDraft) {
         await writeGoalPackageCache(userId, goalTitle.trim(), aiPackageDraft);
-        await incrementAiUsesCount(userId);
       }
     } catch (err) {
       logger.error('[Onboarding] goal/mark creation failed:', err);
