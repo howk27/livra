@@ -1,5 +1,7 @@
 -- Goals table: primary completion via mark count, secondary via deadline
--- Apply after core_livra_sync_schema.sql (requires public.counters to exist for FK).
+-- STATUS: APPLIED 2026-06-14 — verified live: goals + goal_mark_links tables present.
+-- Apply after the counters→marks rename (20260602_rename_counters_to_marks.sql);
+-- the goal_mark_links FK targets public.marks.
 
 create table if not exists public.goals (
   id uuid primary key,
@@ -39,7 +41,7 @@ create policy "Users manage own goals"
 create table if not exists public.goal_mark_links (
   id uuid primary key,
   goal_id uuid not null references public.goals(id) on delete cascade,
-  mark_id uuid not null references public.counters(id) on delete cascade,
+  mark_id uuid not null references public.marks(id) on delete cascade,
   created_at timestamptz not null default now(),
   unique(goal_id, mark_id)
 );

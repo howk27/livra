@@ -1,5 +1,6 @@
 -- Phase 6 · Task 1 — Close the profiles privileged-column write hole.
--- STATUS: NOT APPLIED — run via: supabase db push
+-- STATUS: APPLIED 2026-06-14 — ran without error; dependency profiles.ai_uses_count
+--   is present. (Trigger existence is not REST-verifiable with the anon key.)
 --
 -- Audit (AUDIT_LOG.md, Phase 6 Task 1 / Gap A): the RLS policy
 --   "Users update own profile"  FOR UPDATE USING/ WITH CHECK (auth.uid() = id)

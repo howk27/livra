@@ -1,4 +1,4 @@
--- STATUS: READY TO APPLY
+-- STATUS: APPLIED 2026-06-14 — verified live: marks table present, counters gone.
 -- Verified: useSync.ts and mappers.ts updated in Phase 1 Session 2 (commit 0617cca)
 -- useSync.ts references: marks, mark_events, mark_streaks, mark_badges (confirmed)
 -- mappers.ts uses: mark_id throughout (not counter_id)

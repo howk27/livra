@@ -1,5 +1,6 @@
 -- Phase 4b: AI goal generation — usage counter + package cache
--- STATUS: NOT APPLIED — run via: supabase db push
+-- STATUS: APPLIED 2026-06-14 — verified live: profiles.ai_uses_count,
+--   increment_ai_uses_count() RPC, and ai_goal_packages table all present.
 --
 -- Prerequisites: profiles table exists (20260528_onboarding_meta.sql applied).
 
