@@ -1,5 +1,10 @@
 -- Fix RLS performance: replace auth.uid() with (select auth.uid()) so Postgres
 -- evaluates the function once per query instead of once per row.
+-- STATUS: APPLIED 2026-06-14 — all target tables exist and the migration is
+--   idempotent. NOTE: this is an RLS-policy-only change; the specific policy
+--   bodies are NOT verifiable with the anon key. To confirm the (select auth.uid())
+--   rewrite is live, run in the SQL editor:
+--     select policyname, qual from pg_policies where schemaname='public';
 -- Idempotent: drops each policy before recreating it.
 -- Handles both pre- and post-rename table names (counters→marks, etc.).
 

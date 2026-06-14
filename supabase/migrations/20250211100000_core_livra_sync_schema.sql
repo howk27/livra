@@ -1,4 +1,6 @@
 -- Livra: core tables used by hooks/useSync.ts and client types (lib/supabase.ts).
+-- STATUS: APPLIED 2026-06-14 — verified live: profiles, marks (renamed from
+--   counters), mark_events, mark_streaks, mark_badges all present.
 -- Apply via Supabase CLI or SQL editor. If tables already exist in production, use diff/review
 -- against this file rather than blind re-run (this uses IF NOT EXISTS where safe).
 --

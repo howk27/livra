@@ -1,4 +1,5 @@
 -- Migration: create mark_notes table
+-- STATUS: APPLIED 2026-06-14 — verified live: mark_notes table present.
 -- Run this in your Supabase SQL editor or via the Supabase CLI.
 --
 -- Table stores one note per (user_id, mark_id, date) tuple.
