@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
 import { useEffectiveTheme } from '../../state/uiSlice';
-import { colors } from '../../theme/colors';
+import { themedColors } from '../../theme/tokens';
 
 export default function AuthLayout() {
   const theme = useEffectiveTheme();
@@ -9,7 +9,7 @@ export default function AuthLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: colors[theme].background },
+        contentStyle: { backgroundColor: themedColors(theme).linen },
       }}
     >
       <Stack.Screen name="signin" />

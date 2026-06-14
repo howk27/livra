@@ -25,8 +25,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as AppleAuthentication from 'expo-apple-authentication';
-import { colors } from '../../theme/colors';
-import { spacing, borderRadius, fontSize, fontWeight } from '../../theme/tokens';
+import { spacing, borderRadius, fontWeight, themedColors } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { getSupabaseClient } from '../../lib/supabase';
 import { useSync } from '../../hooks/useSync';
@@ -41,7 +40,7 @@ type AuthMode = 'login' | 'signup';
 
 export default function SignInScreen() {
   const theme = useEffectiveTheme();
-  const themeColors = colors[theme];
+  const c = themedColors(theme);
   const router = useRouter();
   const { user, initialized } = useAuth();
   const { sync } = useSync();
@@ -326,19 +325,19 @@ export default function SignInScreen() {
   // ── Render ──────────────────────────────────────────────────────────────────
 
   const inputBorderColor = (hasError: boolean) =>
-    hasError ? themeColors.error : themeColors.border;
+    hasError ? c.danger : c.borderLight;
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: c.linen }]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
         {loading && (
-          <View style={[styles.loadingOverlay, { backgroundColor: themeColors.background + 'E6' }]}>
-            <ActivityIndicator size="large" color="#FEB729" />
-            <Text style={[styles.loadingText, { color: themeColors.text }]}>
+          <View style={[styles.loadingOverlay, { backgroundColor: c.linen + 'E6' }]}>
+            <ActivityIndicator size="large" color={c.forest} />
+            <Text style={[styles.loadingText, { color: c.inkDark }]}>
               {mode === 'login' ? 'Signing in...' : 'Creating account...'}
             </Text>
           </View>
@@ -354,16 +353,16 @@ export default function SignInScreen() {
 
               {/* Logo + wordmark */}
               <Animated.View entering={FadeIn.duration(400)} style={styles.logoArea}>
-                <Logo size={64} color="#FEB729" />
-                <Text style={[styles.wordmark, { color: themeColors.text }]}>LIVRA</Text>
+                <Logo size={64} color={c.forest} />
+                <Text style={[styles.wordmark, { color: c.inkDark }]}>LIVRA</Text>
               </Animated.View>
 
               {/* Headline */}
               <Animated.View entering={FadeIn.duration(400).delay(80)} style={styles.headlineArea}>
-                <Text style={[styles.headline, { color: themeColors.text }]}>
+                <Text style={[styles.headline, { color: c.inkDark }]}>
                   {mode === 'login' ? 'Welcome back.' : 'Create account.'}
                 </Text>
-                <Text style={[styles.subtext, { color: themeColors.textSecondary }]}>
+                <Text style={[styles.subtext, { color: c.inkMid }]}>
                   {mode === 'login'
                     ? 'Sign in to sync your data across devices.'
                     : 'Start tracking your progress.'}
@@ -380,16 +379,16 @@ export default function SignInScreen() {
                     exiting={FadeOut.duration(180)}
                     style={styles.fieldWrap}
                   >
-                    <Text style={[styles.label, { color: themeColors.textSecondary }]}>Full name</Text>
+                    <Text style={[styles.label, { color: c.inkMid }]}>Full name</Text>
                     <TextInput
                       ref={fullNameInputRef}
                       style={[styles.input, {
-                        backgroundColor: themeColors.surface,
-                        color: themeColors.text,
-                        borderColor: themeColors.border,
+                        backgroundColor: c.surfaceAlt,
+                        color: c.inkDark,
+                        borderColor: c.borderLight,
                       }]}
                       placeholder="Your name"
-                      placeholderTextColor={themeColors.textTertiary}
+                      placeholderTextColor={c.inkMuted}
                       value={fullName}
                       onChangeText={t => { setFullName(t); setError(null); }}
                       autoCapitalize="words"
@@ -403,16 +402,16 @@ export default function SignInScreen() {
 
                 {/* Email */}
                 <View style={styles.fieldWrap}>
-                  <Text style={[styles.label, { color: themeColors.textSecondary }]}>Email</Text>
+                  <Text style={[styles.label, { color: c.inkMid }]}>Email</Text>
                   <TextInput
                     ref={emailInputRef}
                     style={[styles.input, {
-                      backgroundColor: themeColors.surface,
-                      color: themeColors.text,
+                      backgroundColor: c.surfaceAlt,
+                      color: c.inkDark,
                       borderColor: inputBorderColor(emailError),
                     }]}
                     placeholder="you@example.com"
-                    placeholderTextColor={themeColors.textTertiary}
+                    placeholderTextColor={c.inkMuted}
                     value={email}
                     onChangeText={t => { setEmail(t); setError(null); setEmailError(false); }}
                     autoCapitalize="none"
@@ -426,16 +425,16 @@ export default function SignInScreen() {
 
                 {/* Password */}
                 <View style={styles.fieldWrap}>
-                  <Text style={[styles.label, { color: themeColors.textSecondary }]}>Password</Text>
+                  <Text style={[styles.label, { color: c.inkMid }]}>Password</Text>
                   <TextInput
                     ref={passwordInputRef}
                     style={[styles.input, {
-                      backgroundColor: themeColors.surface,
-                      color: themeColors.text,
+                      backgroundColor: c.surfaceAlt,
+                      color: c.inkDark,
                       borderColor: inputBorderColor(passwordError),
                     }]}
                     placeholder={mode === 'signup' ? 'Min. 8 characters' : 'Your password'}
-                    placeholderTextColor={themeColors.textTertiary}
+                    placeholderTextColor={c.inkMuted}
                     value={password}
                     onChangeText={t => { setPassword(t); setError(null); setPasswordError(false); }}
                     secureTextEntry
@@ -457,16 +456,16 @@ export default function SignInScreen() {
                     exiting={FadeOut.duration(180)}
                     style={styles.fieldWrap}
                   >
-                    <Text style={[styles.label, { color: themeColors.textSecondary }]}>Confirm password</Text>
+                    <Text style={[styles.label, { color: c.inkMid }]}>Confirm password</Text>
                     <TextInput
                       ref={confirmPasswordInputRef}
                       style={[styles.input, {
-                        backgroundColor: themeColors.surface,
-                        color: themeColors.text,
-                        borderColor: themeColors.border,
+                        backgroundColor: c.surfaceAlt,
+                        color: c.inkDark,
+                        borderColor: c.borderLight,
                       }]}
                       placeholder="Repeat password"
-                      placeholderTextColor={themeColors.textTertiary}
+                      placeholderTextColor={c.inkMuted}
                       value={confirmPassword}
                       onChangeText={t => { setConfirmPassword(t); setError(null); }}
                       secureTextEntry
@@ -483,9 +482,9 @@ export default function SignInScreen() {
                 {sessionExpiredMessage && (
                   <Animated.View
                     entering={FadeIn.duration(200)}
-                    style={[styles.messageBanner, { backgroundColor: themeColors.error + '20' }]}
+                    style={[styles.messageBanner, { backgroundColor: c.danger + '20' }]}
                   >
-                    <Text style={[styles.messageText, { color: themeColors.error }]}>
+                    <Text style={[styles.messageText, { color: c.danger }]}>
                       {sessionExpiredMessage}
                     </Text>
                   </Animated.View>
@@ -494,9 +493,9 @@ export default function SignInScreen() {
                 {pendingEmailConfirmation && (
                   <Animated.View
                     entering={FadeIn.duration(200)}
-                    style={[styles.messageBanner, { backgroundColor: '#FEB72920' }]}
+                    style={[styles.messageBanner, { backgroundColor: c.forest + '20' }]}
                   >
-                    <Text style={[styles.messageText, { color: '#FEB729' }]}>
+                    <Text style={[styles.messageText, { color: c.forest }]}>
                       Check your email to verify your account, then sign in to continue.
                     </Text>
                   </Animated.View>
@@ -508,7 +507,7 @@ export default function SignInScreen() {
                     exiting={FadeOut.duration(200)}
                     style={styles.errorWrap}
                   >
-                    <Text style={[styles.errorText, { color: themeColors.error }]}>{error}</Text>
+                    <Text style={[styles.errorText, { color: c.danger }]}>{error}</Text>
                   </Animated.View>
                 )}
 
@@ -519,7 +518,7 @@ export default function SignInScreen() {
                     disabled={loading}
                     style={styles.forgotBtn}
                   >
-                    <Text style={[styles.forgotText, { color: themeColors.textSecondary }]}>
+                    <Text style={[styles.forgotText, { color: c.inkMid }]}>
                       Forgot password?
                     </Text>
                   </TouchableOpacity>
@@ -527,15 +526,15 @@ export default function SignInScreen() {
 
                 {/* Submit */}
                 <TouchableOpacity
-                  style={[styles.submitBtn, loading && styles.submitBtnDisabled]}
+                  style={[styles.submitBtn, { backgroundColor: c.forest }, loading && styles.submitBtnDisabled]}
                   onPress={handleSubmit}
                   disabled={loading || isAppleLoading}
                   activeOpacity={0.85}
                 >
                   {loading ? (
-                    <ActivityIndicator color="#111111" />
+                    <ActivityIndicator color={c.inkInverse} />
                   ) : (
-                    <Text style={styles.submitBtnText}>
+                    <Text style={[styles.submitBtnText, { color: c.inkInverse }]}>
                       {mode === 'login' ? 'Sign in' : 'Create account'}
                     </Text>
                   )}
@@ -544,9 +543,9 @@ export default function SignInScreen() {
                 {/* Divider */}
                 {isAppleAvailable && (
                   <View style={styles.divider}>
-                    <View style={[styles.dividerLine, { backgroundColor: themeColors.border }]} />
-                    <Text style={[styles.dividerText, { color: themeColors.textSecondary }]}>or</Text>
-                    <View style={[styles.dividerLine, { backgroundColor: themeColors.border }]} />
+                    <View style={[styles.dividerLine, { backgroundColor: c.borderLight }]} />
+                    <Text style={[styles.dividerText, { color: c.inkMid }]}>or</Text>
+                    <View style={[styles.dividerLine, { backgroundColor: c.borderLight }]} />
                   </View>
                 )}
 
@@ -571,11 +570,11 @@ export default function SignInScreen() {
 
                 {/* Toggle mode */}
                 <View style={styles.toggleRow}>
-                  <Text style={[styles.toggleText, { color: themeColors.textSecondary }]}>
+                  <Text style={[styles.toggleText, { color: c.inkMid }]}>
                     {mode === 'login' ? "Don't have an account? " : 'Already have an account? '}
                   </Text>
                   <TouchableOpacity onPress={toggleMode} disabled={loading}>
-                    <Text style={[styles.toggleLink, { color: '#FEB729' }]}>
+                    <Text style={[styles.toggleLink, { color: c.forest }]}>
                       {mode === 'login' ? 'Start here' : 'Sign in'}
                     </Text>
                   </TouchableOpacity>
@@ -699,14 +698,12 @@ const styles = StyleSheet.create({
   submitBtn: {
     height: 54,
     borderRadius: borderRadius.full,
-    backgroundColor: '#FEB729',
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: spacing.xs,
   },
   submitBtnDisabled: { opacity: 0.6 },
   submitBtnText: {
-    color: '#111111',
     fontSize: 16,
     fontFamily: 'Inter',
     fontWeight: fontWeight.semibold,
