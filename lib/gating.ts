@@ -27,3 +27,21 @@ export function countMarksInGoal(
 ): number {
   return marks.filter((m) => !m.deleted_at && m.goal_id === goalId).length;
 }
+
+// ── Livra+ feature gates ────────────────────────────────────────────────────
+// History, stats, presets and charts are intentionally NOT gated — they belong to the user.
+
+/** Custom per-mark reminder times are a Livra+ feature. */
+export function canUseCustomReminders(isPro: boolean): boolean {
+  return isPro;
+}
+
+/** Data export (CSV) is a Livra+ feature. */
+export function canExportData(isPro: boolean): boolean {
+  return isPro;
+}
+
+/** Sharing a progress/momentum card image is a Livra+ feature. */
+export function canUseShareCard(isPro: boolean): boolean {
+  return isPro;
+}

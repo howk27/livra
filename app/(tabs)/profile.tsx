@@ -9,6 +9,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Image,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, {
@@ -38,6 +39,8 @@ import { logger } from '../../lib/utils/logger';
 import type { User } from '@supabase/supabase-js';
 import { ShareCardModal } from '../../components/ShareCard';
 import { formatDate } from '../../lib/date';
+import { checkProStatus } from '../../lib/iap/iap';
+import { canUseShareCard } from '../../lib/gating';
 
 function displayNameFromUserMetadata(user: User): string | null {
   const meta = user.user_metadata as Record<string, unknown> | undefined;
@@ -61,6 +64,23 @@ export default function ProfileScreen() {
   const [profileDisplayName, setProfileDisplayName] = useState<string | null>(null);
   const [profileImageUri, setProfileImageUri] = useState<string | null>(null);
   const [showShareCard, setShowShareCard] = useState(false);
+
+  // Share card is a Livra+ feature — gate softly on press, never a dead button.
+  const handleSharePress = async () => {
+    const status = await checkProStatus();
+    if (!canUseShareCard(status.effectiveUnlocked)) {
+      Alert.alert(
+        'Share cards are a Livra+ perk',
+        'Livra+ turns your momentum into a shareable card so you can show the progress you’ve built.',
+        [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'See Livra+', onPress: () => router.push('/paywall') },
+        ]
+      );
+      return;
+    }
+    setShowShareCard(true);
+  };
 
   // Staggered entry animation
   const headerOpacity  = useSharedValue(0);
@@ -273,7 +293,7 @@ export default function ProfileScreen() {
                   backgroundColor: applyOpacity(themeColors.accent.primary, isDark ? 0.08 : 0.06),
                 },
               ]}
-              onPress={() => setShowShareCard(true)}
+              onPress={handleSharePress}
               activeOpacity={0.78}
             >
               <ShareNetwork size={18} color={themeColors.accent.primary} weight="regular" />

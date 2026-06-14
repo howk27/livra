@@ -3,6 +3,9 @@ import {
   canAddMark,
   canAddMarkToGoal,
   countMarksInGoal,
+  canUseCustomReminders,
+  canExportData,
+  canUseShareCard,
   FREE_GOAL_LIMIT,
   FREE_MARK_LIMIT,
   FREE_MARKS_PER_GOAL,
@@ -62,5 +65,20 @@ describe('countMarksInGoal', () => {
   });
   test('ignores soft-deleted marks', () => {
     expect(countMarksInGoal([{ id: 'x', goal_id: 'A', deleted_at: 'now' }], 'A')).toBe(0);
+  });
+});
+
+describe('Livra+ feature gates', () => {
+  test('custom reminders: free blocked, pro allowed', () => {
+    expect(canUseCustomReminders(false)).toBe(false);
+    expect(canUseCustomReminders(true)).toBe(true);
+  });
+  test('data export (CSV): free blocked, pro allowed', () => {
+    expect(canExportData(false)).toBe(false);
+    expect(canExportData(true)).toBe(true);
+  });
+  test('share card: free blocked, pro allowed', () => {
+    expect(canUseShareCard(false)).toBe(false);
+    expect(canUseShareCard(true)).toBe(true);
   });
 });

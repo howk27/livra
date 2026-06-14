@@ -32,6 +32,7 @@ import {
   clearMarkReminderTime,
 } from '../../../lib/notifications/markReminder';
 import { checkProStatus } from '../../../lib/iap/iap';
+import { canUseCustomReminders } from '../../../lib/gating';
 import { requestPermissions } from '../../../lib/health/healthPermissions';
 import { suggestStepGoal, suggestWakeTime } from '../../../lib/health/healthLearner';
 import type { HealthKitType } from '../../../lib/health/healthTypes';
@@ -266,18 +267,33 @@ function MarkDetailContent() {
 
   const handleReminderToggle = useCallback(async (value: boolean) => {
     if (!id || !counter) return;
-    setReminderEnabled(value);
     if (value) {
+      // Custom per-mark reminder times are a Livra+ feature. Gate softly on enable.
+      const status = await checkProStatus();
+      if (!canUseCustomReminders(status.effectiveUnlocked)) {
+        setReminderEnabled(false);
+        Alert.alert(
+          'Reminders are a Livra+ perk',
+          'Livra+ lets you set a custom reminder time for any mark, so the nudge lands when it helps most.',
+          [
+            { text: 'Not now', style: 'cancel' },
+            { text: 'See Livra+', onPress: () => router.push('/paywall') },
+          ]
+        );
+        return;
+      }
+      setReminderEnabled(true);
       setShowTimePicker(true);
       const hhmm = `${reminderTime.getHours()}:${String(reminderTime.getMinutes()).padStart(2, '0')}`;
       await setMarkReminderTime(id, hhmm);
       await scheduleMarkReminder(id, counter.name, hhmm);
     } else {
+      setReminderEnabled(false);
       setShowTimePicker(false);
       await cancelMarkReminder(id);
       await clearMarkReminderTime(id);
     }
-  }, [id, counter, reminderTime]);
+  }, [id, counter, reminderTime, router]);
 
   const handleReminderTimeChange = useCallback(async (_: any, selected?: Date) => {
     if (!selected || !id || !counter) return;

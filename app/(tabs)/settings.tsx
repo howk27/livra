@@ -29,6 +29,7 @@ import { useEventsStore } from '../../state/eventsSlice';
 import { getSupabaseClient } from '../../lib/supabase';
 import { clearSyncCursors } from '../../lib/sync/syncCursors';
 import { generateAllCountersCSV } from '../../lib/csv';
+import { canExportData } from '../../lib/gating';
 import { logger } from '../../lib/utils/logger';
 import { useNotification } from '../../contexts/NotificationContext';
 import { useFocusEffect } from 'expo-router';
@@ -306,6 +307,17 @@ export default function SettingsScreen() {
   };
 
   const handleExportMarks = async () => {
+    if (!canExportData(isProUnlocked)) {
+      Alert.alert(
+        'Export is a Livra+ perk',
+        'Your history is always yours to see. Livra+ adds CSV export so you can take it anywhere.',
+        [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'See Livra+', onPress: () => router.push('/paywall') },
+        ]
+      );
+      return;
+    }
     try {
       const eventsMap = new Map();
       counters.forEach((counter) => {

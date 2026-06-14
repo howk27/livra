@@ -1529,3 +1529,28 @@ Auth = Option B (value-first, signup at screen 5). No AI in this phase — AI ha
 | `tests/unit/goalCapStore.test.ts` (NEW) | 4 store-level tests via `useGoalsStore.createGoal`: free creates 2 (active+queued); 3rd throws `GoalLimitError`; Pro creates 3rd; **completed goals don't count** (2 completed → still allows 2 fresh, blocks 3rd). | TDD — watched fail at limit=3 → green at 2. |
 
 **Tests:** gating+goals+goalCapStore 37/37. **Type-check:** 0 errors. Only authorized protected file (`goalsSlice.ts`) touched.
+
+### Task 4 — Feature gates (EXECUTED)
+
+Gates **added** to live entry points that were ungated; gates **verified** on already-protected ones; un-gating history/stats/presets is a **no-op** (none were gated — confirmed in Task 1).
+
+| Feature | Entry point | Action |
+|---------|-------------|--------|
+| Custom reminder times | `app/mark/[id]/index.tsx` `handleReminderToggle` | **Added** gate. On enable, `checkProStatus()` → `canUseCustomReminders`; free user: revert toggle (`setReminderEnabled(false)`) + soft alert ("Reminders are a Livra+ perk" / See Livra+). Pro proceeds. Disable path always allowed. |
+| CSV export | `app/(tabs)/settings.tsx` `handleExportMarks` | **Added** gate via `canExportData(isProUnlocked)`. Free: soft alert + See Livra+; Pro exports. ("Export Goals" is a `console.log` TODO stub — left as-is, out of scope.) |
+| Share card (momentum) | `app/(tabs)/profile.tsx` "Share your momentum" button | **Added** gate. New `handleSharePress` → `checkProStatus()` → `canUseShareCard`; free: soft alert + See Livra+; Pro opens `ShareCardModal`. |
+| Share card (goal complete) | `app/goal/complete.tsx` `handleSharePress` | **Verified already gated** (`checkProStatus` → `/paywall`). No change. |
+| Health connect | `app/mark/[id]/index.tsx` `handleConnectHealth`, `components/HealthConnectBanner.tsx` | **Verified already gated**. No change. |
+| Mark reordering | `SortableMarkList`/`SortableMarkRow` | **Unwired** (not rendered anywhere). No live entry point → no gate added. Out-of-scope-if-absent per audit; gate when wired. |
+| Pace projection | `components/PaceBanner.tsx` | **Unwired** (not rendered). No gate added. Gate when wired. |
+| History / Stats / Presets / Charts | — | **No-op.** Confirmed none gated; left free per the locked principle. |
+
+| File | Change |
+|------|--------|
+| `lib/gating.ts` | Added `canUseCustomReminders`, `canExportData`, `canUseShareCard` (all `=> isPro`). Comment: history/stats/presets/charts intentionally NOT gated. |
+| `app/mark/[id]/index.tsx` | Gated reminder enable; import `canUseCustomReminders`. |
+| `app/(tabs)/settings.tsx` | Gated CSV export; import `canExportData`. |
+| `app/(tabs)/profile.tsx` | Gated momentum share; import `checkProStatus` + `canUseShareCard` + `Alert`. |
+| `tests/unit/gating.test.ts` | +3 gate tests (free blocked / Pro allowed) for reminders, export, share card. |
+
+**Tests:** gating 20/20. **Type-check:** 0 errors. No protected files touched in Task 4 (all unprotected screens + `lib/gating.ts`).
