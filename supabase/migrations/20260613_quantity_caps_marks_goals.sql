@@ -1,8 +1,8 @@
 -- Phase 6 Task 3 — Server-side free-tier quantity caps (defense-in-depth)
--- STATUS: PENDING (as of 2026-06-14) — NOT applied. livra_is_pro() returns 404 on
---   the live DB. The first attempt aborted on the (now-fixed) missing public.goals.
---   Re-run via supabase db push AFTER 20260602_goals_with_mark_links.sql (goals) and
---   20260609_goal_id_on_marks.sql (marks.goal_id), both of which are now applied.
+-- STATUS: APPLIED 2026-06-14 — verified live: livra_is_pro(),
+--   livra_count_other_active_goals(), livra_count_other_marks_for_goal() all
+--   callable by anon (200). RESTRICTIVE policies on marks/goals created in the
+--   same run. (Policy rows are not REST-verifiable with the anon key.)
 --
 -- Audit finding (AUDIT_LOG.md, Phase 6): the goal cap (2 active) and per-goal mark
 -- cap (3) are enforced ONLY in client code (lib/gating.ts). A direct PostgREST
