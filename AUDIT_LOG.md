@@ -1577,3 +1577,90 @@ Gates **added** to live entry points that were ungated; gates **verified** on al
 - ✅ Every wired Plus feature gates with **soft upsell**, no dead-end buttons (reminders, CSV, share + pre-existing health/goal-share). Unwired reorder/pace deferred.
 - ✅ Paywall list matches the locked split (usable features only). Tests green; `AUDIT_LOG.md` updated.
 - ✅ Only authorized protected files touched: `hooks/useCounters.ts` (Task 2), `state/goalsSlice.ts` (Task 3). `lib/db/`, `lib/goalLogic.ts`, `supabase/` untouched. No IAP product IDs / purchase call sites changed.
+
+---
+
+# Phase 6 — Monetization Hardening — Task 1 (AUDIT ONLY)
+
+**Date:** 2026-06-13 · **Mode:** read-only, nothing changed.
+**Note:** `docs/prompt-06-monetization-hardening.md` does **not exist** (the redesign index `docs/livra-redesign-index.md` stops at prompt-05). This audit was run from the task description supplied inline. If a canonical prompt-06 is authored later, re-confirm scope against it.
+
+## 1. Where `isProUnlocked` / `proStatus` comes from
+
+**Authoritative source = server DB.** `profiles.pro_unlocked` (boolean, Supabase Postgres) is the truth. It is written **only** by the `validate-iap-receipt` Supabase Edge Function after server-side receipt/token validation (`lib/iap/iap.ts` `validateReceiptWithServer` → `supabase.functions.invoke('validate-iap-receipt')`, `iap.ts:506`). The client **never** writes `pro_unlocked` through the normal unlock flow — `setLocalProCache()` (`iap.ts:618`) caches locally *only after* `checkProStatus().dbUnlocked === true`.
+
+`checkProStatus()` (`iap.ts:301`): signed-in → reads `profiles.pro_unlocked` from DB first (`iap.ts:379`). DB `true` ⇒ `{status:'unlocked', source:'db', verification:'verified_db', effectiveUnlocked:true}` and refreshes a 24h AsyncStorage cache. DB `false`/no-profile ⇒ locked + cache cleared. Only when the DB read *fails/unreachable* does it fall back to `readCacheGrace()` → 24h TTL cache giving `effectiveUnlocked:true, verification:'cache_grace'`.
+
+The hook `useIapSubscriptions` (`hooks/useIapSubscriptions.ts:225/252/497`) calls `checkProStatus()` and exposes `isProUnlocked = status.effectiveUnlocked`. That boolean is what every gate consumes.
+
+**GAP A — CRITICAL (entitlement is server-stored but NOT server-protected).** RLS policy `"Users update own profile"` (`supabase/migrations/20260610_fix_rls_performance.sql:19-22`) is `FOR UPDATE USING (auth.uid()=id) WITH CHECK (auth.uid()=id)` — **no column-level restriction**. Any signed-in user, using the **bundled anon key**, can run `supabase.from('profiles').update({ pro_unlocked: true }).eq('id', myId)` and grant themselves permanent Pro, **bypassing receipt validation entirely**. The same hole lets a user reset `ai_uses_count` to 0. This is the single highest-impact monetization gap.
+
+**GAP B — local cache is forgeable.** AsyncStorage key `pro_unlocked` = `{value:true, checkedAt:<iso>}`. On a jailbroken/rooted device a user can write this and get a 24h `cache_grace` unlock — but only when the DB read fails (DB-first logic otherwise overwrites it). Narrower than Gap A; flag, lower priority.
+
+## 2. `lib/ai/goalGeneration.ts` — key exposure, request path, free-use enforcement
+
+- **API key in client bundle: YES (by design).** `process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY` (`goalGeneration.ts:194, 372`). The `EXPO_PUBLIC_` prefix means Expo **inlines the literal value into the shipped JS bundle** — extractable from any install. (Currently the key is *not* in `.env` (only `EXPO_PUBLIC_SUPABASE_URL/_ANON_KEY/_ENV`) nor in `eas.json`, so AI returns `no_api_key` today — but the code as written ships the key client-side the moment it's populated.)
+- **Request path: DIRECT to provider, no server.** `callAnthropicAPI` POSTs straight to `https://api.anthropic.com/v1/messages` with `x-api-key` header (`goalGeneration.ts:189, 202-216`). No Edge Function / proxy. ⇒ a billable Anthropic key is exposed and the endpoint is unmetered/unauthenticated beyond the key itself.
+- **`ai_uses_count` free-use check: NOT enforced — anywhere.** `getAiUsesCount()` is exported (`goalGeneration.ts:297`) but **never called** by any screen (onboarding imports only `generateGoalPackage`, `writeGoalPackageCache`, `incrementAiUsesCount` — not `getAiUsesCount`; grep confirms zero non-test callers). The counter is *incremented* on confirm+activate (`onboarding.tsx:316`) but never *read as a gate*. There is no free-tier ceiling on AI generations.
+- **Regen cap (2): client-only.** Enforced solely by Zustand state `store.aiRegenerationsUsed >= 2` (`onboarding.tsx:161`, `state/onboardingSlice.ts:16`). No server check; trivially bypassed (and reset every session). The `increment_ai_uses_count` RPC is `SECURITY DEFINER` (`20260613_ai_uses.sql`) but that hardening is moot while direct `profiles` UPDATE (Gap A) is allowed.
+
+## 3. Are any caps enforced server-side?
+
+**No — all caps are purely client-side.**
+- Goal cap `FREE_GOAL_LIMIT=2` and per-goal mark cap `FREE_MARKS_PER_GOAL=3` live in `lib/gating.ts` and are checked only in client code (`hooks/useCounters.ts:91-100`, `state/goalsSlice.ts`).
+- RLS on `marks`/`goals` is owner-scoped (`"Users manage own ..."`) with **no count/quantity constraint**. A modified client or a direct `supabase.from('marks').insert(...)` call bypasses every cap.
+- No DB trigger, no Edge Function, and no RLS predicate enforces goal/mark/AI limits or gates Plus features.
+
+## 4. Unlinked-marks gap — CONFIRMED
+
+`countMarksInGoal` explicitly **excludes** marks with no `goal_id` (`lib/gating.ts:23,28` — "Unlinked marks (no goal_id) are excluded"). `useCounters.createMark` only runs the cap check `if (!data.skipSync && !isProUnlocked && data.goal_id)` (`useCounters.ts:91`) with the comment *"Marks with no goal_id are uncapped — the core loop is never blocked"* (`useCounters.ts:89`). Mark-creation entry points create unlinked marks whenever the user doesn't attach a goal: `app/mark/new.tsx:256` (`...(linkToGoal && targetGoalId ? { goal_id } : {})`) and `components/sheets/AddMarkSheet.tsx:126`. The Focus tab even renders unlinked marks (`app/(tabs)/focus.tsx:135`).
+⇒ A free user can create **unlimited standalone marks** with no `goal_id`, sidestepping the 3-per-goal cap entirely (and, depending on the link UX, later attach them). The per-goal cap is leaky by design.
+
+## Summary of findings (severity-ordered)
+
+| # | Finding | Severity | Location |
+|---|---------|----------|----------|
+| A | RLS lets any user `UPDATE profiles.pro_unlocked=true` (and reset `ai_uses_count`) with the anon key → free permanent Pro, receipt validation bypassed | **Critical** | `20260610_fix_rls_performance.sql:19-22` |
+| B | Anthropic API key designed to ship in client bundle (`EXPO_PUBLIC_`), request goes direct to api.anthropic.com — billable key extractable | **High** | `goalGeneration.ts:189-216` |
+| C | AI free-use limit not enforced at all (`getAiUsesCount` never called); regen cap client-only | **High** | `onboarding.tsx`, `goalGeneration.ts:297` |
+| D | All free-tier caps (goals, marks) client-side only; RLS has no quantity limits | **High** | `lib/gating.ts`, `useCounters.ts:91`, RLS |
+| E | Local `pro_unlocked` AsyncStorage cache forgeable → 24h grace unlock when DB unreachable | Medium | `iap.ts:313-366` |
+| F | Unlinked marks (`goal_id=null`) uncapped — per-goal cap bypassable | Medium (by design, per redesign rule) | `lib/gating.ts:23`, `useCounters.ts:89-91` |
+
+**Positive:** receipt validation itself is correctly server-side (Edge Function), and `pro_unlocked` is read DB-first with a non-authoritative cache. The architecture's weakness is **write-side authorization** (RLS column protection) and **moving the AI call + free-use accounting server-side**, not the read path.
+
+**STOP — audit only. No files changed except this log.**
+
+---
+
+# Phase 6 — Task 1 (EXECUTE) — RLS profiles column-write guard
+
+**Date:** 2026-06-13 · Fixes **Gap A (Critical)** from the Task 1 audit above.
+
+### Change
+New migration `supabase/migrations/20260613_profiles_privileged_columns_guard.sql` — **written, NOT run** (user runs `supabase db push` after all four tasks). No client code touched.
+
+### What it does
+Adds `BEFORE INSERT OR UPDATE` trigger `trg_guard_profile_privileged_columns` (function `guard_profile_privileged_columns()`) on `public.profiles`. For the two PostgREST client roles (`authenticated`, `anon`) it forces the privileged columns to safe values:
+- **INSERT** → `pro_unlocked=false`, `pro_unlocked_at=NULL`, `ai_uses_count=0`.
+- **UPDATE** → coerced back to the prior (`OLD`) values — clients cannot change them.
+
+`service_role` (Edge Functions: `validate-iap-receipt`, the Task 2 AI proxy), `postgres`, and `supabase_admin` fall through with full write access (`current_user NOT IN ('authenticated','anon')`).
+
+### Why trigger over column-GRANT allowlist
+- Also closes the **INSERT** vector (a client could otherwise insert its own profile row with `pro_unlocked=true`); a column UPDATE-grant misses that.
+- Self-maintaining: future safe profile columns stay client-writable; only the 3 named columns are protected (no need to re-grant on every schema change).
+- Preserves the existing `SECURITY DEFINER` rpc `increment_ai_uses_count` (runs as function owner, not `authenticated`, so it's allowed) → **zero client changes**, as the plan requires.
+- Existing RLS row-ownership policies left intact (defense-in-depth).
+
+### Ordering / dependency
+Sorts after `20260613_ai_uses.sql` (which adds `ai_uses_count`), so the column exists when the guard is applied.
+
+### Verification
+- `npm run type-check` → **0 errors** (SQL-only change; no TS affected).
+- No automated test for the trigger (requires a live Postgres session as `authenticated` vs `service_role`); **manual verification after `db push`:** as a signed-in non-Pro user, `update({pro_unlocked:true})` must return the row still `false`; the `validate-iap-receipt` Edge Function (service_role) must still flip it to `true`.
+
+### Acceptance (partial — this task)
+✅ A signed-in free user can no longer grant themselves Pro or reset `ai_uses_count` via a direct Supabase call (once migration applied).
+
+**STOP — confirming before Task 2 (AI Edge Function), per instructions.**
