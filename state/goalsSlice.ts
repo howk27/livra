@@ -26,7 +26,7 @@ import {
 
 export class GoalLimitError extends Error {
   constructor() {
-    super('Free plan allows up to 3 goals. Upgrade to Livra+ for unlimited.');
+    super('Free plan keeps 2 active goals. Finish one or upgrade to Livra+ for an unlimited queue.');
     this.name = 'GoalLimitError';
   }
 }

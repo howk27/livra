@@ -96,11 +96,11 @@ export default function NewGoalScreen() {
     } catch (err) {
       if (err instanceof GoalLimitError) {
         Alert.alert(
-          'Goal limit reached',
-          'The free plan supports up to 3 goals. Upgrade to Livra+ for unlimited.',
+          'Two goals at a time',
+          'Free keeps you to 2 active goals so you can actually finish them. Livra+ opens an unlimited queue.',
           [
             { text: 'Not now', style: 'cancel' },
-            { text: 'Upgrade', onPress: () => router.push('/paywall') },
+            { text: 'See Livra+', onPress: () => router.push('/paywall') },
           ],
         );
       } else {

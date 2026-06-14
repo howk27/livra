@@ -1516,3 +1516,16 @@ Auth = Option B (value-first, signup at screen 5). No AI in this phase — AI ha
 **Decision (from audit §1):** mark with **no `goal_id` counts against nothing** (uncapped) — chosen over a global default so the quick-add core loop is never walled. Goal-context add paths (`AddMarkSheet` active goal, `mark/new` `goalId`/active goal) carry the cap.
 
 **Tests:** 541/541 passing (was 518). **Type-check:** 0 errors. Did not touch `lib/db/`, `lib/goalLogic.ts`, `supabase/`. No IAP product IDs / purchase call sites touched.
+
+### Task 3 — Active goal cap: 3 → 2 (EXECUTED)
+
+| File | Change | Why |
+|------|--------|-----|
+| `lib/gating.ts` | `FREE_GOAL_LIMIT` 3 → **2**. | Locked split: 2 active goals free. |
+| `state/goalsSlice.ts` (PROTECTED — authorized) | `GoalLimitError` copy → "Free plan keeps 2 active goals. Finish one or upgrade to Livra+ for an unlimited queue." No logic change — `createGoal` already counts `nonCompleted` (excludes completed/expired), so completed goals don't count against the cap. | Soft copy; cap honored via existing filter. |
+| `app/goal/new.tsx` | `GoalLimitError` alert reworded 3→2, soft "Two goals at a time" + "See Livra+". | Surface the cap softly at goal creation. |
+| `components/sheets/AddGoalSheet.tsx` | Special-case `GoalLimitError` (was raw `Alert('Error', msg)`): soft title + "See Livra+" CTA to `/paywall`. Added `useRouter` + `GoalLimitError` import. | Soft cap surface in the Goals tab add-goal flow. |
+| `tests/unit/gating.test.ts`, `tests/unit/goals.test.ts` | Updated `FREE_GOAL_LIMIT`/`canAddGoal` assertions 3→2. | Reflect new cap. |
+| `tests/unit/goalCapStore.test.ts` (NEW) | 4 store-level tests via `useGoalsStore.createGoal`: free creates 2 (active+queued); 3rd throws `GoalLimitError`; Pro creates 3rd; **completed goals don't count** (2 completed → still allows 2 fresh, blocks 3rd). | TDD — watched fail at limit=3 → green at 2. |
+
+**Tests:** gating+goals+goalCapStore 37/37. **Type-check:** 0 errors. Only authorized protected file (`goalsSlice.ts`) touched.

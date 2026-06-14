@@ -9,8 +9,8 @@ import {
 } from '../../lib/gating';
 
 describe('FREE limits', () => {
-  test('FREE_GOAL_LIMIT is 3', () => {
-    expect(FREE_GOAL_LIMIT).toBe(3);
+  test('FREE_GOAL_LIMIT is 2 (active goals on free)', () => {
+    expect(FREE_GOAL_LIMIT).toBe(2);
   });
   test('FREE_MARKS_PER_GOAL is 3', () => {
     expect(FREE_MARKS_PER_GOAL).toBe(3);
@@ -21,8 +21,8 @@ describe('FREE limits', () => {
 });
 
 describe('canAddGoal', () => {
-  test('free user under limit', () => expect(canAddGoal(false, 2)).toBe(true));
-  test('free user at limit', () => expect(canAddGoal(false, 3)).toBe(false));
+  test('free user with 1 active goal can add', () => expect(canAddGoal(false, 1)).toBe(true));
+  test('free user at 2 active goals is blocked', () => expect(canAddGoal(false, 2)).toBe(false));
   test('pro user unlimited', () => expect(canAddGoal(true, 100)).toBe(true));
 });
 

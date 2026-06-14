@@ -22,17 +22,17 @@ function makeGoal(overrides: Partial<Goal> = {}): Goal {
 }
 
 describe('FREE_GOAL_LIMIT', () => {
-  test('is 3', () => {
-    expect(FREE_GOAL_LIMIT).toBe(3);
+  test('is 2', () => {
+    expect(FREE_GOAL_LIMIT).toBe(2);
   });
 });
 
 describe('canAddGoal', () => {
   test('free user under limit can add', () => {
-    expect(canAddGoal(false, 2)).toBe(true);
+    expect(canAddGoal(false, 1)).toBe(true);
   });
   test('free user at limit cannot add', () => {
-    expect(canAddGoal(false, 3)).toBe(false);
+    expect(canAddGoal(false, 2)).toBe(false);
   });
   test('free user over limit cannot add', () => {
     expect(canAddGoal(false, 5)).toBe(false);

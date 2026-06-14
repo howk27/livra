@@ -1,5 +1,6 @@
 // ── Free-tier caps ──────────────────────────────────────────────────────────
-export const FREE_GOAL_LIMIT = 3;
+/** Active (non-completed/non-expired) goals allowed on the free tier. */
+export const FREE_GOAL_LIMIT = 2;
 /** Marks allowed per goal on the free tier (cap is per-goal, not global). */
 export const FREE_MARKS_PER_GOAL = 3;
 /** @deprecated Global mark cap. Superseded by FREE_MARKS_PER_GOAL (per-goal). Kept for back-compat. */

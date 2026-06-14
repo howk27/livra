@@ -23,13 +23,14 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { Feather } from '@expo/vector-icons';
 import { PillButton } from '../ui/PillButton';
 import { SectionLabel } from '../ui/SectionLabel';
 import { MarkRow } from '../ui/MarkRow';
 import { fonts, spacing, radius, shadow, themedColors } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
-import { useGoalsStore } from '../../state/goalsSlice';
+import { useGoalsStore, GoalLimitError } from '../../state/goalsSlice';
 import { useMarksStore } from '../../state/countersSlice';
 import { useAuth } from '../../hooks/useAuth';
 import { useIapSubscriptions } from '../../hooks/useIapSubscriptions';
@@ -46,6 +47,7 @@ interface AddGoalSheetProps {
 
 export function AddGoalSheet({ visible, onClose }: AddGoalSheetProps) {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const tc = themedColors(useEffectiveTheme());
   const { user } = useAuth();
   const { isProUnlocked } = useIapSubscriptions();
@@ -147,8 +149,20 @@ export function AddGoalSheet({ visible, onClose }: AddGoalSheetProps) {
       setLinkedMarkIds(new Set());
       close();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Could not create goal.';
-      Alert.alert('Error', msg);
+      if (err instanceof GoalLimitError) {
+        // Soft cap surface — never a hard wall.
+        Alert.alert(
+          'Two goals at a time',
+          'Free keeps you to 2 active goals so you can actually finish them. Livra+ opens an unlimited queue.',
+          [
+            { text: 'Not now', style: 'cancel' },
+            { text: 'See Livra+', onPress: () => router.push('/paywall') },
+          ]
+        );
+      } else {
+        const msg = err instanceof Error ? err.message : 'Could not create goal.';
+        Alert.alert('Error', msg);
+      }
       logger.error('AddGoalSheet createGoal failed:', err);
     } finally {
       setSaving(false);
