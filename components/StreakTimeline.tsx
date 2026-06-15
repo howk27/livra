@@ -86,14 +86,14 @@ export const StreakTimeline: React.FC<StreakTimelineProps> = ({
   const themeColors = colors[theme];
   const [selectedStreak, setSelectedStreak] = useState<StreakRecord | null>(null);
 
+  const handlePress = useCallback((r: StreakRecord) => {
+    setSelectedStreak(prev => prev?.startDate === r.startDate ? null : r);
+  }, []);
+
   if (streaks.length === 0) return null;
 
   const maxLen = Math.max(...streaks.map(s => s.length), 1);
   const accentColor = themeColors.accent.primary;
-
-  const handlePress = useCallback((r: StreakRecord) => {
-    setSelectedStreak(prev => prev?.startDate === r.startDate ? null : r);
-  }, []);
 
   return (
     <View style={styles.wrapper}>

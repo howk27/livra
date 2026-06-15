@@ -2,7 +2,7 @@
  * CalendarHeatmap — Livra 2.0 Layer 4 hero treatment.
  * Staggered column-by-column reveal on mount. Tap-to-tooltip per day.
  */
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { View, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import Animated, {
   useSharedValue, useAnimatedStyle, withTiming, withDelay, Easing,
@@ -38,6 +38,71 @@ function formatTooltipDate(dateStr: string): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+interface HeatmapColumnProps {
+  col: DayData[];
+  index: number;
+  selectedDate: string | null;
+  todayStr: string;
+  getDayColor: (day: DayData) => string;
+  onDayPress: (day: DayData) => void;
+  accentColor: string;
+  todayBorderColor: string;
+}
+
+/**
+ * One staggered-reveal column. Each instance owns exactly one useSharedValue /
+ * useAnimatedStyle, so hook counts are fixed — calling those hooks inside the
+ * parent's columns.map() violated the rules of hooks (variable hook count).
+ */
+const HeatmapColumn: React.FC<HeatmapColumnProps> = ({
+  col,
+  index,
+  selectedDate,
+  todayStr,
+  getDayColor,
+  onDayPress,
+  accentColor,
+  todayBorderColor,
+}) => {
+  const opacity = useSharedValue(0);
+  useEffect(() => {
+    opacity.value = withDelay(
+      index * 30,
+      withTiming(1, { duration: 250, easing: Easing.out(Easing.ease) }),
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const animStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
+
+  return (
+    <Animated.View style={[styles.column, animStyle]}>
+      {col.map((day) => {
+        const isSelected = selectedDate === day.date;
+        const isToday    = day.date === todayStr;
+        return (
+          <TouchableOpacity
+            key={day.date}
+            activeOpacity={0.7}
+            onPress={() => onDayPress(day)}
+            style={[
+              styles.day,
+              {
+                backgroundColor: getDayColor(day),
+                borderWidth: isToday || isSelected ? 1 : 0,
+                borderColor: isSelected
+                  ? accentColor
+                  : isToday
+                    ? todayBorderColor
+                    : 'transparent',
+              },
+            ]}
+          />
+        );
+      })}
+    </Animated.View>
+  );
+};
+
 export const CalendarHeatmap: React.FC<CalendarHeatmapProps> = ({
   logsByDate,
   totalMarks,
@@ -69,18 +134,6 @@ export const CalendarHeatmap: React.FC<CalendarHeatmapProps> = ({
     columns.push(col);
   }
 
-  // Per-column opacity animation (staggered reveal)
-  const colOpacities = useRef(columns.map(() => useSharedValue(0)));
-  useEffect(() => {
-    columns.forEach((_, i) => {
-      colOpacities.current[i].value = withDelay(
-        i * 30,
-        withTiming(1, { duration: 250, easing: Easing.out(Easing.ease) }),
-      );
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const getDayColor = (day: DayData): string => {
     if (day.logCount === 0) return isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.06)';
     const ratio = Math.min(1, day.logCount / Math.max(1, day.totalMarks));
@@ -95,36 +148,19 @@ export const CalendarHeatmap: React.FC<CalendarHeatmapProps> = ({
   return (
     <View style={styles.wrapper}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.scroll} contentContainerStyle={styles.scrollContent}>
-        {columns.map((col, w) => {
-          const animStyle = useAnimatedStyle(() => ({ opacity: colOpacities.current[w].value }));
-          return (
-            <Animated.View key={w} style={[styles.column, animStyle]}>
-              {col.map((day) => {
-                const isSelected = selectedDay?.date === day.date;
-                const isToday    = day.date === formatDate(today);
-                return (
-                  <TouchableOpacity
-                    key={day.date}
-                    activeOpacity={0.7}
-                    onPress={() => handleDayPress(day)}
-                    style={[
-                      styles.day,
-                      {
-                        backgroundColor: getDayColor(day),
-                        borderWidth: isToday || isSelected ? 1 : 0,
-                        borderColor: isSelected
-                          ? themeColors.accent.primary
-                          : isToday
-                            ? applyOpacity(themeColors.textSecondary, 0.50)
-                            : 'transparent',
-                      },
-                    ]}
-                  />
-                );
-              })}
-            </Animated.View>
-          );
-        })}
+        {columns.map((col, w) => (
+          <HeatmapColumn
+            key={w}
+            col={col}
+            index={w}
+            selectedDate={selectedDay?.date ?? null}
+            todayStr={formatDate(today)}
+            getDayColor={getDayColor}
+            onDayPress={handleDayPress}
+            accentColor={themeColors.accent.primary}
+            todayBorderColor={applyOpacity(themeColors.textSecondary, 0.50)}
+          />
+        ))}
       </ScrollView>
 
       {/* Tooltip */}

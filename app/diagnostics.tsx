@@ -64,7 +64,9 @@ export default function DiagnosticsScreen() {
   const debugDateOverride = useAppDateStore((s) => s.debugDateOverride);
   const setDebugDateOverride = useAppDateStore((s) => s.setDebugDateOverride);
   const shiftDebugDateByDays = useAppDateStore((s) => s.shiftDebugDateByDays);
-  const useRealDate = useAppDateStore((s) => s.useRealDate);
+  // Aliased away from the `use*` name so rules-of-hooks doesn't mistake this
+  // Zustand action for a React hook (it's a store method, not a hook).
+  const resetToRealDate = useAppDateStore((s) => s.useRealDate);
   const [manualSimDate, setManualSimDate] = useState('');
   const [totalMismatchSummary, setTotalMismatchSummary] = useState<{
     count: number;
@@ -424,7 +426,7 @@ export default function DiagnosticsScreen() {
             <View style={styles.rowButtons}>
               <TouchableOpacity
                 style={[styles.button, styles.buttonFlex, { backgroundColor: themeColors.surface }]}
-                onPress={() => useRealDate()}
+                onPress={() => resetToRealDate()}
               >
                 <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
                   Use real date

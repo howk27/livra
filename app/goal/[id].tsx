@@ -92,6 +92,13 @@ export default function GoalDetailScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [pickerDate, setPickerDate] = useState(new Date());
 
+  const handleSaveTitle = useCallback(async () => {
+    if (titleDraft.trim().length >= 3) {
+      await updateGoalTitle(id!, titleDraft.trim());
+    }
+    setEditingTitle(false);
+  }, [titleDraft, id, updateGoalTitle]);
+
   const linkedMarks = marks.filter(m => m.goal_id === id && !m.deleted_at);
 
   if (!goal) {
@@ -106,13 +113,6 @@ export default function GoalDetailScreen() {
   }
 
   const { progress, threshold, canComplete } = getGoalProgress(id!);
-
-  const handleSaveTitle = useCallback(async () => {
-    if (titleDraft.trim().length >= 3) {
-      await updateGoalTitle(id!, titleDraft.trim());
-    }
-    setEditingTitle(false);
-  }, [titleDraft, id, updateGoalTitle]);
 
   const handleOpenDatePicker = () => {
     const initial = goal.target_date ? parseISO(goal.target_date) : new Date();

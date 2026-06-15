@@ -104,22 +104,10 @@ export const DailyProgressCard: React.FC<DailyProgressCardProps> = ({
   const safeTotal = parsePositiveInt(totalMarks);
   const safeCompleted = Math.min(parsePositiveInt(completedToday), safeTotal);
 
-  if (safeTotal <= 0) {
-    return null;
-  }
-
-  const tileUnits = safeTotal;
-  const filledTiles = safeCompleted;
-
-  const TILE_HEIGHT = 12;
-
   const isAllDone =
     (allMarksComplete && safeTotal > 0) || (safeCompleted >= safeTotal && safeTotal > 0);
 
-  const subText =
-    directionalMessage ??
-    (isAllDone ? 'Day complete' : null);
-
+  // Hooks must run unconditionally — keep them above the early return below.
   const streakScale = useRef(new Animated.Value(1)).current;
   const completionScale = useRef(new Animated.Value(1)).current;
   const completionGlow = useRef(new Animated.Value(0)).current;
@@ -145,6 +133,19 @@ export const DailyProgressCard: React.FC<DailyProgressCardProps> = ({
       ]),
     ]).start();
   }, [isAllDone, momentumHighlight, prefersReducedMotion, completionScale, completionGlow]);
+
+  if (safeTotal <= 0) {
+    return null;
+  }
+
+  const tileUnits = safeTotal;
+  const filledTiles = safeCompleted;
+
+  const TILE_HEIGHT = 12;
+
+  const subText =
+    directionalMessage ??
+    (isAllDone ? 'Day complete' : null);
 
   const highlightStyle: StyleProp<ViewStyle> =
     momentumHighlight && !prefersReducedMotion
