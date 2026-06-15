@@ -381,6 +381,11 @@ function MarkDetailContent() {
 
   const styles = useMemo(() => createStyles(c), [c]);
 
+  const handleFrequencyChange = useCallback((target: number) => {
+    if (!id) return;
+    updateMark(id, { weekly_target: target });
+  }, [id, updateMark]);
+
   if (loading) return <LoadingScreen />;
 
   if (!counter || !id) {
@@ -618,11 +623,6 @@ function MarkDetailContent() {
       },
     ]);
   };
-
-  const handleFrequencyChange = useCallback((target: number) => {
-    if (!id) return;
-    updateMark(id, { weekly_target: target });
-  }, [id, updateMark]);
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
