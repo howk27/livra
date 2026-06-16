@@ -1,22 +1,22 @@
 // Supabase Edge Function — Phase 6 Task 2: AI goal generation proxy.
 //
 // Why this exists (AUDIT_LOG.md, Phase 6 Task 1 audit, findings B & C):
-//   - The Anthropic key used to ship in the client bundle (EXPO_PUBLIC_*) and the
-//     request went straight to api.anthropic.com → a billable key anyone could
+//   - The OpenAI key used to ship in the client bundle (EXPO_PUBLIC_*) and the
+//     request went straight to api.openai.com → a billable key anyone could
 //     extract, on an unmetered endpoint.
 //   - ai_uses_count was incremented client-side but never *gated*, so a modified
 //     client could call the model unbounded.
 //
 // This function moves all of that server-side:
-//   - ANTHROPIC_API_KEY lives in Supabase secrets (Deno.env), never the client.
+//   - OPENAI_API_KEY lives in Supabase secrets (Deno.env), never the client.
 //   - The caller is authenticated via the JWT in the Authorization header.
-//   - The free-use gate is enforced here, before the Anthropic call.
+//   - The free-use gate is enforced here, before the OpenAI call.
 //   - ai_uses_count is incremented via the service-role client, which bypasses
 //     the profiles column-guard trigger (Task 1) — the same pattern
 //     validate-iap-receipt uses to write pro_unlocked.
 //
 // Deploy:  supabase functions deploy ai-goal-generation
-// Secrets: supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
+// Secrets: supabase secrets set OPENAI_API_KEY=sk-...
 //          (SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are injected automatically.)
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -30,8 +30,8 @@ const VALID_ICONS = [
 ] as const;
 const FALLBACK_ICON = 'focus';
 
-const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
-const MODEL = 'claude-haiku-4-5-20251001';
+const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
+const MODEL = 'gpt-4o-mini';
 const REQUEST_TIMEOUT_MS = 14_000;
 const MIN_GOAL_LENGTH = 10;
 
@@ -133,24 +133,26 @@ Rules:
 - If multiple goals are given: scope to one; use "low" confidence`;
 }
 
-async function callAnthropic(goalText: string, apiKey: string): Promise<unknown> {
+async function callOpenAI(goalText: string, apiKey: string): Promise<unknown> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   let response: Response;
   try {
-    response = await fetch(ANTHROPIC_API_URL, {
+    response = await fetch(OPENAI_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
+        'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         model: MODEL,
         max_tokens: 512,
-        system: buildSystemPrompt(),
-        messages: [{ role: 'user', content: `Goal: ${goalText}` }],
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: buildSystemPrompt() },
+          { role: 'user', content: `Goal: ${goalText}` },
+        ],
       }),
       signal: controller.signal,
     });
@@ -160,8 +162,10 @@ async function callAnthropic(goalText: string, apiKey: string): Promise<unknown>
 
   if (!response.ok) throw new Error(`api_http_${response.status}`);
 
-  const data = (await response.json()) as { content?: Array<{ type: string; text?: string }> };
-  const text = data.content?.[0]?.text;
+  const data = (await response.json()) as {
+    choices?: Array<{ message?: { content?: string } }>;
+  };
+  const text = data.choices?.[0]?.message?.content;
   if (!text) throw new Error('empty_response');
   return JSON.parse(text); // throws on malformed JSON → triggers the one retry
 }
@@ -183,7 +187,7 @@ Deno.serve(async (req: Request) => {
 
   const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
   const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-  const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY') ?? '';
+  const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY') ?? '';
   if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
     return json(500, { ok: false, reason: 'network_error' });
   }
@@ -244,18 +248,18 @@ Deno.serve(async (req: Request) => {
   }
 
   // 4. Misconfiguration guard — soft failure → client offers manual fallback.
-  if (!ANTHROPIC_API_KEY) {
-    console.error('[ai-goal-generation] ANTHROPIC_API_KEY not set');
+  if (!OPENAI_API_KEY) {
+    console.error('[ai-goal-generation] OPENAI_API_KEY not set');
     return json(200, { ok: false, reason: 'network_error' });
   }
 
-  // 5. Anthropic call with one silent retry on any error.
+  // 5. OpenAI call with one silent retry on any error.
   let raw: unknown;
   try {
-    raw = await callAnthropic(goalText, ANTHROPIC_API_KEY);
+    raw = await callOpenAI(goalText, OPENAI_API_KEY);
   } catch {
     try {
-      raw = await callAnthropic(goalText, ANTHROPIC_API_KEY);
+      raw = await callOpenAI(goalText, OPENAI_API_KEY);
     } catch {
       return json(200, { ok: false, reason: 'network_error' });
     }

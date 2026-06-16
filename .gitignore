@@ -61,3 +61,6 @@ android/
 expo-env.d.ts
 # @end expo-cli
 
+
+# Supabase CLI local cache
+supabase/.temp/
