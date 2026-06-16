@@ -69,7 +69,7 @@ Current Focus (`app/(tabs)/focus.tsx`) is a Phase-5 rebuild + Phase-2 wiring: a 
 
 **Remove from the daily surface (neutral-surface rule):**
 - [ ] Daily streak — delete the `overallStreakDays` memo (`focus.tsx:101-117`), the streak haptic effect + `prevStreakRef` (`156-166`), the banner streak line (`273-278`), the `STREAK` stat cell (`284`), and now-unused imports (`Lightning`, `subDays`, streak `Haptics` usage). (Line numbers from audit; re-verify before editing — they shift.)
-- [ ] **THIS WEEK stat cell** — remove it from the stat strip (week aggregate ≠ "today's state"). Consistency belongs in stats.
+- [ ] **THIS WEEK aggregate — remove it from the daily surface ENTIRELY** (stat strip AND banner — do not relocate it elsewhere on Focus). The week total is a stats-tab metric. **Keep the per-mark weekly counts** (`MarkRow` `showWeeklyCount` — "2/3 this week"); those are correct and necessary for count-based marks. It's only the aggregate total that leaves Focus.
 - [ ] **KEEP the forgiveness line** (`302-308`) and keep `computeWeek` wired to feed its `remaining`. This is the one weekly surface the locked spec puts on the daily view. Do not delete the consistency computation — only its standalone stat display.
 
 **Build the new surface:**
@@ -77,7 +77,7 @@ Current Focus (`app/(tabs)/focus.tsx`) is a Phase-5 rebuild + Phase-2 wiring: a 
 - [ ] Render at most 2 active goal cards. Below them, the collapsed **"Daily habits"** section for goal-less marks.
 - [ ] **Drive marks off Phase-1 weekly state, NOT daily `loggedToday`.** Focus currently uses `resolveDailyTarget`/`loggedToday`; switch to `markWeeklyState` + `computeCompletionsThisWeek` so `due` marks are checkable and `doneForWeek` marks show the rest line + quiet bonus log and sink for the day. `MarkRow` already supports the weekly-count display mode (`showWeeklyCount`/`weeklyCount`/`weeklyTarget`). Abstinence/fixed marks never show rest copy (Phase 1). **Without this the entire Phase-1 frequency model is invisible on the main surface.**
 - [ ] Remove the dead "See all → `/(tabs)/marks`" affordance (`focus.tsx:315`) — the Marks tab is gone and Focus now surfaces everything via goal cards + the Daily habits expander.
-- [ ] Last-due-mark-of-day → card completed state + "That's today done. See you tomorrow." via a subtle Reanimated transition.
+- [ ] **"That's today done. See you tomorrow."** — fires when **nothing is still loggable today**: every active mark is `doneForWeek` OR already logged today OR daily-gated. This is a DAILY payoff ("see you *tomorrow*") — NOT "all marks `doneForWeek`" (that's weekly completion and would almost never trigger). Subtle Reanimated transition.
 - [ ] Keep the FAB (already present on Focus — no change).
 - [ ] Empty/loading/error states. Type-check, commit. **Pause after this task for review.**
 

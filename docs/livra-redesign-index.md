@@ -29,10 +29,11 @@ Frequency is the spine. Everything reads from it. Run in this order:
 1. **`prompt-01-frequency-model.md`** — audit-first. Per-mark weekly frequency model, fixed marks, count-based rest + bonus log, schema migration, "items" subtitle fix. **Touches protected files — carries an explicit exception flag.**
 2. **`prompt-02-consistency-engine.md`** — weekly aggregate (capped, 70%), "X more check-ins" copy, neutral sub-threshold weeks, "X weeks strong" in stats only. Depends on Phase 1's weekly target.
 3. **`prompt-03-ia-restructure.md`** — tabs → Focus / Goals / Settings; Focus redesign (goal cards with inline marks now that mark state exists); Queue repurposed to Goals planning view.
-4. **`prompt-04-onboarding-commitment-ai.md`** — full sequence, commitment screen, AI generation + safeguards. Depends on Phase 1 defaults and Phase 3 Focus landing.
-5. **`prompt-05-premium-gating.md`** — audit-first. Realign Livra+ gates to the new model: mark cap global→per-goal (3/goal free), 2 active goals free, gate reordering/reminders/health/CSV/share/pace, keep history/stats/presets free, paywall copy. **Touches protected files — carries an explicit exception flag.** Depends on Phase 3 (Goals tab) and overlaps Phase 4 (AI gating lives there).
+4. **`prompt-04a-onboarding-sequence.md`** — onboarding sequence rebuild (5 screens, auth = every user signs up late/value-first), fixes the dead `onboardingSlice` + never-called `completeOnboarding`. AI hatch stubbed. Depends on Phase 1 defaults + Phase 3 Focus.
+5. **`prompt-04b-ai-generation.md`** — greenfield AI goal generation: `goalGeneration.ts`, `ai_uses_count`, `ai_goal_packages` cache, all safeguards + regen cap. Un-stubs the hatch. Depends on 4a.
+6. **`prompt-05-premium-gating.md`** — audit-first. Realign Livra+ gates to the new model: mark cap global→per-goal (3/goal free), 2 active goals free, gate reordering/reminders/health/CSV/share/pace, keep history/stats/presets free, paywall copy, relocate the orphaned mark-cap upsell. **Touches protected files — carries an explicit exception flag.** Depends on Phase 3 (Goals tab) and 4b (AI free-use logic).
 
-Phases 1, 2, and 5 are architecture and must each be run **audit-only first**, conflict report reviewed, then executed. Phases 3–4 can run normally but still gate on type-checks.
+Phases 1, 2, and 5 are architecture and must each be run **audit-only first**, conflict report reviewed, then executed. Phases 3 and 4 (audited) run as execute sessions, gated on type-checks.
 
 ---
 
@@ -47,4 +48,5 @@ Phases 1, 2, and 5 are architecture and must each be run **audit-only first**, c
 - **Local persistence is an AsyncStorage-backed mock, not SQLite.** Use the existing `migrateCountersStorageKey` migration pattern (generic parser, no positional params) — there is no SQLite column-existence guard. Supabase is real Postgres; keep local mock and remote schemas from drifting.
 - **Deprecated, not deleted:** `schedule_type`/`schedule_days` are superseded by `weekly_target` (count-based). They stay in the type but no phase reads them for frequency, done-for-week, or consistency math. `goal_value`/`goal_period` are legacy quantity display only (`getGoalLabel`) — `weekly_target` is the single source of truth for frequency.
 - **Canonical week:** `currentWeekDates()` in `lib/features.ts`, Monday-start ISO (consolidates the three conflicting legacy defs). All frequency/consistency math uses only this — one definition app-wide.
+- **`frequencyKind`** (`variable` | `fixed` | `abstinence`) lives on every mark. `fixed` (Sleep) and `abstinence` (no_smoking, no_soda, etc.) are 7/7/7 and **never** show rest/bonus copy — abstinence reads as a daily streak. Only `variable` marks use the frequency picker and done-for-week rest model.
 - All decisions trace back to `livra-product-decisions.md`. If a phase conflicts with a locked decision, stop and report — do not reconcile silently.

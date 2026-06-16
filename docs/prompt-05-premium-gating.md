@@ -68,10 +68,13 @@ No other protected paths. Do not touch `lib/db/`, `lib/goalLogic.ts`, or `supaba
 
 ## Task 2 — Mark cap: global → per-goal
 
-- [ ] In `hooks/useCounters.ts`, change the free-tier check from "total active marks ≥ 3" to "marks feeding *this goal* ≥ 3". A mark with no goal counts against nothing (or against a sensible default — confirm in audit). `isProUnlocked` bypasses.
-- [ ] Soft upsell on hit: "You've added 3 marks to this goal. Livra+ lets you add more." — never a wall on the core loop.
-- [ ] **Relocate the upsell surface.** Phase 3 removed `marks.tsx`, which held the only `FREE_MARK_LIMIT` lock UI + Livra+ upsell row. Put the per-goal upsell where marks are now added — the `AddMarkSheet` / add-mark flow in the goal context — so the entry point isn't orphaned.
-- [ ] Tests: 3-per-goal enforced; 4th blocked for free; Pro unlimited; per-goal isolation (3 on goal A doesn't block goal B). Type-check, commit.
+**Blocker from audit:** `createMark` has no goal context (the mark→goal link is made after creation). Enforce the cap where the mark meets the goal, not globally in `createMark`:
+
+- [ ] **Plumb goal context into the add-mark flow.** When add-mark is launched from a goal card, pass that `goal_id`; enforce "marks linked to *this goal* ≥ 3 → blocked for free." When launched from the generic FAB with no goal, the mark lands in the **Daily habits** bucket. `isProUnlocked` bypasses everywhere.
+- [ ] **Goal-less (Daily habits) cap:** treat Daily habits as its own bucket capped at **3** for free (recommended default — confirm number). Without a cap here, "Unlimited marks" Pro is meaningless and free is exploitable.
+- [ ] Soft upsell on hit: "You've added 3 marks to this goal. Livra+ lets you add more." (and the habits equivalent) — never a wall on the core loop.
+- [ ] **Relocate the upsell surface.** Phase 3 removed `marks.tsx`, which held the only `FREE_MARK_LIMIT` lock UI + Livra+ upsell row. Put the upsell where marks are now added — the `AddMarkSheet` / add-mark flow.
+- [ ] Tests: 3-per-goal enforced; 4th blocked for free; Pro unlimited; per-goal isolation (3 on goal A doesn't block goal B); Daily habits bucket capped independently. Type-check, commit.
 
 ---
 
@@ -84,23 +87,23 @@ No other protected paths. Do not touch `lib/db/`, `lib/goalLogic.ts`, or `supaba
 
 ## Task 4 — Feature gates
 
-- [ ] Add `isProUnlocked` gates to (only those that exist per audit): mark reordering, custom reminder times per mark, health connect, CSV export, share card, pace projection. Each gated entry → soft upsell, not a dead button.
-- [ ] **Un-gate** anything the audit found wrongly gating history, stats, presets, or charts.
-- [ ] Tests for each gate (free blocked w/ upsell, Pro allowed). Type-check, commit.
+- [ ] Add `isProUnlocked` gates ONLY to features that actually exist. Confirmed shipped: mark reordering, custom reminder times, health connect, CSV export. **AI generation** (built in Phase 4b) gates after the 1 free use. **Share card and Pace projection — verify existence first; if not built, skip (nothing to gate).** Each gated entry → soft upsell, not a dead button.
+- [ ] **Regression guard (no-op):** audit confirmed nothing currently gates history/stats/presets/charts. Add a test asserting they remain ungated; do not add gates.
+- [ ] Tests for each real gate (free blocked w/ upsell, Pro allowed). Type-check, commit.
 
 ---
 
 ## Task 5 — Paywall realignment
 
-- [ ] Update `PRO_FEATURES` / titles in `app/paywall.tsx` to the locked Livra+ list. Update headline/subhead/CTA copy to match the new positioning. Do not change product IDs or purchase call sites.
+- [ ] Update `PRO_FEATURES` / `SHIPPED_PREMIUM_FEATURE_TITLES` in `app/paywall.tsx` to the **shipped** Plus features only (keep the two lists in sync — there's a drift warning). **Add AI generation** (now shipped). **Do NOT list Share card or Pace projection unless they're actually built** — listing unbuilt features is selling vapor. Update headline/subhead/CTA copy. Do not change product IDs or purchase call sites.
 - [ ] Type-check, commit.
 
 ---
 
 ## Acceptance
 
-- Mark cap is per-goal (3), not global; goals are isolated.
+- Mark cap is per-goal (3), not global; goals are isolated; Daily habits capped independently.
 - Exactly 2 active goals on free; completed don't count.
-- History, stats, presets, charts are reachable by free users everywhere.
-- Every Plus feature gates with soft upsell, no dead-end buttons, core loop never blocked.
-- Paywall list matches the locked split. Tests green; `AUDIT_LOG.md` updated.
+- History, stats, presets, charts are reachable by free users everywhere (regression-tested).
+- Every shipped Plus feature gates with soft upsell, no dead-end buttons, core loop never blocked.
+- Paywall lists only shipped features (AI included; Share card / Pace projection excluded unless built). Tests green; `AUDIT_LOG.md` updated.
