@@ -369,30 +369,41 @@ Shipped real **Export Marks** (CSV → `expo-file-system/legacy` + `expo-sharing
 Data** (`resetDatabaseState()` clears local marks/goals/events/streaks/badges/xp + reloads the Zustand stores;
 account/session untouched). Hid the unimplemented Export Goals + Import Data stub rows.
 
-### ⏳ Wave 5 — Typography adoption (NOT STARTED — HANDED OFF to fresh session)
-**Decision: full `typography.ts` adoption (size-preserving).** Investigated and intentionally not started this
-session — it needs a dedicated full-context pass, not a partial sweep (a half-migrated app split between preset
-and inline screens is worse drift than the uniform status quo).
+### ✅ Wave 5 — Typography adoption (DONE, 2026-06-16, size-preserving)
+**Decision (confirmed with user): Hybrid scale + full migration in verified batches.** Executed as a single
+provably size-preserving sweep: every raw `fontSize: NN` literal and inline `fontFamily: '<font>'` string was
+replaced with the **equal-valued** token (`fontSize.<token>` / `fonts.<token>`). `lineHeight` pixel literals were
+**left untouched** (they are not part of the `typography.ts` scale and snapping them would shift layout), so
+rendering is byte-for-byte preserved. Driven by a deterministic mapping script with per-file type-check feedback.
 
-**Findings (verified):** ~**50 distinct `(fontFamily × fontSize)` combos** across **37 files / 172 raw
-`fontSize: NN` sites**. Serif (Cormorant) alone is used at **8 sizes (18/20/22/24/26/28/32/36)** + italic
-variants; sans across 10/11/12/13/14/15/16/17/20 × regular/medium/semibold/bold. Dominant: `sans 13` (19×),
-`sans 12` (17×), `sansMedium` (many), `sans 14/15` (heavy).
+**Foundation:**
+- `theme/tokens.ts`: extended `fontSize` to cover **every real size** the app uses — added `'2xs'`=10, `13`,
+  `17`, `18`, `22`, `26`, `'5xl'`=40, `'6xl'`=60, `'7xl'`=64 (existing keys/values untouched — load-bearing via
+  `AppText`). Added `fonts.mono` for diagnostics/code display.
+- `theme/typography.ts`: kept the 8 existing presets **unchanged** (load-bearing, 230× via `AppText`); added 7
+  size-preserving semantic roles the old set didn't cover — `hero` (serif 36), `display2` (serif 32), `greeting`
+  (serif-italic 22), `bodyMedium`/`bodySemibold` (sans 14), `bodySmall`/`bodySmallMedium` (sans 13), `meta`
+  (non-uppercase sans 12, vs the uppercase `caption`). These are the documented vocabulary for `AppText`/new
+  components; inline StyleSheet clusters use token composition (safe — no `lineHeight` injection).
 
-**Constraints for the fresh session:**
-- `theme/typography.ts` presets top out at `2xl`=28 — they DON'T cover the 32–42 serif hero sizes. Adopting the
-  existing presets as-is would **shrink hero/display text**. The scale must be **extended** to the real sizes first.
-- The 8 existing presets (`display/headline/title/subtitle/body/caption/label/button`) are **load-bearing via
-  `AppText`** (used 230×: body 136, button 32, subtitle 25, caption 23, headline 7…). **Do NOT change their sizes.**
-- Latent bug to fix as part of this: `AppText` variants `symbol` (5×), `heading` (1×), `subheading` (1×) are
-  **used but undefined** in `typography.ts` → silently fall back to `body`. Define them (size-preserving vs their
-  intended look) or migrate those call sites.
+**Audit corrections (verified in code):**
+- The "`symbol` (5×) undefined `AppText` variant" finding was a **grep false-positive** — all 5 are an *icon*
+  component `variant` prop (`MarkIcon`/`CounterIcon`), unrelated to typography.
+- Only genuine undefined-variant bug: `heading`/`subheading` in `app/iap-dashboard.tsx` (dev-only screen) →
+  migrated to existing `title`/`subtitle` presets (fixes headers that were silently rendering at `body` size).
+- `'Inter'`/`'Satoshi'` only survive in `app/checkin.tsx.archived` (dead, not compiled) — left as-is.
 
-**Recommended plan (fresh session):** (1) extend `typography.ts` into a complete size-preserving semantic scale
-covering the real serif + sans roles; (2) migrate inline StyleSheet font clusters → preset spreads / `AppText`
-variants **per screen** (each screen fully, so every commit is monotonic improvement), highest-traffic first
-(focus → goals → onboarding → signin → paywall → mark/* → goal/*); (3) verify type-check + 561 tests after each
-batch; commit per screen-group. No visual diff expected (size-preserving).
+**Migrated (41 files):** foundation (`tokens.ts`, `typography.ts`) + `(tabs)/_layout|goals|settings`,
+`onboarding`, `iap-dashboard`, `paywall` (monospace→`fonts.mono`), all `settings/*`, `goal/[id]|complete|queue`,
+`mark/new|[id]/index`, and ~20 components (sheets, `MarkCard`, `MarkRow`, `QueueCard`, `CommitmentScreen`,
+`HeroCard`, `SpeedDialFAB`, etc.). `focus.tsx` / `signin.tsx` were already tokenized in Waves 1–2 (no raw
+literals remained). **Result: 0 raw `fontSize: NN` literals and 0 inline loaded-font strings remain app-wide.**
+
+**Verify:** type-check 0 errors · 561/561 tests pass · **lint-neutral** (baseline of the 41 files: 86 errors/71
+warnings → after: 86 errors/**69** warnings — zero new errors, −2 warnings, proven via stash-and-compare). The 86
+errors are a **pre-existing** `react-hooks/immutability` backlog (Reanimated worklet `.value =` assignments,
+surfaced by the ESLint-9 flat-config migration) — unrelated to typography and out of Wave 5 scope. No visual diff
+(size-preserving by construction).
 
 ### ✅ Wave 7 — Paywall: safe extraction (DONE, scoped per decision)
 **Decision: safe extraction only** (helpers + presentational, leave the IAP state machine). Extracted the pure
@@ -405,6 +416,8 @@ IAP operation state machine was **left intact** (extraction = real regression ri
 clean/safe win). paywall.tsx remains large (~2010 lines); a full hook extraction is a separate, higher-risk task
 that wants IAP test coverage first.
 
-> **STATE (2026-06-16): Waves 1–4 + 6 + 7 complete, verified (type-check 0 errors · eslint clean · 561/561 tests)
-> and COMMITTED on `fix/auth-batch-1` (commits: deletions → UI-unification → docs → build → paywall price helpers).
-> Wave 5 (typography full adoption) is the next session's focused task — analysis + plan above. Not pushed.**
+> **STATE (2026-06-16): Waves 1–7 ALL complete, verified (type-check 0 errors · 561/561 tests · lint-neutral —
+> no new errors vs baseline; pre-existing `react-hooks/immutability` flat-config backlog remains, separate task)
+> and COMMITTED on `fix/auth-batch-1`. Wave 5 (typography full adoption) finished this session — the type system
+> is now fully tokenized (no raw font-size literals app-wide; `theme/tokens` + `theme/typography` are the single
+> source). The UI-overhaul wave plan (§9) is fully executed. Not pushed.**

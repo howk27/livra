@@ -1871,3 +1871,19 @@ Previous AUTH-2 entry claimed "no code change required," but the logo/wordmark w
 Net: keyboard opens → logo/wordmark stay fixed at top, the form scrolls independently, nothing overlaps.
 
 Verification: `npm run type-check` clean; `npm test` 43 suites / 553 tests pass.
+
+---
+
+# UI Overhaul — Waves 1–7 (2026-06-16, branch `fix/auth-batch-1`)
+
+Full screen-by-screen audit and a 7-wave, dependency-ordered visual/system unification. **Detailed wave log lives in `UI-logs.md` (§9)**; this is the master-log summary. Goal: kill design-system drift (two color systems, three icon libraries, two font expectations) so the app reads as one cohesive product, then layer restrained "delight" on a clean base. Color identity unchanged (forest green + warm linen, Cormorant + DM Sans).
+
+- **Wave 1 — Deletions + quick wins:** removed legacy tabs (`stats`/`tracking`/`profile`), archived dead components, fixed `signin.tsx` unloaded fonts (`Satoshi`/`Inter` → `fonts.serif`/`fonts.sans`), wired check-in haptic on Focus.
+- **Wave 2 — Killed the legacy palette:** migrated all 37 importers of `theme/colors.ts` onto `themedColors()` from `theme/tokens.ts`, then **deleted `theme/colors.ts`** (amber era gone). Full `paywall.tsx` colors migration; locale-safe price parsing.
+- **Wave 3 — Icons → Phosphor:** single icon library app-wide; no `@expo/vector-icons` references remain.
+- **Wave 4 — Tokenize hex + promote `CATEGORY_MAP`:** shared `categoryAccents` in tokens; fixed off-brand XP-ring + dark-mode hardcoded forest hexes.
+- **Wave 5 — Typography adoption (THIS SESSION):** extended `theme/tokens.ts` `fontSize` to cover every real size (added 10/13/17/18/22/26/40/60/64 + `fonts.mono`) and `theme/typography.ts` with 7 size-preserving semantic presets (`hero`/`display2`/`greeting`/`bodyMedium`/`bodySemibold`/`bodySmall`/`bodySmallMedium`/`meta`). Replaced **every** raw `fontSize: NN` literal and inline `fontFamily: '<font>'` string across **41 files** with the equal-valued token — **provably size-preserving** (`lineHeight` pixel literals left untouched; no preset spreads into inline styles). Fixed the only genuine undefined-`AppText`-variant bug (`heading`/`subheading` in dev-only `iap-dashboard` → `title`/`subtitle`). The "`symbol` undefined variant" audit finding was a grep false-positive (it's an icon prop). **Result: 0 raw font-size literals / 0 inline loaded-font strings app-wide; `theme/tokens` + `theme/typography` are the single typographic source.**
+- **Wave 6 — Settings data actions:** shipped real Export Marks (CSV) + Reset All Data; hid unimplemented stubs.
+- **Wave 7 — Paywall safe extraction:** pure price helpers → `lib/iap/price.ts` + unit tests; IAP state machine left intact (revenue-path risk).
+
+Verification (Wave 5 / current): `npm run type-check` 0 errors · `npm test` 44 suites / 561 tests pass · **lint-neutral** (the 41 changed files: 86 errors/71 warnings before → 86 errors/69 warnings after — no new errors, −2 warnings, proven by stash-and-compare). The 86 errors are a **pre-existing** `react-hooks/immutability` backlog from the ESLint-9 flat-config migration (Reanimated worklets), unrelated to typography — a separate cleanup task.
