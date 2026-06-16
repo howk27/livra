@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { IconProps } from 'phosphor-react-native';
 import { SectionLabel } from './SectionLabel';
 import { fonts, radius, spacing, shadow, themedColors } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
@@ -12,7 +12,7 @@ interface HeroCardProps {
   description?: string;
   progress?: number; // 0-1
   progressLabel?: string;
-  icon?: keyof typeof Feather.glyphMap;
+  icon?: React.ComponentType<IconProps>;
   children?: React.ReactNode;
   style?: object;
 }
@@ -24,7 +24,7 @@ export function HeroCard({
   description,
   progress,
   progressLabel,
-  icon,
+  icon: Icon,
   children,
   style,
 }: HeroCardProps) {
@@ -42,9 +42,9 @@ export function HeroCard({
     <View style={[styles.card, { backgroundColor: bg }, style]}>
       <View style={styles.topRow}>
         <SectionLabel color={labelColor}>{missionLabel}</SectionLabel>
-        {icon && (
+        {Icon && (
           <View style={[styles.iconPill, { backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : colors.surfaceAlt }]}>
-            <Feather name={icon} size={16} color={isDark ? colors.inkInverse : colors.inkMid} />
+            <Icon size={16} color={isDark ? colors.inkInverse : colors.inkMid} weight="regular" />
           </View>
         )}
       </View>

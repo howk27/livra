@@ -4,8 +4,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppText } from '../components/Typography';
 import { useEffectiveTheme } from '../state/uiSlice';
-import { colors } from '../theme/colors';
-import { spacing, borderRadius, fontSize } from '../theme/tokens';
+import { themedColors, spacing, borderRadius, fontSize } from '../theme/tokens';
 import { env } from '../lib/env';
 import { useDevTools } from '../providers/DevToolsProvider';
 import { useFeatureFlag } from '../hooks/useFeatureFlag';
@@ -33,7 +32,7 @@ import { readSyncDiagSnapshot, type SyncDiagSnapshotV1 } from '../lib/sync/syncD
 
 export default function DiagnosticsScreen() {
   const theme = useEffectiveTheme();
-  const themeColors = colors[theme];
+  const themeColors = themedColors(theme);
   const router = useRouter();
   const { diagnosticsUnlocked } = useDevTools();
   /** Mock/seed/feature-flag tooling — development builds only (production uses gesture unlock for read-only diagnostics). */
@@ -267,7 +266,6 @@ export default function DiagnosticsScreen() {
       } else {
         Alert.alert('Seeded', `Weekly Review demo seeded: ${scenario}`);
       }
-      router.push('/(tabs)/tracking');
     } catch (error: any) {
       Alert.alert('Seed Failed', error?.message || 'Unable to seed Weekly Review demo.');
     }
@@ -289,60 +287,60 @@ export default function DiagnosticsScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: themeColors.linen }]}>
       <ScrollView contentContainerStyle={styles.content}>
-        <AppText variant="title" style={[styles.title, { color: themeColors.text }]}>
+        <AppText variant="title" style={[styles.title, { color: themeColors.inkDark }]}>
           Diagnostics
         </AppText>
         {!showDevInjectionUI ? (
-          <AppText variant="caption" style={[styles.readOnlyHint, { color: themeColors.textSecondary }]}>
+          <AppText variant="caption" style={[styles.readOnlyHint, { color: themeColors.inkMid }]}>
             Read-only device summary. No data can be changed from this screen.
           </AppText>
         ) : null}
 
         {user ? (
           <View style={styles.section}>
-            <AppText variant="caption" style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>
+            <AppText variant="caption" style={[styles.sectionTitle, { color: themeColors.inkMid }]}>
               Sync health
             </AppText>
             <View style={[styles.card, { backgroundColor: themeColors.surface }]}>
-              <AppText variant="body" style={[styles.cardText, { color: themeColors.textSecondary }]}>
+              <AppText variant="body" style={[styles.cardText, { color: themeColors.inkMid }]}>
                 Core last synced:{' '}
                 {syncDiagSnapshot?.coreSyncedAtIso
                   ? new Date(syncDiagSnapshot.coreSyncedAtIso).toLocaleString()
                   : 'never (no successful sync recorded on device)'}
               </AppText>
-              <AppText variant="body" style={[styles.cardText, { color: themeColors.textSecondary }]}>
+              <AppText variant="body" style={[styles.cardText, { color: themeColors.inkMid }]}>
                 Streak recompute (last): {syncDiagSnapshot?.lastStreakRecomputeSource ?? 'none'}
               </AppText>
-              <AppText variant="body" style={[styles.cardText, { color: themeColors.textSecondary }]}>
+              <AppText variant="body" style={[styles.cardText, { color: themeColors.inkMid }]}>
                 Same-name mark groups (different ids): {syncDiagSnapshot?.duplicateMarkNameGroupCount ?? 0}
               </AppText>
-              <AppText variant="body" style={[styles.cardText, { color: themeColors.textSecondary }]}>
+              <AppText variant="body" style={[styles.cardText, { color: themeColors.inkMid }]}>
                 Maintenance warnings:{' '}
                 {syncDiagSnapshot?.maintenanceWarnings?.length
                   ? syncDiagSnapshot.maintenanceWarnings.join(', ')
                   : 'none'}
               </AppText>
-              <AppText variant="caption" style={[styles.cardText, { color: themeColors.textTertiary }]}>
+              <AppText variant="caption" style={[styles.cardText, { color: themeColors.inkMuted }]}>
                 Persisted after each successful core sync (push+pull). Maintenance codes are best-effort post-steps;
                 core data can still be correct if a code is listed. No account secrets logged.
               </AppText>
             </View>
             <View style={[styles.card, { backgroundColor: themeColors.surface, marginTop: spacing.sm }]}>
-              <AppText variant="caption" style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>
+              <AppText variant="caption" style={[styles.sectionTitle, { color: themeColors.inkMid }]}>
                 Totals vs lc_events (local)
               </AppText>
-              <AppText variant="body" style={[styles.cardText, { color: themeColors.textSecondary }]}>
+              <AppText variant="body" style={[styles.cardText, { color: themeColors.inkMid }]}>
                 Mismatches (row total ≠ replay of non-deleted events):{' '}
                 {totalMismatchSummary === null ? '…' : totalMismatchSummary.count}
               </AppText>
               {totalMismatchSummary && totalMismatchSummary.count > 0 ? (
-                <AppText variant="caption" style={[styles.cardText, { color: themeColors.textTertiary }]}>
+                <AppText variant="caption" style={[styles.cardText, { color: themeColors.inkMuted }]}>
                   Sample mark ids: {totalMismatchSummary.sampleIds.join(', ') || '—'}
                 </AppText>
               ) : null}
-              <AppText variant="caption" style={[styles.cardText, { color: themeColors.textTertiary }]}>
+              <AppText variant="caption" style={[styles.cardText, { color: themeColors.inkMuted }]}>
                 Refreshed when this screen loads. No names or tokens logged.
               </AppText>
             </View>
@@ -350,47 +348,47 @@ export default function DiagnosticsScreen() {
         ) : null}
 
         <View style={styles.section}>
-          <AppText variant="caption" style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>
+          <AppText variant="caption" style={[styles.sectionTitle, { color: themeColors.inkMid }]}>
             Environment
           </AppText>
           <View style={[styles.card, { backgroundColor: themeColors.surface }]}>
-            <AppText variant="body" style={[styles.cardText, { color: themeColors.text }]}>
+            <AppText variant="body" style={[styles.cardText, { color: themeColors.inkDark }]}>
               Mode: {env.isProduction ? 'production' : env.isPreview ? 'preview' : 'development'}
             </AppText>
             {showDevInjectionUI ? (
-              <AppText variant="body" style={[styles.cardText, { color: themeColors.textSecondary }]}>
+              <AppText variant="body" style={[styles.cardText, { color: themeColors.inkMid }]}>
                 Diagnostics unlocked: {diagnosticsUnlocked ? 'yes' : 'no'}
               </AppText>
             ) : null}
-            <AppText variant="body" style={[styles.cardText, { color: themeColors.textSecondary }]}>
+            <AppText variant="body" style={[styles.cardText, { color: themeColors.inkMid }]}>
               Execution environment: {env.executionEnvironment}
             </AppText>
-            <AppText variant="body" style={[styles.cardText, { color: themeColors.textSecondary }]}>
+            <AppText variant="body" style={[styles.cardText, { color: themeColors.inkMid }]}>
               App ownership: {env.appOwnership}
             </AppText>
             {devStatus && (
               <>
-                <AppText variant="body" style={[styles.cardText, { color: themeColors.textSecondary }]}>
+                <AppText variant="body" style={[styles.cardText, { color: themeColors.inkMid }]}>
                   Local date: {devStatus.localDate}
                 </AppText>
-                <AppText variant="body" style={[styles.cardText, { color: themeColors.textSecondary }]}>
+                <AppText variant="body" style={[styles.cardText, { color: themeColors.inkMid }]}>
                   Review window: {devStatus.weekStart} → {devStatus.weekEnd}
                 </AppText>
-                <AppText variant="body" style={[styles.cardText, { color: themeColors.textSecondary }]}>
+                <AppText variant="body" style={[styles.cardText, { color: themeColors.inkMid }]}>
                   Events in window: {devStatus.windowEvents}
                 </AppText>
-                <AppText variant="body" style={[styles.cardText, { color: themeColors.textSecondary }]}>
+                <AppText variant="body" style={[styles.cardText, { color: themeColors.inkMid }]}>
                   Dates in window: {devStatus.windowDates.join(', ') || 'none'}
                 </AppText>
-                <AppText variant="body" style={[styles.cardText, { color: themeColors.textSecondary }]}>
+                <AppText variant="body" style={[styles.cardText, { color: themeColors.inkMid }]}>
                   Source table: lc_events (event_type = 'increment')
                 </AppText>
                 {showDevInjectionUI ? (
                   <>
-                    <AppText variant="body" style={[styles.cardText, { color: themeColors.textSecondary }]}>
+                    <AppText variant="body" style={[styles.cardText, { color: themeColors.inkMid }]}>
                       Last seed action: {devStatus.lastSeedAction || 'none'}
                     </AppText>
-                    <AppText variant="body" style={[styles.cardText, { color: themeColors.textSecondary }]}>
+                    <AppText variant="body" style={[styles.cardText, { color: themeColors.inkMid }]}>
                       Seed user ID: {devStatus.seedUserId || 'none'}
                     </AppText>
                   </>
@@ -403,7 +401,7 @@ export default function DiagnosticsScreen() {
         {!user && !showDevInjectionUI ? (
           <View style={styles.section}>
             <View style={[styles.card, { backgroundColor: themeColors.surface }]}>
-              <AppText variant="body" style={[styles.cardText, { color: themeColors.textSecondary }]}>
+              <AppText variant="body" style={[styles.cardText, { color: themeColors.inkMid }]}>
                 Sign in to view account sync health and totals checks.
               </AppText>
             </View>
@@ -412,14 +410,14 @@ export default function DiagnosticsScreen() {
 
         {__DEV__ && (
           <View style={styles.section}>
-            <AppText variant="caption" style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>
+            <AppText variant="caption" style={[styles.sectionTitle, { color: themeColors.inkMid }]}>
               Simulated app date
             </AppText>
             <View style={[styles.card, { backgroundColor: themeColors.surface }]}>
-              <AppText variant="body" style={[styles.cardText, { color: themeColors.text }]}>
+              <AppText variant="body" style={[styles.cardText, { color: themeColors.inkDark }]}>
                 Effective “today”: {formatDate(getAppDate())}
               </AppText>
-              <AppText variant="caption" style={[styles.cardText, { color: themeColors.textSecondary }]}>
+              <AppText variant="caption" style={[styles.cardText, { color: themeColors.inkMid }]}>
                 Override: {debugDateOverride ?? 'none (system clock)'}
               </AppText>
             </View>
@@ -428,7 +426,7 @@ export default function DiagnosticsScreen() {
                 style={[styles.button, styles.buttonFlex, { backgroundColor: themeColors.surface }]}
                 onPress={() => resetToRealDate()}
               >
-                <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+                <AppText variant="button" style={[styles.buttonText, { color: themeColors.inkDark }]}>
                   Use real date
                 </AppText>
               </TouchableOpacity>
@@ -436,7 +434,7 @@ export default function DiagnosticsScreen() {
                 style={[styles.button, styles.buttonFlex, { backgroundColor: themeColors.surface }]}
                 onPress={() => shiftDebugDateByDays(1)}
               >
-                <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+                <AppText variant="button" style={[styles.buttonText, { color: themeColors.inkDark }]}>
                   +1 day
                 </AppText>
               </TouchableOpacity>
@@ -446,7 +444,7 @@ export default function DiagnosticsScreen() {
                 style={[styles.button, styles.buttonFlex, { backgroundColor: themeColors.surface }]}
                 onPress={() => shiftDebugDateByDays(3)}
               >
-                <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+                <AppText variant="button" style={[styles.buttonText, { color: themeColors.inkDark }]}>
                   +3 days
                 </AppText>
               </TouchableOpacity>
@@ -454,7 +452,7 @@ export default function DiagnosticsScreen() {
                 style={[styles.button, styles.buttonFlex, { backgroundColor: themeColors.surface }]}
                 onPress={() => shiftDebugDateByDays(7)}
               >
-                <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+                <AppText variant="button" style={[styles.buttonText, { color: themeColors.inkDark }]}>
                   +7 days
                 </AppText>
               </TouchableOpacity>
@@ -463,15 +461,15 @@ export default function DiagnosticsScreen() {
               value={manualSimDate}
               onChangeText={setManualSimDate}
               placeholder="YYYY-MM-DD"
-              placeholderTextColor={themeColors.textTertiary}
+              placeholderTextColor={themeColors.inkMuted}
               autoCapitalize="none"
               autoCorrect={false}
               style={[
                 styles.manualDateInput,
                 {
-                  color: themeColors.text,
-                  borderColor: themeColors.border,
-                  backgroundColor: themeColors.background,
+                  color: themeColors.inkDark,
+                  borderColor: themeColors.borderMid,
+                  backgroundColor: themeColors.linen,
                 },
               ]}
             />
@@ -487,7 +485,7 @@ export default function DiagnosticsScreen() {
                 setManualSimDate('');
               }}
             >
-              <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+              <AppText variant="button" style={[styles.buttonText, { color: themeColors.inkDark }]}>
                 Set manual date
               </AppText>
             </TouchableOpacity>
@@ -497,7 +495,7 @@ export default function DiagnosticsScreen() {
         {showDevInjectionUI ? (
           <>
             <View style={styles.section}>
-              <AppText variant="caption" style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>
+              <AppText variant="caption" style={[styles.sectionTitle, { color: themeColors.inkMid }]}>
                 Feature Flags
               </AppText>
               {flagRows.map((flag) => {
@@ -505,10 +503,10 @@ export default function DiagnosticsScreen() {
                 return (
                   <View key={flag.key} style={[styles.settingRow, { backgroundColor: themeColors.surface }]}>
                     <View style={styles.flagInfo}>
-                      <AppText variant="body" style={[styles.settingLabel, { color: themeColors.text }]}>
+                      <AppText variant="body" style={[styles.settingLabel, { color: themeColors.inkDark }]}>
                         {flag.label}
                       </AppText>
-                      <AppText variant="caption" style={[styles.settingMeta, { color: themeColors.textSecondary }]}>
+                      <AppText variant="caption" style={[styles.settingMeta, { color: themeColors.inkMid }]}>
                         Default: {defaultFlags[flag.key] ? 'on' : 'off'}
                         {typeof override === 'boolean' ? ` • Override: ${override ? 'on' : 'off'}` : ''}
                       </AppText>
@@ -521,21 +519,21 @@ export default function DiagnosticsScreen() {
                 style={[styles.button, { backgroundColor: themeColors.surface }]}
                 onPress={handleResetFlags}
               >
-                <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+                <AppText variant="button" style={[styles.buttonText, { color: themeColors.inkDark }]}>
                   Reset Flag Overrides
                 </AppText>
               </TouchableOpacity>
             </View>
 
             <View style={styles.section}>
-              <AppText variant="caption" style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>
+              <AppText variant="caption" style={[styles.sectionTitle, { color: themeColors.inkMid }]}>
                 Simulation
               </AppText>
               <TouchableOpacity
                 style={[styles.button, { backgroundColor: themeColors.surface }]}
                 onPress={handleSeedDemo}
               >
-                <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+                <AppText variant="button" style={[styles.buttonText, { color: themeColors.inkDark }]}>
                   Seed Demo Data
                 </AppText>
               </TouchableOpacity>
@@ -543,7 +541,7 @@ export default function DiagnosticsScreen() {
                 style={[styles.button, { backgroundColor: themeColors.surface }]}
                 onPress={handleSeedHighUsage}
               >
-                <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+                <AppText variant="button" style={[styles.buttonText, { color: themeColors.inkDark }]}>
                   Simulate High Usage
                 </AppText>
               </TouchableOpacity>
@@ -551,7 +549,7 @@ export default function DiagnosticsScreen() {
                 style={[styles.button, { backgroundColor: themeColors.surface }]}
                 onPress={handleBrokenStreak}
               >
-                <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+                <AppText variant="button" style={[styles.buttonText, { color: themeColors.inkDark }]}>
                   Simulate Streak Loss
                 </AppText>
               </TouchableOpacity>
@@ -559,21 +557,21 @@ export default function DiagnosticsScreen() {
                 style={[styles.button, { backgroundColor: themeColors.surface }]}
                 onPress={handlePerfectWeek}
               >
-                <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+                <AppText variant="button" style={[styles.buttonText, { color: themeColors.inkDark }]}>
                   Simulate Perfect Week
                 </AppText>
               </TouchableOpacity>
             </View>
 
             <View style={styles.section}>
-              <AppText variant="caption" style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>
+              <AppText variant="caption" style={[styles.sectionTitle, { color: themeColors.inkMid }]}>
                 Weekly Review Demo
               </AppText>
-              <AppText variant="caption" style={[styles.warningText, { color: themeColors.textSecondary }]}>
+              <AppText variant="caption" style={[styles.warningText, { color: themeColors.inkMid }]}>
                 Seeding adds demo activity on top of existing data. Use “Reset App” to start fresh.
               </AppText>
               <View style={[styles.settingRow, { backgroundColor: themeColors.surface }]}>
-                <AppText variant="body" style={[styles.settingLabel, { color: themeColors.text }]}>
+                <AppText variant="body" style={[styles.settingLabel, { color: themeColors.inkDark }]}>
                   Reset before seeding
                 </AppText>
                 <Switch value={resetBeforeWeeklySeed} onValueChange={setResetBeforeWeeklySeed} />
@@ -582,7 +580,7 @@ export default function DiagnosticsScreen() {
                 style={[styles.button, { backgroundColor: themeColors.surface }]}
                 onPress={() => handleSeedWeeklyReview('balanced')}
               >
-                <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+                <AppText variant="button" style={[styles.buttonText, { color: themeColors.inkDark }]}>
                   Seed: Balanced Week
                 </AppText>
               </TouchableOpacity>
@@ -590,7 +588,7 @@ export default function DiagnosticsScreen() {
                 style={[styles.button, { backgroundColor: themeColors.surface }]}
                 onPress={() => handleSeedWeeklyReview('perfect')}
               >
-                <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+                <AppText variant="button" style={[styles.buttonText, { color: themeColors.inkDark }]}>
                   Seed: Perfect Week
                 </AppText>
               </TouchableOpacity>
@@ -598,7 +596,7 @@ export default function DiagnosticsScreen() {
                 style={[styles.button, { backgroundColor: themeColors.surface }]}
                 onPress={() => handleSeedWeeklyReview('midweekDip')}
               >
-                <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+                <AppText variant="button" style={[styles.buttonText, { color: themeColors.inkDark }]}>
                   Seed: Midweek Dip
                 </AppText>
               </TouchableOpacity>
@@ -606,7 +604,7 @@ export default function DiagnosticsScreen() {
                 style={[styles.button, { backgroundColor: themeColors.surface }]}
                 onPress={() => handleSeedWeeklyReview('strongFinish')}
               >
-                <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+                <AppText variant="button" style={[styles.buttonText, { color: themeColors.inkDark }]}>
                   Seed: Strong Finish
                 </AppText>
               </TouchableOpacity>
@@ -614,31 +612,21 @@ export default function DiagnosticsScreen() {
                 style={[styles.button, { backgroundColor: themeColors.surface }]}
                 onPress={() => handleSeedWeeklyReview('chaotic')}
               >
-                <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+                <AppText variant="button" style={[styles.buttonText, { color: themeColors.inkDark }]}>
                   Seed: Chaotic Week
                 </AppText>
               </TouchableOpacity>
             </View>
 
             <View style={styles.section}>
-              <AppText variant="caption" style={[styles.sectionTitle, { color: themeColors.textSecondary }]}>
+              <AppText variant="caption" style={[styles.sectionTitle, { color: themeColors.inkMid }]}>
                 Maintenance
               </AppText>
-              {weeklyReview && (
-                <TouchableOpacity
-                  style={[styles.button, { backgroundColor: themeColors.surface }]}
-                  onPress={() => router.push('/(tabs)/tracking')}
-                >
-                  <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
-                    Open Tracking (weekly snapshot)
-                  </AppText>
-                </TouchableOpacity>
-              )}
               <TouchableOpacity
                 style={[styles.button, { backgroundColor: themeColors.surface }]}
                 onPress={handleResetApp}
               >
-                <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+                <AppText variant="button" style={[styles.buttonText, { color: themeColors.inkDark }]}>
                   Reset App
                 </AppText>
               </TouchableOpacity>
@@ -646,7 +634,7 @@ export default function DiagnosticsScreen() {
                 style={[styles.button, { backgroundColor: themeColors.surface }]}
                 onPress={handleOpenIapDiagnostics}
               >
-                <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+                <AppText variant="button" style={[styles.buttonText, { color: themeColors.inkDark }]}>
                   Open IAP Diagnostics
                 </AppText>
               </TouchableOpacity>

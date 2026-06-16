@@ -11,9 +11,8 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { colors } from '../../theme/colors';
-import { spacing, borderRadius, fontSize, fontWeight, shadow } from '../../theme/tokens';
+import { ChartBar } from 'phosphor-react-native';
+import { themedColors, spacing, borderRadius, fontSize, fontWeight, shadow } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useCounters } from '../../hooks/useCounters';
 import { SuggestedCountersList } from '../../components/SuggestedCountersList';
@@ -101,7 +100,7 @@ const ICON_GRID_COLUMNS = 4;
 
 export default function NewCounterScreen() {
   const theme = useEffectiveTheme();
-  const themeColors = colors[theme];
+  const themeColors = themedColors(theme);
   const router = useRouter();
   const { goalId: goalIdParam } = useLocalSearchParams<{ goalId?: string }>();
   const insets = useSafeAreaInsets();
@@ -298,10 +297,10 @@ export default function NewCounterScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: themeColors.linen }]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={themeColors.primary} />
-          <Text style={[styles.loadingText, { color: themeColors.text }]}>Creating counter...</Text>
+          <ActivityIndicator size="large" color={themeColors.forest} />
+          <Text style={[styles.loadingText, { color: themeColors.inkDark }]}>Creating counter...</Text>
         </View>
       </SafeAreaView>
     );
@@ -310,31 +309,31 @@ export default function NewCounterScreen() {
   const headerSideWidth = 72;
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
-      <View style={[styles.header, { borderBottomColor: theme === 'dark' ? 'rgba(255,255,255,0.08)' : themeColors.border }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: themeColors.linen }]}>
+      <View style={[styles.header, { borderBottomColor: theme === 'dark' ? 'rgba(255,255,255,0.08)' : themeColors.borderMid }]}>
         <View style={{ width: headerSideWidth }}>
           <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Text style={[styles.cancelButton, { color: themeColors.textSecondary }]}>Cancel</Text>
+            <Text style={[styles.cancelButton, { color: themeColors.inkMid }]}>Cancel</Text>
           </TouchableOpacity>
         </View>
-        <Text style={[styles.headerTitle, { color: themeColors.text }]} numberOfLines={1}>
+        <Text style={[styles.headerTitle, { color: themeColors.inkDark }]} numberOfLines={1}>
           Add a mark
         </Text>
         <View style={{ width: headerSideWidth }} />
       </View>
 
-      <View style={[styles.modeToggle, { backgroundColor: themeColors.surfaceVariant || themeColors.surface }]}>
+      <View style={[styles.modeToggle, { backgroundColor: themeColors.surfaceAlt || themeColors.surface }]}>
         <TouchableOpacity
           style={[
             styles.modeButton,
-            mode === 'suggested' && { backgroundColor: applyOpacity(themeColors.accent.primary, 0.14) },
+            mode === 'suggested' && { backgroundColor: applyOpacity(themeColors.accent, 0.14) },
           ]}
           onPress={() => setMode('suggested')}
         >
           <Text
             style={[
               styles.modeButtonText,
-              { color: mode === 'suggested' ? themeColors.accent.primary : themeColors.textSecondary },
+              { color: mode === 'suggested' ? themeColors.accent : themeColors.inkMid },
             ]}
           >
             Suggested
@@ -343,7 +342,7 @@ export default function NewCounterScreen() {
         <TouchableOpacity
           style={[
             styles.modeButton,
-            mode === 'custom' && { backgroundColor: applyOpacity(themeColors.accent.primary, 0.14) },
+            mode === 'custom' && { backgroundColor: applyOpacity(themeColors.accent, 0.14) },
           ]}
           onPress={() => {
             setMode('custom');
@@ -353,7 +352,7 @@ export default function NewCounterScreen() {
           <Text
             style={[
               styles.modeButtonText,
-              { color: mode === 'custom' ? themeColors.accent.primary : themeColors.textSecondary },
+              { color: mode === 'custom' ? themeColors.accent : themeColors.inkMid },
             ]}
           >
             Custom
@@ -374,22 +373,22 @@ export default function NewCounterScreen() {
                 styles.footerCtaWrap,
                 styles.suggestedSelectionWrap,
                 {
-                  borderTopColor: themeColors.border,
-                  backgroundColor: themeColors.background,
+                  borderTopColor: themeColors.borderMid,
+                  backgroundColor: themeColors.linen,
                   paddingBottom: spacing.sm + insets.bottom,
                 },
               ]}
             >
-              <Text style={[styles.sectionKicker, { color: themeColors.textTertiary, marginBottom: spacing.xs }]}>
+              <Text style={[styles.sectionKicker, { color: themeColors.inkMuted, marginBottom: spacing.xs }]}>
                 Selected mark
               </Text>
-              <Text style={[styles.suggestedSelectionTitle, { color: themeColors.text }]}>
+              <Text style={[styles.suggestedSelectionTitle, { color: themeColors.inkDark }]}>
                 {pendingSuggestedCounter.name}
               </Text>
-              <Text style={[styles.sectionKickerRight, { color: themeColors.textTertiary }]}>
+              <Text style={[styles.sectionKickerRight, { color: themeColors.inkMuted }]}>
                 {getCategoryForSuggestedCounter(pendingSuggestedCounter)}
               </Text>
-              <Text style={[styles.suggestedSelectionHint, { color: themeColors.textSecondary }]}>
+              <Text style={[styles.suggestedSelectionHint, { color: themeColors.inkMid }]}>
                 Set today&apos;s target, then add it.
               </Text>
               <DailyTargetStepper
@@ -416,13 +415,13 @@ export default function NewCounterScreen() {
                 style={[
                   styles.footerCta,
                   styles.suggestedConfirmButton,
-                  { backgroundColor: themeColors.accent.primary },
+                  { backgroundColor: themeColors.forest },
                   shadow.sm,
                 ]}
                 onPress={handleConfirmSuggestedCounter}
                 activeOpacity={0.88}
               >
-                <Text style={[styles.footerCtaText, { color: themeColors.text }]}>
+                <Text style={[styles.footerCtaText, { color: themeColors.inkInverse }]}>
                   Add {pendingSuggestedCounter.name}
                 </Text>
               </TouchableOpacity>
@@ -442,24 +441,24 @@ export default function NewCounterScreen() {
                 styles.card,
                 {
                   backgroundColor: themeColors.surface,
-                  borderColor: themeColors.border,
+                  borderColor: themeColors.borderMid,
                 },
               ]}
             >
-              <Text style={[styles.sectionKicker, { color: themeColors.textTertiary }]}>The habit</Text>
+              <Text style={[styles.sectionKicker, { color: themeColors.inkMuted }]}>The habit</Text>
               <TextInput
                 style={[
                   styles.inputInCard,
                   {
-                    backgroundColor: themeColors.background,
-                    color: themeColors.text,
-                    borderColor: themeColors.border,
+                    backgroundColor: themeColors.linen,
+                    color: themeColors.inkDark,
+                    borderColor: themeColors.borderMid,
                   },
                 ]}
                 value={name}
                 onChangeText={setName}
                 placeholder="What will you track?"
-                placeholderTextColor={themeColors.textTertiary}
+                placeholderTextColor={themeColors.inkMuted}
               />
             </View>
 
@@ -468,13 +467,13 @@ export default function NewCounterScreen() {
                 styles.card,
                 {
                   backgroundColor: themeColors.surface,
-                  borderColor: themeColors.border,
+                  borderColor: themeColors.borderMid,
                 },
               ]}
             >
               <View style={styles.sectionHeaderRow}>
-                <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Identity</Text>
-                <Text style={[styles.sectionKickerRight, { color: themeColors.textTertiary }]}>Choose icon</Text>
+                <Text style={[styles.sectionTitle, { color: themeColors.inkDark }]}>Identity</Text>
+                <Text style={[styles.sectionKickerRight, { color: themeColors.inkMuted }]}>Choose icon</Text>
               </View>
               <View style={styles.iconGrid}>
                 {ICON_OPTIONS.map((iconType) => {
@@ -487,8 +486,8 @@ export default function NewCounterScreen() {
                         {
                           width: iconCellSize,
                           height: iconCellSize,
-                          backgroundColor: isSelected ? color + '30' : themeColors.background,
-                          borderColor: isSelected ? color : themeColors.border,
+                          backgroundColor: isSelected ? color + '30' : themeColors.linen,
+                          borderColor: isSelected ? color : themeColors.borderMid,
                         },
                       ]}
                       onPress={() => setSelectedIconType(iconType)}
@@ -496,7 +495,7 @@ export default function NewCounterScreen() {
                       <CounterIcon
                         type={iconType as any}
                         size={Math.min(28, Math.floor(iconCellSize * 0.45))}
-                        color={isSelected ? color : themeColors.textSecondary}
+                        color={isSelected ? color : themeColors.inkMid}
                         variant="symbol"
                       />
                     </TouchableOpacity>
@@ -510,13 +509,13 @@ export default function NewCounterScreen() {
                 styles.card,
                 {
                   backgroundColor: themeColors.surface,
-                  borderColor: themeColors.border,
+                  borderColor: themeColors.borderMid,
                 },
               ]}
             >
               <View style={styles.sectionHeaderRow}>
-                <Text style={[styles.sectionTitle, { color: themeColors.text }]}>Vibe</Text>
-                <Text style={[styles.sectionKickerRight, { color: themeColors.textTertiary }]}>{selectedCategory}</Text>
+                <Text style={[styles.sectionTitle, { color: themeColors.inkDark }]}>Vibe</Text>
+                <Text style={[styles.sectionKickerRight, { color: themeColors.inkMuted }]}>{selectedCategory}</Text>
               </View>
               <View style={styles.colorGrid}>
                 {COLOR_OPTIONS.map((c) => (
@@ -527,7 +526,7 @@ export default function NewCounterScreen() {
                       {
                         backgroundColor: c,
                         borderWidth: c === color ? 3 : 0,
-                        borderColor: themeColors.background,
+                        borderColor: themeColors.linen,
                       },
                     ]}
                     onPress={() => {
@@ -544,14 +543,14 @@ export default function NewCounterScreen() {
                 styles.card,
                 {
                   backgroundColor: themeColors.surface,
-                  borderColor: themeColors.border,
+                  borderColor: themeColors.borderMid,
                 },
               ]}
             >
-              <Text style={[styles.sectionTitle, { color: themeColors.text, textAlign: 'center', marginBottom: spacing.xs }]}>
+              <Text style={[styles.sectionTitle, { color: themeColors.inkDark, textAlign: 'center', marginBottom: spacing.xs }]}>
                 Daily goal
               </Text>
-              <Text style={[styles.cardHint, { color: themeColors.textSecondary, textAlign: 'center', marginBottom: spacing.md }]}>
+              <Text style={[styles.cardHint, { color: themeColors.inkMid, textAlign: 'center', marginBottom: spacing.md }]}>
                 How many completions count for this mark today?
               </Text>
               <DailyTargetStepper value={dailyTarget} onChange={setDailyTarget} label={null} helperText="TIMES" />
@@ -562,11 +561,11 @@ export default function NewCounterScreen() {
                 styles.card,
                 {
                   backgroundColor: themeColors.surface,
-                  borderColor: themeColors.border,
+                  borderColor: themeColors.borderMid,
                 },
               ]}
             >
-              <Text style={[styles.sectionTitle, { color: themeColors.text, marginBottom: spacing.md }]}>Frequency</Text>
+              <Text style={[styles.sectionTitle, { color: themeColors.inkDark, marginBottom: spacing.md }]}>Frequency</Text>
               <View style={styles.frequencyRow}>
                 {WEEKDAY_CHIPS.map(({ value, label }) => {
                   const active = scheduleDaysForDisplay.includes(value);
@@ -576,8 +575,8 @@ export default function NewCounterScreen() {
                       style={[
                         styles.dayChip,
                         {
-                          backgroundColor: active ? color : themeColors.background,
-                          borderColor: active ? color : themeColors.border,
+                          backgroundColor: active ? color : themeColors.linen,
+                          borderColor: active ? color : themeColors.borderMid,
                         },
                       ]}
                       onPress={() => toggleScheduleDay(value)}
@@ -587,7 +586,7 @@ export default function NewCounterScreen() {
                         style={[
                           styles.dayChipText,
                           {
-                          color: active ? foregroundForHexBackground(color, theme === 'dark') : themeColors.textSecondary,
+                          color: active ? foregroundForHexBackground(color, theme === 'dark') : themeColors.inkMid,
                           opacity: active ? 1 : 0.72,
                           },
                         ]}
@@ -606,7 +605,7 @@ export default function NewCounterScreen() {
                 styles.streakCard,
                 {
                   backgroundColor: themeColors.surface,
-                  borderColor: themeColors.border,
+                  borderColor: themeColors.borderMid,
                 },
               ]}
               onPress={() => setEnableStreak(!enableStreak)}
@@ -618,11 +617,11 @@ export default function NewCounterScreen() {
                   { backgroundColor: applyOpacity(color, theme === 'dark' ? 0.22 : 0.14) },
                 ]}
               >
-                <Ionicons name="stats-chart-outline" size={20} color={color} />
+                <ChartBar size={20} color={color} weight="duotone" />
               </View>
               <View style={styles.streakTextWrap}>
-                <Text style={[styles.toggleLabel, { color: themeColors.text }]}>Enable streak</Text>
-                <Text style={[styles.toggleDescription, { color: themeColors.textSecondary }]}>
+                <Text style={[styles.toggleLabel, { color: themeColors.inkDark }]}>Enable streak</Text>
+                <Text style={[styles.toggleDescription, { color: themeColors.inkMid }]}>
                   Track consecutive days with activity
                 </Text>
               </View>
@@ -630,7 +629,7 @@ export default function NewCounterScreen() {
                 style={[
                   styles.toggleSwitch,
                   {
-                    backgroundColor: enableStreak ? color : themeColors.border,
+                    backgroundColor: enableStreak ? color : themeColors.borderMid,
                     alignItems: enableStreak ? 'flex-end' : 'flex-start',
                   },
                 ]}
@@ -641,17 +640,17 @@ export default function NewCounterScreen() {
 
             {targetGoalId && targetGoalTitle ? (
               <TouchableOpacity
-                style={[styles.card, styles.streakCard, { backgroundColor: themeColors.surface, borderColor: themeColors.border }]}
+                style={[styles.card, styles.streakCard, { backgroundColor: themeColors.surface, borderColor: themeColors.borderMid }]}
                 onPress={() => setLinkToGoal(!linkToGoal)}
                 activeOpacity={0.85}
               >
                 <View style={styles.streakTextWrap}>
-                  <Text style={[styles.toggleLabel, { color: themeColors.text }]}>Link to goal</Text>
-                  <Text style={[styles.toggleDescription, { color: themeColors.textSecondary }]} numberOfLines={1}>
+                  <Text style={[styles.toggleLabel, { color: themeColors.inkDark }]}>Link to goal</Text>
+                  <Text style={[styles.toggleDescription, { color: themeColors.inkMid }]} numberOfLines={1}>
                     {targetGoalTitle}
                   </Text>
                 </View>
-                <View style={[styles.toggleSwitch, { backgroundColor: linkToGoal ? color : themeColors.border, alignItems: linkToGoal ? 'flex-end' : 'flex-start' }]}>
+                <View style={[styles.toggleSwitch, { backgroundColor: linkToGoal ? color : themeColors.borderMid, alignItems: linkToGoal ? 'flex-end' : 'flex-start' }]}>
                   <View style={[styles.toggleThumb, { backgroundColor: themeColors.surface }]} />
                 </View>
               </TouchableOpacity>
@@ -664,8 +663,8 @@ export default function NewCounterScreen() {
             style={[
               styles.footerCtaWrap,
               {
-                borderTopColor: themeColors.border,
-                backgroundColor: themeColors.background,
+                borderTopColor: themeColors.borderMid,
+                backgroundColor: themeColors.linen,
                 paddingBottom: spacing.sm + insets.bottom,
               },
             ]}
@@ -673,14 +672,14 @@ export default function NewCounterScreen() {
             <TouchableOpacity
               style={[
                 styles.footerCta,
-                { backgroundColor: themeColors.accent.primary },
+                { backgroundColor: themeColors.forest },
                 shadow.sm,
               ]}
               onPress={handleSave}
               disabled={loading || !name.trim()}
               activeOpacity={0.88}
             >
-              <Text style={[styles.footerCtaText, { color: themeColors.text }]}>
+              <Text style={[styles.footerCtaText, { color: themeColors.inkInverse }]}>
                 Create mark →
               </Text>
             </TouchableOpacity>

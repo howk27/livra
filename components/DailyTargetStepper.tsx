@@ -1,9 +1,9 @@
 import React, { useEffect, useRef } from 'react';
 import { View, TouchableOpacity, StyleSheet, Animated, Platform } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { Minus, Plus } from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
 import { useEffectiveTheme } from '../state/uiSlice';
-import { colors } from '../theme/colors';
+import { themedColors } from '../theme/tokens';
 import { spacing, borderRadius, fontSize, fontWeight } from '../theme/tokens';
 import { AppText } from './Typography';
 import { normalizeDailyTargetInput } from '../lib/markDailyTarget';
@@ -24,7 +24,7 @@ export const DailyTargetStepper: React.FC<DailyTargetStepperProps> = ({
   helperText,
 }) => {
   const theme = useEffectiveTheme();
-  const themeColors = colors[theme];
+  const c = themedColors(theme);
   const safe = normalizeDailyTargetInput(value);
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -60,7 +60,7 @@ export const DailyTargetStepper: React.FC<DailyTargetStepperProps> = ({
   };
 
   return (
-    <View style={[styles.row, { borderColor: themeColors.border, backgroundColor: themeColors.surface }]}>
+    <View style={[styles.row, { borderColor: c.borderMid, backgroundColor: c.surface }]}>
       <TouchableOpacity
         onPress={dec}
         disabled={safe <= 1}
@@ -68,19 +68,19 @@ export const DailyTargetStepper: React.FC<DailyTargetStepperProps> = ({
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         accessibilityLabel="Decrease daily target"
       >
-        <Ionicons name="remove" size={20} color={safe <= 1 ? themeColors.textTertiary : themeColors.text} />
+        <Minus size={20} color={safe <= 1 ? c.inkMuted : c.inkDark} weight="bold" />
       </TouchableOpacity>
       <View style={styles.mid}>
         {label !== null ? (
-          <AppText variant="label" style={{ color: themeColors.textSecondary }}>
+          <AppText variant="label" style={{ color: c.inkMid }}>
             {label}
           </AppText>
         ) : null}
         <Animated.View style={[styles.valueWrap, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
-          <AppText style={[styles.value, { color: themeColors.text }]}>{safe}</AppText>
+          <AppText style={[styles.value, { color: c.inkDark }]}>{safe}</AppText>
         </Animated.View>
         {resolvedHelperText !== null ? (
-          <AppText style={{ fontSize: fontSize.xs, color: themeColors.textTertiary }}>
+          <AppText style={{ fontSize: fontSize.xs, color: c.inkMuted }}>
             {resolvedHelperText}
           </AppText>
         ) : null}
@@ -92,7 +92,7 @@ export const DailyTargetStepper: React.FC<DailyTargetStepperProps> = ({
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         accessibilityLabel="Increase daily target"
       >
-        <Ionicons name="add" size={20} color={safe >= MAX ? themeColors.textTertiary : themeColors.text} />
+        <Plus size={20} color={safe >= MAX ? c.inkMuted : c.inkDark} weight="bold" />
       </TouchableOpacity>
     </View>
   );

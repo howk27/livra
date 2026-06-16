@@ -25,13 +25,14 @@ const LINKS = [
 ];
 
 export default function AboutScreen() {
-  const c = themedColors(useEffectiveTheme());
+  const theme = useEffectiveTheme();
+  const c = themedColors(theme);
   return (
     <View style={[styles.screen, { backgroundColor: c.linen }]}>
       <LivraHeader showBack title="About" />
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.centered}>
-          <SvgLogo color={c.forest} width={48} height={24} />
+          <SvgLogo color={theme === 'dark' ? c.inkDark : c.forest} width={48} height={24} />
           <View style={{ marginTop: spacing.md }}>
             <LivraWordmark color={c.inkDark} fontSize={24} letterSpacing={6} />
           </View>
@@ -52,7 +53,7 @@ export default function AboutScreen() {
               activeOpacity={url ? 0.7 : 1}
               style={styles.linkRow}
             >
-              <Text style={[styles.linkText, { color: url ? c.forest : c.inkMuted }]}>
+              <Text style={[styles.linkText, { color: url ? c.accent : c.inkMuted }]}>
                 {label}
               </Text>
             </TouchableOpacity>

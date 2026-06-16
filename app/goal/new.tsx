@@ -137,7 +137,7 @@ export default function NewGoalScreen() {
           </TouchableOpacity>
           <Text style={[styles.headerTitle, { color: c.inkDark }]}>New Goal</Text>
           <TouchableOpacity onPress={handleNext} disabled={!title.trim() || saving}>
-            <Text style={[styles.save, { color: title.trim() && !saving ? c.forest : c.inkMuted }]}>
+            <Text style={[styles.save, { color: title.trim() && !saving ? c.accent : c.inkMuted }]}>
               Next
             </Text>
           </TouchableOpacity>

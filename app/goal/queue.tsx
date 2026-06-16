@@ -156,8 +156,8 @@ export default function GoalQueueScreen() {
           <CaretLeft size={22} color={c.inkDark} weight="bold" />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: c.inkDark }]}>Goals</Text>
-        <TouchableOpacity style={styles.headerAddBtn} onPress={() => router.push('/goal/new')} activeOpacity={0.8}>
-          <Plus size={18} color="#FFFFFF" weight="bold" />
+        <TouchableOpacity style={[styles.headerAddBtn, { backgroundColor: c.forest }]} onPress={() => router.push('/goal/new')} activeOpacity={0.8}>
+          <Plus size={18} color={c.inkInverse} weight="bold" />
         </TouchableOpacity>
       </View>
 
@@ -168,7 +168,7 @@ export default function GoalQueueScreen() {
               ACTIVE
             </Text>
             <TouchableOpacity
-              style={[styles.card, styles.activeCard, { backgroundColor: c.surface }]}
+              style={[styles.card, styles.activeCard, { backgroundColor: c.surface, borderLeftColor: c.forest }]}
               onPress={() => router.push(`/goal/${active.id}` as any)}
               activeOpacity={0.85}
             >
@@ -217,10 +217,10 @@ export default function GoalQueueScreen() {
                     </TouchableOpacity>
                     {canComplete ? (
                       <TouchableOpacity
-                        style={[styles.completeBtn, { borderColor: '#1C3830', backgroundColor: '#1C3830' }]}
+                        style={[styles.completeBtn, { borderColor: c.forest, backgroundColor: c.forest }]}
                         onPress={() => handleComplete(active)}
                       >
-                        <Text style={[styles.completeBtnText, { color: '#FFFFFF' }]}>
+                        <Text style={[styles.completeBtnText, { color: c.inkInverse }]}>
                           Mark complete
                         </Text>
                       </TouchableOpacity>
@@ -363,11 +363,11 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   headerTitle: { fontSize: 24, fontFamily: fonts.serif },
-  headerAddBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#1C3830', alignItems: 'center', justifyContent: 'center' },
+  headerAddBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   content: { paddingHorizontal: spacing.md, paddingBottom: spacing.xl },
   section: { marginTop: spacing.lg, gap: spacing.sm },
   sectionLabel: { fontSize: 11, fontFamily: fonts.sansSemibold, letterSpacing: 1.5, textTransform: 'uppercase' },
-  activeCard: { borderWidth: 0, borderLeftWidth: 3, borderLeftColor: '#1C3830' },
+  activeCard: { borderWidth: 0, borderLeftWidth: 3 },
   card: {
     borderWidth: 1,
     borderRadius: borderRadius.lg,

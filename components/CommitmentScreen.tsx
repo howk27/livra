@@ -147,7 +147,7 @@ export function CommitmentScreen({
               style={[
                 styles.markChip,
                 {
-                  borderColor: isSelected ? c.forest : c.borderLight,
+                  borderColor: isSelected ? c.accent : c.borderLight,
                   backgroundColor: isSelected ? c.forest + '18' : c.surface,
                 },
               ]}
@@ -157,7 +157,7 @@ export function CommitmentScreen({
                 {s.name}
               </Text>
               {owned && (
-                <Text style={[styles.ownedBadge, { color: c.forest }]}>✓</Text>
+                <Text style={[styles.ownedBadge, { color: c.accent }]}>✓</Text>
               )}
             </TouchableOpacity>
           );
@@ -182,7 +182,7 @@ export function CommitmentScreen({
             style={[
               styles.tierBtn,
               {
-                borderColor: tier === t ? c.forest : c.borderLight,
+                borderColor: tier === t ? c.accent : c.borderLight,
                 backgroundColor: tier === t ? c.forest + '15' : c.surface,
               },
             ]}
@@ -221,7 +221,7 @@ export function CommitmentScreen({
               style={[
                 styles.freqBtn,
                 {
-                  borderColor: selected ? c.forest : c.borderLight,
+                  borderColor: selected ? c.accent : c.borderLight,
                   backgroundColor: selected ? c.forest + '15' : c.surface,
                   opacity: allowed ? 1 : 0.35,
                 },

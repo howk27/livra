@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { Tabs, useRouter } from 'expo-router';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
+import { Sun, List, Gear } from 'phosphor-react-native';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { spacing, themedColors } from '../../theme/tokens';
 import { useAuth } from '../../hooks/useAuth';
@@ -13,13 +13,13 @@ import { DrawerContext } from '../../components/ui/LivraHeader';
 type IconProps = { focused: boolean; color: string };
 
 function FocusIcon({ focused, color }: IconProps) {
-  return <Feather name="sun" size={22} color={color} style={focused ? { opacity: 1 } : { opacity: 0.7 }} />;
+  return <Sun size={22} color={color} weight={focused ? 'fill' : 'regular'} />;
 }
 function GoalsIcon({ focused, color }: IconProps) {
-  return <Feather name="list" size={22} color={color} style={focused ? { opacity: 1 } : { opacity: 0.7 }} />;
+  return <List size={22} color={color} weight={focused ? 'bold' : 'regular'} />;
 }
 function SettingsIcon({ focused, color }: IconProps) {
-  return <Feather name="settings" size={22} color={color} style={focused ? { opacity: 1 } : { opacity: 0.7 }} />;
+  return <Gear size={22} color={color} weight={focused ? 'fill' : 'regular'} />;
 }
 
 // ── Tab Layout ────────────────────────────────────────────────────────────────
@@ -106,11 +106,6 @@ export default function TabLayout() {
               ),
             }}
           />
-
-          {/* Hidden routes — accessible programmatically */}
-          <Tabs.Screen name="stats" options={{ href: null }} />
-          <Tabs.Screen name="tracking" options={{ href: null }} />
-          <Tabs.Screen name="profile" options={{ href: null }} />
         </Tabs>
       </View>
     </DrawerContext.Provider>

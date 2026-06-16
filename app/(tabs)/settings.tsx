@@ -11,7 +11,26 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
+import {
+  User,
+  Bell,
+  ShieldCheck,
+  LinkSimple,
+  Star,
+  Sun,
+  Calendar,
+  ArrowsClockwise,
+  DownloadSimple,
+  Trash,
+  Question,
+  ChatText,
+  Info,
+  CaretRight,
+  PencilSimple,
+  Envelope,
+  type Icon,
+  type IconProps,
+} from 'phosphor-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { LivraHeader } from '../../components/ui/LivraHeader';
@@ -26,9 +45,14 @@ import { useSync } from '../../hooks/useSync';
 import { useIapSubscriptions } from '../../hooks/useIapSubscriptions';
 import { useCounters } from '../../hooks/useCounters';
 import { useEventsStore } from '../../state/eventsSlice';
+import { useMarksStore } from '../../state/countersSlice';
+import { useGoalsStore } from '../../state/goalsSlice';
 import { getSupabaseClient } from '../../lib/supabase';
 import { clearSyncCursors } from '../../lib/sync/syncCursors';
+import { resetDatabaseState } from '../../lib/db';
 import { generateAllCountersCSV } from '../../lib/csv';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import { canExportData } from '../../lib/gating';
 import { logger } from '../../lib/utils/logger';
 import { useNotification } from '../../contexts/NotificationContext';
@@ -63,7 +87,7 @@ const cardStyles = StyleSheet.create({
 // SettingsRow — standard tappable row inside a card
 // ---------------------------------------------------------------------------
 interface SettingsRowProps {
-  icon: string;
+  icon: Icon;
   label: string;
   onPress?: () => void;
   isLast?: boolean;
@@ -81,6 +105,7 @@ function SettingsRow({
   rightElement,
 }: SettingsRowProps) {
   const c = themedColors(useEffectiveTheme());
+  const RowIcon = icon;
   return (
     <TouchableOpacity
       style={[rowStyles.row, !isLast && [rowStyles.rowBorder, { borderBottomColor: c.borderLight }]]}
@@ -88,12 +113,12 @@ function SettingsRow({
       activeOpacity={onPress ? 0.7 : 1}
       disabled={!onPress}
     >
-      <Feather name={icon as any} size={18} color={c.inkMid} />
+      <RowIcon size={18} color={c.inkMid} weight="regular" />
       <Text style={[rowStyles.label, { color: labelColor ?? c.inkDark }]}>{label}</Text>
       {rightElement ? (
         rightElement
       ) : !hideChevron ? (
-        <Feather name="chevron-right" size={16} color={c.inkMuted} />
+        <CaretRight size={16} color={c.inkMuted} weight="bold" />
       ) : null}
     </TouchableOpacity>
   );
@@ -388,11 +413,55 @@ export default function SettingsScreen() {
         eventsMap.set(counter.id, events.filter((e) => e.mark_id === counter.id));
       });
       const csv = generateAllCountersCSV(counters, eventsMap);
-      logger.log('[Settings] Marks CSV export:', csv.length, 'chars');
-      showSuccess('Export ready — sharing coming soon.');
+
+      const isAvailable = await Sharing.isAvailableAsync();
+      if (!isAvailable) {
+        showError('Sharing is not available on this device.');
+        return;
+      }
+
+      const stamp = new Date().toISOString().slice(0, 10);
+      const fileUri = `${FileSystem.cacheDirectory}livra-marks-${stamp}.csv`;
+      await FileSystem.writeAsStringAsync(fileUri, csv, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+      await Sharing.shareAsync(fileUri, {
+        mimeType: 'text/csv',
+        dialogTitle: 'Export Marks',
+        UTI: 'public.comma-separated-values-text',
+      });
     } catch (e: any) {
       showError(e.message || 'Failed to export marks.');
     }
+  };
+
+  const handleResetAllData = () => {
+    Alert.alert(
+      'Reset All Data',
+      'This permanently deletes all your marks, goals, and history on this device. Your account and sign-in stay intact. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await resetDatabaseState();
+              // Reload the in-memory stores so the UI reflects the wipe.
+              await Promise.all([
+                useMarksStore.getState().loadMarks(user?.id),
+                user?.id ? useGoalsStore.getState().loadGoals(user.id) : Promise.resolve(),
+                useEventsStore.getState().loadEvents(undefined, user?.id),
+              ]);
+              showSuccess('All local data has been reset.');
+            } catch (e: any) {
+              logger.error('[Settings] Reset All Data failed:', e);
+              showError(e?.message || 'Failed to reset data.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const scrollContentBottomPad = spacing.xxl + TAB_BAR_CONTENT_HEIGHT + insets.bottom + spacing.lg;
@@ -414,7 +483,7 @@ export default function SettingsScreen() {
               {profileImageUri ? (
                 <Image source={{ uri: profileImageUri }} style={styles.avatarImage} />
               ) : (
-                <Feather name="user" size={24} color={c.inkMid} />
+                <User size={24} color={c.inkMid} weight="duotone" />
               )}
             </View>
             <View style={styles.profileMeta}>
@@ -426,7 +495,7 @@ export default function SettingsScreen() {
                 <Text style={[styles.profileSince, { color: c.inkMuted }]}>Member since {memberSince}</Text>
               ) : null}
             </View>
-            <Feather name="edit-2" size={16} color={c.inkMuted} />
+            <PencilSimple size={16} color={c.inkMuted} weight="regular" />
           </View>
           <View style={styles.xpBarWrapper}>
             <LevelProgressBar />
@@ -436,12 +505,12 @@ export default function SettingsScreen() {
         {/* ── Email-not-verified nudge ── */}
         {user && !emailVerified ? (
           <View style={[styles.verifyBanner, { backgroundColor: c.surface, borderColor: c.borderLight }]}>
-            <Feather name="mail" size={16} color={c.inkMid} />
+            <Envelope size={16} color={c.inkMid} weight="regular" />
             <Text style={[styles.verifyText, { color: c.inkMid }]}>
               Your email isn’t verified yet.
             </Text>
             <TouchableOpacity onPress={handleResendVerification} disabled={resendingVerification} hitSlop={8}>
-              <Text style={[styles.verifyAction, { color: c.forest }]}>
+              <Text style={[styles.verifyAction, { color: c.accent }]}>
                 {resendingVerification ? 'Sending…' : 'Resend'}
               </Text>
             </TouchableOpacity>
@@ -452,27 +521,27 @@ export default function SettingsScreen() {
         <SectionLabel style={styles.sectionLabel}>ACCOUNT</SectionLabel>
         <SettingsCard>
           <SettingsRow
-            icon="user"
+            icon={User}
             label="Edit Profile"
             onPress={() => router.push('/settings/profile' as any)}
           />
           <SettingsRow
-            icon="bell"
+            icon={Bell}
             label="Notifications"
             onPress={() => router.push('/settings/notifications' as any)}
           />
           <SettingsRow
-            icon="shield"
+            icon={ShieldCheck}
             label="Privacy & Security"
             onPress={() => router.push('/settings/privacy' as any)}
           />
           <SettingsRow
-            icon="link"
+            icon={LinkSimple}
             label="Integrations"
             onPress={() => router.push('/settings/integrations' as any)}
           />
           <SettingsRow
-            icon="star"
+            icon={Star}
             label="Subscription"
             onPress={() => router.push('/paywall')}
             isLast
@@ -482,7 +551,7 @@ export default function SettingsScreen() {
                   <Text style={[styles.proBadgeText, { color: c.inkInverse }]}>PRO</Text>
                 </View>
               ) : (
-                <Feather name="chevron-right" size={16} color={c.inkMuted} />
+                <CaretRight size={16} color={c.inkMuted} weight="bold" />
               )
             }
           />
@@ -492,12 +561,12 @@ export default function SettingsScreen() {
         <SectionLabel style={styles.sectionLabel}>PREFERENCES</SectionLabel>
         <SettingsCard>
           <SettingsRow
-            icon="sun"
+            icon={Sun}
             label="Appearance"
             onPress={() => router.push('/settings/appearance' as any)}
           />
           <SettingsRow
-            icon="calendar"
+            icon={Calendar}
             label="Week Start Day"
             hideChevron
             rightElement={
@@ -505,7 +574,7 @@ export default function SettingsScreen() {
             }
           />
           <SettingsRow
-            icon="refresh-cw"
+            icon={ArrowsClockwise}
             label="Data & Sync"
             isLast
             onPress={handleSync}
@@ -522,40 +591,17 @@ export default function SettingsScreen() {
         <SectionLabel style={styles.sectionLabel}>DATA</SectionLabel>
         <SettingsCard>
           <SettingsRow
-            icon="download"
+            icon={DownloadSimple}
             label="Export Marks"
             onPress={handleExportMarks}
           />
           <SettingsRow
-            icon="download"
-            label="Export Goals"
-            onPress={() => console.log('[Settings] Export Goals — TODO')}
-          />
-          <SettingsRow
-            icon="upload"
-            label="Import Data"
-            onPress={() => console.log('[Settings] Import Data — TODO')}
-          />
-          <SettingsRow
-            icon="trash-2"
+            icon={Trash}
             label="Reset All Data"
             isLast
             labelColor={c.danger}
             hideChevron
-            onPress={() =>
-              Alert.alert(
-                'Reset All Data',
-                'This will permanently delete all your local data. Are you sure?',
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  {
-                    text: 'Reset',
-                    style: 'destructive',
-                    onPress: () => console.log('[Settings] Reset All Data confirmed'),
-                  },
-                ]
-              )
-            }
+            onPress={handleResetAllData}
           />
         </SettingsCard>
 
@@ -563,22 +609,22 @@ export default function SettingsScreen() {
         <SectionLabel style={styles.sectionLabel}>SUPPORT</SectionLabel>
         <SettingsCard>
           <SettingsRow
-            icon="help-circle"
+            icon={Question}
             label="Help Center"
             onPress={() => Linking.openURL('https://livralife.com/help').catch(() => {})}
           />
           <SettingsRow
-            icon="message-square"
+            icon={ChatText}
             label="Send Feedback"
             onPress={() => Linking.openURL('mailto:support@livralife.com').catch(() => {})}
           />
           <SettingsRow
-            icon="star"
+            icon={Star}
             label="Rate Livra"
             onPress={() => Linking.openURL('itms-apps://itunes.apple.com/app/id6741537890?action=write-review').catch(() => {})}
           />
           <SettingsRow
-            icon="info"
+            icon={Info}
             label="About Livra"
             isLast
             onPress={() => router.push('/settings/about' as any)}

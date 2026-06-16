@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Plus, Flag } from 'phosphor-react-native';
 import { SectionLabel } from './SectionLabel';
 import { fonts, radius, spacing, shadow, themedColors } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
@@ -9,7 +9,6 @@ interface QueueCardProps {
   isHero?: boolean;
   title: string;
   description?: string;
-  icon?: keyof typeof Feather.glyphMap;
   sequenceNumber?: number;
   estimatedDuration?: string;
   onAdd?: () => void;
@@ -20,7 +19,6 @@ export function QueueCard({
   isHero,
   title,
   description,
-  icon = 'flag',
   sequenceNumber,
   estimatedDuration,
   onAdd,
@@ -50,7 +48,7 @@ export function QueueCard({
 
         {onAdd && (
           <TouchableOpacity style={[styles.heroAddBtn, { backgroundColor: colors.surface }]} onPress={onAdd} activeOpacity={0.8}>
-            <Feather name="plus" size={20} color={colors.forest} />
+            <Plus size={20} color={colors.forest} weight="bold" />
           </TouchableOpacity>
         )}
       </View>
@@ -60,7 +58,7 @@ export function QueueCard({
   return (
     <View style={[styles.card, { backgroundColor: colors.surface }, style]}>
       <View style={[styles.iconBox, { backgroundColor: colors.surfaceAlt }]}>
-        <Feather name={icon} size={18} color={colors.inkMid} />
+        <Flag size={18} color={colors.inkMid} weight="duotone" />
       </View>
       <View style={styles.cardCenter}>
         <Text style={[styles.cardTitle, { color: colors.inkDark }]} numberOfLines={2}>{title}</Text>
@@ -74,7 +72,7 @@ export function QueueCard({
         )}
         {onAdd && (
           <TouchableOpacity style={[styles.addCircle, { backgroundColor: colors.surfaceAlt }]} onPress={onAdd} activeOpacity={0.8}>
-            <Feather name="plus" size={16} color={colors.inkMid} />
+            <Plus size={16} color={colors.inkMid} weight="bold" />
           </TouchableOpacity>
         )}
       </View>

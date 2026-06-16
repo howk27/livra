@@ -165,7 +165,7 @@ export default function GoalCompleteScreen() {
       <View style={styles.center}>
         {/* Logo */}
         <Animated.View style={[styles.logoWrap, logoStyle]}>
-          <SvgLogo color={c.forest} width={56} height={28} />
+          <SvgLogo color={theme === 'dark' ? c.inkDark : c.forest} width={56} height={28} />
         </Animated.View>
 
         {/* Goal title */}

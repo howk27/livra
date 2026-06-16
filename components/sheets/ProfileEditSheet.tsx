@@ -17,7 +17,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
+import { X, User, Camera } from 'phosphor-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { PillButton } from '../ui/PillButton';
 import { SectionLabel } from '../ui/SectionLabel';
@@ -123,7 +123,7 @@ export function ProfileEditSheet({
         <View style={styles.sheetHeader}>
           <Text style={styles.sheetTitle}>Edit Profile</Text>
           <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Feather name="x" size={20} color={colors.inkMid} />
+            <X size={20} color={colors.inkMid} weight="bold" />
           </TouchableOpacity>
         </View>
 
@@ -140,10 +140,10 @@ export function ProfileEditSheet({
             <View style={styles.avatarRow}>
               <TouchableOpacity style={styles.avatarContainer} onPress={pickImage}>
                 <View style={styles.avatarCircle}>
-                  {avatarUri ? null : <Feather name="user" size={28} color={colors.inkMuted} />}
+                  {avatarUri ? null : <User size={28} color={colors.inkMuted} weight="duotone" />}
                 </View>
                 <View style={styles.cameraOverlay}>
-                  <Feather name="camera" size={14} color={colors.inkInverse} />
+                  <Camera size={14} color={colors.inkInverse} weight="fill" />
                 </View>
               </TouchableOpacity>
             </View>

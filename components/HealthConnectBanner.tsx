@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import { colors } from '../theme/colors';
+import { themedColors } from '../theme/tokens';
 import { spacing, fontSize, fontWeight, borderRadius } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { detectHealthKitType } from '../lib/health/autoSuggest';
@@ -18,7 +18,7 @@ type Props = {
 
 export function HealthConnectBanner({ markId, markName, alreadyConnected }: Props) {
   const theme = useEffectiveTheme();
-  const themeColors = colors[theme];
+  const c = themedColors(theme);
   const router = useRouter();
   const [visible, setVisible] = useState(false);
 
@@ -51,16 +51,16 @@ export function HealthConnectBanner({ markId, markName, alreadyConnected }: Prop
   if (!visible) return null;
 
   return (
-    <View style={[styles.banner, { backgroundColor: themeColors.surface, borderColor: themeColors.border }]}>
-      <Text style={[styles.text, { color: themeColors.text }]}>
+    <View style={[styles.banner, { backgroundColor: c.surface, borderColor: c.borderMid }]}>
+      <Text style={[styles.text, { color: c.inkDark }]}>
         Connect {markName} to Apple Health to power your weekly reflection.
       </Text>
       <View style={styles.actions}>
         <TouchableOpacity onPress={() => void handleConnect()}>
-          <Text style={[styles.connectBtn, { color: themeColors.primary }]}>Connect</Text>
+          <Text style={[styles.connectBtn, { color: c.accent }]}>Connect</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => void dismiss()}>
-          <Text style={[styles.dismissBtn, { color: themeColors.textSecondary }]}>Dismiss</Text>
+          <Text style={[styles.dismissBtn, { color: c.inkMid }]}>Dismiss</Text>
         </TouchableOpacity>
       </View>
     </View>

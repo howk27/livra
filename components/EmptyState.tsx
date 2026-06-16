@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
-import { colors } from '../theme/colors';
+import { themedColors } from '../theme/tokens';
 import { spacing, borderRadius } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { AppText } from './Typography';
@@ -23,31 +23,31 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   onAction,
 }) => {
   const theme = useEffectiveTheme();
-  const themeColors = colors[theme];
+  const c = themedColors(theme);
 
   return (
     <View style={styles.container}>
       {iconElement ? (
         <View style={styles.iconSlot}>{iconElement}</View>
       ) : (
-        <AppText variant="display" style={[styles.icon, { color: themeColors.text }]}>
+        <AppText variant="display" style={[styles.icon, { color: c.inkDark }]}>
           {icon}
         </AppText>
       )}
-      <AppText variant="headline" style={[styles.title, { color: themeColors.text }]}>
+      <AppText variant="headline" style={[styles.title, { color: c.inkDark }]}>
         {title}
       </AppText>
-      <AppText variant="body" style={[styles.message, { color: themeColors.textSecondary }]}>
+      <AppText variant="body" style={[styles.message, { color: c.inkMid }]}>
         {message}
       </AppText>
 
       {actionLabel && onAction && (
         <TouchableOpacity
-          style={[styles.button, { backgroundColor: themeColors.primary }]}
+          style={[styles.button, { backgroundColor: c.forest }]}
           onPress={onAction}
           activeOpacity={0.8}
         >
-          <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+          <AppText variant="button" style={[styles.buttonText, { color: c.inkInverse }]}>
             {actionLabel}
           </AppText>
         </TouchableOpacity>

@@ -10,7 +10,7 @@ import {
 import DateTimePicker from '@react-native-community/datetimepicker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { format, parseISO } from 'date-fns';
-import { colors } from '../theme/colors';
+import { themedColors } from '../theme/tokens';
 import { spacing, fontSize, fontWeight, borderRadius } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { useGoalsStore } from '../state/goalsSlice';
@@ -36,7 +36,7 @@ export function PaceBanner({
   suggestedDate,
 }: Props) {
   const theme = useEffectiveTheme();
-  const themeColors = colors[theme];
+  const themeColors = themedColors(theme);
   const updateGoalTargetDate = useGoalsStore(s => s.updateGoalTargetDate);
 
   const [dismissed, setDismissed] = useState(true); // hidden until async check
@@ -84,9 +84,9 @@ export function PaceBanner({
 
   return (
     <>
-      <View style={[styles.banner, { backgroundColor: themeColors.surface, borderColor: themeColors.border }]}>
+      <View style={[styles.banner, { backgroundColor: themeColors.surface, borderColor: themeColors.borderMid }]}>
         <View style={styles.bannerContent}>
-          <Text style={[styles.bannerText, { color: themeColors.text }]}>
+          <Text style={[styles.bannerText, { color: themeColors.inkDark }]}>
             At this pace,{' '}
             <Text style={{ fontWeight: fontWeight.semibold }}>{goalTitle}</Text>
             {' '}finishes about{' '}
@@ -94,14 +94,14 @@ export function PaceBanner({
             . Still fixable.
           </Text>
           <TouchableOpacity
-            style={[styles.recalibrateBtn, { backgroundColor: themeColors.accent.primary }]}
+            style={[styles.recalibrateBtn, { backgroundColor: themeColors.forest }]}
             onPress={() => setModalVisible(true)}
           >
             <Text style={styles.recalibrateBtnText}>Recalibrate</Text>
           </TouchableOpacity>
         </View>
         <TouchableOpacity onPress={handleDismiss} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Text style={[styles.dismiss, { color: themeColors.textSecondary }]}>×</Text>
+          <Text style={[styles.dismiss, { color: themeColors.inkMid }]}>×</Text>
         </TouchableOpacity>
       </View>
 
@@ -120,10 +120,10 @@ export function PaceBanner({
             style={[styles.sheet, { backgroundColor: themeColors.surface }]}
             activeOpacity={1}
           >
-            <Text style={[styles.sheetTitle, { color: themeColors.textSecondary }]}>
+            <Text style={[styles.sheetTitle, { color: themeColors.inkMid }]}>
               Suggested target
             </Text>
-            <Text style={[styles.sheetDate, { color: themeColors.text }]}>
+            <Text style={[styles.sheetDate, { color: themeColors.inkDark }]}>
               {suggestedDate
                 ? format(parseISO(suggestedDate), 'MMMM d, yyyy')
                 : 'No suggestion available'}
@@ -133,14 +133,14 @@ export function PaceBanner({
               <>
                 {suggestedDate && (
                   <TouchableOpacity
-                    style={[styles.acceptBtn, { backgroundColor: themeColors.accent.primary }]}
+                    style={[styles.acceptBtn, { backgroundColor: themeColors.forest }]}
                     onPress={handleAccept}
                   >
                     <Text style={styles.acceptBtnText}>Yes, update it</Text>
                   </TouchableOpacity>
                 )}
                 <TouchableOpacity onPress={() => setShowDatePicker(true)}>
-                  <Text style={[styles.pickLink, { color: themeColors.textSecondary }]}>
+                  <Text style={[styles.pickLink, { color: themeColors.inkMid }]}>
                     Pick a different date
                   </Text>
                 </TouchableOpacity>
@@ -158,7 +158,7 @@ export function PaceBanner({
                   style={{ width: '100%' }}
                 />
                 <TouchableOpacity
-                  style={[styles.acceptBtn, { backgroundColor: themeColors.accent.primary }]}
+                  style={[styles.acceptBtn, { backgroundColor: themeColors.forest }]}
                   onPress={() => handlePickDate(pickedDate)}
                 >
                   <Text style={styles.acceptBtnText}>Set this date</Text>

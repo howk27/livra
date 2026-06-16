@@ -9,7 +9,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { AppText } from './Typography';
 import { applyOpacity } from '@/src/components/icons/color';
-import { colors } from '../theme/colors';
+import { themedColors } from '../theme/tokens';
 import { spacing, borderRadius, fontSize, fontWeight } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { formatDate } from '../lib/date';
@@ -109,7 +109,7 @@ export const CalendarHeatmap: React.FC<CalendarHeatmapProps> = ({
   weeksToShow = 16,
 }) => {
   const theme = useEffectiveTheme();
-  const themeColors = colors[theme];
+  const themeColors = themedColors(theme);
   const isDark = theme === 'dark';
   const [selectedDay, setSelectedDay] = useState<DayData | null>(null);
 
@@ -137,8 +137,8 @@ export const CalendarHeatmap: React.FC<CalendarHeatmapProps> = ({
   const getDayColor = (day: DayData): string => {
     if (day.logCount === 0) return isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.06)';
     const ratio = Math.min(1, day.logCount / Math.max(1, day.totalMarks));
-    if (ratio >= 1) return isDark ? applyOpacity(themeColors.accent.primary, 0.85) : themeColors.accent.primary;
-    return isDark ? applyOpacity(themeColors.accent.primary, 0.40) : applyOpacity(themeColors.accent.primary, 0.45);
+    if (ratio >= 1) return isDark ? applyOpacity(themeColors.forest, 0.85) : themeColors.forest;
+    return isDark ? applyOpacity(themeColors.forest, 0.40) : applyOpacity(themeColors.forest, 0.45);
   };
 
   const handleDayPress = useCallback((day: DayData) => {
@@ -157,19 +157,19 @@ export const CalendarHeatmap: React.FC<CalendarHeatmapProps> = ({
             todayStr={formatDate(today)}
             getDayColor={getDayColor}
             onDayPress={handleDayPress}
-            accentColor={themeColors.accent.primary}
-            todayBorderColor={applyOpacity(themeColors.textSecondary, 0.50)}
+            accentColor={themeColors.forest}
+            todayBorderColor={applyOpacity(themeColors.inkMid, 0.50)}
           />
         ))}
       </ScrollView>
 
       {/* Tooltip */}
       {selectedDay && (
-        <View style={[styles.tooltip, { backgroundColor: themeColors.surface, borderColor: applyOpacity(themeColors.border, 0.7) }]}>
-          <AppText style={[styles.tooltipDate, { color: themeColors.text }]}>
+        <View style={[styles.tooltip, { backgroundColor: themeColors.surface, borderColor: applyOpacity(themeColors.borderMid, 0.7) }]}>
+          <AppText style={[styles.tooltipDate, { color: themeColors.inkDark }]}>
             {formatTooltipDate(selectedDay.date)}
           </AppText>
-          <AppText style={[styles.tooltipSub, { color: themeColors.textSecondary }]}>
+          <AppText style={[styles.tooltipSub, { color: themeColors.inkMid }]}>
             {selectedDay.logCount === 0
               ? 'No marks logged'
               : `${selectedDay.logCount}/${selectedDay.totalMarks} marks`}

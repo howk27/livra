@@ -24,7 +24,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
+import { Minus, Plus } from 'phosphor-react-native';
 import { PillButton } from '../ui/PillButton';
 import { SectionLabel } from '../ui/SectionLabel';
 import { MarkRow } from '../ui/MarkRow';
@@ -232,7 +232,7 @@ export function AddGoalSheet({ visible, onClose }: AddGoalSheetProps) {
                   onPress={() => setTargetCount(t => Math.max(0, t - 1))}
                   activeOpacity={0.7}
                 >
-                  <Feather name="minus" size={16} color={tc.inkMid} />
+                  <Minus size={16} color={tc.inkMid} weight="bold" />
                 </TouchableOpacity>
                 <Text style={[styles.stepNumber, { color: tc.inkDark }]}>{targetCount}</Text>
                 <TouchableOpacity
@@ -240,7 +240,7 @@ export function AddGoalSheet({ visible, onClose }: AddGoalSheetProps) {
                   onPress={() => setTargetCount(t => t + 1)}
                   activeOpacity={0.7}
                 >
-                  <Feather name="plus" size={16} color={tc.inkMid} />
+                  <Plus size={16} color={tc.inkMid} weight="bold" />
                 </TouchableOpacity>
                 <Text style={[styles.stepLabel, { color: tc.inkMuted }]}>total marks to complete</Text>
               </View>

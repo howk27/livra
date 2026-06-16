@@ -20,10 +20,22 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Feather } from '@expo/vector-icons';
+import {
+  Moon,
+  Barbell,
+  Drop,
+  Calendar,
+  BookOpen,
+  Briefcase,
+  CircleIcon,
+  Minus,
+  Plus,
+  type Icon,
+} from 'phosphor-react-native';
 import { PillButton } from '../ui/PillButton';
 import { SectionLabel } from '../ui/SectionLabel';
-import { fonts, spacing, radius, shadow, themedColors } from '../../theme/tokens';
+import { fonts, spacing, radius, shadow, themedColors, categoryAccents } from '../../theme/tokens';
+import { applyOpacity } from '@/src/components/icons/color';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useCounters } from '../../hooks/useCounters';
 import { useAuth } from '../../hooks/useAuth';
@@ -37,24 +49,19 @@ const DURATION = 300;
 interface Category {
   key: string;
   label: string;
-  icon: keyof typeof Feather.glyphMap;
+  icon: Icon;
   accent: string;
 }
 
 const CATEGORIES: Category[] = [
-  { key: 'sleep',    label: 'Sleep',    icon: 'moon',       accent: '#6B8FA6' },
-  { key: 'workout',  label: 'Workout',  icon: 'activity',   accent: '#A0614A' },
-  { key: 'water',    label: 'Water',    icon: 'droplet',    accent: '#4A8C7A' },
-  { key: 'planning', label: 'Planning', icon: 'calendar',   accent: '#8C7A3A' },
-  { key: 'reading',  label: 'Reading',  icon: 'book-open',  accent: '#7A4A8C' },
-  { key: 'work',     label: 'Work',     icon: 'briefcase',  accent: '#4A6A8C' },
-  { key: 'custom',   label: 'Custom',   icon: 'circle',     accent: '#6B7A6B' },
+  { key: 'sleep',    label: 'Sleep',    icon: Moon,       accent: categoryAccents.recovery },
+  { key: 'workout',  label: 'Workout',  icon: Barbell,    accent: categoryAccents.fitness },
+  { key: 'water',    label: 'Water',    icon: Drop,       accent: categoryAccents.health },
+  { key: 'planning', label: 'Planning', icon: Calendar,   accent: categoryAccents.planning },
+  { key: 'reading',  label: 'Reading',  icon: BookOpen,   accent: categoryAccents.creative },
+  { key: 'work',     label: 'Work',     icon: Briefcase,  accent: categoryAccents.deepWork },
+  { key: 'custom',   label: 'Custom',   icon: CircleIcon, accent: categoryAccents.custom },
 ];
-
-function applyOpacity(hex: string, opacity: number): string {
-  const alpha = Math.round(opacity * 255).toString(16).padStart(2, '0');
-  return hex + alpha;
-}
 
 interface AddMarkSheetProps {
   visible: boolean;
@@ -204,22 +211,23 @@ export function AddMarkSheet({ visible, onClose }: AddMarkSheetProps) {
               >
                 {CATEGORIES.map(cat => {
                   const isSelected = category === cat.key;
+                  const CatIcon = cat.icon;
                   return (
                     <TouchableOpacity
                       key={cat.key}
                       style={[
                         styles.categoryPill,
                         isSelected
-                          ? { backgroundColor: `${tc.forest}18`, borderWidth: 1.5, borderColor: tc.forest }
+                          ? { backgroundColor: applyOpacity(tc.forest, 0.09), borderWidth: 1.5, borderColor: tc.forest }
                           : { backgroundColor: tc.surfaceAlt, borderWidth: 1.5, borderColor: 'transparent' },
                       ]}
                       onPress={() => setCategory(cat.key)}
                       activeOpacity={0.7}
                     >
-                      <Feather
-                        name={cat.icon}
+                      <CatIcon
                         size={14}
                         color={isSelected ? tc.inkInverse : tc.inkMid}
+                        weight="duotone"
                       />
                       <Text
                         style={[
@@ -244,7 +252,7 @@ export function AddMarkSheet({ visible, onClose }: AddMarkSheetProps) {
                   onPress={() => setTarget(t => Math.max(1, t - 1))}
                   activeOpacity={0.7}
                 >
-                  <Feather name="minus" size={16} color={tc.inkMid} />
+                  <Minus size={16} color={tc.inkMid} weight="bold" />
                 </TouchableOpacity>
                 <Text style={[styles.stepNumber, { color: tc.inkDark }]}>{target}</Text>
                 <TouchableOpacity
@@ -252,7 +260,7 @@ export function AddMarkSheet({ visible, onClose }: AddMarkSheetProps) {
                   onPress={() => setTarget(t => t + 1)}
                   activeOpacity={0.7}
                 >
-                  <Feather name="plus" size={16} color={tc.inkMid} />
+                  <Plus size={16} color={tc.inkMid} weight="bold" />
                 </TouchableOpacity>
                 <Text style={[styles.stepLabel, { color: tc.inkMuted }]}>times per day</Text>
               </View>

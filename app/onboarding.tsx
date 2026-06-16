@@ -408,7 +408,7 @@ export default function OnboardingScreen() {
               disabled={aiLoading}
             >
               {aiLoading ? (
-                <ActivityIndicator size="small" color={c.forest} />
+                <ActivityIndicator size="small" color={c.accent} />
               ) : (
                 <Text style={styles.secondaryLink}>↺ Try a different suggestion</Text>
               )}
@@ -435,7 +435,7 @@ export default function OnboardingScreen() {
   // Step 0 — Welcome
   const renderStep0 = () => (
     <View style={styles.stepCenter}>
-      <SvgLogo color={c.forest} width={64} height={32} />
+      <SvgLogo color={theme === 'dark' ? c.inkDark : c.forest} width={64} height={32} />
       <View style={{ marginTop: spacing.md }}>
         <LivraWordmark color={c.inkDark} fontSize={42} letterSpacing={10} />
       </View>
@@ -486,7 +486,7 @@ export default function OnboardingScreen() {
           activeOpacity={0.75}
         >
           {aiLoading ? (
-            <ActivityIndicator size="small" color={c.forest} />
+            <ActivityIndicator size="small" color={c.accent} />
           ) : (
             <Text style={styles.aiHatchText}>✦ Let Livra suggest a plan</Text>
           )}
@@ -530,11 +530,11 @@ export default function OnboardingScreen() {
           return (
             <TouchableOpacity
               key={opt.value}
-              style={[styles.paceRow, selected && { borderColor: c.forest, borderWidth: 2 }]}
+              style={[styles.paceRow, selected && { borderColor: c.accent, borderWidth: 2 }]}
               activeOpacity={0.75}
               onPress={() => store.setCommitment(opt.value)}
             >
-              <Text style={[styles.paceLabel, selected && { color: c.forest, fontFamily: fonts.sansMedium }]}>
+              <Text style={[styles.paceLabel, selected && { color: c.accent, fontFamily: fonts.sansMedium }]}>
                 {opt.label}
               </Text>
               <View
@@ -825,7 +825,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
       paddingHorizontal: spacing.md,
       borderRadius: radius.md,
       borderWidth: 1,
-      borderColor: c.forest,
+      borderColor: c.accent,
       borderStyle: 'dashed' as const,
       alignItems: 'center' as const,
       justifyContent: 'center' as const,
@@ -834,7 +834,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     aiHatchText: {
       fontFamily: fonts.sansMedium,
       fontSize: 14,
-      color: c.forest,
+      color: c.accent,
     },
     aiHatchSub: {
       fontFamily: fonts.sans,
@@ -847,7 +847,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     aiError: {
       fontFamily: fonts.sans,
       fontSize: 12,
-      color: '#C0392B',
+      color: c.danger,
       textAlign: 'center' as const,
       marginTop: spacing.xs,
       lineHeight: 18,

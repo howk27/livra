@@ -24,7 +24,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as AppleAuthentication from 'expo-apple-authentication';
-import { spacing, borderRadius, fontWeight, themedColors } from '../../theme/tokens';
+import type { SupabaseClient, AuthUser as User } from '@supabase/supabase-js';
+import { spacing, borderRadius, fontWeight, fonts, fontSize, themedColors } from '../../theme/tokens';
 import {
   useEffectiveTheme,
   useUIStore,
@@ -306,7 +307,7 @@ export default function SignInScreen() {
       >
         {loading && (
           <View style={[styles.loadingOverlay, { backgroundColor: c.linen + 'E6' }]}>
-            <ActivityIndicator size="large" color={c.forest} />
+            <ActivityIndicator size="large" color={c.accent} />
             <Text style={[styles.loadingText, { color: c.inkDark }]}>
               {mode === 'login' ? 'Signing in...' : 'Creating account...'}
             </Text>
@@ -315,7 +316,7 @@ export default function SignInScreen() {
 
         {/* Fixed header — logo + wordmark stay pinned at top, never scroll */}
         <Animated.View entering={FadeIn.duration(400)} style={styles.header}>
-          <Logo size={64} color={c.forest} />
+          <Logo size={64} color={theme === 'dark' ? c.inkDark : c.forest} />
           <Text style={[styles.wordmark, { color: c.inkDark }]}>LIVRA</Text>
         </Animated.View>
 
@@ -466,7 +467,7 @@ export default function SignInScreen() {
                     entering={FadeIn.duration(200)}
                     style={[styles.messageBanner, { backgroundColor: c.forest + '20' }]}
                   >
-                    <Text style={[styles.messageText, { color: c.forest }]}>
+                    <Text style={[styles.messageText, { color: c.accent }]}>
                       Check your email to verify your account, then sign in to continue.
                     </Text>
                   </Animated.View>
@@ -545,7 +546,7 @@ export default function SignInScreen() {
                     {mode === 'login' ? "Don't have an account? " : 'Already have an account? '}
                   </Text>
                   <TouchableOpacity onPress={toggleMode} disabled={loading}>
-                    <Text style={[styles.toggleLink, { color: c.forest }]}>
+                    <Text style={[styles.toggleLink, { color: c.accent }]}>
                       {mode === 'login' ? 'Start here' : 'Sign in'}
                     </Text>
                   </TouchableOpacity>
@@ -562,7 +563,12 @@ export default function SignInScreen() {
 
 // ── Profile creation helper ────────────────────────────────────────────────────
 
-async function ensureProfile(supabase: any, userId: string, user: any, displayName?: string) {
+async function ensureProfile(
+  supabase: SupabaseClient,
+  userId: string,
+  user: User,
+  displayName?: string,
+) {
   try {
     const { data: existing, error: checkErr } = await supabase
       .from('profiles')
@@ -630,8 +636,8 @@ const styles = StyleSheet.create({
     paddingBottom: 48,
   },
   wordmark: {
-    fontSize: 22,
-    fontFamily: 'Satoshi',
+    fontSize: fontSize.xl,
+    fontFamily: fonts.serif,
     fontWeight: fontWeight.bold,
     letterSpacing: 6,
   },
@@ -640,23 +646,22 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   headline: {
-    fontSize: 32,
-    fontFamily: 'Satoshi',
+    fontSize: fontSize['3xl'],
+    fontFamily: fonts.serif,
     fontWeight: fontWeight.bold,
     letterSpacing: -0.5,
     lineHeight: 38,
   },
   subtext: {
-    fontSize: 15,
-    fontFamily: 'Inter',
+    fontSize: fontSize.md,
+    fontFamily: fonts.sans,
     lineHeight: 22,
   },
   form: { gap: spacing.lg },
   fieldWrap: { gap: spacing.xs },
   label: {
-    fontSize: 12,
-    fontFamily: 'Inter',
-    fontWeight: fontWeight.medium,
+    fontSize: fontSize.sm,
+    fontFamily: fonts.sansMedium,
     letterSpacing: 0.3,
   },
   input: {
@@ -664,28 +669,27 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 12,
     paddingHorizontal: spacing.md,
-    fontSize: 15,
-    fontFamily: 'Inter',
+    fontSize: fontSize.md,
+    fontFamily: fonts.sans,
   },
   messageBanner: {
     padding: spacing.md,
     borderRadius: 12,
   },
   messageText: {
-    fontSize: 13,
-    fontFamily: 'Inter',
-    fontWeight: fontWeight.medium,
+    fontSize: fontSize.sm,
+    fontFamily: fonts.sansMedium,
     lineHeight: 18,
   },
   errorWrap: { marginTop: -spacing.xs },
   errorText: {
-    fontSize: 13,
-    fontFamily: 'Inter',
+    fontSize: fontSize.sm,
+    fontFamily: fonts.sans,
   },
   forgotBtn: { alignSelf: 'flex-end', marginTop: -spacing.sm },
   forgotText: {
-    fontSize: 13,
-    fontFamily: 'Inter',
+    fontSize: fontSize.sm,
+    fontFamily: fonts.sans,
   },
   submitBtn: {
     height: 54,
@@ -696,9 +700,8 @@ const styles = StyleSheet.create({
   },
   submitBtnDisabled: { opacity: 0.6 },
   submitBtnText: {
-    fontSize: 16,
-    fontFamily: 'Inter',
-    fontWeight: fontWeight.semibold,
+    fontSize: fontSize.lg,
+    fontFamily: fonts.sansSemibold,
   },
   divider: {
     flexDirection: 'row',
@@ -708,9 +711,8 @@ const styles = StyleSheet.create({
   },
   dividerLine: { flex: 1, height: 1 },
   dividerText: {
-    fontSize: 12,
-    fontFamily: 'Inter',
-    fontWeight: fontWeight.medium,
+    fontSize: fontSize.sm,
+    fontFamily: fonts.sansMedium,
   },
   appleBtn: {
     width: '100%',
@@ -723,13 +725,12 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   toggleText: {
-    fontSize: 14,
-    fontFamily: 'Inter',
+    fontSize: fontSize.base,
+    fontFamily: fonts.sans,
   },
   toggleLink: {
-    fontSize: 14,
-    fontFamily: 'Inter',
-    fontWeight: fontWeight.semibold,
+    fontSize: fontSize.base,
+    fontFamily: fonts.sansSemibold,
   },
   loadingOverlay: {
     position: 'absolute',
@@ -740,8 +741,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   loadingText: {
-    fontSize: 14,
-    fontFamily: 'Inter',
-    fontWeight: fontWeight.medium,
+    fontSize: fontSize.base,
+    fontFamily: fonts.sansMedium,
   },
 });

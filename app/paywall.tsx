@@ -10,12 +10,21 @@ import {
   Alert,
   Platform,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import {
+  X,
+  Flag,
+  InfinityIcon,
+  Sparkle,
+  ShareNetwork,
+  Bell,
+  Heart,
+  ChartBar,
+  type Icon,
+} from 'phosphor-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import Constants from 'expo-constants';
-import { colors } from '../theme/colors';
-import { spacing, borderRadius, fontSize, fontWeight, shadow } from '../theme/tokens';
+import { spacing, borderRadius, fontSize, fontWeight, shadow, themedColors } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { useIapSubscriptions } from '../hooks/useIapSubscriptions';
 import { MONTHLY_PRODUCT_ID, YEARLY_PRODUCT_ID } from '../lib/iap/iap';
@@ -38,14 +47,14 @@ import { SvgLogo } from '../components/ui/SvgLogo';
 // Locked Livra+ split — list only features a subscriber can use today (no dead-ends).
 // Mark reordering and pace projection are built but not yet wired into a screen, so they
 // are intentionally omitted here and added when their entry points ship (Phase 5 audit §5).
-const PRO_FEATURES = [
-  { ion: 'flag-outline',           title: 'Unlimited Goals',      description: 'Keep an unlimited goal queue — past the 2 free.' },
-  { ion: 'infinite-outline',       title: 'Unlimited Marks',      description: 'Add as many marks per goal as you need.' },
-  { ion: 'sparkles-outline',       title: 'AI Goal Plans',        description: 'Describe a goal; Livra drafts the marks to get there.' },
-  { ion: 'share-social-outline',   title: 'Share Cards',          description: 'Turn your momentum into a shareable card.' },
-  { ion: 'notifications-outline',  title: 'Custom Reminders',     description: 'Set a reminder time for any mark.' },
-  { ion: 'heart-outline',          title: 'Apple Health',         description: 'Sleep, Workout, Steps — synced automatically.' },
-  { ion: 'bar-chart-outline',      title: 'CSV Export',           description: 'Your history is yours. Export anytime.' },
+const PRO_FEATURES: { icon: Icon; title: string; description: string }[] = [
+  { icon: Flag,         title: 'Unlimited Goals',      description: 'Keep an unlimited goal queue — past the 2 free.' },
+  { icon: InfinityIcon, title: 'Unlimited Marks',      description: 'Add as many marks per goal as you need.' },
+  { icon: Sparkle,      title: 'AI Goal Plans',        description: 'Describe a goal; Livra drafts the marks to get there.' },
+  { icon: ShareNetwork, title: 'Share Cards',          description: 'Turn your momentum into a shareable card.' },
+  { icon: Bell,         title: 'Custom Reminders',     description: 'Set a reminder time for any mark.' },
+  { icon: Heart,        title: 'Apple Health',         description: 'Sleep, Workout, Steps — synced automatically.' },
+  { icon: ChartBar,     title: 'CSV Export',           description: 'Your history is yours. Export anytime.' },
 ];
 
 const SHIPPED_PREMIUM_FEATURE_TITLES = [
@@ -60,10 +69,52 @@ const SHIPPED_PREMIUM_FEATURE_TITLES = [
 
 type PlanType = 'monthly' | 'yearly';
 
+/**
+ * Locale-aware parse of a *formatted* price string (e.g. "$9.99", "9,99 €",
+ * "1.234,56 €"). Strips currency symbols/letters/spaces, then infers the
+ * decimal separator as the last '.' or ',' and treats the other as a group
+ * separator. Returns 0 on failure (never NaN).
+ */
+function parseLocalizedPrice(input: string | null | undefined): number {
+  if (!input) return 0;
+  let s = String(input).replace(/[^0-9.,]/g, '').trim();
+  if (!s) return 0;
+  const lastComma = s.lastIndexOf(',');
+  const lastDot = s.lastIndexOf('.');
+  const decimalSep = lastComma > lastDot ? ',' : lastDot > -1 ? '.' : '';
+  if (decimalSep) {
+    const groupSep = decimalSep === ',' ? '.' : ',';
+    s = s.split(groupSep).join('');
+    s = s.replace(decimalSep, '.');
+  } else {
+    s = s.replace(/,/g, '');
+  }
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Resolve a numeric price for math. Prefers the machine-readable numeric
+ * `price` field (locale-independent, provided by expo-iap); falls back to
+ * locale-aware parsing of the localized/formatted display string. Never
+ * returns NaN.
+ */
+function priceToNumber(
+  rawPrice: string | number | null | undefined,
+  formatted?: string | null
+): number {
+  if (typeof rawPrice === 'number') return Number.isFinite(rawPrice) ? rawPrice : 0;
+  if (typeof rawPrice === 'string') {
+    const trimmed = rawPrice.trim();
+    if (/^[0-9]+(\.[0-9]+)?$/.test(trimmed)) return parseFloat(trimmed);
+  }
+  return parseLocalizedPrice(formatted ?? (typeof rawPrice === 'string' ? rawPrice : ''));
+}
+
 function PaywallScreenContent() {
   const iapService = getIapService();
   const theme = useEffectiveTheme();
-  const themeColors = colors[theme];
+  const c = themedColors(theme);
   const isDark = theme === 'dark';
   const router = useRouter();
   const [selectedPlan, setSelectedPlan] = useState<PlanType>('monthly');
@@ -194,8 +245,9 @@ function PaywallScreenContent() {
   useEffect(() => {
     if (env.isDev) {
       try {
-        const diag = getIapService().getDiagnostics();
-        // Diagnostics tracked but not used to gate purchases
+        // Diagnostics are telemetry only — invoked for any internal tracking
+        // side effects, but the result is intentionally not used to gate purchases.
+        getIapService().getDiagnostics();
       } catch (e) {
         // Silently fail - diagnostics are telemetry only
       }
@@ -330,16 +382,14 @@ function PaywallScreenContent() {
   const selectedProduct = selectedPlan === 'monthly' ? monthlyProduct : yearlyProduct;
   const selectedPrice = selectedProduct?.localizedPrice || selectedProduct?.price || '';
   
-  // Calculate monthly equivalent for yearly plan - null-safe with NaN checks
-  const yearlyPriceAsNumber = yearlyPrice && typeof yearlyPrice === 'string'
-    ? (parseFloat(yearlyPrice.replace(/[^0-9.]/g, '')) || 0)
-    : 0;
-  const monthlyPriceAsNumber = monthlyPrice && typeof monthlyPrice === 'string'
-    ? (parseFloat(monthlyPrice.replace(/[^0-9.]/g, '')) || 0)
-    : 0;
-  
+  // Calculate monthly equivalent for yearly plan - locale-safe numeric parse
+  // (prefers the raw numeric `price` field; falls back to locale-aware parsing
+  // of the localized string so comma-decimal/grouped currencies stay correct).
+  const yearlyPriceAsNumber = priceToNumber(yearlyProduct?.price, yearlyProduct?.localizedPrice);
+  const monthlyPriceAsNumber = priceToNumber(monthlyProduct?.price, monthlyProduct?.localizedPrice);
+
   // Safe division with NaN checks
-  const monthlyEquivalent = (yearlyPriceAsNumber > 0 && !isNaN(yearlyPriceAsNumber) && !isNaN(12))
+  const monthlyEquivalent = (yearlyPriceAsNumber > 0 && !isNaN(yearlyPriceAsNumber))
     ? yearlyPriceAsNumber / 12
     : 0;
   const pricePerMonth = monthlyEquivalent > 0 && !isNaN(monthlyEquivalent)
@@ -984,7 +1034,7 @@ function PaywallScreenContent() {
   // Early return for loading state
   if (isLoadingProducts || connectionStatus === 'connecting') {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: c.linen }]}>
         <ScrollView contentContainerStyle={styles.content}>
           <View style={styles.header}>
             <TouchableOpacity
@@ -993,14 +1043,14 @@ function PaywallScreenContent() {
               style={{ opacity: purchaseInProgress ? 0.5 : 1 }}
               hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             >
-              <Ionicons name="close-outline" size={28} color={themeColors.textSecondary} />
+              <X size={28} color={c.inkMid} weight="regular" />
             </TouchableOpacity>
           </View>
           <View style={styles.loadingBlock}>
             <SvgLogo width={48} height={48} />
             <View style={styles.loadingContainer}>
-              <ActivityIndicator size="small" color={themeColors.primary} />
-              <Text style={[styles.loadingText, { color: themeColors.textSecondary }]}>
+              <ActivityIndicator size="small" color={c.forest} />
+              <Text style={[styles.loadingText, { color: c.inkMid }]}>
                 {isLoadingProducts ? 'Loading subscription options...' : 'Connecting to store...'}
               </Text>
             </View>
@@ -1011,7 +1061,7 @@ function PaywallScreenContent() {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: c.linen }]}>
       <ScrollView contentContainerStyle={styles.content}>
         {/* Header */}
         <View style={styles.header}>
@@ -1021,7 +1071,7 @@ function PaywallScreenContent() {
             style={{ opacity: purchaseInProgress ? 0.5 : 1 }}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           >
-            <Ionicons name="close-outline" size={28} color={themeColors.textSecondary} />
+            <X size={28} color={c.inkMid} weight="regular" />
           </TouchableOpacity>
         </View>
 
@@ -1031,17 +1081,17 @@ function PaywallScreenContent() {
             style={[
               styles.heroIconWrap,
               {
-                backgroundColor: themeColors.surface,
-                borderColor: applyOpacity(themeColors.border, 0.9),
+                backgroundColor: c.surface,
+                borderColor: applyOpacity(c.borderMid, 0.9),
               },
             ]}
           >
             <SvgLogo width={48} height={48} />
           </View>
           <TouchableOpacity onPress={handleTitleTap} activeOpacity={1}>
-            <Text style={[styles.title, { color: themeColors.text }]}>Livra+</Text>
+            <Text style={[styles.title, { color: c.inkDark }]}>Livra+</Text>
           </TouchableOpacity>
-          <Text style={[styles.subtitle, { color: themeColors.textSecondary }]}>
+          <Text style={[styles.subtitle, { color: c.inkMid }]}>
             Your history and stats are always free. Livra+ adds the room and tools to finish more.
           </Text>
           {!isNativeStorePurchasesSupported() && (
@@ -1049,13 +1099,13 @@ function PaywallScreenContent() {
               style={[
                 styles.devEnvBanner,
                 {
-                  borderColor: themeColors.border,
-                  backgroundColor: themeColors.surface,
+                  borderColor: c.borderMid,
+                  backgroundColor: c.surface,
                 },
               ]}
               accessibilityRole="text"
             >
-              <AppText variant="body" style={[styles.devEnvBannerText, { color: themeColors.textSecondary }]}>
+              <AppText variant="body" style={[styles.devEnvBannerText, { color: c.inkMid }]}>
                 Store purchases and restore work only in a development build or TestFlight, not in Expo Go or
                 the browser.
               </AppText>
@@ -1071,24 +1121,24 @@ function PaywallScreenContent() {
               style={[
                 styles.featureItem,
                 {
-                  backgroundColor: themeColors.surface,
-                  borderColor: themeColors.border,
+                  backgroundColor: c.surface,
+                  borderColor: c.borderMid,
                 },
               ]}
             >
               <View
                 style={[
                   styles.featureIcon,
-                  { backgroundColor: applyOpacity(themeColors.text, isDark ? 0.12 : 0.06) },
+                  { backgroundColor: applyOpacity(c.inkDark, isDark ? 0.12 : 0.06) },
                 ]}
               >
-                <Ionicons name={feature.ion as any} size={26} color={themeColors.text} />
+                <feature.icon size={26} color={c.inkDark} weight="duotone" />
               </View>
               <View style={styles.featureText}>
-                <AppText variant="body" style={[styles.featureTitle, { color: themeColors.text }]}>
+                <AppText variant="body" style={[styles.featureTitle, { color: c.inkDark }]}>
                   {feature.title}
                 </AppText>
-                <AppText variant="body" style={[styles.featureDescription, { color: themeColors.textSecondary }]}>
+                <AppText variant="body" style={[styles.featureDescription, { color: c.inkMid }]}>
                   {feature.description}
                 </AppText>
               </View>
@@ -1104,8 +1154,8 @@ function PaywallScreenContent() {
               style={[
                 styles.planOption,
                 { 
-                  backgroundColor: themeColors.surface,
-                  borderColor: selectedPlan === 'monthly' ? themeColors.accent.primary : themeColors.border,
+                  backgroundColor: c.surface,
+                  borderColor: selectedPlan === 'monthly' ? c.accent : c.borderMid,
                   borderWidth: selectedPlan === 'monthly' ? 2 : 1,
                 },
                 selectedPlan === 'monthly' && shadow.md,
@@ -1116,23 +1166,23 @@ function PaywallScreenContent() {
               disabled={isSubscribed}
             >
               <View style={styles.planHeader}>
-                <Text style={[styles.planLabel, { color: themeColors.text }]}>Monthly</Text>
+                <Text style={[styles.planLabel, { color: c.inkDark }]}>Monthly</Text>
                 {selectedPlan === 'monthly' && (
-                  <View style={[styles.selectedBadge, { backgroundColor: themeColors.accent.primary }]}>
-                    <Text style={[styles.selectedBadgeText, { color: themeColors.text }]}>✓</Text>
+                  <View style={[styles.selectedBadge, { backgroundColor: c.forest }]}>
+                    <Text style={[styles.selectedBadgeText, { color: c.inkInverse }]}>✓</Text>
                   </View>
                 )}
               </View>
               {monthlyPrice && monthlyPrice.trim() !== '' ? (
-                <Text style={[styles.planPrice, { color: themeColors.text }]}>
+                <Text style={[styles.planPrice, { color: c.inkDark }]}>
                   {monthlyPrice} <Text style={styles.planPeriod}>/ month</Text>
                 </Text>
               ) : pricesMissing || isLoadingProducts ? (
-                <Text style={[styles.planPrice, { color: themeColors.textSecondary }]}>
+                <Text style={[styles.planPrice, { color: c.inkMid }]}>
                   Loading price… <Text style={styles.planPeriod}>/ month</Text>
                 </Text>
               ) : (
-                <Text style={[styles.planPrice, { color: themeColors.textSecondary }]}>
+                <Text style={[styles.planPrice, { color: c.inkMid }]}>
                   — <Text style={styles.planPeriod}>/ month</Text>
                 </Text>
               )}
@@ -1143,8 +1193,8 @@ function PaywallScreenContent() {
               style={[
                 styles.planOption,
                 { 
-                  backgroundColor: themeColors.surface,
-                  borderColor: selectedPlan === 'yearly' ? themeColors.accent.primary : themeColors.border,
+                  backgroundColor: c.surface,
+                  borderColor: selectedPlan === 'yearly' ? c.accent : c.borderMid,
                   borderWidth: selectedPlan === 'yearly' ? 2 : 1,
                 },
                 selectedPlan === 'yearly' && shadow.md,
@@ -1156,34 +1206,34 @@ function PaywallScreenContent() {
             >
               <View style={styles.planHeader}>
                 <View style={styles.planHeaderLeft}>
-                  <Text style={[styles.planLabel, { color: themeColors.text }]}>Yearly</Text>
-                  <View style={[styles.bestValueBadge, { backgroundColor: themeColors.accent.primary }]}>
-                    <Text style={[styles.bestValueText, { color: themeColors.text }]}>Best value</Text>
+                  <Text style={[styles.planLabel, { color: c.inkDark }]}>Yearly</Text>
+                  <View style={[styles.bestValueBadge, { backgroundColor: c.forest }]}>
+                    <Text style={[styles.bestValueText, { color: c.inkInverse }]}>Best value</Text>
                   </View>
                 </View>
                 {selectedPlan === 'yearly' && (
-                  <View style={[styles.selectedBadge, { backgroundColor: themeColors.accent.primary }]}>
-                    <Text style={[styles.selectedBadgeText, { color: themeColors.text }]}>✓</Text>
+                  <View style={[styles.selectedBadge, { backgroundColor: c.forest }]}>
+                    <Text style={[styles.selectedBadgeText, { color: c.inkInverse }]}>✓</Text>
                   </View>
                 )}
               </View>
               {yearlyPrice && yearlyPrice.trim() !== '' ? (
                 <>
-                  <Text style={[styles.planPrice, { color: themeColors.text }]}>
+                  <Text style={[styles.planPrice, { color: c.inkDark }]}>
                     {yearlyPrice} <Text style={styles.planPeriod}>/ year</Text>
                   </Text>
                   {pricePerMonth && pricePerMonth.trim() !== '' && savingsPercent > 0 && !isNaN(savingsPercent) && (
-                    <Text style={[styles.planSavings, { color: themeColors.textSecondary }]}>
+                    <Text style={[styles.planSavings, { color: c.inkMid }]}>
                       {pricePerMonth}/month • Save {savingsPercent}%
                     </Text>
                   )}
                 </>
               ) : pricesMissing || isLoadingProducts ? (
-                <Text style={[styles.planPrice, { color: themeColors.textSecondary }]}>
+                <Text style={[styles.planPrice, { color: c.inkMid }]}>
                   Loading price… <Text style={styles.planPeriod}>/ year</Text>
                 </Text>
               ) : (
-                <Text style={[styles.planPrice, { color: themeColors.textSecondary }]}>
+                <Text style={[styles.planPrice, { color: c.inkMid }]}>
                   — <Text style={styles.planPeriod}>/ year</Text>
                 </Text>
               )}
@@ -1194,13 +1244,13 @@ function PaywallScreenContent() {
         {isSubscribed && (
           <PrimaryButton
             onPress={handleManageSubscription}
-            backgroundColor={themeColors.accent.primary}
-            indicatorColor={themeColors.text}
+            backgroundColor={c.forest}
+            indicatorColor={c.inkInverse}
             shadowVariant="lg"
             style={{ marginBottom: spacing.md }}
             accessibilityLabel="Manage Livra+ subscription"
           >
-            <AppText variant="button" style={{ color: themeColors.text, fontWeight: fontWeight.bold }}>
+            <AppText variant="button" style={{ color: c.inkInverse, fontWeight: fontWeight.bold }}>
               Manage Livra+
             </AppText>
           </PrimaryButton>
@@ -1209,8 +1259,8 @@ function PaywallScreenContent() {
         {/* Loading State */}
         {isLoadingProducts && (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color={themeColors.primary} />
-            <AppText variant="body" style={[styles.loadingText, { color: themeColors.textSecondary }]}>
+            <ActivityIndicator size="small" color={c.forest} />
+            <AppText variant="body" style={[styles.loadingText, { color: c.inkMid }]}>
               Loading subscription options...
             </AppText>
           </View>
@@ -1219,16 +1269,16 @@ function PaywallScreenContent() {
         {/* TASK 7: Preflight health check error - show user-facing error */}
         {healthCheckFailed && !isLoadingProducts && (
           <Card
-            backgroundColor={themeColors.surface}
-            borderColor={themeColors.error}
+            backgroundColor={c.surface}
+            borderColor={c.danger}
             borderRadiusKey="md"
             paddingKey="md"
             style={[styles.noticeCardMargin, { marginTop: spacing.sm }]}
           >
-            <AppText variant="body" style={[styles.errorText, { color: themeColors.error, fontWeight: fontWeight.semibold }]}>
+            <AppText variant="body" style={[styles.errorText, { color: c.danger, fontWeight: fontWeight.semibold }]}>
               Unable to load subscription options
             </AppText>
-            <AppText variant="label" style={[styles.errorHint, { color: themeColors.textSecondary, marginTop: spacing.xs }]}>
+            <AppText variant="label" style={[styles.errorHint, { color: c.inkMid, marginTop: spacing.xs }]}>
               {healthCheckReasons.length > 0 
                 ? healthCheckReasons[0] // Show first reason as user message
                 : 'Please check your connection and try again.'}
@@ -1242,7 +1292,6 @@ function PaywallScreenContent() {
             error={lastError}
             connectionStatus={connectionStatus}
             onRetry={handleRetryLoadProducts}
-            themeColors={themeColors}
             showDiagnostics={supportModeEnabled}
           />
         )}
@@ -1253,23 +1302,23 @@ function PaywallScreenContent() {
             onPress={handlePurchase}
             disabled={buttonDisabled}
             loading={purchaseInProgress}
-            backgroundColor={themeColors.accent.primary}
-            indicatorColor={themeColors.text}
+            backgroundColor={c.forest}
+            indicatorColor={c.inkInverse}
             shadowVariant="lg"
             style={{ marginBottom: spacing.md }}
             activeOpacity={0.8}
             accessibilityLabel="Continue with selected subscription plan"
           >
             {!isReady ? (
-              <AppText variant="button" style={{ color: themeColors.text, fontWeight: fontWeight.bold }}>Initializing...</AppText>
+              <AppText variant="button" style={{ color: c.inkInverse, fontWeight: fontWeight.bold }}>Initializing...</AppText>
             ) : connectionStatus !== 'connected' ? (
-              <AppText variant="button" style={{ color: themeColors.text, fontWeight: fontWeight.bold }}>Store Not Available</AppText>
+              <AppText variant="button" style={{ color: c.inkInverse, fontWeight: fontWeight.bold }}>Store Not Available</AppText>
             ) : !selectedProduct ? (
-              <AppText variant="button" style={{ color: themeColors.text, fontWeight: fontWeight.bold }}>Select a Plan</AppText>
+              <AppText variant="button" style={{ color: c.inkInverse, fontWeight: fontWeight.bold }}>Select a Plan</AppText>
             ) : pricesMissing || (!selectedPrice || selectedPrice.trim() === '') ? (
-              <AppText variant="button" style={{ color: themeColors.text, fontWeight: fontWeight.bold }}>Loading price...</AppText>
+              <AppText variant="button" style={{ color: c.inkInverse, fontWeight: fontWeight.bold }}>Loading price...</AppText>
             ) : (
-              <AppText variant="button" style={{ color: themeColors.text, fontWeight: fontWeight.bold }}>
+              <AppText variant="button" style={{ color: c.inkInverse, fontWeight: fontWeight.bold }}>
                 Start Livra+
                 {selectedPrice && selectedPrice.trim() !== '' ? ` — ${selectedPrice}` : ''}
               </AppText>
@@ -1279,19 +1328,19 @@ function PaywallScreenContent() {
 
         {/* Operation Status / Error Display */}
         {isStrictFailure && operationState === 'error' && (
-          <AppText variant="body" style={[styles.errorText, { color: themeColors.error, textAlign: 'center', marginTop: spacing.sm }]}>
+          <AppText variant="body" style={[styles.errorText, { color: c.danger, textAlign: 'center', marginTop: spacing.sm }]}>
             {operationMessage || 'Purchase failed. Please try again.'}
           </AppText>
         )}
         {(operationMessage || lastError) && !productsLoadError && !isStrictFailure && (
           <Card
-            backgroundColor={themeColors.surface}
+            backgroundColor={c.surface}
             borderColor={
               operationState === 'subscribed'
-                ? themeColors.success
+                ? c.success
                 : operationState === 'transient_error' || operationState === 'info'
-                  ? themeColors.accent.primary
-                  : themeColors.error
+                  ? c.accent
+                  : c.danger
             }
             borderRadiusKey="md"
             paddingKey="md"
@@ -1304,10 +1353,10 @@ function PaywallScreenContent() {
                 {
                   color:
                     operationState === 'subscribed'
-                      ? themeColors.success
+                      ? c.success
                       : operationState === 'transient_error' || operationState === 'info'
-                        ? themeColors.accent.primary
-                        : themeColors.error,
+                        ? c.accent
+                        : c.danger,
                   fontWeight: fontWeight.semibold,
                 },
               ]}
@@ -1315,7 +1364,7 @@ function PaywallScreenContent() {
               {operationMessage || lastError}
             </AppText>
             {connectionStatus !== 'connected' && (
-              <AppText variant="label" style={[styles.errorHint, { color: themeColors.textSecondary, marginTop: spacing.xs }]}>
+              <AppText variant="label" style={[styles.errorHint, { color: c.inkMid, marginTop: spacing.xs }]}>
                 Please check your internet connection and try again.
               </AppText>
             )}
@@ -1323,13 +1372,13 @@ function PaywallScreenContent() {
               <PrimaryButton
                 size="compact"
                 onPress={handleRetryVerification}
-                backgroundColor={themeColors.accent.primary}
-                indicatorColor={themeColors.text}
+                backgroundColor={c.forest}
+                indicatorColor={c.inkInverse}
                 shadowVariant="none"
                 style={{ marginTop: spacing.md }}
                 accessibilityLabel="Retry verification"
               >
-                <AppText variant="body" style={{ color: themeColors.text, fontWeight: fontWeight.semibold }}>
+                <AppText variant="body" style={{ color: c.inkInverse, fontWeight: fontWeight.semibold }}>
                   Retry Verification
                 </AppText>
               </PrimaryButton>
@@ -1339,13 +1388,13 @@ function PaywallScreenContent() {
                 size="compact"
                 onPress={handleManageSubscription}
                 disabled={purchaseInProgress}
-                backgroundColor={themeColors.accent.primary}
-                indicatorColor={themeColors.text}
+                backgroundColor={c.forest}
+                indicatorColor={c.inkInverse}
                 shadowVariant="none"
                 style={{ marginTop: spacing.sm }}
                 accessibilityLabel="Manage subscription"
               >
-                <AppText variant="body" style={{ color: themeColors.text, fontWeight: fontWeight.semibold }}>
+                <AppText variant="body" style={{ color: c.inkInverse, fontWeight: fontWeight.semibold }}>
                   Manage Subscription
                 </AppText>
               </PrimaryButton>
@@ -1365,7 +1414,7 @@ function PaywallScreenContent() {
               style={[
                 styles.restoreButtonText,
                 {
-                  color: themeColors.textSecondary,
+                  color: c.inkMid,
                   opacity: purchaseInProgress || isLoadingProducts ? 0.5 : 1,
                 },
               ]}
@@ -1380,17 +1429,17 @@ function PaywallScreenContent() {
           <Card
             backgroundColor={
               restoreMessageType === 'success'
-                ? applyOpacity(themeColors.success, 0.15)
+                ? applyOpacity(c.success, 0.15)
                 : restoreMessageType === 'info'
-                  ? applyOpacity(themeColors.accent.primary, 0.18)
-                  : applyOpacity(themeColors.error, 0.15)
+                  ? applyOpacity(c.accent, 0.18)
+                  : applyOpacity(c.danger, 0.15)
             }
             borderColor={
               restoreMessageType === 'success'
-                ? themeColors.success
+                ? c.success
                 : restoreMessageType === 'info'
-                  ? themeColors.accent.primary
-                  : themeColors.error
+                  ? c.accent
+                  : c.danger
             }
             borderRadiusKey="md"
             paddingKey="md"
@@ -1403,10 +1452,10 @@ function PaywallScreenContent() {
                 {
                   color:
                     restoreMessageType === 'success'
-                      ? themeColors.success
+                      ? c.success
                       : restoreMessageType === 'info'
-                        ? themeColors.accent.primary
-                        : themeColors.error,
+                        ? c.accent
+                        : c.danger,
                 },
               ]}
             >
@@ -1419,23 +1468,23 @@ function PaywallScreenContent() {
         {/* Common questions — reference layout */}
         <View style={styles.faq}>
           <View style={styles.faqRuleRow}>
-            <View style={[styles.faqRule, { backgroundColor: themeColors.border }]} />
-            <Text style={[styles.faqRuleLabel, { color: themeColors.textTertiary }]}>
+            <View style={[styles.faqRule, { backgroundColor: c.borderMid }]} />
+            <Text style={[styles.faqRuleLabel, { color: c.inkMuted }]}>
               COMMON QUESTIONS
             </Text>
-            <View style={[styles.faqRule, { backgroundColor: themeColors.border }]} />
+            <View style={[styles.faqRule, { backgroundColor: c.borderMid }]} />
           </View>
 
           <View style={styles.faqItem}>
-            <Text style={[styles.faqQuestion, { color: themeColors.text }]}>Does it work offline?</Text>
-            <Text style={[styles.faqAnswer, { color: themeColors.textSecondary }]}>
+            <Text style={[styles.faqQuestion, { color: c.inkDark }]}>Does it work offline?</Text>
+            <Text style={[styles.faqAnswer, { color: c.inkMid }]}>
               Yes. Tracking is local-first; sync runs when you are online.
             </Text>
           </View>
 
           <View style={styles.faqItem}>
-            <Text style={[styles.faqQuestion, { color: themeColors.text }]}>How do I cancel?</Text>
-            <Text style={[styles.faqAnswer, { color: themeColors.textSecondary }]}>
+            <Text style={[styles.faqQuestion, { color: c.inkDark }]}>How do I cancel?</Text>
+            <Text style={[styles.faqAnswer, { color: c.inkMid }]}>
               Manage or cancel anytime in your App Store subscription settings.
             </Text>
           </View>
@@ -1443,15 +1492,15 @@ function PaywallScreenContent() {
 
         <View style={styles.legalLinks}>
           <TouchableOpacity onPress={() => router.push('/legal/privacy-policy')} style={styles.legalLink}>
-            <Text style={[styles.legalLinkText, { color: themeColors.textSecondary }]}>Privacy Policy</Text>
+            <Text style={[styles.legalLinkText, { color: c.inkMid }]}>Privacy Policy</Text>
           </TouchableOpacity>
-          <Text style={[styles.legalSeparator, { color: themeColors.textTertiary }]}> · </Text>
+          <Text style={[styles.legalSeparator, { color: c.inkMuted }]}> · </Text>
           <TouchableOpacity onPress={() => router.push('/legal/terms-and-conditions')} style={styles.legalLink}>
-            <Text style={[styles.legalLinkText, { color: themeColors.textSecondary }]}>Terms & Conditions</Text>
+            <Text style={[styles.legalLinkText, { color: c.inkMid }]}>Terms & Conditions</Text>
           </TouchableOpacity>
         </View>
 
-        <Text style={[styles.copyrightLine, { color: themeColors.textTertiary }]}>
+        <Text style={[styles.copyrightLine, { color: c.inkMuted }]}>
           © {new Date().getFullYear()} Livra
         </Text>
       </ScrollView>
@@ -1466,15 +1515,15 @@ function ErrorDetails({
   error,
   connectionStatus,
   onRetry,
-  themeColors,
   showDiagnostics,
 }: {
   error: string | null;
   connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error';
   onRetry: () => void;
-  themeColors: any;
   showDiagnostics: boolean;
 }) {
+  const theme = useEffectiveTheme();
+  const c = themedColors(theme);
   const [expanded, setExpanded] = useState(false);
   const [diagnostics, setDiagnostics] = useState<any>(null);
 
@@ -1496,25 +1545,25 @@ function ErrorDetails({
 
   return (
     <Card
-      backgroundColor={applyOpacity(themeColors.error, 0.1)}
-      borderColor={themeColors.error}
+      backgroundColor={applyOpacity(c.danger, 0.1)}
+      borderColor={c.danger}
       borderRadiusKey="md"
       paddingKey="md"
       style={[styles.noticeCardMargin, { marginTop: spacing.sm }]}
     >
-      <AppText variant="body" style={[styles.errorText, { color: themeColors.error }]}>
+      <AppText variant="body" style={[styles.errorText, { color: c.danger }]}>
         {error || 'Unable to load subscription options. Please check your connection and try again.'}
       </AppText>
       <PrimaryButton
         size="compact"
         onPress={onRetry}
-        backgroundColor={themeColors.accent.primary}
-        indicatorColor={themeColors.text}
+        backgroundColor={c.forest}
+        indicatorColor={c.inkInverse}
         shadowVariant="none"
         style={{ marginTop: spacing.md }}
         accessibilityLabel="Retry loading subscriptions"
       >
-        <AppText variant="body" style={{ color: themeColors.text, fontWeight: fontWeight.semibold }}>
+        <AppText variant="body" style={{ color: c.inkInverse, fontWeight: fontWeight.semibold }}>
           Retry Loading Subscriptions
         </AppText>
       </PrimaryButton>
@@ -1525,40 +1574,40 @@ function ErrorDetails({
           style={styles.detailsToggle}
           onPress={() => setExpanded(!expanded)}
         >
-          <Text style={[styles.detailsToggleText, { color: themeColors.textSecondary }]}>
+          <Text style={[styles.detailsToggleText, { color: c.inkMid }]}>
             {expanded ? 'Hide Details' : 'Show Details'}
           </Text>
         </TouchableOpacity>
       )}
 
       {showDiagnostics && expanded && diagnostics && (
-        <View style={[styles.detailsContainer, { backgroundColor: themeColors.surface }]}>
-          <Text style={[styles.detailsTitle, { color: themeColors.text }]}>Diagnostics</Text>
+        <View style={[styles.detailsContainer, { backgroundColor: c.surface }]}>
+          <Text style={[styles.detailsTitle, { color: c.inkDark }]}>Diagnostics</Text>
           
           <View style={styles.detailsSection}>
-            <Text style={[styles.detailsLabel, { color: themeColors.textSecondary }]}>
+            <Text style={[styles.detailsLabel, { color: c.inkMid }]}>
               Connection Status:
             </Text>
-            <Text style={[styles.detailsValue, { color: themeColors.text }]}>
+            <Text style={[styles.detailsValue, { color: c.inkDark }]}>
               {diagnostics.manager.state.connectionStatus}
             </Text>
           </View>
 
           <View style={styles.detailsSection}>
-            <Text style={[styles.detailsLabel, { color: themeColors.textSecondary }]}>
+            <Text style={[styles.detailsLabel, { color: c.inkMid }]}>
               Products Loaded:
             </Text>
-            <Text style={[styles.detailsValue, { color: themeColors.text }]}>
+            <Text style={[styles.detailsValue, { color: c.inkDark }]}>
               {diagnostics.manager.state.products.length} / 2
             </Text>
           </View>
 
           <View style={styles.detailsSection}>
-            <Text style={[styles.detailsLabel, { color: themeColors.textSecondary }]}>
+            <Text style={[styles.detailsLabel, { color: c.inkMid }]}>
               Export Validation:
             </Text>
             <Text style={[styles.detailsValue, { 
-              color: diagnostics.exports?.requiredExportsPresent ? themeColors.success : themeColors.error 
+              color: diagnostics.exports?.requiredExportsPresent ? c.success : c.danger 
             }]}>
               {diagnostics.exports?.requiredExportsPresent ? '✓ Passed' : '✕ Failed'}
             </Text>
@@ -1566,39 +1615,39 @@ function ErrorDetails({
 
           {!diagnostics.exports?.requiredExportsPresent && diagnostics.exports?.missing && diagnostics.exports.missing.length > 0 && (
             <View style={styles.detailsSection}>
-              <Text style={[styles.detailsLabel, { color: themeColors.textSecondary }]}>
+              <Text style={[styles.detailsLabel, { color: c.inkMid }]}>
                 Missing Exports:
               </Text>
-              <Text style={[styles.detailsValue, { color: themeColors.error }]}>
+              <Text style={[styles.detailsValue, { color: c.danger }]}>
                 {diagnostics.exports.missing.join(', ') || 'None'}
               </Text>
             </View>
           )}
 
           <View style={styles.detailsSection}>
-            <Text style={[styles.detailsLabel, { color: themeColors.textSecondary }]}>
+            <Text style={[styles.detailsLabel, { color: c.inkMid }]}>
               Bundle ID:
             </Text>
-            <Text style={[styles.detailsValue, { color: themeColors.text }]}>
+            <Text style={[styles.detailsValue, { color: c.inkDark }]}>
               {diagnostics.manager.bundleId}
             </Text>
           </View>
 
           <View style={styles.detailsSection}>
-            <Text style={[styles.detailsLabel, { color: themeColors.textSecondary }]}>
+            <Text style={[styles.detailsLabel, { color: c.inkMid }]}>
               Product IDs Configured:
             </Text>
-            <Text style={[styles.detailsValue, { color: themeColors.text }]}>
+            <Text style={[styles.detailsValue, { color: c.inkDark }]}>
               {diagnostics.manager.productIdsConfigured.join(', ')}
             </Text>
           </View>
 
           {diagnostics.manager.state.lastError && (
             <View style={styles.detailsSection}>
-              <Text style={[styles.detailsLabel, { color: themeColors.textSecondary }]}>
+              <Text style={[styles.detailsLabel, { color: c.inkMid }]}>
                 Last Error:
               </Text>
-              <Text style={[styles.detailsValue, { color: themeColors.error }]}>
+              <Text style={[styles.detailsValue, { color: c.danger }]}>
                 {diagnostics.manager.state.lastError.code}: {diagnostics.manager.state.lastError.message}
               </Text>
             </View>
@@ -1944,32 +1993,32 @@ const styles = StyleSheet.create({
 // Error Boundary Fallback Component with Retry
 function PaywallErrorFallback({ onRetry }: { onRetry: () => void }) {
   const theme = useEffectiveTheme();
-  const themeColors = colors[theme];
-  
+  const c = themedColors(theme);
+
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: c.linen }]}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.header}>
-          <Ionicons name="close-outline" size={28} color={themeColors.textSecondary} />
+          <X size={28} color={c.inkMid} weight="regular" />
         </View>
         <View style={styles.loadingBlock}>
           <SvgLogo width={48} height={48} />
-          <AppText variant="headline" style={[styles.title, { color: themeColors.text }]}>
+          <AppText variant="headline" style={[styles.title, { color: c.inkDark }]}>
             Unable to load subscription options
           </AppText>
-          <AppText variant="body" style={[styles.loadingText, { color: themeColors.textSecondary }]}>
+          <AppText variant="body" style={[styles.loadingText, { color: c.inkMid }]}>
             Please check your connection and try again.
           </AppText>
           <PrimaryButton
             size="compact"
             onPress={onRetry}
-            backgroundColor={themeColors.accent.primary}
-            indicatorColor={themeColors.text}
+            backgroundColor={c.forest}
+            indicatorColor={c.inkInverse}
             shadowVariant="none"
             style={{ marginTop: spacing.md, alignSelf: 'stretch' }}
             accessibilityLabel="Try again"
           >
-            <AppText variant="body" style={{ color: themeColors.text, fontWeight: fontWeight.semibold }}>Try Again</AppText>
+            <AppText variant="body" style={{ color: c.inkInverse, fontWeight: fontWeight.semibold }}>Try Again</AppText>
           </PrimaryButton>
         </View>
       </ScrollView>

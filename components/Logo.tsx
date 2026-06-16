@@ -1,7 +1,7 @@
 import React from 'react';
 import Svg, { Path } from 'react-native-svg';
 import { useEffectiveTheme } from '../state/uiSlice';
-import { colors } from '../theme/colors';
+import { themedColors } from '../theme/tokens';
 
 interface LogoProps {
   size?: number;
@@ -40,8 +40,8 @@ const LOGO_PATH =
 
 export function Logo({ size = 28, color }: LogoProps) {
   const theme = useEffectiveTheme();
-  const themeColors = colors[theme];
-  const fill = color ?? themeColors.text;
+  const c = themedColors(theme);
+  const fill = color ?? c.inkDark;
 
   return (
     <Svg

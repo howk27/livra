@@ -180,7 +180,7 @@ export default function ResetPasswordScreen() {
               disabled={loading}
               style={styles.backToSignInButton}
             >
-              <Text style={[styles.backToSignInText, { color: c.forest }]}>
+              <Text style={[styles.backToSignInText, { color: c.accent }]}>
                 ← Back to Sign In
               </Text>
             </TouchableOpacity>

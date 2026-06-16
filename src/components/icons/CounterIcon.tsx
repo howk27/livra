@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
-import { colors } from '../../../theme/colors';
+import { themedColors } from '../../../theme/tokens';
 import { useEffectiveTheme } from '../../../state/uiSlice';
 import { useReducedMotion } from '../../../hooks/useReducedMotion';
 import {
@@ -50,7 +50,7 @@ export const CounterIcon: React.FC<CounterIconProps> = ({
   const theme = useEffectiveTheme();
   const prefersReducedMotion = useReducedMotion();
   const definition = getIconDefinition(type);
-  const themeColors = colors[theme];
+  const themeColors = themedColors(theme);
   const flattenedStyle = useMemo(() => StyleSheet.flatten(style) as (ViewStyle & { color?: string }) | undefined, [style]);
 
   const resolvedTone: CounterTone = tone ?? definition?.defaultTone ?? 'misc';
@@ -63,8 +63,8 @@ export const CounterIcon: React.FC<CounterIconProps> = ({
       return flattenedStyle.color;
     }
     const toneColor = getToneColor(resolvedTone, theme);
-    return toneColor ?? themeColors.text;
-  }, [color, flattenedStyle?.color, resolvedTone, theme, themeColors.text]);
+    return toneColor ?? themeColors.inkDark;
+  }, [color, flattenedStyle?.color, resolvedTone, theme, themeColors.inkDark]);
 
   const backgroundColor = useMemo(
     () =>

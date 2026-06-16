@@ -76,7 +76,7 @@ export function LivraHeader({
               cx={18}
               cy={18}
               r={16}
-              stroke="#C47E8A"
+              stroke={colors.mint}
               strokeWidth={2}
               fill="none"
               strokeDasharray={`${2 * Math.PI * 16}`}
@@ -99,7 +99,7 @@ export function LivraHeader({
         {left}
         <View style={styles.center}>
           {centerLogo ? (
-            <SvgLogo color={colors.forest} width={32} height={16} />
+            <SvgLogo color={theme === 'dark' ? colors.inkDark : colors.forest} width={32} height={16} />
           ) : title ? (
             <Text style={[styles.title, { color: colors.inkDark }]}>{title}</Text>
           ) : null}

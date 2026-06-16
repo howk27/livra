@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { ArrowLeft, Pulse, ArrowsClockwise, Copy } from 'phosphor-react-native';
 import {
   getDiagSnapshot,
   getDiagnosticsAsString,
@@ -167,7 +167,7 @@ export default function IapDashboardScreen() {
           onPress={() => router.back()}
           style={styles.backButton}
         >
-          <Ionicons name="arrow-back" size={24} color={c.inkDark} />
+          <ArrowLeft size={24} color={c.inkDark} weight="bold" />
         </TouchableOpacity>
         <AppText variant="heading" style={[styles.headerTitle, { color: c.inkDark }]}>
           IAP Dashboard
@@ -219,7 +219,7 @@ export default function IapDashboardScreen() {
               style={[styles.copyButton, { backgroundColor: c.forest, marginTop: spacing.sm }]}
               onPress={handleToggleSupportDiagnostics}
             >
-              <Ionicons name="pulse-outline" size={20} color="#FFFFFF" />
+              <Pulse size={20} color="#FFFFFF" weight="regular" />
               <AppText variant="button" style={styles.copyButtonText}>
                 {supportDiagnosticsEnabled ? 'Disable' : 'Enable'}
               </AppText>
@@ -235,7 +235,7 @@ export default function IapDashboardScreen() {
               style={[styles.copyButton, { backgroundColor: c.forest }]}
               onPress={handleRetryIapSetup}
             >
-              <Ionicons name="refresh-outline" size={20} color="#FFFFFF" />
+              <ArrowsClockwise size={20} color="#FFFFFF" weight="regular" />
               <AppText variant="button" style={styles.copyButtonText}>
                 Retry IAP Setup
               </AppText>
@@ -297,7 +297,7 @@ export default function IapDashboardScreen() {
           style={[styles.copyButton, { backgroundColor: c.forest }]}
           onPress={handleCopy}
         >
-          <Ionicons name="copy-outline" size={20} color="#FFFFFF" />
+          <Copy size={20} color="#FFFFFF" weight="regular" />
           <AppText variant="button" style={styles.copyButtonText}>
             Copy
           </AppText>

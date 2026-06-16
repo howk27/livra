@@ -13,7 +13,7 @@ import {
   Image,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { Feather } from '@expo/vector-icons';
+import { User, Camera } from 'phosphor-react-native';
 import { LivraHeader } from '../../components/ui/LivraHeader';
 import { PillButton } from '../../components/ui/PillButton';
 import { SectionLabel } from '../../components/ui/SectionLabel';
@@ -91,11 +91,11 @@ export default function ProfileScreen() {
                 <Image source={{ uri: avatarUri }} style={styles.avatar} resizeMode="cover" />
               ) : (
                 <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                  <Feather name="user" size={28} color={c.inkMuted} />
+                  <User size={28} color={c.inkMuted} weight="duotone" />
                 </View>
               )}
               <View style={[styles.cameraChip, { backgroundColor: c.forest }]}>
-                <Feather name="camera" size={14} color={c.inkInverse} />
+                <Camera size={14} color={c.inkInverse} weight="fill" />
               </View>
             </TouchableOpacity>
           </View>

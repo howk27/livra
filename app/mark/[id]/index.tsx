@@ -796,7 +796,7 @@ function MarkDetailContent() {
                     <Text style={styles.historyDate}>
                       {dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                     </Text>
-                    <Check size={14} color={c.forest} weight="duotone" />
+                    <Check size={14} color={c.accent} weight="duotone" />
                   </TouchableOpacity>
                 );
               })
@@ -922,7 +922,7 @@ function MarkDetailContent() {
                 <Switch
                   value={reminderEnabled}
                   onValueChange={handleReminderToggle}
-                  trackColor={{ false: c.borderMid, true: c.forest }}
+                  trackColor={{ false: c.borderMid, true: c.accent }}
                   thumbColor={c.inkInverse}
                 />
               </View>
@@ -951,7 +951,7 @@ function MarkDetailContent() {
                   style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
                 >
                   <Text style={styles.settingAction}>Open</Text>
-                  <ArrowRight size={14} color={c.forest} weight="bold" />
+                  <ArrowRight size={14} color={c.accent} weight="bold" />
                 </TouchableOpacity>
               </View>
             </View>
@@ -1282,7 +1282,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     gap: spacing.xs,
   },
   noteCloudHint: { fontSize: 12, fontFamily: fonts.sans, color: c.inkMuted, lineHeight: 18 },
-  noteCloudDismiss: { fontSize: 12, fontFamily: fonts.sansMedium, color: c.forest },
+  noteCloudDismiss: { fontSize: 12, fontFamily: fonts.sansMedium, color: c.accent },
 
   // Past notes
   pastNoteRow: {
@@ -1318,7 +1318,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
   },
   settingLabel: { fontSize: 15, fontFamily: fonts.sansMedium, color: c.inkDark },
   settingMeta: { fontSize: 12, fontFamily: fonts.sans, color: c.inkMuted, marginTop: 2 },
-  settingAction: { fontSize: 13, fontFamily: fonts.sansMedium, color: c.forest },
+  settingAction: { fontSize: 13, fontFamily: fonts.sansMedium, color: c.accent },
 
   // Modal
   modalOverlay: {

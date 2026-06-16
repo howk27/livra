@@ -6,9 +6,10 @@ import {
   TouchableOpacity,
   TouchableWithoutFeedback,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { colors } from '../theme/colors';
+import { WarningCircle } from 'phosphor-react-native';
+import { themedColors } from '../theme/tokens';
 import { spacing, borderRadius, fontSize, fontWeight } from '../theme/tokens';
+import { applyOpacity } from '@/src/components/icons/color';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { AppText } from './Typography';
 
@@ -44,7 +45,7 @@ export const DuplicateMarkModal: React.FC<DuplicateMarkModalProps> = ({
   showGoToButton = false,
 }) => {
   const theme = useEffectiveTheme();
-  const themeColors = colors[theme];
+  const c = themedColors(theme);
   const message = DUPLICATE_MESSAGES[Math.floor(Math.random() * DUPLICATE_MESSAGES.length)];
 
   return (
@@ -60,28 +61,28 @@ export const DuplicateMarkModal: React.FC<DuplicateMarkModalProps> = ({
             <View
               style={[
                 styles.modalContainer,
-                { backgroundColor: themeColors.surface, borderColor: themeColors.border },
+                { backgroundColor: c.surface, borderColor: c.borderMid },
               ]}
             >
               {/* Icon */}
-              <View style={[styles.iconContainer, { backgroundColor: themeColors.primary + '20' }]}>
-                <Ionicons name="alert-circle" size={48} color={themeColors.primary} />
+              <View style={[styles.iconContainer, { backgroundColor: applyOpacity(c.forest, 0.12) }]}>
+                <WarningCircle size={48} color={c.forest} weight="duotone" />
               </View>
 
               {/* Title */}
-              <AppText variant="headline" style={[styles.title, { color: themeColors.text }]}>
+              <AppText variant="headline" style={[styles.title, { color: c.inkDark }]}>
                 {message}
               </AppText>
 
               {/* Mark Name */}
-              <View style={[styles.counterNameContainer, { backgroundColor: themeColors.surfaceVariant || themeColors.surface }]}>
-                <AppText variant="body" style={[styles.counterName, { color: themeColors.textSecondary }]}>
+              <View style={[styles.counterNameContainer, { backgroundColor: c.surfaceAlt || c.surface }]}>
+                <AppText variant="body" style={[styles.counterName, { color: c.inkMid }]}>
                   "{markName}"
                 </AppText>
               </View>
 
               {/* Message */}
-              <AppText variant="body" style={[styles.message, { color: themeColors.textSecondary }]}>
+              <AppText variant="body" style={[styles.message, { color: c.inkMid }]}>
                 {showGoToButton
                   ? "Open the existing mark and continue tracking there."
                   : "Try a different name, or open the existing mark to edit it."}
@@ -90,29 +91,29 @@ export const DuplicateMarkModal: React.FC<DuplicateMarkModalProps> = ({
               {/* Buttons */}
               <View style={styles.buttonContainer}>
                 <TouchableOpacity
-                  style={[styles.button, styles.cancelButton, { borderColor: themeColors.border }]}
+                  style={[styles.button, styles.cancelButton, { borderColor: c.borderMid }]}
                   onPress={onClose}
                 >
-                  <AppText variant="button" style={[styles.buttonText, { color: themeColors.textSecondary }]}>
+                  <AppText variant="button" style={[styles.buttonText, { color: c.inkMid }]}>
                     Dismiss
                   </AppText>
                 </TouchableOpacity>
                 {showGoToButton && onGoToMark && (
                   <TouchableOpacity
-                    style={[styles.button, styles.primaryButton, { backgroundColor: themeColors.accent.primary }]}
+                    style={[styles.button, styles.primaryButton, { backgroundColor: c.forest }]}
                     onPress={onGoToMark}
                   >
-                    <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+                    <AppText variant="button" style={[styles.buttonText, { color: c.inkInverse }]}>
                       Go to Mark
                     </AppText>
                   </TouchableOpacity>
                 )}
                 {!showGoToButton && (
                   <TouchableOpacity
-                    style={[styles.button, styles.primaryButton, { backgroundColor: themeColors.accent.primary }]}
+                    style={[styles.button, styles.primaryButton, { backgroundColor: c.forest }]}
                     onPress={onClose}
                   >
-                    <AppText variant="button" style={[styles.buttonText, { color: themeColors.text }]}>
+                    <AppText variant="button" style={[styles.buttonText, { color: c.inkInverse }]}>
                       Got it
                     </AppText>
                   </TouchableOpacity>

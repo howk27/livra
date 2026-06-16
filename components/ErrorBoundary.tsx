@@ -1,7 +1,7 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors } from '../theme/colors';
+import { themedColors } from '../theme/tokens';
 import { env } from '../lib/env';
 import { spacing, borderRadius, fontSize, fontWeight } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
@@ -72,36 +72,36 @@ interface ErrorFallbackProps {
 
 function ErrorFallback({ error, onReload }: ErrorFallbackProps) {
   const theme = useEffectiveTheme();
-  const themeColors = colors[theme];
+  const c = themedColors(theme);
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: c.linen }]}>
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.iconContainer}>
-          <Text style={[styles.icon, { color: themeColors.error }]}>⚠️</Text>
+          <Text style={[styles.icon, { color: c.danger }]}>⚠️</Text>
         </View>
 
-        <Text style={[styles.title, { color: themeColors.text }]}>
+        <Text style={[styles.title, { color: c.inkDark }]}>
           Something went wrong
         </Text>
 
-        <Text style={[styles.message, { color: themeColors.textSecondary }]}>
+        <Text style={[styles.message, { color: c.inkMid }]}>
           We're sorry, but something unexpected happened. Don't worry, your data is safe.
         </Text>
 
         {env.isDev && error && (
-          <View style={[styles.errorContainer, { backgroundColor: themeColors.surface }]}>
-            <Text style={[styles.errorTitle, { color: themeColors.error }]}>
+          <View style={[styles.errorContainer, { backgroundColor: c.surface }]}>
+            <Text style={[styles.errorTitle, { color: c.danger }]}>
               Error Details (Development Only)
             </Text>
-            <Text style={[styles.errorText, { color: themeColors.textSecondary }]}>
+            <Text style={[styles.errorText, { color: c.inkMid }]}>
               {error.toString()}
             </Text>
             {error.stack && (
-              <Text style={[styles.errorStack, { color: themeColors.textSecondary }]}>
+              <Text style={[styles.errorStack, { color: c.inkMid }]}>
                 {error.stack}
               </Text>
             )}
@@ -109,16 +109,16 @@ function ErrorFallback({ error, onReload }: ErrorFallbackProps) {
         )}
 
         <TouchableOpacity
-          style={[styles.button, { backgroundColor: themeColors.accent.primary }]}
+          style={[styles.button, { backgroundColor: c.forest }]}
           onPress={onReload}
           activeOpacity={0.7}
         >
-          <Text style={[styles.buttonText, { color: themeColors.text }]}>
+          <Text style={[styles.buttonText, { color: c.inkInverse }]}>
             Try Again
           </Text>
         </TouchableOpacity>
 
-        <Text style={[styles.hint, { color: themeColors.textSecondary }]}>
+        <Text style={[styles.hint, { color: c.inkMid }]}>
           If this problem persists, please restart the app or contact support.
         </Text>
       </ScrollView>

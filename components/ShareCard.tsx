@@ -10,7 +10,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { colors } from '../theme/colors';
+import { themedColors } from '../theme/tokens';
 import { spacing, borderRadius, fontSize, fontWeight } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { AppText } from '../components/Typography';
@@ -127,8 +127,10 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
   profileName,
 }) => {
   const effectiveTheme = useEffectiveTheme();
-  const chromeColors = colors[effectiveTheme];
-  const cardColors = colors.dark;
+  const chromeColors = themedColors(effectiveTheme);
+  // The exported share card is a fixed on-brand surface: forest card with
+  // light (inverse) ink, regardless of the app's active theme.
+  const cardColors = themedColors('dark');
   const { width: screenWidth } = useWindowDimensions();
   const cellSize =
     (screenWidth - CARD_PADDING * 2 - spacing.lg * 2 - CELL_GAP * (HEATMAP_COLS - 1)) /
@@ -183,7 +185,7 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
       <View
         style={[
           styles.backdrop,
-          { backgroundColor: accentWithOpacity(chromeColors.background, 0.92) },
+          { backgroundColor: accentWithOpacity(chromeColors.linen, 0.92) },
         ]}
       >
         <View style={styles.sheetContainer}>
@@ -194,21 +196,21 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
             accessibilityLabel="Close"
             accessibilityRole="button"
           >
-            <Text style={[styles.closeIcon, { color: chromeColors.textSecondary }]}>✕</Text>
+            <Text style={[styles.closeIcon, { color: chromeColors.inkMid }]}>✕</Text>
           </TouchableOpacity>
 
           <View
             style={[
               styles.card,
               {
-                backgroundColor: cardColors.background,
+                backgroundColor: cardColors.forest,
                 borderColor: accentWithOpacity(accentColor, 0.18),
               },
             ]}
           >
             <AppText
               variant="headline"
-              style={[styles.titleText, { color: cardColors.text }]}
+              style={[styles.titleText, { color: cardColors.inkInverse }]}
               numberOfLines={2}
               adjustsFontSizeToFit
             >
@@ -226,7 +228,7 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
               </Text>
               <AppText
                 variant="caption"
-                style={[styles.momentumLabel, { color: cardColors.textTertiary }]}
+                style={[styles.momentumLabel, { color: cardColors.inkInverseMuted }]}
               >
                 MOMENTUM
               </AppText>
@@ -248,7 +250,7 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
             </View>
 
             <View style={styles.cardFooter}>
-              <Text style={[styles.wordmark, { color: cardColors.textTertiary }]}>
+              <Text style={[styles.wordmark, { color: cardColors.inkInverseMuted }]}>
                 LIVRA
               </Text>
             </View>
@@ -264,7 +266,10 @@ export const ShareCardModal: React.FC<ShareCardModalProps> = ({
             accessibilityRole="button"
             accessibilityLabel="Share your momentum"
           >
-            <AppText variant="button" style={styles.shareButtonText}>
+            <AppText
+              variant="button"
+              style={[styles.shareButtonText, { color: cardColors.inkInverse }]}
+            >
               Share your momentum.
             </AppText>
           </TouchableOpacity>
@@ -342,7 +347,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  shareButtonText: {
-    color: colors.dark.text,
-  },
+  shareButtonText: {},
 });

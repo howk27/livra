@@ -208,7 +208,7 @@ export default function ResetPasswordCompleteScreen() {
 
           {recoveryGate === 'checking' ? (
             <View style={styles.centerBlock}>
-              <ActivityIndicator size="large" color={c.forest} />
+              <ActivityIndicator size="large" color={c.accent} />
               <Text style={[styles.hint, { color: c.inkMuted }]}>
                 Checking your reset link…
               </Text>
@@ -225,7 +225,7 @@ export default function ResetPasswordCompleteScreen() {
                 <Text style={styles.submitButtonText}>Request a new reset email</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={() => router.replace('/auth/signin')} style={styles.linkBtn}>
-                <Text style={[styles.linkText, { color: c.forest }]}>Back to sign in</Text>
+                <Text style={[styles.linkText, { color: c.accent }]}>Back to sign in</Text>
               </TouchableOpacity>
             </Animated.View>
           ) : (
@@ -309,7 +309,7 @@ export default function ResetPasswordCompleteScreen() {
                 disabled={loading}
                 style={styles.backToSignInButton}
               >
-                <Text style={[styles.backToSignInText, { color: c.forest }]}>
+                <Text style={[styles.backToSignInText, { color: c.accent }]}>
                   ← Back to sign in
                 </Text>
               </TouchableOpacity>

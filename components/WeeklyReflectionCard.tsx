@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { colors } from '../theme/colors';
+import { themedColors } from '../theme/tokens';
 import { spacing, fontSize, fontWeight, borderRadius } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
 import type { ReflectionTier } from '../lib/weeklyReflectionCopy';
@@ -22,7 +22,7 @@ interface WeeklyReflectionCardProps {
 
 export function WeeklyReflectionCard({ markName, tier, title, body }: WeeklyReflectionCardProps) {
   const theme = useEffectiveTheme();
-  const themeColors = colors[theme];
+  const c = themedColors(theme);
   const accent = TIER_ACCENT[tier];
 
   return (
@@ -30,17 +30,17 @@ export function WeeklyReflectionCard({ markName, tier, title, body }: WeeklyRefl
       style={[
         styles.card,
         {
-          backgroundColor: themeColors.surface,
-          borderColor: themeColors.border,
+          backgroundColor: c.surface,
+          borderColor: c.borderMid,
           borderLeftColor: accent,
         },
       ]}
     >
-      <Text style={[styles.markName, { color: themeColors.textSecondary }]}>
+      <Text style={[styles.markName, { color: c.inkMid }]}>
         {markName.toUpperCase()}
       </Text>
-      <Text style={[styles.title, { color: themeColors.text }]}>{title}</Text>
-      <Text style={[styles.body, { color: themeColors.textSecondary }]}>{body}</Text>
+      <Text style={[styles.title, { color: c.inkDark }]}>{title}</Text>
+      <Text style={[styles.body, { color: c.inkMid }]}>{body}</Text>
     </View>
   );
 }

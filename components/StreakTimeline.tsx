@@ -9,7 +9,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { AppText } from './Typography';
 import { applyOpacity } from '@/src/components/icons/color';
-import { colors } from '../theme/colors';
+import { themedColors } from '../theme/tokens';
 import { spacing, borderRadius, fontSize, fontWeight } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
 
@@ -83,7 +83,7 @@ export const StreakTimeline: React.FC<StreakTimelineProps> = ({
   maxBarHeight = 72,
 }) => {
   const theme = useEffectiveTheme();
-  const themeColors = colors[theme];
+  const c = themedColors(theme);
   const [selectedStreak, setSelectedStreak] = useState<StreakRecord | null>(null);
 
   const handlePress = useCallback((r: StreakRecord) => {
@@ -93,7 +93,7 @@ export const StreakTimeline: React.FC<StreakTimelineProps> = ({
   if (streaks.length === 0) return null;
 
   const maxLen = Math.max(...streaks.map(s => s.length), 1);
-  const accentColor = themeColors.accent.primary;
+  const accentColor = c.accent;
 
   return (
     <View style={styles.wrapper}>
@@ -117,7 +117,7 @@ export const StreakTimeline: React.FC<StreakTimelineProps> = ({
       </ScrollView>
 
       {selectedStreak && (
-        <AppText style={[styles.label, { color: themeColors.textSecondary }]}>
+        <AppText style={[styles.label, { color: c.inkMid }]}>
           {formatDateRange(selectedStreak.startDate, selectedStreak.endDate, selectedStreak.length)}
         </AppText>
       )}

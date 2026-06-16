@@ -8,7 +8,7 @@ import Animated, {
   withTiming,
   Easing,
 } from 'react-native-reanimated';
-import { colors } from '../theme/colors';
+import { themedColors } from '../theme/tokens';
 import { spacing, fontSize, borderRadius } from '../theme/tokens';
 import { LEVEL_UP_COPY, getBorderStyle } from '../lib/xpEngine';
 import { useEffectiveTheme } from '../state/uiSlice';
@@ -21,7 +21,7 @@ interface LevelUpModalProps {
 
 export function LevelUpModal({ level, levelTitle, onDismiss }: LevelUpModalProps) {
   const theme = useEffectiveTheme();
-  const c = colors[theme];
+  const c = themedColors(theme);
 
   const borderStyle = getBorderStyle(level);
   const scale = useSharedValue(0.85);
@@ -52,7 +52,7 @@ export function LevelUpModal({ level, levelTitle, onDismiss }: LevelUpModalProps
   return (
     <View style={styles.overlay}>
       <Animated.View style={[styles.card, { backgroundColor: c.surface }, containerStyle]}>
-        <Text style={[styles.levelNumber, { color: c.accent.primary }]}>Level {level}</Text>
+        <Text style={[styles.levelNumber, { color: c.accent }]}>Level {level}</Text>
 
         <Animated.View
           style={[
@@ -78,17 +78,17 @@ export function LevelUpModal({ level, levelTitle, onDismiss }: LevelUpModalProps
             borderStyle.animated && pulseStyle,
           ]}
         >
-          <Text style={[styles.emblemText, { color: c.accent.primary }]}>{level}</Text>
+          <Text style={[styles.emblemText, { color: c.accent }]}>{level}</Text>
         </Animated.View>
 
-        <Text style={[styles.title, { color: c.text }]}>{levelTitle}</Text>
-        <Text style={[styles.copy, { color: c.textSecondary }]}>{copy}</Text>
+        <Text style={[styles.title, { color: c.inkDark }]}>{levelTitle}</Text>
+        <Text style={[styles.copy, { color: c.inkMid }]}>{copy}</Text>
 
         <Pressable
           onPress={onDismiss}
           style={({ pressed }) => [
             styles.cta,
-            { backgroundColor: c.accent.primary, opacity: pressed ? 0.8 : 1 },
+            { backgroundColor: c.forest, opacity: pressed ? 0.8 : 1 },
           ]}
           accessibilityRole="button"
           accessibilityLabel="Keep going"

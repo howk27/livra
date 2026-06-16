@@ -8,10 +8,8 @@ import Animated, {
   withTiming,
   runOnJS,
 } from 'react-native-reanimated';
-import { Ionicons } from '@expo/vector-icons';
-import { CheckCircle } from 'phosphor-react-native';
-import { colors } from '../theme/colors';
-import { spacing, borderRadius, fontSize, fontWeight, shadow } from '../theme/tokens';
+import { CheckCircle, WarningCircle, Warning, Info, X } from 'phosphor-react-native';
+import { spacing, borderRadius, fontSize, fontWeight, shadow, themedColors } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { AppText } from './Typography';
 
@@ -31,7 +29,7 @@ interface NotificationToastProps {
 
 const NotificationToast: React.FC<NotificationToastProps> = ({ notification, onDismiss }) => {
   const theme = useEffectiveTheme();
-  const themeColors = colors[theme];
+  const c = themedColors(theme);
   const insets = useSafeAreaInsets();
   const translateY = useSharedValue(-100);
   const opacity = useSharedValue(0);
@@ -72,27 +70,30 @@ const NotificationToast: React.FC<NotificationToastProps> = ({ notification, onD
   if (!notification) return null;
 
   const renderIcon = () => {
-    if (notification.type === 'success') {
-      return <CheckCircle size={24} color="#FFFFFF" weight="bold" />;
+    switch (notification.type) {
+      case 'success':
+        return <CheckCircle size={24} color="#FFFFFF" weight="fill" />;
+      case 'error':
+        return <WarningCircle size={24} color="#FFFFFF" weight="fill" />;
+      case 'warning':
+        return <Warning size={24} color="#FFFFFF" weight="fill" />;
+      case 'info':
+      default:
+        return <Info size={24} color="#FFFFFF" weight="fill" />;
     }
-    const iconName =
-      notification.type === 'error' ? 'alert-circle'
-      : notification.type === 'warning' ? 'warning'
-      : 'information-circle';
-    return <Ionicons name={iconName} size={24} color="#FFFFFF" />;
   };
 
   const getBackgroundColor = () => {
     switch (notification.type) {
       case 'success':
-        return themeColors.accent.primary;
+        return c.success;
       case 'error':
-        return themeColors.error;
+        return c.danger;
       case 'warning':
         return '#F97316';
       case 'info':
       default:
-        return themeColors.primary;
+        return c.forest;
     }
   };
 
@@ -114,7 +115,7 @@ const NotificationToast: React.FC<NotificationToastProps> = ({ notification, onD
           {notification.message}
         </AppText>
         <TouchableOpacity onPress={onDismiss} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-          <Ionicons name="close" size={20} color="#FFFFFF" />
+          <X size={20} color="#FFFFFF" weight="bold" />
         </TouchableOpacity>
       </View>
     </Animated.View>

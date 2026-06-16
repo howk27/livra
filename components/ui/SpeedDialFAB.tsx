@@ -16,7 +16,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Feather } from '@expo/vector-icons';
+import { CheckCircle, Flag, Plus } from 'phosphor-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { spacing, radius, shadow, themedColors } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
@@ -152,7 +152,7 @@ export function SpeedDialFAB() {
               onPress={handleAddMark}
               activeOpacity={0.85}
             >
-              <Feather name="check-circle" size={18} color={colors.inkInverse} />
+              <CheckCircle size={18} color={colors.inkInverse} weight="fill" />
             </TouchableOpacity>
           </View>
         </Animated.View>
@@ -171,7 +171,7 @@ export function SpeedDialFAB() {
               onPress={handleAddGoal}
               activeOpacity={0.85}
             >
-              <Feather name="flag" size={18} color={colors.inkInverse} />
+              <Flag size={18} color={colors.inkInverse} weight="fill" />
             </TouchableOpacity>
           </View>
         </Animated.View>
@@ -184,7 +184,7 @@ export function SpeedDialFAB() {
             activeOpacity={0.9}
           >
             <Animated.View style={fabRotateStyle}>
-              <Feather name="plus" size={22} color={colors.inkInverse} />
+              <Plus size={22} color={colors.inkInverse} weight="bold" />
             </Animated.View>
           </TouchableOpacity>
         )}

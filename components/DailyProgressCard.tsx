@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated, StyleProp, ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffectiveTheme } from '../state/uiSlice';
-import { colors } from '../theme/colors';
+import { themedColors } from '../theme/tokens';
 import { spacing, borderRadius, fontWeight, fontSize } from '../theme/tokens';
 import { applyOpacity } from '@/src/components/icons/color';
 import { useReducedMotion } from '../hooks/useReducedMotion';
@@ -97,7 +97,7 @@ export const DailyProgressCard: React.FC<DailyProgressCardProps> = ({
   momentumHighlight = false,
 }) => {
   const theme = useEffectiveTheme();
-  const themeColors = colors[theme];
+  const themeColors = themedColors(theme);
   const isDark = theme === 'dark';
   const prefersReducedMotion = useReducedMotion();
 
@@ -170,15 +170,15 @@ export const DailyProgressCard: React.FC<DailyProgressCardProps> = ({
     >
       {streakDays > 0 && (
         <Animated.View style={{ transform: [{ scale: streakScale }], alignSelf: 'flex-start' }}>
-          <Text style={[styles.streakLabel, { color: themeColors.textTertiary }]}>
+          <Text style={[styles.streakLabel, { color: themeColors.inkMuted }]}>
             {streakDays} day streak
           </Text>
         </Animated.View>
       )}
 
       <View style={styles.titleRow}>
-        <Text style={[styles.title, { color: themeColors.text }]}>Daily Momentum</Text>
-        <Text style={[styles.countBadge, { color: themeColors.text }]}>
+        <Text style={[styles.title, { color: themeColors.inkDark }]}>Daily Momentum</Text>
+        <Text style={[styles.countBadge, { color: themeColors.inkDark }]}>
           {safeCompleted}/{safeTotal}
         </Text>
       </View>
@@ -186,7 +186,7 @@ export const DailyProgressCard: React.FC<DailyProgressCardProps> = ({
       <View style={[styles.tilesRow, isAllDone && styles.tilesRowComplete]}>
         {Array.from({ length: tileUnits }).map((_, i) => {
           const filled = i < filledTiles;
-          const emptyBg = isDark ? themeColors.surfaceVariant : themeColors.border;
+          const emptyBg = isDark ? themeColors.surfaceAlt : themeColors.borderMid;
           const [g0, g1] = filledSegmentGradientColors(i, isDark, filledTiles);
           return (
             <View
@@ -217,7 +217,7 @@ export const DailyProgressCard: React.FC<DailyProgressCardProps> = ({
       </View>
 
       {subText ? (
-        <Text style={[styles.subText, { color: themeColors.textSecondary }]}>{subText}</Text>
+        <Text style={[styles.subText, { color: themeColors.inkMid }]}>{subText}</Text>
       ) : null}
     </Animated.View>
   );

@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { UploadSimple, DownloadSimple, CaretRight, IconProps } from 'phosphor-react-native';
 import { useEffectiveTheme } from '../state/uiSlice';
-import { colors } from '../theme/colors';
+import { themedColors } from '../theme/tokens';
 import { spacing, borderRadius, fontSize, fontWeight } from '../theme/tokens';
 import { exportBackup, importBackup } from '../lib/backup';
 import { useMarksStore } from '../state/countersSlice';
@@ -18,7 +18,7 @@ export interface BackupRestoreSectionProps {
 
 export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({ embedded = false }) => {
   const theme = useEffectiveTheme();
-  const themeColors = colors[theme];
+  const themeColors = themedColors(theme);
   const { user } = useAuth();
   const loadMarks = useMarksStore(s => s.loadMarks);
   const [exporting, setExporting] = useState(false);
@@ -72,14 +72,14 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({ embe
 
   const rows = [
     {
-      icon: 'cloud-upload-outline' as const,
+      Icon: UploadSimple as React.FC<IconProps>,
       label: 'Export backup',
       sub: 'Create a portable data snapshot',
       onPress: handleExport,
       loading: exporting,
     },
     {
-      icon: 'cloud-download-outline' as const,
+      Icon: DownloadSimple as React.FC<IconProps>,
       label: 'Restore backup',
       sub: 'Upload a previously saved state',
       onPress: handleImport,
@@ -92,25 +92,25 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({ embe
       key={row.label}
       style={[
         embedded ? styles.rowEmbedded : styles.row,
-        embedded && !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: themeColors.border },
+        embedded && !isLast && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: themeColors.borderMid },
         !embedded && { backgroundColor: themeColors.surface },
       ]}
       onPress={row.onPress}
       disabled={row.loading}
       activeOpacity={0.7}
     >
-      <View style={[styles.iconWrap, { backgroundColor: applyOpacity(themeColors.accent.primary, theme === 'dark' ? 0.16 : 0.12) }]}>
+      <View style={[styles.iconWrap, { backgroundColor: applyOpacity(themeColors.accent, theme === 'dark' ? 0.16 : 0.12) }]}>
         {row.loading ? (
-          <ActivityIndicator size="small" color={themeColors.accent.primary} />
+          <ActivityIndicator size="small" color={themeColors.accent} />
         ) : (
-          <Ionicons name={row.icon} size={20} color={themeColors.textSecondary} />
+          <row.Icon size={20} color={themeColors.inkMid} weight="regular" />
         )}
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={[styles.rowLabel, { color: themeColors.text }]}>{row.label}</Text>
-        <Text style={[styles.rowSub, { color: themeColors.textSecondary }]}>{row.sub}</Text>
+        <Text style={[styles.rowLabel, { color: themeColors.inkDark }]}>{row.label}</Text>
+        <Text style={[styles.rowSub, { color: themeColors.inkMid }]}>{row.sub}</Text>
       </View>
-      <Ionicons name="chevron-forward-outline" size={18} color={themeColors.textTertiary} />
+      <CaretRight size={18} color={themeColors.inkMuted} weight="bold" />
     </TouchableOpacity>
   );
 
@@ -121,7 +121,7 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({ embe
           styles.embeddedCard,
           {
             backgroundColor: themeColors.surface,
-            borderColor: themeColors.border,
+            borderColor: themeColors.borderMid,
           },
         ]}
       >

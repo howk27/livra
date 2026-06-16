@@ -2,8 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { View, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { colors } from '../../theme/colors';
-import { spacing, fontSize, fontWeight } from '../../theme/tokens';
+import { themedColors, spacing, fontSize, fontWeight } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { AppText } from '../../components/Typography';
 import { GradientBackground } from '../../components/GradientBackground';
@@ -12,7 +11,7 @@ import { logger } from '../../lib/utils/logger';
 
 export default function SigningOutScreen() {
   const theme = useEffectiveTheme();
-  const themeColors = colors[theme];
+  const themeColors = themedColors(theme);
   const router = useRouter();
   const { signOut, user, initialized, loading } = useAuth();
   const [signOutError, setSignOutError] = useState<string | null>(null);
@@ -60,23 +59,23 @@ export default function SigningOutScreen() {
 
   return (
     <GradientBackground>
-      <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: themeColors.linen }]}>
         <View style={styles.content}>
-          <ActivityIndicator size="large" color={themeColors.primary} />
-          <AppText variant="headline" style={[styles.title, { color: themeColors.text }]}>
+          <ActivityIndicator size="large" color={themeColors.forest} />
+          <AppText variant="headline" style={[styles.title, { color: themeColors.inkDark }]}>
             {signOutError ? 'Sign-out pending' : 'Signing out…'}
           </AppText>
-          <AppText variant="body" style={[styles.subtitle, { color: themeColors.textSecondary }]}>
+          <AppText variant="body" style={[styles.subtitle, { color: themeColors.inkMid }]}>
             {signOutError ??
               'Finishing on this device. If you stay here, your session is being cleared.'}
           </AppText>
           {signOutError ? (
             <TouchableOpacity
-              style={[styles.retry, { backgroundColor: themeColors.primary }]}
+              style={[styles.retry, { backgroundColor: themeColors.forest }]}
               onPress={handleRetry}
               activeOpacity={0.85}
             >
-              <AppText variant="button" style={{ color: themeColors.text }}>
+              <AppText variant="button" style={{ color: themeColors.inkInverse }}>
                 Try again
               </AppText>
             </TouchableOpacity>

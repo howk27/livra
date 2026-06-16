@@ -2,7 +2,7 @@ import React from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { ArrowLeft } from 'phosphor-react-native';
 import { themedColors, spacing, borderRadius } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { AppText } from '../../components/Typography';
@@ -22,7 +22,7 @@ export default function PrivacyPolicyScreen() {
             onPress={() => router.back()}
             style={[styles.backButton, { backgroundColor: c.surface }]}
           >
-            <Ionicons name="arrow-back" size={24} color={c.inkDark} />
+            <ArrowLeft size={24} color={c.inkDark} weight="bold" />
           </TouchableOpacity>
           <AppText variant="headline" style={[styles.headerTitle, { color: c.inkDark }]}>
             Privacy Policy

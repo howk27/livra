@@ -16,7 +16,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { GestureDetector, Gesture, GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
-import { Feather } from '@expo/vector-icons';
+import { ArrowRight } from 'phosphor-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SvgLogo } from '../ui/SvgLogo';
 import { PillButton } from '../ui/PillButton';
@@ -54,7 +54,8 @@ function AnimatedElement({
 
 export function GoalCompletionOverlay() {
   const insets = useSafeAreaInsets();
-  const c = themedColors(useEffectiveTheme());
+  const theme = useEffectiveTheme();
+  const c = themedColors(theme);
   const { completedGoal, show, hideCompletion } = useGoalCompletionStore();
   const goals = useGoalsStore((s) => s.goals);
 
@@ -126,7 +127,7 @@ export function GoalCompletionOverlay() {
           ]}
         >
           <AnimatedElement delay={400}>
-            <SvgLogo color={c.forest} width={52} height={26} />
+            <SvgLogo color={theme === 'dark' ? c.inkDark : c.forest} width={52} height={26} />
           </AnimatedElement>
 
           <AnimatedElement delay={550}>
@@ -147,7 +148,7 @@ export function GoalCompletionOverlay() {
                 <SectionLabel color={c.inkMuted} style={styles.nextLabel}>NEXT IN LINE</SectionLabel>
                 <Text style={[styles.nextTitle, { color: c.inkDark }]}>{nextGoal.title}</Text>
                 <View style={styles.nextArrow}>
-                  <Feather name="arrow-right" size={14} color={c.inkMuted} />
+                  <ArrowRight size={14} color={c.inkMuted} weight="bold" />
                 </View>
               </View>
             </AnimatedElement>

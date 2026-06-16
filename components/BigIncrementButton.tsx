@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { Pressable, StyleSheet, Animated, Easing } from 'react-native';
-import { colors } from '../theme/colors';
+import { themedColors } from '../theme/tokens';
 import { spacing, borderRadius, motion, shadow } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { AppText } from './Typography';
@@ -18,7 +18,7 @@ export const BigIncrementButton: React.FC<BigIncrementButtonProps> = ({
   label = '+1',
 }) => {
   const theme = useEffectiveTheme();
-  const themeColors = colors[theme];
+  const themeColors = themedColors(theme);
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const prefersReducedMotion = useReducedMotion();
 
@@ -55,7 +55,7 @@ export const BigIncrementButton: React.FC<BigIncrementButtonProps> = ({
       <Pressable
         style={({ pressed }) => [
           styles.button,
-          { backgroundColor: themeColors.accent.primary },
+          { backgroundColor: themeColors.forest },
           disabled && styles.disabled,
           pressed && { opacity: 0.8 },
           shadow.lg,
@@ -66,7 +66,7 @@ export const BigIncrementButton: React.FC<BigIncrementButtonProps> = ({
         disabled={disabled}
         hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
       >
-        <AppText variant="display" style={[styles.buttonText, { color: themeColors.text }]}>
+        <AppText variant="display" style={[styles.buttonText, { color: themeColors.inkInverse }]}>
           {label}
         </AppText>
       </Pressable>

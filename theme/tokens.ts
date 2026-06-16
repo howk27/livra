@@ -6,6 +6,11 @@ export const colors = {
   forestLight: '#2D5446',
   mint: '#8DB5A8',
   mintLight: '#C8DDD8',
+  // Brand accent for FOREGROUND use (text, icons, selection outlines) on the
+  // page background. Distinct from `forest`, which doubles as a card/button
+  // background. On light this equals `forest`; on dark it must stay readable on
+  // the dark-green background, so it uses the bright `mint` accent.
+  accent: '#1C3830',
   inkDark: '#1A1A18',
   inkMid: '#4A4A45',
   inkMuted: '#9A9A92',
@@ -39,6 +44,9 @@ const colorsDark: typeof colors = {
   forestLight: '#3A6B58',
   mint: '#8DB5A8',
   mintLight: '#C8DDD8',
+  // Foreground brand accent — the bright mint reads on the dark background,
+  // where `forest` (#2D5446) would be green-on-green. See `accent` in `colors`.
+  accent: '#8DB5A8',
   // Ink (text) inverts: light text on dark surfaces
   inkDark: '#F0EDE8',
   inkMid: '#C2C7C2',
@@ -53,6 +61,27 @@ const colorsDark: typeof colors = {
   borderLight: '#2A3A35',
   borderMid: '#3A4A44',
 };
+
+/**
+ * Per-category accent palette (warm, muted hues). These are *data* — one
+ * recognizable color per mark category — not part of the light/dark semantic
+ * roles, so they stay constant across themes. Single source of truth for
+ * MarkRow's category map and the AddMarkSheet category picker.
+ */
+export const categoryAccents = {
+  recovery: '#6B8FA6',
+  fitness: '#A0614A',
+  health: '#4A8C7A',
+  mindset: '#8A6B7B',
+  deepWork: '#4A6A8C',
+  creative: '#7A4A8C',
+  discipline: '#8A7E6B',
+  relationships: '#9E7B6B',
+  finance: '#9E8A6B',
+  email: '#4A7A8C',
+  planning: '#8C7A3A',
+  custom: '#6B7A6B',
+} as const;
 
 const colorsByTheme = { light: colors, dark: colorsDark } as const;
 

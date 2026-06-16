@@ -17,37 +17,30 @@ import {
   type Icon as PhosphorIcon,
 } from 'phosphor-react-native';
 import { CheckinButton } from './CheckinButton';
-import { fonts, radius, spacing, themedColors } from '../../theme/tokens';
+import { fonts, radius, spacing, themedColors, categoryAccents } from '../../theme/tokens';
+import { applyOpacity } from '@/src/components/icons/color';
 import { useEffectiveTheme } from '../../state/uiSlice';
 
 export const CATEGORY_MAP: Record<string, { Icon: PhosphorIcon; accent: string }> = {
-  Recovery:      { Icon: Moon,           accent: '#6B8FA6' },
-  Fitness:       { Icon: Pulse,          accent: '#A0614A' },
-  Health:        { Icon: Drop,           accent: '#4A8C7A' },
-  Mindset:       { Icon: Heart,          accent: '#8A6B7B' },
-  'Deep Work':   { Icon: Briefcase,      accent: '#4A6A8C' },
-  Creative:      { Icon: PencilSimple,   accent: '#7A4A8C' },
-  Discipline:    { Icon: Shield,         accent: '#8A7E6B' },
-  Relationships: { Icon: Users,          accent: '#9E7B6B' },
-  Finance:       { Icon: CurrencyDollar, accent: '#9E8A6B' },
-  email:         { Icon: EnvelopeSimple,  accent: '#4A7A8C' },
+  Recovery:      { Icon: Moon,           accent: categoryAccents.recovery },
+  Fitness:       { Icon: Pulse,          accent: categoryAccents.fitness },
+  Health:        { Icon: Drop,           accent: categoryAccents.health },
+  Mindset:       { Icon: Heart,          accent: categoryAccents.mindset },
+  'Deep Work':   { Icon: Briefcase,      accent: categoryAccents.deepWork },
+  Creative:      { Icon: PencilSimple,   accent: categoryAccents.creative },
+  Discipline:    { Icon: Shield,         accent: categoryAccents.discipline },
+  Relationships: { Icon: Users,          accent: categoryAccents.relationships },
+  Finance:       { Icon: CurrencyDollar, accent: categoryAccents.finance },
+  email:         { Icon: EnvelopeSimple, accent: categoryAccents.email },
   // Legacy lowercase keys
-  sleep:         { Icon: Moon,           accent: '#6B8FA6' },
-  workout:       { Icon: Pulse,          accent: '#A0614A' },
-  water:         { Icon: Drop,           accent: '#4A8C7A' },
-  planning:      { Icon: Calendar,       accent: '#8C7A3A' },
-  reading:       { Icon: BookOpen,       accent: '#7A4A8C' },
-  work:          { Icon: Briefcase,      accent: '#4A6A8C' },
-  custom:        { Icon: CircleIcon,      accent: '#6B7A6B' },
+  sleep:         { Icon: Moon,           accent: categoryAccents.recovery },
+  workout:       { Icon: Pulse,          accent: categoryAccents.fitness },
+  water:         { Icon: Drop,           accent: categoryAccents.health },
+  planning:      { Icon: Calendar,       accent: categoryAccents.planning },
+  reading:       { Icon: BookOpen,       accent: categoryAccents.creative },
+  work:          { Icon: Briefcase,      accent: categoryAccents.deepWork },
+  custom:        { Icon: CircleIcon,     accent: categoryAccents.custom },
 };
-
-function hexToRgba(hex: string, alpha: number): string {
-  const h = hex.replace('#', '');
-  const r = parseInt(h.substring(0, 2), 16);
-  const g = parseInt(h.substring(2, 4), 16);
-  const b = parseInt(h.substring(4, 6), 16);
-  return `rgba(${r},${g},${b},${alpha})`;
-}
 
 interface MarkRowProps {
   title: string;
@@ -105,7 +98,7 @@ export function MarkRow({
       <View
         style={[
           styles.iconTile,
-          { backgroundColor: hexToRgba(accent, 0.12) },
+          { backgroundColor: applyOpacity(accent, 0.12) },
         ]}
       >
         <CatIcon size={18} color={accent} weight="duotone" />

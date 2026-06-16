@@ -13,7 +13,7 @@ import Animated, {
   withDelay,
   Easing,
 } from 'react-native-reanimated';
-import { colors } from '../theme/colors';
+import { themedColors } from '../theme/tokens';
 import { spacing, fontSize, fontWeight, borderRadius } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { AppText } from './Typography';
@@ -109,7 +109,7 @@ export const HomeHeader: React.FC<HomeHeaderProps> = ({
   ceremonyToken,
 }) => {
   const theme = useEffectiveTheme();
-  const themeColors = colors[theme];
+  const c = themedColors(theme);
   const isDark = theme === 'dark';
   const prefersReducedMotion = useReducedMotion();
 
@@ -189,8 +189,8 @@ export const HomeHeader: React.FC<HomeHeaderProps> = ({
   const postLogStyle = useAnimatedStyle(() => ({ opacity: postLogOpacity.value }));
 
   const displayHeader = ceremonyHeader ?? header;
-  const segmentColor = (i: number) => markColors[i] ?? themeColors.primary;
-  const emptyBg = isDark ? applyOpacity(themeColors.border, 0.30) : applyOpacity(themeColors.border, 0.60);
+  const segmentColor = (i: number) => markColors[i] ?? c.forest;
+  const emptyBg = isDark ? applyOpacity(c.borderMid, 0.30) : applyOpacity(c.borderMid, 0.60);
 
   // Per-segment pulse tokens (incremented on ceremony, staggered)
   const [pulse0, setPulse0] = React.useState(0);
@@ -210,7 +210,7 @@ export const HomeHeader: React.FC<HomeHeaderProps> = ({
     <View style={styles.container}>
       {/* Living header title */}
       <Animated.View style={titleStyle}>
-        <AppText style={[styles.title, { color: themeColors.text }]}>
+        <AppText style={[styles.title, { color: c.inkDark }]}>
           {displayHeader.title}
         </AppText>
       </Animated.View>
@@ -218,7 +218,7 @@ export const HomeHeader: React.FC<HomeHeaderProps> = ({
       {/* Subtitle */}
       {displayHeader.subtitle ? (
         <Animated.View style={subtitleStyle}>
-          <AppText style={[styles.subtitle, { color: themeColors.textSecondary }]}>
+          <AppText style={[styles.subtitle, { color: c.inkMid }]}>
             {displayHeader.subtitle}
           </AppText>
         </Animated.View>
@@ -242,13 +242,13 @@ export const HomeHeader: React.FC<HomeHeaderProps> = ({
       )}
 
       {/* Week arc strip */}
-      <AppText style={[styles.weekArc, { color: themeColors.textTertiary }]}>
+      <AppText style={[styles.weekArc, { color: c.inkMuted }]}>
         {weekArc}
       </AppText>
 
       {/* Post-log message (3/3 ceremony only) */}
       <Animated.View style={[styles.postLogWrap, postLogStyle]} pointerEvents="none">
-        <AppText style={[styles.postLogText, { color: themeColors.textSecondary }]}>
+        <AppText style={[styles.postLogText, { color: c.inkMid }]}>
           {postLogText}
         </AppText>
       </Animated.View>

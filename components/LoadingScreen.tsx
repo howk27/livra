@@ -9,14 +9,14 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import { useEffectiveTheme } from '../state/uiSlice';
-import { colors } from '../theme/colors';
+import { themedColors } from '../theme/tokens';
 import { SvgLogo } from './ui/SvgLogo';
 
 const LOGO_SIZE = 80;
 
 export const LoadingScreen: React.FC = () => {
   const theme = useEffectiveTheme();
-  const themeColors = colors[theme];
+  const c = themedColors(theme);
   const scale = useSharedValue(1);
 
   useEffect(() => {
@@ -36,9 +36,9 @@ export const LoadingScreen: React.FC = () => {
   }));
 
   return (
-    <View style={[styles.container, { backgroundColor: themeColors.background }]}>
+    <View style={[styles.container, { backgroundColor: c.linen }]}>
       <Animated.View style={logoStyle}>
-        <SvgLogo color={themeColors.text} width={LOGO_SIZE} height={LOGO_SIZE} />
+        <SvgLogo color={c.inkDark} width={LOGO_SIZE} height={LOGO_SIZE} />
       </Animated.View>
     </View>
   );

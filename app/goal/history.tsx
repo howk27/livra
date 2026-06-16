@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { CaretLeft } from 'phosphor-react-native';
 import { format, parseISO } from 'date-fns';
 import { themedColors, spacing, fontSize, fontWeight, borderRadius } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
@@ -30,7 +30,7 @@ export default function GoalHistoryScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: c.linen }]}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Ionicons name="chevron-back" size={24} color={c.inkDark} />
+          <CaretLeft size={24} color={c.inkDark} weight="bold" />
         </TouchableOpacity>
         <View style={styles.headerTextWrap}>
           <Text style={[styles.headerTitle, { color: c.inkDark }]}>Done.</Text>

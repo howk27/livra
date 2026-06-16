@@ -388,7 +388,7 @@ export default function GoalsScreen() {
         {/* Loading */}
         {isLoading && (
           <View style={styles.loadingState}>
-            <ActivityIndicator size="small" color={c.forest} />
+            <ActivityIndicator size="small" color={c.accent} />
           </View>
         )}
 

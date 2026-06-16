@@ -12,7 +12,7 @@ import {
 import * as Sharing from 'expo-sharing';
 import * as MediaLibrary from 'expo-media-library';
 import * as Haptics from 'expo-haptics';
-import { colors } from '../theme/colors';
+import { themedColors } from '../theme/tokens';
 import { spacing, fontSize, fontWeight, borderRadius } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
 
@@ -37,7 +37,7 @@ export const SharePreviewModal: React.FC<SharePreviewModalProps> = ({
   onClose,
 }) => {
   const theme = useEffectiveTheme();
-  const c = colors[theme];
+  const c = themedColors(theme);
 
   const [saveState, setSaveState] = useState<'idle' | 'saved' | 'error'>('idle');
 
@@ -102,7 +102,7 @@ export const SharePreviewModal: React.FC<SharePreviewModalProps> = ({
         >
           {/* Header row */}
           <View style={styles.header}>
-            <Text style={[styles.goalTitle, { color: c.text }]} numberOfLines={1}>
+            <Text style={[styles.goalTitle, { color: c.inkDark }]} numberOfLines={1}>
               {goalTitle}
             </Text>
             <TouchableOpacity
@@ -111,7 +111,7 @@ export const SharePreviewModal: React.FC<SharePreviewModalProps> = ({
               accessibilityLabel="Close"
               accessibilityRole="button"
             >
-              <Text style={[styles.closeIcon, { color: c.textSecondary }]}>✕</Text>
+              <Text style={[styles.closeIcon, { color: c.inkMid }]}>✕</Text>
             </TouchableOpacity>
           </View>
 
@@ -119,11 +119,11 @@ export const SharePreviewModal: React.FC<SharePreviewModalProps> = ({
           <View
             style={[
               styles.previewContainer,
-              { backgroundColor: c.surfaceVariant },
+              { backgroundColor: c.surfaceAlt },
             ]}
           >
             {imageUri == null ? (
-              <ActivityIndicator color={c.accent.primary} size="large" />
+              <ActivityIndicator color={c.forest} size="large" />
             ) : (
               <Image
                 source={{ uri: imageUri }}
@@ -138,7 +138,7 @@ export const SharePreviewModal: React.FC<SharePreviewModalProps> = ({
           <TouchableOpacity
             style={[
               styles.button,
-              { backgroundColor: c.accent.primary, opacity: imageUri == null ? 0.45 : 1 },
+              { backgroundColor: c.forest, opacity: imageUri == null ? 0.45 : 1 },
             ]}
             onPress={handleShare}
             disabled={imageUri == null}
@@ -155,7 +155,7 @@ export const SharePreviewModal: React.FC<SharePreviewModalProps> = ({
               styles.button,
               styles.secondaryButton,
               {
-                borderColor: c.border,
+                borderColor: c.borderMid,
                 opacity: imageUri == null ? 0.45 : 1,
               },
             ]}
@@ -173,8 +173,8 @@ export const SharePreviewModal: React.FC<SharePreviewModalProps> = ({
                     saveState === 'saved'
                       ? c.success
                       : saveState === 'error'
-                        ? c.error
-                        : c.textSecondary,
+                        ? c.danger
+                        : c.inkMid,
                 },
               ]}
             >

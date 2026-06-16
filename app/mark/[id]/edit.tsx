@@ -2,8 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { colors } from '../../../theme/colors';
-import { spacing, borderRadius, fontSize, fontWeight } from '../../../theme/tokens';
+import { themedColors, spacing, borderRadius, fontSize, fontWeight } from '../../../theme/tokens';
 import { useEffectiveTheme } from '../../../state/uiSlice';
 import { useCounters } from '../../../hooks/useCounters';
 import { SchedulePicker } from '../../../components/SchedulePicker';
@@ -74,7 +73,7 @@ const ALL_ICON_TYPES: Exclude<MarkType, 'custom'>[] = [
 
 export default function EditCounterScreen() {
   const theme = useEffectiveTheme();
-  const themeColors = colors[theme];
+  const themeColors = themedColors(theme);
   const router = useRouter();
   const params = useLocalSearchParams<{ id: string }>();
   const id = typeof params.id === 'string' ? params.id : params.id?.[0];
@@ -121,9 +120,9 @@ export default function EditCounterScreen() {
 
   if (!counter || !id) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: themeColors.linen }]}>
         <View style={styles.centered}>
-          <Text style={[styles.errorText, { color: themeColors.text }]}>Counter not found</Text>
+          <Text style={[styles.errorText, { color: themeColors.inkDark }]}>Counter not found</Text>
         </View>
       </SafeAreaView>
     );
@@ -161,34 +160,34 @@ export default function EditCounterScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: themeColors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: themeColors.linen }]}>
       <ScrollView contentContainerStyle={styles.content}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()}>
-            <Text style={[styles.cancelButton, { color: themeColors.textSecondary }]}>Cancel</Text>
+            <Text style={[styles.cancelButton, { color: themeColors.inkMid }]}>Cancel</Text>
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: themeColors.text }]}>Edit Mark</Text>
+          <Text style={[styles.headerTitle, { color: themeColors.inkDark }]}>Edit Mark</Text>
           <TouchableOpacity onPress={handleSave} disabled={loading}>
-            <Text style={[styles.saveButton, { color: themeColors.accent.primary }]}>Save</Text>
+            <Text style={[styles.saveButton, { color: themeColors.accent }]}>Save</Text>
           </TouchableOpacity>
         </View>
 
         {/* Name Field */}
         <View style={styles.section}>
-          <Text style={[styles.label, { color: themeColors.text }]}>Name</Text>
+          <Text style={[styles.label, { color: themeColors.inkDark }]}>Name</Text>
           <TextInput
-            style={[styles.input, { backgroundColor: themeColors.surface, color: themeColors.text }]}
+            style={[styles.input, { backgroundColor: themeColors.surface, color: themeColors.inkDark }]}
             value={name}
             onChangeText={setName}
             placeholder="e.g., Gym Sessions"
-            placeholderTextColor={themeColors.textTertiary}
+            placeholderTextColor={themeColors.inkMuted}
           />
         </View>
 
         {/* Icon Picker */}
         <View style={styles.section}>
-          <Text style={[styles.label, { color: themeColors.text }]}>Icon</Text>
+          <Text style={[styles.label, { color: themeColors.inkDark }]}>Icon</Text>
           <View style={styles.iconGrid}>
             {ALL_ICON_TYPES.map((iconType) => {
               const isSelected = iconType === selectedIconType;
@@ -199,7 +198,7 @@ export default function EditCounterScreen() {
                     styles.iconButton,
                     {
                       backgroundColor: isSelected ? color + '30' : themeColors.surface,
-                      borderColor: isSelected ? color : themeColors.border,
+                      borderColor: isSelected ? color : themeColors.borderMid,
                     },
                   ]}
                   onPress={() => setSelectedIconType(iconType)}
@@ -207,7 +206,7 @@ export default function EditCounterScreen() {
                   <CounterIcon
                     type={iconType as any}
                     size={28}
-                    color={isSelected ? color : themeColors.textSecondary}
+                    color={isSelected ? color : themeColors.inkMid}
                     variant="symbol"
                   />
                 </TouchableOpacity>
@@ -218,7 +217,7 @@ export default function EditCounterScreen() {
 
         {/* Color Picker */}
         <View style={styles.section}>
-          <Text style={[styles.label, { color: themeColors.text }]}>Color</Text>
+          <Text style={[styles.label, { color: themeColors.inkDark }]}>Color</Text>
           <View style={styles.colorGrid}>
             {COLOR_OPTIONS.map((c) => (
               <TouchableOpacity
@@ -228,7 +227,7 @@ export default function EditCounterScreen() {
                   {
                     backgroundColor: c,
                     borderWidth: c === color ? 3 : 0,
-                    borderColor: themeColors.background,
+                    borderColor: themeColors.linen,
                   },
                 ]}
                 onPress={() => setColor(c)}
@@ -242,7 +241,7 @@ export default function EditCounterScreen() {
         </View>
         {/* Schedule */}
         <View style={styles.section}>
-          <Text style={[styles.label, { color: themeColors.text }]}>Schedule</Text>
+          <Text style={[styles.label, { color: themeColors.inkDark }]}>Schedule</Text>
           <SchedulePicker
             scheduleType={scheduleType}
             scheduleDays={scheduleDays}
@@ -257,8 +256,8 @@ export default function EditCounterScreen() {
             onPress={() => setEnableStreak(!enableStreak)}
           >
             <View>
-              <Text style={[styles.toggleLabel, { color: themeColors.text }]}>Enable Streak</Text>
-              <Text style={[styles.toggleDescription, { color: themeColors.textSecondary }]}>
+              <Text style={[styles.toggleLabel, { color: themeColors.inkDark }]}>Enable Streak</Text>
+              <Text style={[styles.toggleDescription, { color: themeColors.inkMid }]}>
                 Track consecutive days with activity
               </Text>
             </View>
@@ -266,7 +265,7 @@ export default function EditCounterScreen() {
               style={[
                 styles.toggleSwitch,
                 {
-                  backgroundColor: enableStreak ? color : themeColors.border,
+                  backgroundColor: enableStreak ? color : themeColors.borderMid,
                   alignItems: enableStreak ? 'flex-end' : 'flex-start',
                 },
               ]}

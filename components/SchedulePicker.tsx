@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useEffectiveTheme } from '../state/uiSlice';
-import { colors } from '../theme/colors';
+import { themedColors } from '../theme/tokens';
 import { foregroundForHexBackground } from '@/src/components/icons/color';
 import type { ScheduleType, DayOfWeek } from '../types';
 
@@ -18,7 +18,7 @@ export const SchedulePicker: React.FC<SchedulePickerProps> = ({
   scheduleType, scheduleDays, color, onChange,
 }) => {
   const theme = useEffectiveTheme();
-  const themeColors = colors[theme];
+  const themeColors = themedColors(theme);
 
   const handleTypePress = (type: ScheduleType) => {
     if (type === 'daily') {
@@ -50,7 +50,7 @@ export const SchedulePicker: React.FC<SchedulePickerProps> = ({
                 styles.typePill,
                 {
                   backgroundColor: active ? color : themeColors.surface,
-                  borderColor: active ? color : themeColors.border,
+                  borderColor: active ? color : themeColors.borderMid,
                 },
               ]}
               onPress={() => handleTypePress(opt.key)}
@@ -62,7 +62,7 @@ export const SchedulePicker: React.FC<SchedulePickerProps> = ({
                   {
                     color: active
                       ? foregroundForHexBackground(color, theme === 'dark')
-                      : themeColors.textSecondary,
+                      : themeColors.inkMid,
                   },
                 ]}
               >
@@ -85,7 +85,7 @@ export const SchedulePicker: React.FC<SchedulePickerProps> = ({
                   styles.dayChip,
                   {
                     backgroundColor: active ? color : themeColors.surface,
-                    borderColor: active ? color : themeColors.border,
+                    borderColor: active ? color : themeColors.borderMid,
                   },
                 ]}
                 onPress={() => toggleDay(day)}
@@ -97,7 +97,7 @@ export const SchedulePicker: React.FC<SchedulePickerProps> = ({
                     {
                       color: active
                         ? foregroundForHexBackground(color, theme === 'dark')
-                        : themeColors.textSecondary,
+                        : themeColors.inkMid,
                     },
                   ]}
                 >

@@ -1,9 +1,9 @@
 import React from 'react';
 import { View, TouchableOpacity, StyleSheet, Platform } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { ShieldCheck, X } from 'phosphor-react-native';
 import { AppText } from './Typography';
 import { spacing, borderRadius, fontSize, fontWeight } from '../theme/tokens';
-import { colors } from '../theme/colors';
+import { themedColors } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
 
 type Props = {
@@ -17,7 +17,7 @@ type Props = {
  */
 export function AuthPersistenceBanner({ visible, onDismiss }: Props) {
   const theme = useEffectiveTheme();
-  const themeColors = colors[theme];
+  const themeColors = themedColors(theme);
 
   if (!visible) return null;
 
@@ -27,17 +27,17 @@ export function AuthPersistenceBanner({ visible, onDismiss }: Props) {
         styles.wrap,
         {
           backgroundColor: themeColors.surface,
-          borderColor: themeColors.border,
+          borderColor: themeColors.borderMid,
         },
       ]}
       accessibilityRole="alert"
     >
-      <Ionicons name="shield-outline" size={20} color={themeColors.textSecondary} style={styles.icon} />
+      <ShieldCheck size={20} color={themeColors.inkMid} style={styles.icon} weight="regular" />
       <View style={styles.textCol}>
-        <AppText variant="caption" style={[styles.title, { color: themeColors.text }]}>
+        <AppText variant="caption" style={[styles.title, { color: themeColors.inkDark }]}>
           Sign-in could not be saved securely
         </AppText>
-        <AppText variant="caption" style={[styles.body, { color: themeColors.textSecondary }]}>
+        <AppText variant="caption" style={[styles.body, { color: themeColors.inkMid }]}>
           This device may not have stored your session. You might need to sign in again after closing the app.
           If this keeps happening, check storage permissions or free space.
         </AppText>
@@ -48,7 +48,7 @@ export function AuthPersistenceBanner({ visible, onDismiss }: Props) {
         accessibilityLabel="Dismiss sign-in storage notice"
         style={styles.dismiss}
       >
-        <Ionicons name="close" size={22} color={themeColors.textSecondary} />
+        <X size={22} color={themeColors.inkMid} weight="bold" />
       </TouchableOpacity>
     </View>
   );

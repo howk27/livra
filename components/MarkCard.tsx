@@ -21,7 +21,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Mark } from '../types';
 import { resolveDailyTarget } from '../lib/markDailyTarget';
-import { colors } from '../theme/colors';
+import { themedColors } from '../theme/tokens';
 import { spacing, borderRadius, fontSize, fontWeight, shadow, fonts } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { AppText } from './Typography';
@@ -73,15 +73,15 @@ function resolveTokens(
   state: CardVisualState,
   markColor: string,
   isDark: boolean,
-  themeColors: (typeof colors)['dark'],
+  themeColors: ReturnType<typeof themedColors>,
 ): CardTokens {
   const iconBgLogged   = markColor;
   const iconFgLogged   = foregroundForHexBackground(markColor, isDark);
   const iconBgUnlogged = applyOpacity(markColor, 0.40);
   const iconFgUnlogged = markColor;
   const normalBorder   = isDark
-    ? applyOpacity(themeColors.border, 0.40)
-    : applyOpacity(themeColors.border, 0.75);
+    ? applyOpacity(themeColors.borderMid, 0.40)
+    : applyOpacity(themeColors.borderMid, 0.75);
 
   switch (state) {
     case 2:
@@ -159,10 +159,10 @@ export const MarkCard: React.FC<MarkCardProps> = ({
   onLongPress,
 }) => {
   const theme = useEffectiveTheme();
-  const themeColors = colors[theme];
+  const themeColors = themedColors(theme);
   const isDark = theme === 'dark';
   useAppDateStore((s) => s.debugDateOverride ?? '');
-  const markColor = getCategoryColorForMark({ name: mark.name, color: mark.color }) || themeColors.primary;
+  const markColor = getCategoryColorForMark({ name: mark.name, color: mark.color }) || themeColors.forest;
   const prefersReducedMotion = useReducedMotion();
 
   // ── Optimistic today-count ───────────────────────────────────────────
@@ -357,7 +357,7 @@ export const MarkCard: React.FC<MarkCardProps> = ({
   const cardSheenLight = [
     applyOpacity('#FFFFFF', 0.14),
     'rgba(255,255,255,0)',
-    applyOpacity(themeColors.border, 0.12),
+    applyOpacity(themeColors.borderMid, 0.12),
   ] as const;
 
   const btnFg = foregroundForHexBackground(markColor, isDark);
@@ -370,7 +370,7 @@ export const MarkCard: React.FC<MarkCardProps> = ({
         android_ripple={{ color: 'rgba(128,128,128,0.05)' }}
         style={[
           styles.compactCard,
-          { backgroundColor: themeColors.surfaceVariant, borderColor: applyOpacity(themeColors.border, isDark ? 0.55 : 0.9) },
+          { backgroundColor: themeColors.surfaceAlt, borderColor: applyOpacity(themeColors.borderMid, isDark ? 0.55 : 0.9) },
         ]}
       >
         <View style={styles.compactRow}>
@@ -378,9 +378,9 @@ export const MarkCard: React.FC<MarkCardProps> = ({
             <MarkIcon type={resolvedIconType} size={18} variant="symbol" animate="none" ariaLabel={`${mark.name} icon`} color={applyOpacity(markColor, 0.80)} />
           </View>
           <View style={styles.compactIdentity}>
-            <AppText numberOfLines={1} style={[styles.compactName, { color: themeColors.textSecondary }]}>{mark.name}</AppText>
+            <AppText numberOfLines={1} style={[styles.compactName, { color: themeColors.inkMid }]}>{mark.name}</AppText>
             {dailyTarget > 1 && (
-              <AppText style={[styles.compactFraction, { color: themeColors.textTertiary }]}>
+              <AppText style={[styles.compactFraction, { color: themeColors.inkMuted }]}>
                 {Math.min(displayTodayCount, dailyTarget)}/{dailyTarget}
               </AppText>
             )}
@@ -405,7 +405,7 @@ export const MarkCard: React.FC<MarkCardProps> = ({
         style={[
           styles.card,
           {
-            backgroundColor: isDark ? themeColors.surface : (isCompletedNow ? themeColors.surfaceVariant : themeColors.surface),
+            backgroundColor: isDark ? themeColors.surface : (isCompletedNow ? themeColors.surfaceAlt : themeColors.surface),
             borderColor: tokens.borderColor,
             borderWidth: tokens.borderWidth,
           },
@@ -435,24 +435,24 @@ export const MarkCard: React.FC<MarkCardProps> = ({
                 numberOfLines={1}
                 style={[
                   styles.name,
-                  { color: themeColors.text, fontWeight: isActive && !isCompletedNow ? fontWeight.bold : fontWeight.semibold, flex: 1 },
+                  { color: themeColors.inkDark, fontWeight: isActive && !isCompletedNow ? fontWeight.bold : fontWeight.semibold, flex: 1 },
                 ]}
               >
                 {mark.name}
               </AppText>
               {hasNote && (
-                <View style={[styles.noteDot, { backgroundColor: applyOpacity(themeColors.textSecondary, 0.55) }]} />
+                <View style={[styles.noteDot, { backgroundColor: applyOpacity(themeColors.inkMid, 0.55) }]} />
               )}
             </View>
 
             {goalTitle ? (
-              <AppText numberOfLines={1} style={[styles.goalSubtitle, { color: themeColors.textTertiary }]}>
+              <AppText numberOfLines={1} style={[styles.goalSubtitle, { color: themeColors.inkMuted }]}>
                 {goalTitle}
               </AppText>
             ) : null}
 
             {helperLabel !== null && (
-              <AppText style={[styles.metaText, { color: isCompletedNow ? themeColors.textSecondary : themeColors.textTertiary, fontWeight: isCompletedNow ? fontWeight.medium : fontWeight.normal }]}>
+              <AppText style={[styles.metaText, { color: isCompletedNow ? themeColors.inkMid : themeColors.inkMuted, fontWeight: isCompletedNow ? fontWeight.medium : fontWeight.normal }]}>
                 {helperLabel}
               </AppText>
             )}
@@ -462,7 +462,7 @@ export const MarkCard: React.FC<MarkCardProps> = ({
                 {Array.from({ length: compressed.units }).map((_, i) => {
                   const isFull = i < compressed.filled;
                   const isPartial = i === compressed.filled && compressed.partialFill > 0;
-                  const trackBg = isDark ? applyOpacity(themeColors.border, 0.55) : applyOpacity(themeColors.border, 0.95);
+                  const trackBg = isDark ? applyOpacity(themeColors.borderMid, 0.55) : applyOpacity(themeColors.borderMid, 0.95);
                   return (
                     <View key={i} style={styles.pillOuter}>
                       <View style={[styles.pillTrack, { backgroundColor: trackBg }]}>
@@ -490,7 +490,7 @@ export const MarkCard: React.FC<MarkCardProps> = ({
                           {
                             backgroundColor: isDotFilled
                               ? 'transparent'
-                              : (isDark ? applyOpacity(themeColors.surfaceActive, 0.78) : applyOpacity(themeColors.border, 0.86)),
+                              : (isDark ? applyOpacity(themeColors.surfaceAlt, 0.78) : applyOpacity(themeColors.borderMid, 0.86)),
                             borderWidth: 1,
                             borderColor: isDotFilled
                               ? applyOpacity(markColor, isDark ? 0.70 : 0.55)
@@ -521,7 +521,7 @@ export const MarkCard: React.FC<MarkCardProps> = ({
                             ? applyOpacity(markColor, isDark ? 0.84 : 0.72)
                             : isFuture
                               ? 'transparent'
-                              : (isDark ? applyOpacity(themeColors.surfaceActive, 0.78) : applyOpacity(themeColors.border, 0.86)),
+                              : (isDark ? applyOpacity(themeColors.surfaceAlt, 0.78) : applyOpacity(themeColors.borderMid, 0.86)),
                         },
                       ]}
                     />

@@ -6,14 +6,14 @@ import Animated, {
   withTiming,
   Easing,
 } from 'react-native-reanimated';
-import { colors } from '../theme/colors';
+import { themedColors } from '../theme/tokens';
 import { spacing, fontSize, borderRadius } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { useXP } from '../hooks/useXP';
 
 export function LevelProgressBar() {
   const theme = useEffectiveTheme();
-  const c = colors[theme];
+  const c = themedColors(theme);
 
   const { levelTitle, nextLevelTitle, progressRatio } = useXP();
 
@@ -35,10 +35,10 @@ export function LevelProgressBar() {
   return (
     <View style={styles.container}>
       <View style={styles.labels}>
-        <Text style={[styles.label, { color: c.textSecondary }]}>{levelTitle}</Text>
-        <Text style={[styles.label, { color: c.textSecondary }]}>{rightLabel}</Text>
+        <Text style={[styles.label, { color: c.inkMid }]}>{levelTitle}</Text>
+        <Text style={[styles.label, { color: c.inkMid }]}>{rightLabel}</Text>
       </View>
-      <View style={[styles.track, { backgroundColor: c.border }]}>
+      <View style={[styles.track, { backgroundColor: c.borderMid }]}>
         <Animated.View style={[styles.fill, { backgroundColor: '#C47E8A' }, fillStyle]} />
       </View>
     </View>

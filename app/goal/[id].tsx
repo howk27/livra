@@ -53,7 +53,7 @@ function ProgressRing({ progress, threshold }: { progress: number; threshold: nu
           cx={RING_SIZE / 2}
           cy={RING_SIZE / 2}
           r={RADIUS}
-          stroke="#1C3830"
+          stroke={c.forest}
           strokeWidth={STROKE}
           fill="none"
           strokeDasharray={CIRCUMFERENCE}
@@ -63,10 +63,10 @@ function ProgressRing({ progress, threshold }: { progress: number; threshold: nu
           origin={`${RING_SIZE / 2}, ${RING_SIZE / 2}`}
         />
       </Svg>
-      <Text style={{ fontFamily: fonts.sansBold, fontSize: 22, color: '#1C3830', marginTop: spacing.xs }}>
+      <Text style={{ fontFamily: fonts.sansBold, fontSize: 22, color: c.forest, marginTop: spacing.xs }}>
         {progress}
       </Text>
-      <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: '#1C3830', opacity: 0.7 }}>
+      <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: c.forest, opacity: 0.7 }}>
         of {threshold}
       </Text>
     </View>
@@ -106,7 +106,7 @@ export default function GoalDetailScreen() {
       <SafeAreaView style={{ flex: 1, backgroundColor: c.linen, alignItems: 'center', justifyContent: 'center' }}>
         <Text style={{ fontFamily: fonts.sans, color: c.inkMuted }}>Goal not found.</Text>
         <TouchableOpacity onPress={() => router.back()} style={{ marginTop: spacing.md }}>
-          <Text style={{ fontFamily: fonts.sansMedium, color: '#1C3830' }}>Go back</Text>
+          <Text style={{ fontFamily: fonts.sansMedium, color: c.forest }}>Go back</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -192,7 +192,7 @@ export default function GoalDetailScreen() {
               onSubmitEditing={handleSaveTitle}
             />
             <TouchableOpacity onPress={handleSaveTitle} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Check size={22} color="#1C3830" weight="bold" />
+              <Check size={22} color={c.forest} weight="bold" />
             </TouchableOpacity>
           </View>
         ) : (
@@ -223,10 +223,10 @@ export default function GoalDetailScreen() {
                 No marks linked to this goal yet.
               </Text>
               <TouchableOpacity
-                style={[styles.addMarkBtn, { backgroundColor: '#1C3830' }]}
+                style={[styles.addMarkBtn, { backgroundColor: c.forest }]}
                 onPress={() => router.push({ pathname: '/counter/new', params: { goalId: id } } as any)}
               >
-                <Plus size={14} color="#FFFFFF" weight="bold" />
+                <Plus size={14} color={c.inkInverse} weight="bold" />
                 <Text style={styles.addMarkBtnText}>Add a mark</Text>
               </TouchableOpacity>
             </View>
@@ -248,7 +248,7 @@ export default function GoalDetailScreen() {
         {/* Complete button */}
         {canComplete && (
           <TouchableOpacity
-            style={styles.completeBtn}
+            style={[styles.completeBtn, { backgroundColor: c.forest }]}
             onPress={handleComplete}
           >
             <Text style={styles.completeBtnText}>Mark complete</Text>
@@ -290,7 +290,7 @@ export default function GoalDetailScreen() {
                   style={{ width: '100%' }}
                 />
                 <TouchableOpacity
-                  style={[styles.dateSetBtn, { backgroundColor: '#1C3830' }]}
+                  style={[styles.dateSetBtn, { backgroundColor: c.forest }]}
                   onPress={() => handleSaveDate(pickerDate)}
                 >
                   <Text style={styles.dateSetBtnText}>Set date</Text>
@@ -376,7 +376,6 @@ const styles = StyleSheet.create({
   markName: { fontSize: fontSize.md, fontFamily: fonts.sansMedium },
   completeBtn: {
     marginTop: spacing.lg,
-    backgroundColor: '#1C3830',
     borderRadius: borderRadius.md,
     paddingVertical: spacing.md,
     alignItems: 'center',

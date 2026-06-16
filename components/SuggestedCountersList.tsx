@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
 import { SUGGESTED_COUNTERS_BY_CATEGORY, SuggestedCounter } from '../lib/suggestedCounters';
-import { colors } from '../theme/colors';
+import { themedColors } from '../theme/tokens';
 import { spacing, borderRadius, fontSize, fontWeight } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { applyOpacity } from '@/src/components/icons/color';
@@ -45,7 +45,7 @@ export const SuggestedMarksList: React.FC<SuggestedMarksListProps> = ({
   const resolvedOnSelect = onMarkSelect ?? onCounterSelect;
   const resolvedSelected = selectedMarks ?? selectedCounters;
   const theme = useEffectiveTheme();
-  const themeColors = colors[theme];
+  const c = themedColors(theme);
 
   const isSelected = (counter: SuggestedCounter) => {
     return resolvedSelected.some(
@@ -75,9 +75,9 @@ export const SuggestedMarksList: React.FC<SuggestedMarksListProps> = ({
         <View key={categoryIndex} style={styles.categorySection}>
           {category.title && (
             <View style={styles.categoryHeader}>
-              <View style={[styles.categoryAccent, { backgroundColor: themeColors.accent.primary }]} />
+              <View style={[styles.categoryAccent, { backgroundColor: c.accent }]} />
               {category.title ? (
-                <Text style={[styles.categoryTitle, { color: themeColors.text }]}>
+                <Text style={[styles.categoryTitle, { color: c.inkDark }]}>
                   {category.title}
                 </Text>
               ) : null}
@@ -103,10 +103,10 @@ export const SuggestedMarksList: React.FC<SuggestedMarksListProps> = ({
                       height: CARD_SIZE,
                       backgroundColor: selected
                         ? applyOpacity(categoryColor, 0.12)
-                        : themeColors.surface,
+                        : c.surface,
                       borderColor: selected
                         ? categoryColor
-                        : themeColors.border,
+                        : c.borderMid,
                       opacity: disabled ? 0.5 : 1,
                     },
                   ]}
@@ -121,7 +121,7 @@ export const SuggestedMarksList: React.FC<SuggestedMarksListProps> = ({
                       <Text style={styles.counterEmoji}>{counter.emoji}</Text>
                     )}
                     <Text
-                      style={[styles.counterName, { color: themeColors.text }]}
+                      style={[styles.counterName, { color: c.inkDark }]}
                       numberOfLines={2}
                       ellipsizeMode="tail"
                     >

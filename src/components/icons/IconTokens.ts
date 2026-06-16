@@ -1,4 +1,4 @@
-import { colors } from '../../../theme/colors';
+import { themedColors } from '../../../theme/tokens';
 
 export const ICON_CANVAS_SIZES = [16, 20, 24, 28, 32, 40] as const;
 
@@ -35,20 +35,20 @@ export const ICON_CORNER_RADIUS = {
  */
 export const ICON_TONE_COLOR_TOKENS = {
   physical: {
-    light: colors.light.accent.primary,
-    dark: colors.dark.accent.primary,
+    light: themedColors('light').accent,
+    dark: themedColors('dark').accent,
   },
   nutrition: {
-    light: colors.light.success,
-    dark: colors.dark.success,
+    light: themedColors('light').success,
+    dark: themedColors('dark').success,
   },
   mind: {
-    light: colors.light.textSecondary,
-    dark: colors.dark.textSecondary,
+    light: themedColors('light').inkMid,
+    dark: themedColors('dark').inkMid,
   },
   misc: {
-    light: colors.light.text,
-    dark: colors.dark.text,
+    light: themedColors('light').inkDark,
+    dark: themedColors('dark').inkDark,
   },
 } as const;
 

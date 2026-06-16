@@ -12,7 +12,7 @@ import { Swipeable } from 'react-native-gesture-handler';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 
-import { fonts, spacing, radius, borderRadius, shadow, themedColors } from '../../theme/tokens';
+import { fonts, fontSize, spacing, radius, borderRadius, shadow, themedColors } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { LivraHeader } from '../../components/ui/LivraHeader';
 import { MarkRow } from '../../components/ui/MarkRow';
@@ -38,6 +38,7 @@ import { computeWeek } from '../../lib/consistency';
 import { logger } from '../../lib/utils/logger';
 import { MARK_LIBRARY } from '../../lib/suggestedCounters';
 import { resolveCounterIconType } from '../../src/components/icons/IconResolver';
+import { applyOpacity } from '../../src/components/icons/color';
 
 import type { Counter } from '../../types';
 
@@ -187,6 +188,9 @@ export default function FocusScreen() {
   const handleQuickIncrement = useCallback(
     async (markId: string) => {
       if (!user?.id) return;
+      if (Platform.OS !== 'web') {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      }
       try {
         await incrementCounter(markId, user.id, 1);
         if (permissionGranted) {
@@ -303,7 +307,7 @@ export default function FocusScreen() {
                 onPress={() => handleQuickIncrement(mark.id)}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.bonusButtonText, { color: c.forest }]}>Log one more</Text>
+                <Text style={[styles.bonusButtonText, { color: c.accent }]}>Log one more</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -331,9 +335,13 @@ export default function FocusScreen() {
         <View style={[
           styles.progressBanner,
           {
-            backgroundColor: theme === 'dark' ? 'rgba(141,181,168,0.12)' : 'rgba(28,60,52,0.10)',
+            backgroundColor: theme === 'dark'
+              ? applyOpacity(c.mint, 0.12)
+              : applyOpacity(c.forest, 0.1),
             borderWidth: 0.5,
-            borderColor: theme === 'dark' ? 'rgba(141,181,168,0.15)' : 'rgba(28,60,52,0.15)',
+            borderColor: theme === 'dark'
+              ? applyOpacity(c.mint, 0.15)
+              : applyOpacity(c.forest, 0.15),
           },
         ]}>
           <View style={[
@@ -341,8 +349,8 @@ export default function FocusScreen() {
             {
               borderRadius: borderRadius.card,
               backgroundColor: theme === 'dark'
-                ? 'rgba(141,181,168,0.08)'
-                : 'rgba(28,60,52,0.08)',
+                ? applyOpacity(c.mint, 0.08)
+                : applyOpacity(c.forest, 0.08),
             },
           ]} />
           <View>
@@ -419,7 +427,7 @@ export default function FocusScreen() {
                       onPress={() => toggleGoalExpand(goal.id)}
                       activeOpacity={0.7}
                     >
-                      <Text style={[styles.expanderText, { color: c.forest }]}>
+                      <Text style={[styles.expanderText, { color: c.accent }]}>
                         {hiddenCount} more mark{hiddenCount !== 1 ? 's' : ''}
                       </Text>
                     </TouchableOpacity>
@@ -449,7 +457,7 @@ export default function FocusScreen() {
               activeOpacity={0.7}
             >
               <SectionLabel style={styles.sectionLabel}>DAILY HABITS</SectionLabel>
-              <Text style={[styles.dailyHabitsToggle, { color: c.forest }]}>
+              <Text style={[styles.dailyHabitsToggle, { color: c.accent }]}>
                 {dailyHabitsExpanded ? 'Hide' : `Show ${goallessMarks.length}`}
               </Text>
             </TouchableOpacity>
@@ -488,7 +496,7 @@ const styles = StyleSheet.create({
 
   greeting: {
     fontFamily: fonts.serifItalic,
-    fontSize: 22,
+    fontSize: fontSize.xl,
     lineHeight: 30,
     marginTop: spacing.lg,
     paddingHorizontal: spacing.lg,
@@ -508,12 +516,12 @@ const styles = StyleSheet.create({
   },
   bannerFraction: {
     fontFamily: fonts.serif,
-    fontSize: 26,
+    fontSize: fontSize.display,
     lineHeight: 32,
   },
   bannerFractionLabel: {
     fontFamily: fonts.sans,
-    fontSize: 12,
+    fontSize: fontSize.sm,
   },
   restLineRow: {
     paddingHorizontal: spacing.lg,
@@ -524,7 +532,7 @@ const styles = StyleSheet.create({
   },
   restLineText: {
     fontFamily: fonts.sans,
-    fontSize: 12,
+    fontSize: fontSize.sm,
     lineHeight: 17,
     flex: 1,
     marginRight: spacing.sm,
@@ -535,12 +543,12 @@ const styles = StyleSheet.create({
   },
   bonusButtonText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 12,
+    fontSize: fontSize.sm,
   },
 
   forgivenessLine: {
     fontFamily: fonts.sans,
-    fontSize: 13,
+    fontSize: fontSize.sm,
     lineHeight: 18,
     marginHorizontal: spacing.lg,
     marginTop: spacing.sm,
@@ -555,7 +563,7 @@ const styles = StyleSheet.create({
   },
   allDoneText: {
     fontFamily: fonts.serifItalic,
-    fontSize: 15,
+    fontSize: fontSize.md,
     textAlign: 'center',
   },
 
@@ -583,13 +591,13 @@ const styles = StyleSheet.create({
   },
   goalCardTitle: {
     fontFamily: fonts.serifSemibold,
-    fontSize: 18,
+    fontSize: fontSize.lg,
     flex: 1,
     marginRight: spacing.sm,
   },
   goalCardMeta: {
     fontFamily: fonts.sans,
-    fontSize: 12,
+    fontSize: fontSize.sm,
   },
   expanderRow: {
     paddingHorizontal: spacing.lg,
@@ -597,7 +605,7 @@ const styles = StyleSheet.create({
   },
   expanderText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 13,
+    fontSize: fontSize.sm,
   },
   doneDivider: {
     height: 0.5,
@@ -621,7 +629,7 @@ const styles = StyleSheet.create({
   },
   dailyHabitsToggle: {
     fontFamily: fonts.sansMedium,
-    fontSize: 12,
+    fontSize: fontSize.sm,
   },
 
   marksList: {
@@ -639,7 +647,7 @@ const styles = StyleSheet.create({
   },
   emptyMarksText: {
     fontFamily: fonts.sans,
-    fontSize: 14,
+    fontSize: fontSize.base,
     textAlign: 'center',
   },
 
@@ -651,7 +659,7 @@ const styles = StyleSheet.create({
   },
   swipeDeleteText: {
     fontFamily: fonts.sansSemibold,
-    fontSize: 13,
+    fontSize: fontSize.sm,
     color: '#FFFFFF',
   },
 
