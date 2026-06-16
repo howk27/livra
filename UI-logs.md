@@ -369,16 +369,42 @@ Shipped real **Export Marks** (CSV → `expo-file-system/legacy` + `expo-sharing
 Data** (`resetDatabaseState()` clears local marks/goals/events/streaks/badges/xp + reloads the Zustand stores;
 account/session untouched). Hid the unimplemented Export Goals + Import Data stub rows.
 
-### ⏳ Wave 5 — Typography adoption (NOT STARTED — deferred)
-Scope is large/cosmetic: **172 raw `fontSize: NN` sites across 37 files**; `typography.ts` presets are only
-consumed by `components/Typography.tsx`. High visual-regression risk, untestable, low ROI pre-release — flagged
-for an explicit go-ahead + scope decision rather than a blind blanket pass.
+### ⏳ Wave 5 — Typography adoption (NOT STARTED — HANDED OFF to fresh session)
+**Decision: full `typography.ts` adoption (size-preserving).** Investigated and intentionally not started this
+session — it needs a dedicated full-context pass, not a partial sweep (a half-migrated app split between preset
+and inline screens is worse drift than the uniform status quo).
 
-### ⏳ Wave 7 — Paywall hook extraction (NOT STARTED — deferred, RISK)
-`app/paywall.tsx` is **2051 lines** with a fragile ~8-`useEffect` IAP operation state machine and **thin test
-coverage** (only `iapReVerify.test.ts` touches IAP). Decomposing the money path autonomously, with no test net,
-right before a store release is high-risk — flagged for an explicit decision.
+**Findings (verified):** ~**50 distinct `(fontFamily × fontSize)` combos** across **37 files / 172 raw
+`fontSize: NN` sites**. Serif (Cormorant) alone is used at **8 sizes (18/20/22/24/26/28/32/36)** + italic
+variants; sans across 10/11/12/13/14/15/16/17/20 × regular/medium/semibold/bold. Dominant: `sans 13` (19×),
+`sans 12` (17×), `sansMedium` (many), `sans 14/15` (heavy).
 
-> **STATE (2026-06-16): Waves 1–4 + 6 complete, verified (type-check 0 errors · eslint clean · 553/553 tests),
-> and COMMITTED on `fix/auth-batch-1` (deletions → UI-unification → docs → build). Waves 5 & 7 deferred pending
-> a user decision (cosmetic-churn scope / revenue-path risk). Not pushed.**
+**Constraints for the fresh session:**
+- `theme/typography.ts` presets top out at `2xl`=28 — they DON'T cover the 32–42 serif hero sizes. Adopting the
+  existing presets as-is would **shrink hero/display text**. The scale must be **extended** to the real sizes first.
+- The 8 existing presets (`display/headline/title/subtitle/body/caption/label/button`) are **load-bearing via
+  `AppText`** (used 230×: body 136, button 32, subtitle 25, caption 23, headline 7…). **Do NOT change their sizes.**
+- Latent bug to fix as part of this: `AppText` variants `symbol` (5×), `heading` (1×), `subheading` (1×) are
+  **used but undefined** in `typography.ts` → silently fall back to `body`. Define them (size-preserving vs their
+  intended look) or migrate those call sites.
+
+**Recommended plan (fresh session):** (1) extend `typography.ts` into a complete size-preserving semantic scale
+covering the real serif + sans roles; (2) migrate inline StyleSheet font clusters → preset spreads / `AppText`
+variants **per screen** (each screen fully, so every commit is monotonic improvement), highest-traffic first
+(focus → goals → onboarding → signin → paywall → mark/* → goal/*); (3) verify type-check + 561 tests after each
+batch; commit per screen-group. No visual diff expected (size-preserving).
+
+### ✅ Wave 7 — Paywall: safe extraction (DONE, scoped per decision)
+**Decision: safe extraction only** (helpers + presentational, leave the IAP state machine). Extracted the pure
+`parseLocalizedPrice` / `priceToNumber` helpers to **`lib/iap/price.ts`** (reusable, unit-testable) and added
+**`tests/unit/iapPrice.test.ts`** (8 cases: US/EU separators, lone-separator ambiguity documented, never-NaN,
+numeric-field preference) — locking the locale-fragile parsing the audit flagged. The fragile ~8-`useEffect`
+IAP operation state machine was **left intact** (extraction = real regression risk on the revenue path; only
+`iapReVerify.test.ts` covers IAP). The presentational `ErrorDetails` / `PaywallErrorFallback` were **left inline**
+— they're coupled to the shared module-level `styles` StyleSheet, so extracting would duplicate styles (not a
+clean/safe win). paywall.tsx remains large (~2010 lines); a full hook extraction is a separate, higher-risk task
+that wants IAP test coverage first.
+
+> **STATE (2026-06-16): Waves 1–4 + 6 + 7 complete, verified (type-check 0 errors · eslint clean · 561/561 tests)
+> and COMMITTED on `fix/auth-batch-1` (commits: deletions → UI-unification → docs → build → paywall price helpers).
+> Wave 5 (typography full adoption) is the next session's focused task — analysis + plan above. Not pushed.**
