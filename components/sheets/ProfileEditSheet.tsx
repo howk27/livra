@@ -21,7 +21,7 @@ import { X, User, Camera } from 'phosphor-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { PillButton } from '../ui/PillButton';
 import { SectionLabel } from '../ui/SectionLabel';
-import { colors, fonts, spacing, radius } from '../../theme/tokens';
+import { colors, fonts, spacing, radius, fontSize } from '../../theme/tokens';
 import { useAuth } from '../../hooks/useAuth';
 import { useNotification } from '../../contexts/NotificationContext';
 import { uploadAvatar } from '../../lib/storage/avatarStorage';
@@ -241,7 +241,7 @@ const styles = StyleSheet.create({
   },
   sheetTitle: {
     fontFamily: fonts.sansMedium,
-    fontSize: 17,
+    fontSize: fontSize[17],
     color: colors.inkDark,
   },
   content: {
@@ -283,7 +283,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
     fontFamily: fonts.sans,
-    fontSize: 15,
+    fontSize: fontSize.md,
     color: colors.inkDark,
     borderWidth: 1,
     borderColor: colors.borderLight,
@@ -294,7 +294,7 @@ const styles = StyleSheet.create({
   },
   changeLink: {
     fontFamily: fonts.sansMedium,
-    fontSize: 13,
+    fontSize: fontSize[13],
     color: colors.forest,
     marginTop: spacing.xs,
   },

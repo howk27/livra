@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 import { SvgLogo } from './SvgLogo';
-import { fonts, spacing, themedColors } from '../../theme/tokens';
+import { fonts, spacing, themedColors, fontSize } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useXP } from '../../hooks/useXP';
 
@@ -135,7 +135,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontFamily: fonts.sansMedium,
-    fontSize: 16,
+    fontSize: fontSize.lg,
   },
   avatarRingWrapper: {
     width: 36,

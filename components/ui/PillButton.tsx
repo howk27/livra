@@ -1,6 +1,6 @@
 import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, ViewStyle, StyleProp } from 'react-native';
-import { fonts, radius, spacing, themedColors } from '../../theme/tokens';
+import { fonts, radius, spacing, themedColors, fontSize } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 
 type Variant = 'primary' | 'ghost' | 'danger';
@@ -57,7 +57,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontFamily: fonts.sansMedium,
-    fontSize: 15,
+    fontSize: fontSize.md,
   },
   disabled: { opacity: 0.5 },
 });

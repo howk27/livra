@@ -4,7 +4,7 @@ import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Sun, List, Gear } from 'phosphor-react-native';
 import { useEffectiveTheme } from '../../state/uiSlice';
-import { spacing, themedColors } from '../../theme/tokens';
+import { spacing, themedColors, fontSize, fonts } from '../../theme/tokens';
 import { useAuth } from '../../hooks/useAuth';
 import { DrawerContext } from '../../components/ui/LivraHeader';
 
@@ -68,8 +68,8 @@ export default function TabLayout() {
               zIndex: 1,
             },
             tabBarLabelStyle: {
-              fontSize: 10,
-              fontFamily: 'DMSans_400Regular',
+              fontSize: fontSize['2xs'],
+              fontFamily: fonts.sans,
               marginTop: 2,
               letterSpacing: 0,
             },

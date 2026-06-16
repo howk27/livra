@@ -68,7 +68,7 @@ export const MomentumCounter: React.FC<MomentumCounterProps> = ({
 
 const styles = StyleSheet.create({
   number: {
-    fontSize: 64,
+    fontSize: fontSize['7xl'],
     fontWeight: fontWeight.bold,
     letterSpacing: -2,
     lineHeight: 70,

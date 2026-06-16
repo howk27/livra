@@ -9,7 +9,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LivraHeader } from '../../components/ui/LivraHeader';
 import { SectionLabel } from '../../components/ui/SectionLabel';
-import { fonts, spacing, radius, shadow, themedColors } from '../../theme/tokens';
+import { fonts, spacing, radius, shadow, themedColors, fontSize } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 
 export const BIOMETRIC_LOCK_KEY = 'biometric_lock_enabled';
@@ -234,11 +234,11 @@ const styles = StyleSheet.create({
   },
   rowLabel: {
     fontFamily: fonts.sansMedium,
-    fontSize: 15,
+    fontSize: fontSize.md,
   },
   rowSubtitle: {
     fontFamily: fonts.sans,
-    fontSize: 12,
+    fontSize: fontSize.sm,
     marginTop: 2,
   },
   subRow: {
@@ -255,7 +255,7 @@ const styles = StyleSheet.create({
   },
   optText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 13,
+    fontSize: fontSize[13],
   },
   syncRow: {
     flexDirection: 'row',
@@ -272,6 +272,6 @@ const styles = StyleSheet.create({
   },
   syncBadgeText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 12,
+    fontSize: fontSize.sm,
   },
 });

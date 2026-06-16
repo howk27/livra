@@ -248,7 +248,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
   },
   goalTitle: {
     fontFamily: fonts.serif,
-    fontSize: 32,
+    fontSize: fontSize['3xl'],
     lineHeight: 38,
     color: c.inkDark,
     textAlign: 'center',
@@ -256,7 +256,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
   },
   tagline: {
     fontFamily: fonts.serifItalic,
-    fontSize: 22,
+    fontSize: fontSize[22],
     color: c.inkMid,
     textAlign: 'center',
   },
@@ -277,7 +277,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
   },
   nextTitle: {
     fontFamily: fonts.sansMedium,
-    fontSize: 17,
+    fontSize: fontSize[17],
     color: c.inkDark,
     textAlign: 'center',
     marginTop: spacing.sm,

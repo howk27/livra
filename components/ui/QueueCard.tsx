@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Plus, Flag } from 'phosphor-react-native';
 import { SectionLabel } from './SectionLabel';
-import { fonts, radius, spacing, shadow, themedColors } from '../../theme/tokens';
+import { fonts, radius, spacing, shadow, themedColors, fontSize } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 
 interface QueueCardProps {
@@ -103,13 +103,13 @@ const styles = StyleSheet.create({
   },
   heroTitle: {
     fontFamily: fonts.serif,
-    fontSize: 36,
+    fontSize: fontSize['4xl'],
     lineHeight: 40,
     marginTop: spacing.sm,
   },
   heroDescription: {
     fontFamily: fonts.sans,
-    fontSize: 15,
+    fontSize: fontSize.md,
     marginTop: spacing.xs,
   },
   heroAddBtn: {
@@ -141,12 +141,12 @@ const styles = StyleSheet.create({
   cardCenter: { flex: 1 },
   cardTitle: {
     fontFamily: fonts.serifSemibold,
-    fontSize: 20,
+    fontSize: fontSize.xl,
     lineHeight: 26,
   },
   cardMeta: {
     fontFamily: fonts.sans,
-    fontSize: 12,
+    fontSize: fontSize.sm,
     marginTop: 2,
   },
   cardRight: {
@@ -155,7 +155,7 @@ const styles = StyleSheet.create({
   },
   seqNum: {
     fontFamily: fonts.sans,
-    fontSize: 13,
+    fontSize: fontSize[13],
   },
   addCircle: {
     width: 36,

@@ -1033,7 +1033,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
   safeArea: { flex: 1 },
   keyboardAvoid: { flex: 1 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  errorText: { fontSize: 17, fontFamily: fonts.sansMedium },
+  errorText: { fontSize: fontSize[17], fontFamily: fonts.sansMedium },
   content: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
@@ -1054,7 +1054,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
   },
   allDoneBannerText: {
     fontFamily: fonts.serifItalic,
-    fontSize: 20,
+    fontSize: fontSize.xl,
     color: c.inkInverse,
   },
 
@@ -1074,7 +1074,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
   },
   heroTitle: {
     fontFamily: fonts.serif,
-    fontSize: 32,
+    fontSize: fontSize['3xl'],
     color: c.inkDark,
     lineHeight: 36,
     textAlign: 'center',
@@ -1082,7 +1082,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
   },
   heroMeta: {
     fontFamily: fonts.sans,
-    fontSize: 13,
+    fontSize: fontSize[13],
     color: c.inkMuted,
   },
   heroGoalLink: {
@@ -1090,7 +1090,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
   },
   heroGoalLinkText: {
     fontFamily: fonts.sans,
-    fontSize: 12,
+    fontSize: fontSize.sm,
     textDecorationLine: 'underline',
   },
 
@@ -1111,12 +1111,12 @@ function createStyles(c: ReturnType<typeof themedColors>) {
   },
   compactStatValue: {
     fontFamily: fonts.sansSemibold,
-    fontSize: 20,
+    fontSize: fontSize.xl,
     color: c.inkDark,
   },
   compactStatLabel: {
     fontFamily: fonts.sans,
-    fontSize: 12,
+    fontSize: fontSize.sm,
     color: c.inkMuted,
     marginTop: 2,
   },
@@ -1139,12 +1139,12 @@ function createStyles(c: ReturnType<typeof themedColors>) {
   },
   logBtnText: {
     fontFamily: fonts.serif,
-    fontSize: 18,
+    fontSize: fontSize[18],
     color: c.inkInverse,
   },
   logBtnTextDone: {
     fontFamily: fonts.sansMedium,
-    fontSize: 16,
+    fontSize: fontSize.lg,
     color: c.inkMuted,
   },
 
@@ -1158,7 +1158,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
   },
   secondaryBtn: { paddingVertical: spacing.xs },
   secondaryText: {
-    fontSize: 13,
+    fontSize: fontSize[13],
     fontFamily: fonts.sansMedium,
     color: c.inkMuted,
   },
@@ -1176,7 +1176,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     gap: spacing.sm,
   },
   doneForWeekText: {
-    fontSize: 13,
+    fontSize: fontSize[13],
     fontFamily: fonts.sans,
     textAlign: 'center',
     lineHeight: 19,
@@ -1186,7 +1186,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     paddingVertical: spacing.xs,
   },
   bonusLogBtnText: {
-    fontSize: 13,
+    fontSize: fontSize[13],
     fontFamily: fonts.sans,
   },
 
@@ -1204,17 +1204,17 @@ function createStyles(c: ReturnType<typeof themedColors>) {
   linkedGoalTitle: {
     flex: 1,
     fontFamily: fonts.sansMedium,
-    fontSize: 14,
+    fontSize: fontSize.base,
     color: c.inkDark,
   },
   linkedGoalProgress: {
     fontFamily: fonts.sans,
-    fontSize: 12,
+    fontSize: fontSize.sm,
     color: c.inkMuted,
   },
   noLinkedGoals: {
     fontFamily: fonts.sans,
-    fontSize: 14,
+    fontSize: fontSize.base,
     color: c.inkMuted,
   },
 
@@ -1229,12 +1229,12 @@ function createStyles(c: ReturnType<typeof themedColors>) {
   },
   historyDate: {
     fontFamily: fonts.sans,
-    fontSize: 14,
+    fontSize: fontSize.base,
     color: c.inkMid,
   },
   noHistoryText: {
     fontFamily: fonts.sans,
-    fontSize: 14,
+    fontSize: fontSize.base,
     color: c.inkMuted,
   },
 
@@ -1247,7 +1247,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     ...shadow.card,
   },
   noteSectionLabel: {
-    fontSize: 11,
+    fontSize: fontSize.xs,
     fontFamily: fonts.sansSemibold,
     color: c.inkMuted,
     letterSpacing: 1.5,
@@ -1260,7 +1260,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     borderRadius: 12,
     padding: spacing.md,
     minHeight: 90,
-    fontSize: 15,
+    fontSize: fontSize.md,
     fontFamily: fonts.sans,
     color: c.inkDark,
     lineHeight: 22,
@@ -1271,9 +1271,9 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  noteCharCount: { fontSize: 11, fontFamily: fonts.sans, color: c.inkMuted },
-  noteSavedIndicator: { fontSize: 11, fontFamily: fonts.sans, color: c.inkMuted },
-  noteDeleteText: { fontSize: 13, fontFamily: fonts.sansMedium, color: c.danger },
+  noteCharCount: { fontSize: fontSize.xs, fontFamily: fonts.sans, color: c.inkMuted },
+  noteSavedIndicator: { fontSize: fontSize.xs, fontFamily: fonts.sans, color: c.inkMuted },
+  noteDeleteText: { fontSize: fontSize[13], fontFamily: fonts.sansMedium, color: c.danger },
   noteCloudRow: {
     marginTop: spacing.xs,
     paddingTop: spacing.sm,
@@ -1281,8 +1281,8 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     borderTopColor: c.borderLight,
     gap: spacing.xs,
   },
-  noteCloudHint: { fontSize: 12, fontFamily: fonts.sans, color: c.inkMuted, lineHeight: 18 },
-  noteCloudDismiss: { fontSize: 12, fontFamily: fonts.sansMedium, color: c.accent },
+  noteCloudHint: { fontSize: fontSize.sm, fontFamily: fonts.sans, color: c.inkMuted, lineHeight: 18 },
+  noteCloudDismiss: { fontSize: fontSize.sm, fontFamily: fonts.sansMedium, color: c.accent },
 
   // Past notes
   pastNoteRow: {
@@ -1292,8 +1292,8 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     paddingVertical: spacing.sm,
   },
   pastNoteContent: { flex: 1, gap: 3 },
-  pastNoteDate: { fontSize: 12, fontFamily: fonts.sans, color: c.inkMuted },
-  pastNoteText: { fontSize: 14, fontFamily: fonts.sans, color: c.inkDark, lineHeight: 20 },
+  pastNoteDate: { fontSize: fontSize.sm, fontFamily: fonts.sans, color: c.inkMuted },
+  pastNoteText: { fontSize: fontSize.base, fontFamily: fonts.sans, color: c.inkDark, lineHeight: 20 },
   pastNoteSeparator: { height: StyleSheet.hairlineWidth, backgroundColor: c.borderLight },
 
   // Settings cards
@@ -1316,9 +1316,9 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     alignItems: 'center',
     justifyContent: 'center',
   },
-  settingLabel: { fontSize: 15, fontFamily: fonts.sansMedium, color: c.inkDark },
-  settingMeta: { fontSize: 12, fontFamily: fonts.sans, color: c.inkMuted, marginTop: 2 },
-  settingAction: { fontSize: 13, fontFamily: fonts.sansMedium, color: c.accent },
+  settingLabel: { fontSize: fontSize.md, fontFamily: fonts.sansMedium, color: c.inkDark },
+  settingMeta: { fontSize: fontSize.sm, fontFamily: fonts.sans, color: c.inkMuted, marginTop: 2 },
+  settingAction: { fontSize: fontSize[13], fontFamily: fonts.sansMedium, color: c.accent },
 
   // Modal
   modalOverlay: {
@@ -1333,14 +1333,14 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     gap: spacing.md,
     backgroundColor: c.surface,
   },
-  modalTitle: { fontSize: 18, fontFamily: fonts.sansMedium, color: c.inkDark, marginBottom: spacing.sm },
-  modalBody: { fontSize: 14, fontFamily: fonts.sans, color: c.inkMuted, lineHeight: 20 },
+  modalTitle: { fontSize: fontSize[18], fontFamily: fonts.sansMedium, color: c.inkDark, marginBottom: spacing.sm },
+  modalBody: { fontSize: fontSize.base, fontFamily: fonts.sans, color: c.inkMuted, lineHeight: 20 },
   modalInput: {
     borderWidth: 1,
     borderColor: c.borderLight,
     borderRadius: 12,
     padding: spacing.md,
-    fontSize: 16,
+    fontSize: fontSize.lg,
     fontFamily: fonts.sans,
     color: c.inkDark,
     backgroundColor: c.linen,
@@ -1351,10 +1351,10 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     alignItems: 'center',
     backgroundColor: c.forest,
   },
-  modalBtnText: { color: c.inkInverse, fontSize: 16, fontFamily: fonts.sansMedium },
+  modalBtnText: { color: c.inkInverse, fontSize: fontSize.lg, fontFamily: fonts.sansMedium },
   modalOption: { paddingVertical: spacing.md },
-  modalOptionText: { fontSize: 16, fontFamily: fonts.sans, color: c.inkDark },
+  modalOptionText: { fontSize: fontSize.lg, fontFamily: fonts.sans, color: c.inkDark },
   modalCancel: { paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.xs },
-  modalCancelText: { fontSize: 14, fontFamily: fonts.sans, color: c.inkMuted },
+  modalCancelText: { fontSize: fontSize.base, fontFamily: fonts.sans, color: c.inkMuted },
   });
 }

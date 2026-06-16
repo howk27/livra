@@ -150,6 +150,7 @@ export const fonts = {
   sansMedium: 'DMSans_500Medium',
   sansSemibold: 'DMSans_600SemiBold',
   sansBold: 'DMSans_700Bold',
+  mono: 'monospace', // diagnostics / code display only
   // Backward compat aliases used by theme/typography.ts
   heading: 'CormorantGaramond_700Bold',
   regular: 'DMSans_400Regular',
@@ -160,6 +161,11 @@ export const borderRadius = { ...radius, card: 16 };
 export const fontSize = {
   xs: 11, sm: 12, base: 14, md: 15, lg: 16, xl: 20,
   display: 24, '2xl': 28, '3xl': 32, '4xl': 36,
+  // Wave 5 — remaining real sizes used across screens (key === px for the
+  // in-between steps so the migration stays provably size-preserving).
+  '2xs': 10,
+  13: 13, 17: 17, 18: 18, 22: 22, 26: 26,
+  '5xl': 40, '6xl': 60, '7xl': 64,
 };
 export const fontWeight = {
   normal: '400' as const,

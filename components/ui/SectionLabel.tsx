@@ -1,6 +1,6 @@
 import React from 'react';
 import { Text, StyleSheet } from 'react-native';
-import { fonts, themedColors } from '../../theme/tokens';
+import { fonts, themedColors, fontSize } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 
 interface SectionLabelProps {
@@ -23,7 +23,7 @@ export function SectionLabel({ children, color, style }: SectionLabelProps) {
 const styles = StyleSheet.create({
   label: {
     fontFamily: fonts.sansMedium,
-    fontSize: 11,
+    fontSize: fontSize.xs,
     letterSpacing: 1.2,
     textTransform: 'uppercase',
   },

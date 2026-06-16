@@ -114,7 +114,7 @@ const styles = StyleSheet.create({
   },
   goalTitle: {
     color: CARD_TEXT,
-    fontSize: 40,
+    fontSize: fontSize['5xl'],
     fontWeight: fontWeight.bold,
     textAlign: 'center',
     lineHeight: 44,

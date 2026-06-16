@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { Heart, Plug } from 'phosphor-react-native';
 import { LivraHeader } from '../../components/ui/LivraHeader';
 import { SectionLabel } from '../../components/ui/SectionLabel';
-import { fonts, spacing, radius, shadow, themedColors } from '../../theme/tokens';
+import { fonts, spacing, radius, shadow, themedColors, fontSize } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 
 function hexToRgba(hex: string, alpha: number): string {
@@ -94,12 +94,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  rowLabel: { fontFamily: fonts.sansMedium, fontSize: 15 },
-  rowMeta: { fontFamily: fonts.sans, fontSize: 12, marginTop: 2 },
+  rowLabel: { fontFamily: fonts.sansMedium, fontSize: fontSize.md },
+  rowMeta: { fontFamily: fonts.sans, fontSize: fontSize.sm, marginTop: 2 },
   badge: {
     paddingHorizontal: spacing.sm,
     paddingVertical: 4,
     borderRadius: radius.sm,
   },
-  badgeText: { fontFamily: fonts.sansMedium, fontSize: 12 },
+  badgeText: { fontFamily: fonts.sansMedium, fontSize: fontSize.sm },
 });

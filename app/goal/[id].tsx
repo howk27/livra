@@ -63,10 +63,10 @@ function ProgressRing({ progress, threshold }: { progress: number; threshold: nu
           origin={`${RING_SIZE / 2}, ${RING_SIZE / 2}`}
         />
       </Svg>
-      <Text style={{ fontFamily: fonts.sansBold, fontSize: 22, color: c.forest, marginTop: spacing.xs }}>
+      <Text style={{ fontFamily: fonts.sansBold, fontSize: fontSize[22], color: c.forest, marginTop: spacing.xs }}>
         {progress}
       </Text>
-      <Text style={{ fontFamily: fonts.sans, fontSize: 12, color: c.forest, opacity: 0.7 }}>
+      <Text style={{ fontFamily: fonts.sans, fontSize: fontSize.sm, color: c.forest, opacity: 0.7 }}>
         of {threshold}
       </Text>
     </View>
@@ -238,7 +238,7 @@ export default function GoalDetailScreen() {
                 onPress={() => router.push(`/mark/${mark.id}` as any)}
                 activeOpacity={0.8}
               >
-                <Text style={[styles.markEmoji, { fontSize: 20 }]}>{mark.emoji || '📌'}</Text>
+                <Text style={[styles.markEmoji, { fontSize: fontSize.xl }]}>{mark.emoji || '📌'}</Text>
                 <Text style={[styles.markName, { color: c.inkDark }]}>{mark.name}</Text>
               </TouchableOpacity>
             ))
@@ -314,11 +314,11 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   content: { paddingHorizontal: spacing.md, paddingBottom: spacing.xl * 2 },
-  title: { fontSize: 28, fontFamily: fonts.serif, marginTop: spacing.sm },
+  title: { fontSize: fontSize['2xl'], fontFamily: fonts.serif, marginTop: spacing.sm },
   titleEditRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm },
   titleInput: {
     flex: 1,
-    fontSize: 20,
+    fontSize: fontSize.xl,
     fontFamily: fonts.sans,
     borderWidth: 1,
     borderRadius: borderRadius.md,
@@ -332,7 +332,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   cardLabel: {
-    fontSize: 10,
+    fontSize: fontSize['2xs'],
     fontFamily: fonts.sansSemibold,
     letterSpacing: 1.5,
     textTransform: 'uppercase',
@@ -341,7 +341,7 @@ const styles = StyleSheet.create({
   cardValue: { fontSize: fontSize.md, fontFamily: fonts.sansMedium },
   section: { marginTop: spacing.md, gap: spacing.xs },
   sectionLabel: {
-    fontSize: 11,
+    fontSize: fontSize.xs,
     fontFamily: fonts.sansSemibold,
     letterSpacing: 1.5,
     textTransform: 'uppercase',

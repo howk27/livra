@@ -17,7 +17,7 @@ import { useRouter } from 'expo-router';
 import { SvgLogo } from '../components/ui/SvgLogo';
 import { LivraWordmark } from '../components/ui/LivraWordmark';
 import { PillButton } from '../components/ui/PillButton';
-import { themedColors, fonts, spacing, radius } from '../theme/tokens';
+import { themedColors, fonts, spacing, radius, fontSize } from '../theme/tokens';
 import { useEffectiveTheme, useUIStore } from '../state/uiSlice';
 import { useOnboardingStore, CommitmentLevel } from '../state/onboardingSlice';
 import { useGoalsStore } from '../state/goalsSlice';
@@ -671,7 +671,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     },
     tagline: {
       fontFamily: fonts.serifItalic,
-      fontSize: 26,
+      fontSize: fontSize[26],
       lineHeight: 34,
       color: c.inkDark,
       textAlign: 'center',
@@ -679,7 +679,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     },
     body: {
       fontFamily: fonts.sans,
-      fontSize: 15,
+      fontSize: fontSize.md,
       lineHeight: 24,
       color: c.inkMid,
       textAlign: 'center',
@@ -692,7 +692,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     },
     secondaryLink: {
       fontFamily: fonts.sans,
-      fontSize: 14,
+      fontSize: fontSize.base,
       color: c.inkMid,
       textAlign: 'center',
       marginTop: spacing.md,
@@ -705,13 +705,13 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     },
     stepTitle: {
       fontFamily: fonts.serif,
-      fontSize: 28,
+      fontSize: fontSize['2xl'],
       color: c.inkDark,
       marginTop: spacing.xl,
     },
     stepSubtitle: {
       fontFamily: fonts.sans,
-      fontSize: 15,
+      fontSize: fontSize.md,
       color: c.inkMid,
       lineHeight: 22,
       marginTop: spacing.sm,
@@ -728,7 +728,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
       borderRadius: radius.md,
       paddingHorizontal: spacing.md,
       fontFamily: fonts.sans,
-      fontSize: 15,
+      fontSize: fontSize.md,
       color: c.inkDark,
       borderWidth: 1,
       borderColor: c.borderLight,
@@ -752,7 +752,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     },
     paceLabel: {
       fontFamily: fonts.sans,
-      fontSize: 16,
+      fontSize: fontSize.lg,
       color: c.inkDark,
       flex: 1,
     },
@@ -766,7 +766,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     },
     paceFootnote: {
       fontFamily: fonts.sans,
-      fontSize: 13,
+      fontSize: fontSize[13],
       color: c.inkMuted,
       textAlign: 'center',
       marginTop: spacing.md,
@@ -792,7 +792,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
       opacity: 0.45,
     },
     markEmoji: {
-      fontSize: 24,
+      fontSize: fontSize.display,
       lineHeight: 28,
     },
     markInfo: {
@@ -800,12 +800,12 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     },
     markName: {
       fontFamily: fonts.sansMedium,
-      fontSize: 15,
+      fontSize: fontSize.md,
       color: c.inkDark,
     },
     markFreq: {
       fontFamily: fonts.sans,
-      fontSize: 12,
+      fontSize: fontSize.sm,
       color: c.inkMuted,
       marginTop: 2,
     },
@@ -833,12 +833,12 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     },
     aiHatchText: {
       fontFamily: fonts.sansMedium,
-      fontSize: 14,
+      fontSize: fontSize.base,
       color: c.accent,
     },
     aiHatchSub: {
       fontFamily: fonts.sans,
-      fontSize: 12,
+      fontSize: fontSize.sm,
       color: c.inkMuted,
       textAlign: 'center' as const,
       marginTop: spacing.xs,
@@ -846,7 +846,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     },
     aiError: {
       fontFamily: fonts.sans,
-      fontSize: 12,
+      fontSize: fontSize.sm,
       color: c.danger,
       textAlign: 'center' as const,
       marginTop: spacing.xs,
@@ -856,14 +856,14 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     // AI review
     reviewLabel: {
       fontFamily: fonts.sansMedium,
-      fontSize: 11,
+      fontSize: fontSize.xs,
       color: c.inkMuted,
       letterSpacing: 0.8,
       marginBottom: spacing.xs,
     },
     reviewTimeframe: {
       fontFamily: fonts.sans,
-      fontSize: 15,
+      fontSize: fontSize.md,
       color: c.inkDark,
       paddingVertical: spacing.xs,
     },
@@ -880,7 +880,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     },
     reviewMarkWhy: {
       fontFamily: fonts.sans,
-      fontSize: 12,
+      fontSize: fontSize.sm,
       color: c.inkMuted,
       marginTop: 2,
       lineHeight: 17,

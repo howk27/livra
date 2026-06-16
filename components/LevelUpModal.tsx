@@ -131,7 +131,7 @@ const styles = StyleSheet.create({
     marginVertical: spacing.md,
   },
   emblemText: {
-    fontSize: 32,
+    fontSize: fontSize['3xl'],
     fontWeight: '700',
   },
   title: {

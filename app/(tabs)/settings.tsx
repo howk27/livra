@@ -36,7 +36,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LivraHeader } from '../../components/ui/LivraHeader';
 import { SectionLabel } from '../../components/ui/SectionLabel';
 import { LevelProgressBar } from '../../components/LevelProgressBar';
-import { fonts, spacing, radius, shadow, themedColors } from '../../theme/tokens';
+import { fonts, spacing, radius, shadow, themedColors, fontSize } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { ProfileEditSheet } from '../../components/sheets/ProfileEditSheet';
 
@@ -137,7 +137,7 @@ const rowStyles = StyleSheet.create({
   label: {
     flex: 1,
     fontFamily: fonts.sansMedium,
-    fontSize: 15,
+    fontSize: fontSize.md,
   },
 });
 
@@ -710,15 +710,15 @@ const styles = StyleSheet.create({
   },
   profileName: {
     fontFamily: fonts.sansMedium,
-    fontSize: 17,
+    fontSize: fontSize[17],
   },
   profileEmail: {
     fontFamily: fonts.sans,
-    fontSize: 13,
+    fontSize: fontSize[13],
   },
   profileSince: {
     fontFamily: fonts.sans,
-    fontSize: 11,
+    fontSize: fontSize.xs,
     marginTop: spacing.xs,
   },
 
@@ -736,11 +736,11 @@ const styles = StyleSheet.create({
   verifyText: {
     flex: 1,
     fontFamily: fonts.sans,
-    fontSize: 13,
+    fontSize: fontSize[13],
   },
   verifyAction: {
     fontFamily: fonts.sansMedium,
-    fontSize: 13,
+    fontSize: fontSize[13],
   },
 
   // Section label
@@ -753,7 +753,7 @@ const styles = StyleSheet.create({
   // Inline row right-side hints
   inlineHint: {
     fontFamily: fonts.sans,
-    fontSize: 13,
+    fontSize: fontSize[13],
   },
 
   // Pro badge
@@ -764,7 +764,7 @@ const styles = StyleSheet.create({
   },
   proBadgeText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 10,
+    fontSize: fontSize['2xs'],
     letterSpacing: 0.8,
   },
 
@@ -776,11 +776,11 @@ const styles = StyleSheet.create({
   },
   signOutText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 15,
+    fontSize: fontSize.md,
   },
   deleteAccountText: {
     fontFamily: fonts.sans,
-    fontSize: 13,
+    fontSize: fontSize[13],
   },
 
   // Footer
@@ -791,7 +791,7 @@ const styles = StyleSheet.create({
   },
   version: {
     fontFamily: fonts.sans,
-    fontSize: 11,
+    fontSize: fontSize.xs,
     letterSpacing: 1.2,
     textTransform: 'uppercase',
   },

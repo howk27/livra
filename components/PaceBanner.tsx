@@ -197,7 +197,7 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     fontWeight: fontWeight.semibold,
   },
-  dismiss: { fontSize: 22, lineHeight: 24 },
+  dismiss: { fontSize: fontSize[22], lineHeight: 24 },
   modalOverlay: {
     flex: 1,
     justifyContent: 'flex-end',

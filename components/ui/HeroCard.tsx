@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { IconProps } from 'phosphor-react-native';
 import { SectionLabel } from './SectionLabel';
-import { fonts, radius, spacing, shadow, themedColors } from '../../theme/tokens';
+import { fonts, radius, spacing, shadow, themedColors, fontSize } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 
 interface HeroCardProps {
@@ -101,13 +101,13 @@ const styles = StyleSheet.create({
   },
   title: {
     fontFamily: fonts.serif,
-    fontSize: 36,
+    fontSize: fontSize['4xl'],
     lineHeight: 40,
     marginTop: spacing.sm,
   },
   description: {
     fontFamily: fonts.sans,
-    fontSize: 15,
+    fontSize: fontSize.md,
     marginTop: spacing.xs,
   },
   progressSection: {
@@ -120,7 +120,7 @@ const styles = StyleSheet.create({
   },
   progressPct: {
     fontFamily: fonts.sansSemibold,
-    fontSize: 14,
+    fontSize: fontSize.base,
   },
   progressTrack: {
     height: 3,

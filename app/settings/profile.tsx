@@ -17,7 +17,7 @@ import { User, Camera } from 'phosphor-react-native';
 import { LivraHeader } from '../../components/ui/LivraHeader';
 import { PillButton } from '../../components/ui/PillButton';
 import { SectionLabel } from '../../components/ui/SectionLabel';
-import { themedColors, fonts, spacing, radius } from '../../theme/tokens';
+import { themedColors, fonts, spacing, radius, fontSize } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useAuth } from '../../hooks/useAuth';
 import { getSupabaseClient } from '../../lib/supabase';
@@ -176,7 +176,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
       borderRadius: radius.md,
       paddingHorizontal: spacing.md,
       fontFamily: fonts.sans,
-      fontSize: 15,
+      fontSize: fontSize.md,
       color: c.inkDark,
       borderWidth: 1,
       borderColor: c.borderLight,
@@ -185,7 +185,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     inputDisabled: { opacity: 0.6 },
     inputText: {
       fontFamily: fonts.sans,
-      fontSize: 15,
+      fontSize: fontSize.md,
     },
     saveBtn: {
       marginTop: spacing.xxl,

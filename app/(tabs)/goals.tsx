@@ -22,7 +22,7 @@ import Animated, {
   runOnJS,
   type SharedValue,
 } from 'react-native-reanimated';
-import { fonts, spacing, radius, themedColors } from '../../theme/tokens';
+import { fonts, spacing, radius, themedColors, fontSize } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { LivraWordmark } from '../../components/ui/LivraWordmark';
 import { QueueCard } from '../../components/ui/QueueCard';
@@ -476,7 +476,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontFamily: fonts.serifItalic,
-    fontSize: 16,
+    fontSize: fontSize.lg,
     marginTop: 4,
     marginBottom: 24,
   },
@@ -487,7 +487,7 @@ const styles = StyleSheet.create({
   },
   addBtnText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 13,
+    fontSize: fontSize[13],
   },
 
   sectionLabel: {
@@ -522,17 +522,17 @@ const styles = StyleSheet.create({
   },
   activeBadgeText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 10,
+    fontSize: fontSize['2xs'],
     letterSpacing: 0.8,
   },
   activeTitle: {
     fontFamily: fonts.serif,
-    fontSize: 28,
+    fontSize: fontSize['2xl'],
     lineHeight: 34,
   },
   activeDescription: {
     fontFamily: fonts.sans,
-    fontSize: 14,
+    fontSize: fontSize.base,
     marginTop: spacing.xs,
   },
   progressSection: {
@@ -550,11 +550,11 @@ const styles = StyleSheet.create({
   },
   progressLabel: {
     fontFamily: fonts.sans,
-    fontSize: 12,
+    fontSize: fontSize.sm,
   },
   activeDeadline: {
     fontFamily: fonts.sans,
-    fontSize: 12,
+    fontSize: fontSize.sm,
     marginTop: spacing.sm,
   },
   completeCta: {
@@ -568,7 +568,7 @@ const styles = StyleSheet.create({
   },
   completeCtaText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 13,
+    fontSize: fontSize[13],
   },
 
   // Draggable list
@@ -600,7 +600,7 @@ const styles = StyleSheet.create({
   },
   completedLabel: {
     fontFamily: fonts.sans,
-    fontSize: 14,
+    fontSize: fontSize.base,
   },
 
   // Error banner
@@ -612,7 +612,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontFamily: fonts.sans,
-    fontSize: 13,
+    fontSize: fontSize[13],
   },
 
   // Loading
@@ -631,13 +631,13 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     fontFamily: fonts.serifSemibold,
-    fontSize: 22,
+    fontSize: fontSize[22],
     textAlign: 'center',
     marginTop: spacing.md,
   },
   emptySubtitle: {
     fontFamily: fonts.sans,
-    fontSize: 14,
+    fontSize: fontSize.base,
     textAlign: 'center',
     marginTop: spacing.sm,
   },
@@ -649,7 +649,7 @@ const styles = StyleSheet.create({
   },
   emptyAddBtnText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 15,
+    fontSize: fontSize.md,
   },
 
   bottomSpacer: { height: spacing.xxl },

@@ -18,7 +18,7 @@ import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CheckCircle, Flag, Plus } from 'phosphor-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { spacing, radius, shadow, themedColors } from '../../theme/tokens';
+import { spacing, radius, shadow, themedColors, fontSize, fonts } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { AddMarkSheet } from '../sheets/AddMarkSheet';
 import { AddGoalSheet } from '../sheets/AddGoalSheet';
@@ -225,8 +225,8 @@ const styles = StyleSheet.create({
     ...shadow.card,
   },
   labelText: {
-    fontFamily: 'DMSans_500Medium',
-    fontSize: 13,
+    fontFamily: fonts.sansMedium,
+    fontSize: fontSize[13],
   },
   optionBtn: {
     width: OPT_SIZE,

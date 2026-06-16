@@ -24,7 +24,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import Constants from 'expo-constants';
-import { spacing, borderRadius, fontSize, fontWeight, shadow, themedColors } from '../theme/tokens';
+import { spacing, borderRadius, fontSize, fontWeight, shadow, themedColors, fonts } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { useIapSubscriptions } from '../hooks/useIapSubscriptions';
 import { MONTHLY_PRODUCT_ID, YEARLY_PRODUCT_ID } from '../lib/iap/iap';
@@ -1952,7 +1952,7 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     flex: 1,
     textAlign: 'right',
-    fontFamily: 'monospace',
+    fontFamily: fonts.mono,
   },
 });
 

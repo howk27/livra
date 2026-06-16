@@ -21,7 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SvgLogo } from '../ui/SvgLogo';
 import { PillButton } from '../ui/PillButton';
 import { SectionLabel } from '../ui/SectionLabel';
-import { fonts, spacing, themedColors } from '../../theme/tokens';
+import { fonts, spacing, themedColors, fontSize } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useGoalCompletionStore } from '../../state/goalCompletionStore';
 import { useGoalsStore } from '../../state/goalsSlice';
@@ -185,7 +185,7 @@ const styles = StyleSheet.create({
   },
   goalTitle: {
     fontFamily: fonts.serif,
-    fontSize: 32,
+    fontSize: fontSize['3xl'],
     lineHeight: 38,
     textAlign: 'center',
     marginTop: spacing.xl,
@@ -197,7 +197,7 @@ const styles = StyleSheet.create({
   },
   completionCopy: {
     fontFamily: fonts.serifItalic,
-    fontSize: 22,
+    fontSize: fontSize[22],
     textAlign: 'center',
   },
   nextGoalBlock: {
@@ -210,7 +210,7 @@ const styles = StyleSheet.create({
   },
   nextTitle: {
     fontFamily: fonts.sansMedium,
-    fontSize: 17,
+    fontSize: fontSize[17],
     textAlign: 'center',
     marginTop: spacing.sm,
   },
@@ -230,6 +230,6 @@ const styles = StyleSheet.create({
   },
   shareText: {
     fontFamily: fonts.sans,
-    fontSize: 13,
+    fontSize: fontSize[13],
   },
 });

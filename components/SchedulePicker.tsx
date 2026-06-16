@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useEffectiveTheme } from '../state/uiSlice';
-import { themedColors } from '../theme/tokens';
+import { themedColors, fontSize } from '../theme/tokens';
 import { foregroundForHexBackground } from '@/src/components/icons/color';
 import type { ScheduleType, DayOfWeek } from '../types';
 
@@ -116,7 +116,7 @@ const styles = StyleSheet.create({
   container: { gap: 8 },
   typeRow: { flexDirection: 'row', gap: 8 },
   typePill: { flex: 1, paddingVertical: 9, borderRadius: 10, alignItems: 'center', borderWidth: 1.5 },
-  typePillText: { fontSize: 13, fontWeight: '500' },
+  typePillText: { fontSize: fontSize[13], fontWeight: '500' },
   daysRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
   dayChip: {
     width: 38,
@@ -126,5 +126,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1.5,
   },
-  dayChipText: { fontSize: 13, fontWeight: '600' },
+  dayChipText: { fontSize: fontSize[13], fontWeight: '600' },
 });

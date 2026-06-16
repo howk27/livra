@@ -17,7 +17,7 @@ import {
   type Icon as PhosphorIcon,
 } from 'phosphor-react-native';
 import { CheckinButton } from './CheckinButton';
-import { fonts, radius, spacing, themedColors, categoryAccents } from '../../theme/tokens';
+import { fonts, radius, spacing, themedColors, categoryAccents, fontSize } from '../../theme/tokens';
 import { applyOpacity } from '@/src/components/icons/color';
 import { useEffectiveTheme } from '../../state/uiSlice';
 
@@ -168,17 +168,17 @@ const styles = StyleSheet.create({
   center: { flex: 1 },
   title: {
     fontFamily: fonts.sansMedium,
-    fontSize: 15,
+    fontSize: fontSize.md,
   },
   subtitle: {
     fontFamily: fonts.sans,
-    fontSize: 12,
+    fontSize: fontSize.sm,
     marginTop: 2,
   },
   right: { alignItems: 'flex-end', justifyContent: 'center' },
   count: {
     fontFamily: fonts.sansSemibold,
-    fontSize: 16,
+    fontSize: fontSize.lg,
   },
   progressTrackWrap: { marginTop: spacing.xs },
   progressTrack: {

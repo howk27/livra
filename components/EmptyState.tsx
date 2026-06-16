@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, TouchableOpacity } from 'react-native';
-import { themedColors } from '../theme/tokens';
+import { themedColors, fontSize } from '../theme/tokens';
 import { spacing, borderRadius } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { AppText } from './Typography';
@@ -70,7 +70,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   icon: {
-    fontSize: 60,
+    fontSize: fontSize['6xl'],
     marginBottom: spacing.lg,
   },
   title: {

@@ -61,7 +61,7 @@ function GoalMarkRow({ linkedMarkIds }: { linkedMarkIds?: string[] }) {
             color={c.inkMuted}
             variant="symbol"
           />
-          <Text style={{ fontSize: 11, fontFamily: fonts.sansMedium, color: c.inkMuted }}>
+          <Text style={{ fontSize: fontSize.xs, fontFamily: fonts.sansMedium, color: c.inkMuted }}>
             {mark.name}
           </Text>
         </TouchableOpacity>
@@ -196,7 +196,7 @@ export default function GoalQueueScreen() {
                           }}
                         />
                       </View>
-                      <Text style={{ fontSize: 13, fontFamily: fonts.sans, color: c.inkMuted }}>
+                      <Text style={{ fontSize: fontSize[13], fontFamily: fonts.sans, color: c.inkMuted }}>
                         {progress} / {threshold} mark logs
                       </Text>
                     </View>
@@ -362,11 +362,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
-  headerTitle: { fontSize: 24, fontFamily: fonts.serif },
+  headerTitle: { fontSize: fontSize.display, fontFamily: fonts.serif },
   headerAddBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   content: { paddingHorizontal: spacing.md, paddingBottom: spacing.xl },
   section: { marginTop: spacing.lg, gap: spacing.sm },
-  sectionLabel: { fontSize: 11, fontFamily: fonts.sansSemibold, letterSpacing: 1.5, textTransform: 'uppercase' },
+  sectionLabel: { fontSize: fontSize.xs, fontFamily: fonts.sansSemibold, letterSpacing: 1.5, textTransform: 'uppercase' },
   activeCard: { borderWidth: 0, borderLeftWidth: 3 },
   card: {
     borderWidth: 1,
@@ -374,7 +374,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: spacing.xs,
   },
-  goalTitle: { fontSize: 16, fontFamily: fonts.sansSemibold },
+  goalTitle: { fontSize: fontSize.lg, fontFamily: fonts.sansSemibold },
   goalDesc: { fontSize: fontSize.sm },
   completeBtn: {
     marginTop: spacing.sm,

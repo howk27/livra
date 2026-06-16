@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import { LivraHeader } from '../../components/ui/LivraHeader';
 import { SectionLabel } from '../../components/ui/SectionLabel';
-import { fonts, spacing, radius, shadow, themedColors } from '../../theme/tokens';
+import { fonts, spacing, radius, shadow, themedColors, fontSize } from '../../theme/tokens';
 import { useEffectiveTheme, useUIStore } from '../../state/uiSlice';
 import type { ThemeMode } from '../../types';
 
@@ -116,11 +116,11 @@ const styles = StyleSheet.create({
   },
   themePillText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 14,
+    fontSize: fontSize.base,
   },
   themeHint: {
     fontFamily: fonts.sans,
-    fontSize: 13,
+    fontSize: fontSize[13],
     textAlign: 'center',
     marginTop: spacing.sm,
   },
@@ -142,10 +142,10 @@ const styles = StyleSheet.create({
   },
   iconPlaceholder: {
     fontFamily: fonts.sansMedium,
-    fontSize: 20,
+    fontSize: fontSize.xl,
   },
   iconLabel: {
     fontFamily: fonts.sans,
-    fontSize: 11,
+    fontSize: fontSize.xs,
   },
 });

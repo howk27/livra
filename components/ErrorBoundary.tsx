@@ -1,7 +1,7 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { themedColors } from '../theme/tokens';
+import { themedColors, fonts } from '../theme/tokens';
 import { env } from '../lib/env';
 import { spacing, borderRadius, fontSize, fontWeight } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
@@ -140,7 +140,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   icon: {
-    fontSize: 64,
+    fontSize: fontSize['7xl'],
   },
   title: {
     fontSize: fontSize['2xl'],
@@ -168,12 +168,12 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: fontSize.xs,
-    fontFamily: 'monospace',
+    fontFamily: fonts.mono,
     marginBottom: spacing.xs,
   },
   errorStack: {
     fontSize: fontSize.xs,
-    fontFamily: 'monospace',
+    fontFamily: fonts.mono,
     opacity: 0.7,
   },
   button: {

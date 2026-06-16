@@ -859,7 +859,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   dayChipText: {
-    fontSize: 13,
+    fontSize: fontSize[13],
     fontWeight: fontWeight.semibold,
   },
   unitButtons: {

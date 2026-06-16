@@ -64,6 +64,66 @@ export const typography: TypographyScale = StyleSheet.create({
     lineHeight: roundLineHeight(fontSize.lg, lineHeight.snug),
     letterSpacing: letterSpacing.normal,
   },
+
+  // ── Wave 5 additions — size-preserving semantic roles for the clusters the
+  // original 8 presets don't cover. Serif heroes above 2xl, italic greeting,
+  // and the common sans body/meta weights (non-uppercase, unlike `caption`).
+  hero: {
+    fontFamily: fonts.serif,
+    fontSize: fontSize['4xl'],
+    fontWeight: fontWeight.bold,
+    lineHeight: roundLineHeight(fontSize['4xl'], lineHeight.snug),
+    letterSpacing: letterSpacing.tight,
+  },
+  display2: {
+    fontFamily: fonts.serif,
+    fontSize: fontSize['3xl'],
+    fontWeight: fontWeight.bold,
+    lineHeight: roundLineHeight(fontSize['3xl'], lineHeight.snug),
+    letterSpacing: letterSpacing.tight,
+  },
+  greeting: {
+    fontFamily: fonts.serifItalic,
+    fontSize: fontSize[22],
+    fontWeight: fontWeight.normal,
+    lineHeight: roundLineHeight(fontSize[22], lineHeight.snug),
+    letterSpacing: letterSpacing.normal,
+  },
+  bodyMedium: {
+    fontFamily: fonts.sansMedium,
+    fontSize: fontSize.base,
+    fontWeight: fontWeight.medium,
+    lineHeight: roundLineHeight(fontSize.base, lineHeight.relaxed),
+    letterSpacing: letterSpacing.normal,
+  },
+  bodySemibold: {
+    fontFamily: fonts.sansSemibold,
+    fontSize: fontSize.base,
+    fontWeight: fontWeight.semibold,
+    lineHeight: roundLineHeight(fontSize.base, lineHeight.relaxed),
+    letterSpacing: letterSpacing.normal,
+  },
+  bodySmall: {
+    fontFamily: fonts.sans,
+    fontSize: fontSize[13],
+    fontWeight: fontWeight.normal,
+    lineHeight: roundLineHeight(fontSize[13], lineHeight.relaxed),
+    letterSpacing: letterSpacing.normal,
+  },
+  bodySmallMedium: {
+    fontFamily: fonts.sansMedium,
+    fontSize: fontSize[13],
+    fontWeight: fontWeight.medium,
+    lineHeight: roundLineHeight(fontSize[13], lineHeight.relaxed),
+    letterSpacing: letterSpacing.normal,
+  },
+  meta: {
+    fontFamily: fonts.sansMedium,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.medium,
+    lineHeight: roundLineHeight(fontSize.sm, lineHeight.default),
+    letterSpacing: letterSpacing.normal,
+  },
 });
 
 export type TypographyVariant = keyof typeof typography;

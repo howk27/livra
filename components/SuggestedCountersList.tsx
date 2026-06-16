@@ -189,7 +189,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   counterEmoji: {
-    fontSize: 32,
+    fontSize: fontSize['3xl'],
     marginBottom: spacing.xs,
   },
   counterName: {

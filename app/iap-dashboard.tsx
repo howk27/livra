@@ -137,7 +137,7 @@ export default function IapDashboardScreen() {
 
   const renderSection = (title: string, content: React.ReactNode) => (
     <View style={[styles.section, { backgroundColor: c.surface }]}>
-      <AppText variant="subheading" style={[styles.sectionTitle, { color: c.inkDark }]}>
+      <AppText variant="subtitle" style={[styles.sectionTitle, { color: c.inkDark }]}>
         {title}
       </AppText>
       {content}
@@ -169,7 +169,7 @@ export default function IapDashboardScreen() {
         >
           <ArrowLeft size={24} color={c.inkDark} weight="bold" />
         </TouchableOpacity>
-        <AppText variant="heading" style={[styles.headerTitle, { color: c.inkDark }]}>
+        <AppText variant="title" style={[styles.headerTitle, { color: c.inkDark }]}>
           IAP Dashboard
         </AppText>
         <View style={styles.backButton} />

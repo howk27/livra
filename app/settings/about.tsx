@@ -11,7 +11,7 @@ import Constants from 'expo-constants';
 import { LivraHeader } from '../../components/ui/LivraHeader';
 import { SvgLogo } from '../../components/ui/SvgLogo';
 import { LivraWordmark } from '../../components/ui/LivraWordmark';
-import { fonts, spacing, themedColors } from '../../theme/tokens';
+import { fonts, spacing, themedColors, fontSize } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 
 const LINKS = [
@@ -80,13 +80,13 @@ const styles = StyleSheet.create({
   },
   version: {
     fontFamily: fonts.sans,
-    fontSize: 13,
+    fontSize: fontSize[13],
     textAlign: 'center',
     marginTop: spacing.sm,
   },
   company: {
     fontFamily: fonts.sans,
-    fontSize: 13,
+    fontSize: fontSize[13],
     textAlign: 'center',
     marginTop: spacing.xs,
   },
@@ -101,12 +101,12 @@ const styles = StyleSheet.create({
   linkRow: {},
   linkText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 14,
+    fontSize: fontSize.base,
     textAlign: 'center',
   },
   footer: {
     fontFamily: fonts.sans,
-    fontSize: 12,
+    fontSize: fontSize.sm,
     textAlign: 'center',
     marginTop: spacing.xxl,
   },

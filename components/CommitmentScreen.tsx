@@ -152,7 +152,7 @@ export function CommitmentScreen({
                 },
               ]}
             >
-              <Text style={{ fontSize: 15 }}>{s.emoji}</Text>
+              <Text style={{ fontSize: fontSize.md }}>{s.emoji}</Text>
               <Text style={[styles.markChipText, { color: isSelected ? c.inkDark : c.inkMuted }]}>
                 {s.name}
               </Text>
@@ -317,7 +317,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   markChipText: { fontSize: fontSize.sm, fontWeight: fontWeight.medium },
-  ownedBadge: { fontSize: 10, marginLeft: 2 },
+  ownedBadge: { fontSize: fontSize['2xs'], marginLeft: 2 },
   tierRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   tierBtn: {
     flex: 1,
@@ -328,7 +328,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   tierLabel: { fontSize: fontSize.sm, fontWeight: fontWeight.semibold, textAlign: 'center' },
-  tierDesc: { fontSize: 10, textAlign: 'center', marginTop: 2 },
+  tierDesc: { fontSize: fontSize['2xs'], textAlign: 'center', marginTop: 2 },
   freqRow: { flexDirection: 'row', gap: 8 },
   freqBtn: {
     flex: 1,
@@ -339,7 +339,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   freqLabel: { fontSize: fontSize.sm, fontWeight: fontWeight.semibold },
-  freqMeta: { fontSize: 10 },
+  freqMeta: { fontSize: fontSize['2xs'] },
   summary: { fontSize: fontSize.xs, textAlign: 'center', marginTop: spacing.md },
   cta: {
     marginTop: spacing.lg,
@@ -356,7 +356,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  explainBtnText: { fontSize: 11, lineHeight: 14 },
+  explainBtnText: { fontSize: fontSize.xs, lineHeight: 14 },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.4)',

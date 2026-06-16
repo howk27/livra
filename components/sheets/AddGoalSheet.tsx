@@ -28,7 +28,7 @@ import { Minus, Plus } from 'phosphor-react-native';
 import { PillButton } from '../ui/PillButton';
 import { SectionLabel } from '../ui/SectionLabel';
 import { MarkRow } from '../ui/MarkRow';
-import { fonts, spacing, radius, shadow, themedColors } from '../../theme/tokens';
+import { fonts, spacing, radius, shadow, themedColors, fontSize } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useGoalsStore, GoalLimitError } from '../../state/goalsSlice';
 import { useMarksStore } from '../../state/countersSlice';
@@ -337,14 +337,14 @@ const styles = StyleSheet.create({
   },
   sheetTitle: {
     fontFamily: fonts.serif,
-    fontSize: 28,
+    fontSize: fontSize['2xl'],
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
     lineHeight: 34,
   },
   sheetSubtitle: {
     fontFamily: fonts.sans,
-    fontSize: 14,
+    fontSize: fontSize.base,
     fontStyle: 'italic',
     paddingHorizontal: spacing.lg,
     marginTop: spacing.xs,
@@ -358,13 +358,13 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
     fontFamily: fonts.sans,
-    fontSize: 15,
+    fontSize: fontSize.md,
     borderWidth: 1,
     marginTop: spacing.xs,
   },
   goalNameInput: {
     height: 56,
-    fontSize: 17,
+    fontSize: fontSize[17],
     fontFamily: fonts.sansMedium,
   },
   multiInput: {
@@ -395,13 +395,13 @@ const styles = StyleSheet.create({
   },
   stepNumber: {
     fontFamily: fonts.sansSemibold,
-    fontSize: 20,
+    fontSize: fontSize.xl,
     width: 48,
     textAlign: 'center',
   },
   stepLabel: {
     fontFamily: fonts.sans,
-    fontSize: 13,
+    fontSize: fontSize[13],
     flex: 1,
   },
   deadlineToggleRow: {
@@ -412,11 +412,11 @@ const styles = StyleSheet.create({
   },
   deadlineLabel: {
     fontFamily: fonts.sansMedium,
-    fontSize: 15,
+    fontSize: fontSize.md,
   },
   linkSubtitle: {
     fontFamily: fonts.sans,
-    fontSize: 13,
+    fontSize: fontSize[13],
     marginTop: spacing.xs,
     marginBottom: spacing.sm,
   },

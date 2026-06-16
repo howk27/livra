@@ -13,7 +13,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { LivraHeader } from '../../components/ui/LivraHeader';
-import { fonts, spacing, radius, shadow, themedColors } from '../../theme/tokens';
+import { fonts, spacing, radius, shadow, themedColors, fontSize } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 
 interface ToggleRowProps {
@@ -176,7 +176,7 @@ const styles = StyleSheet.create({
   },
   intro: {
     fontFamily: fonts.sans,
-    fontSize: 14,
+    fontSize: fontSize.base,
     marginBottom: spacing.lg,
   },
   card: {
@@ -197,11 +197,11 @@ const styles = StyleSheet.create({
   },
   rowLabel: {
     fontFamily: fonts.sansMedium,
-    fontSize: 15,
+    fontSize: fontSize.md,
   },
   rowSubtitle: {
     fontFamily: fonts.sans,
-    fontSize: 12,
+    fontSize: fontSize.sm,
     marginTop: 2,
   },
   subRow: {
@@ -211,7 +211,7 @@ const styles = StyleSheet.create({
   },
   subRowLabel: {
     fontFamily: fonts.sans,
-    fontSize: 13,
+    fontSize: fontSize[13],
   },
   dayPill: {
     paddingHorizontal: spacing.md,
@@ -222,6 +222,6 @@ const styles = StyleSheet.create({
   },
   dayPillText: {
     fontFamily: fonts.sansMedium,
-    fontSize: 13,
+    fontSize: fontSize[13],
   },
 });

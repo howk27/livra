@@ -34,7 +34,7 @@ import {
 } from 'phosphor-react-native';
 import { PillButton } from '../ui/PillButton';
 import { SectionLabel } from '../ui/SectionLabel';
-import { fonts, spacing, radius, shadow, themedColors, categoryAccents } from '../../theme/tokens';
+import { fonts, spacing, radius, shadow, themedColors, categoryAccents, fontSize } from '../../theme/tokens';
 import { applyOpacity } from '@/src/components/icons/color';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useCounters } from '../../hooks/useCounters';
@@ -305,14 +305,14 @@ const styles = StyleSheet.create({
   },
   sheetTitle: {
     fontFamily: fonts.serif,
-    fontSize: 24,
+    fontSize: fontSize.display,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
     lineHeight: 30,
   },
   sheetSubtitle: {
     fontFamily: fonts.sans,
-    fontSize: 14,
+    fontSize: fontSize.base,
     paddingHorizontal: spacing.lg,
     marginTop: spacing.xs,
   },
@@ -325,7 +325,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
     fontFamily: fonts.sans,
-    fontSize: 15,
+    fontSize: fontSize.md,
     borderWidth: 1,
     marginTop: spacing.xs,
   },
@@ -346,11 +346,11 @@ const styles = StyleSheet.create({
   },
   categoryLabel: {
     fontFamily: fonts.sansMedium,
-    fontSize: 13,
+    fontSize: fontSize[13],
   },
   identityPreview: {
     fontFamily: fonts.sans,
-    fontSize: 13,
+    fontSize: fontSize[13],
     fontStyle: 'italic',
     marginTop: spacing.sm,
   },
@@ -369,13 +369,13 @@ const styles = StyleSheet.create({
   },
   stepNumber: {
     fontFamily: fonts.sansSemibold,
-    fontSize: 20,
+    fontSize: fontSize.xl,
     width: 48,
     textAlign: 'center',
   },
   stepLabel: {
     fontFamily: fonts.sans,
-    fontSize: 13,
+    fontSize: fontSize[13],
     marginLeft: spacing.sm,
   },
   cta: {

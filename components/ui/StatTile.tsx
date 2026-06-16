@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { type Icon as PhosphorIcon } from 'phosphor-react-native';
-import { fonts, radius, spacing, shadow, themedColors } from '../../theme/tokens';
+import { fonts, radius, spacing, shadow, themedColors, fontSize } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 
 interface StatTileProps {
@@ -41,11 +41,11 @@ const styles = StyleSheet.create({
   },
   value: {
     fontFamily: fonts.sansSemibold,
-    fontSize: 28,
+    fontSize: fontSize['2xl'],
   },
   label: {
     fontFamily: fonts.sansMedium,
-    fontSize: 11,
+    fontSize: fontSize.xs,
     letterSpacing: 1.2,
   },
 });
