@@ -198,17 +198,24 @@ feel *understood*, not *performed at*. When in doubt, the voice errs toward calm
    "Daily habit" is just an un-goaled mark, not a third term to teach. Never assume the user
    already knows the model.
 
+### Copy formatting
+
+**No dashes in user-facing copy.** Notifications, alerts, and any on-screen message use no
+em-dashes (—), en-dashes (–), or hyphens standing in as dashes. Use a period, a comma, or two
+short sentences instead. (This rule governs shipped app copy; this spec document itself is
+exempt — the example lines below are written dash-free to model the rule.)
+
 ### Do / Don't (with real lines)
 
 | Surface | Do — wise & playful mentor | Don't — off-tone |
 | --- | --- | --- |
 | **Greeting** | *"Welcome back. One step today is enough."* | "🔥 Day 7! Keep your streak alive!" |
-| **Empty state (no goals)** | *"Nothing here yet — and that's the right place to start. Pick one thing that matters."* | "You have 0 goals. Get started now!" |
-| **What's a mark? (first use)** | *"A mark is one action you'll repeat toward your goal — small, yours. Log it each time you show up."* | "Tap + to add a counter to your tracker." |
-| **First missed day** | *"Missed yesterday? Good — that means you're human. Today's still open."* | "You broke your 5-day streak. 😟 Don't let it happen again." |
+| **Empty state (no goals)** | *"Nothing here yet. That's exactly the right place to start. Pick one thing that matters."* | "You have 0 goals. Get started now!" |
+| **What's a mark? (first use)** | *"A mark is one action you'll repeat toward your goal. Small, yours. Log it each time you show up."* | "Tap + to add a counter to your tracker." |
+| **First missed day** | *"Missed yesterday? Good. That means you're human. Today's still open."* | "You broke your 5-day streak. 😟 Don't let it happen again." |
 | **Logging a mark** | *"That's one. It counts."* | "+1 XP! Streak +1! Combo x3!" |
-| **Goal completion** | *"You finished what you started. That's rarer than it sounds — take the moment."* | "Achievement unlocked! 🏆🎉 Share your badge!" |
-| **Paywall nudge** | *"You've filled this goal up. Livra+ lets you carry more when you're ready — no rush."* | "Upgrade now! Limited time! Don't miss out!" |
+| **Goal completion** | *"You finished what you started. That's rarer than it sounds. Take the moment."* | "Achievement unlocked! 🏆🎉 Share your badge!" |
+| **Paywall nudge** | *"You've filled this goal up. Livra+ lets you carry more when you're ready. No rush."* | "Upgrade now! Limited time! Don't miss out!" |
 | **At-risk status** | *"This one's slipping a little. Want to make it today's single focus?"* | "⚠️ You're falling behind! Catch up now!" |
 
 > **On "at-risk":** this is an *offer to refocus*, never a penalty — the one allowed
@@ -218,6 +225,7 @@ feel *understood*, not *performed at*. When in doubt, the voice errs toward calm
 
 **Guardrails (check before launch):**
 - [ ] No copy uses guilt, fake urgency, or streak-loss language.
+- [ ] No user-facing copy uses an em-dash, en-dash, or a hyphen as a dash.
 - [ ] "At-risk" reads as an offer to refocus, never a penalty or a broken-state warning.
 - [ ] Celebration copy is proportionate to what was actually achieved.
 - [ ] Playful lines are the exception, sitting among calm, sincere ones — not wall-to-wall.
@@ -387,6 +395,7 @@ real app against each line.
 - [ ] Teaching/reflection moments appear only at fixed events (first goal, first miss, first
       completion, milestones) — never on a timer.
 - [ ] No copy uses guilt, fake urgency, or streak-loss language.
+- [ ] No user-facing copy uses an em-dash, en-dash, or a hyphen as a dash.
 - [ ] Celebration is proportionate; playful lines are the exception, not the default.
 
 **State handling**
