@@ -148,6 +148,12 @@ three specific vehicles and nowhere else.
    words — greetings, empty states, confirmations, the occasional aside — not in new
    surfaces. See [Voice & Copy](#voice--copy).
 
+**Onboarding is skippable — so empty states teach too.** Onboarding carries the richest
+teaching, but a user can skip it, so the empty states are a **co-equal** teaching surface,
+not a fallback: each term is defined wherever it's first relied on, with or without
+onboarding. And teaching the *method* is not a setup chore — the first goal stays light
+(presets, templates, or one AI draft); what onboarding adds is the *why*, not more steps.
+
 **What the growth edge is NOT.** It is explicitly **not** a recurring engagement surface —
 no weekly feed, no "insight of the week" card, no daily content stream, no streak
 visualization. The retention layer (streak viz, calendar heatmap, momentum counter,
@@ -157,6 +163,8 @@ progress on something they care about — not from Livra manufacturing reasons t
 
 **Guardrails (check before launch):**
 - [ ] Onboarding leaves the user able to define a goal, a mark, and a daily habit.
+- [ ] Onboarding is completable in well under a minute and never traps the user (Skip always works).
+- [ ] A user who skips onboarding still meets each term defined in empty states before relying on it.
 - [ ] Teaching/reflection moments appear only at the fixed events above — not on a timer or
       every session.
 - [ ] No surface re-creates the cut retention layer (streaks, heatmaps, momentum, pace,
@@ -214,6 +222,14 @@ feel *understood*, not *performed at*. When in doubt, the voice errs toward calm
 - [ ] Celebration copy is proportionate to what was actually achieved.
 - [ ] Playful lines are the exception, sitting among calm, sincere ones — not wall-to-wall.
 - [ ] Every term of the Goal/Mark/Daily-habit vocabulary is defined before it's relied on.
+
+### Keeping voice consistent
+
+Voice drifts one well-meant screen at a time, so these are standing rules, not just launch
+checks: all new user-facing copy is held against the Do/Don't table before it ships, and each
+vocabulary term has **one** canonical definition that screens reuse — never re-invented or
+re-worded per surface. If a new string can't be written in this voice, the feature copy is
+wrong, not the voice.
 
 ## Design Principles
 
@@ -279,6 +295,10 @@ feel the product's value before they're ever asked to pay.
   the core experience.
 - **Livra+ sells more room and power, not relief from pain.** The free tier is not
   deliberately crippled to force the upgrade; Livra+ extends a product that already works.
+- **The free AI draft is honest about being one-time.** AI generation is an *optional*
+  accelerator, not the only way in — presets and templates are always free. Its one-time
+  nature is stated plainly at the point of use ("one free AI draft"), so it's a deliberate
+  choice the user makes, never a wall they discover later.
 
 **The split (locked model):**
 
@@ -290,11 +310,30 @@ feel the product's value before they're ever asked to pay.
 | Presets / templates | ✅ All | ✅ All |
 | AI goal/mark generation | 1 free, ever | Repeat use |
 | On-track / at-risk status | ✅ | ✅ |
-| Share card, custom reminders, CSV export, Apple Health, mark reordering, pace projection | — | ✅ |
+| Share card | ✅ Preset designs | ✅ Custom designs |
+| Custom reminders, CSV export, Apple Health, mark reordering, pace projection | — | ✅ |
+
+> **Share cards:** preset share-card designs are free — finishing a goal is a moment any
+> user should be able to share. Livra+ adds *custom* designs (themes, layout, branding), so
+> the upgrade sells expression, not the ability to share at all.
+
+> **Stats (pre-launch item):** the stats surface is currently hidden and slated to be
+> **rerouted and realigned for the V2 launch**. The "history & stats free, never gated"
+> commitment above is intentional and stands; it just needs the surface re-exposed as part
+> of V2 so the promise is actually reachable in-app.
+
+**Why these numbers are genuinely useful, not crippled.** A mark is a *recurring action*,
+not a single rep — so 3 marks on a goal is a complete routine (e.g. half-marathon: training
+run · strength · stretch), not a teaser. Two active goals matches the "one at a time, rest
+queued" philosophy: enough to have real work in flight, few enough to stay focused. A free
+user can run, and finish, a meaningful goal — Livra+ adds room, not the basics.
 
 **Guardrails (check before launch):**
 - [ ] No part of the add → log → progress → complete loop is blocked for free users.
 - [ ] History, stats, and presets are never behind the paywall.
+- [ ] The free AI generation discloses it's one-time *before* it's spent; presets/templates
+      remain a full free path to a first goal.
+- [ ] Preset share cards work for free users; only custom designs are Livra+.
 - [ ] Upsell language is soft and contextual — no fake urgency, no full-screen interruption
       of the core loop.
 
@@ -320,10 +359,14 @@ pushier is a number we ignore.
 
 ## Accessibility & Inclusion
 
-Not a current priority — the focus is shipping the core experience first. (Worth
-revisiting before/at App Store launch: AA contrast, reduced-motion, and not conveying
-state by color/opacity alone, since the app currently dims done-marks to 45% opacity
-with no non-visual cue.)
+Not a current priority — the focus is shipping the core experience first. The broader pass
+(AA contrast, reduced-motion) stays deferred.
+
+**One exception is not deferrable.** Done/logged state is currently shown by dimming to 45%
+opacity with no other cue (`focus.tsx`, `MarkFrequencyPicker`). That conveys state by opacity
+alone — a usability bug, not just an a11y nicety — and it contradicts Design Principle 6
+("every state is designed"). Before launch, the done state must carry a non-dimming cue: a
+check, a label, or a strikethrough.
 
 ## Launch Readiness Check
 
@@ -349,9 +392,14 @@ real app against each line.
 **State handling**
 - [ ] Every screen handles empty, loading, and error states — consistently (standard
       skeletons, human-readable errors with retry, no blank screens, no raw error strings).
+- [ ] Logged/done state is shown by more than opacity — an icon, label, or strikethrough —
+      not dimming or color alone.
 
 **Monetization**
 - [ ] No part of the core loop is paywalled; history/stats/presets are free.
+- [ ] The free AI generation discloses it's one-time before it's spent; presets are a full
+      free path to a first goal.
+- [ ] Preset share cards work for free; only custom designs are Livra+.
 - [ ] Upsells are soft and contextual — no fake urgency, no full-screen interruption.
 
 **Feel (anti-references)**
