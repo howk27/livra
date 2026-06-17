@@ -102,18 +102,23 @@ add a goal  →  log marks toward it  →  see progress accrue  →  complete th
 
 ### The vocabulary (define it, don't assume it)
 
-Livra runs on **two owned nouns: Goal and Mark.** A **mark** is *not* the act of tapping —
-it is a repeatable action you define and then **log** each time you do it. Logging is the
-gesture; the mark is the thing being logged.
+Livra runs on **three owned nouns: Goal, Mark, and Momentum.** A **mark** is *not* the act of
+tapping — it is a repeatable action you define and then **log** each time you do it. Logging
+is the gesture; the mark is the thing being logged.
 
 - **Goal** — the meaningful outcome you're working toward (e.g. *run a half-marathon*).
 - **Mark** — a small, repeatable action under that goal, logged each time you show up
   (e.g. *training run*, logged ~4× a week). A mark that isn't attached to a goal is a
   standalone **daily habit** — the same object, just goal-free. "Daily habit" is a label
-  for one kind of mark, **not a third concept** the user has to learn.
+  for one kind of mark, **not a separate concept** the user has to learn.
+- **Momentum** — the active goal's forgiving run: a day count earned by honoring your marks'
+  frequencies. It survives a stumble and only resets after a real slide, so a rest day never
+  breaks it. Momentum is *not* a streak in the punishing sense (see "Not now / not ever") and
+  is specced in full at `docs/superpowers/specs/2026-06-17-momentum-design.md`.
 
 Worked example — **Goal:** run a half-marathon · **Mark:** "training run," logged ~4×/week ·
-**Daily habit (un-goaled mark):** "stretch."
+**Daily habit (un-goaled mark):** "stretch." · **Momentum:** "12 days," held as long as the
+marks' frequencies are honored.
 
 "Mark" is owned vocabulary, not throwaway jargon: define it **once**, early — in onboarding
 and in the relevant empty state — then **use it consistently and warmly everywhere after**
@@ -125,14 +130,19 @@ To protect focus, Livra explicitly refuses to become:
 
 - **A multi-habit dashboard.** No "track 20 things at once" grid. One active goal is the
   whole point.
-- **A streak-panic engine.** No streak counters that punish a missed day, no loss-aversion
-  mechanics, no "don't break the chain" pressure.
+- **A streak-panic engine.** No *brittle* streaks that punish a missed day, no loss-aversion
+  mechanics, no "don't break the chain" pressure. Livra's **Momentum** is the sanctioned
+  opposite: a forgiving run that survives a stumble and resets only after a genuine slide, so
+  the lever is encouragement, never dread.
 - **A social/accountability feed.** No followers, no leaderboards, no public shaming or
   comparison. (Sharing a finished result is opt-in and outbound only — never a feed.)
 - **A quantified-self analytics suite.** No dense charts competing for attention. Stats
   exist to reassure and orient, not to be studied.
 - **A notification nag machine.** Reminders are gentle, user-set, and skippable — never
-  attention-hijacking or guilt-driven.
+  attention-hijacking or guilt-driven. The one sanctioned exception is the **Momentum
+  at-risk warning**: at most two pushes per slip (one when it goes at-risk, one final before
+  it would reset), rotating copy, always an offer with a rest-out. With a frequency-scaled
+  cushion the warning is the only way to see the edge, so it informs rather than nags.
 
 **Guardrails (check before launch):**
 - [ ] Logging a mark is reachable in one tap from the primary screen and gives visible
@@ -177,20 +187,23 @@ onboarding. And teaching the *method* is not a setup chore — the first goal st
 (presets, templates, or one AI draft); what onboarding adds is the *why*, not more steps.
 
 **What the growth edge is NOT.** It is explicitly **not** a recurring engagement surface —
-no weekly feed, no "insight of the week" card, no daily content stream, no streak
-visualization. The retention layer (streak viz, calendar heatmap, momentum counter,
-daily-progress card, pace banner, Weekly Review screen) was **intentionally cut**. The
-growth edge must not quietly re-introduce it. Engagement comes from the user making real
-progress on something they care about — not from Livra manufacturing reasons to return.
+no weekly feed, no "insight of the week" card, no daily content stream, no brittle streak
+visualization. Most of the retention layer (calendar heatmap, daily-progress card, pace
+banner, Weekly Review screen) was **intentionally cut** and stays cut. The **one deliberate
+exception is Momentum** — the forgiving, frequency-earned run defined in the vocabulary above
+and specced separately — readmitted on purpose because it pulls *without* punishing.
+Everything else in that cut list must not quietly return, and Momentum itself must never
+harden into the brittle streak it replaced. Engagement otherwise comes from the user making
+real progress on something they care about — not from Livra manufacturing reasons to return.
 
-> **Stress point — resolve while building:** The doc says the retention layer was
-> "intentionally cut," present tense, but it is still wired throughout the code: an "Enable
-> streak" toggle defaulting on (`app/mark/new.tsx`), `enable_streak: true` on every new
-> goal/mark (`app/onboarding.tsx`, `app/goal/new.tsx`), streak-loss notifications
-> (`anyStreakAtRisk` in `services/behaviorNotifications.ts`), a `streakProtection` flag and
-> "Simulate Streak Loss" tooling (`app/diagnostics.tsx`), and "streak data" named in the
-> privacy policy. "Cut" is the intent, not the state. Treat the streak teardown as a real
-> build task with its own checklist, and don't let any new surface read streak fields.
+> **Stress point — being resolved (Momentum):** The streak machinery still wired through the
+> code (the "Enable streak" toggle in `app/mark/new.tsx`, `enable_streak: true` defaults in
+> `app/onboarding.tsx` / `app/goal/new.tsx`, `anyStreakAtRisk` in
+> `services/behaviorNotifications.ts`, the `streakProtection` flag and "Simulate Streak Loss"
+> in `app/diagnostics.tsx`, "streak data" in the privacy policy) is **not** being deleted —
+> it is being *transformed* into Momentum. See
+> `docs/superpowers/specs/2026-06-17-momentum-design.md` §6 for the per-file plan. The brittle
+> streak goes; the forgiving run takes its place.
 
 > **Stress point — resolve while building:** "No manufactured reasons to return" is
 > principled but is also the product's biggest commercial risk, and the doc treats it as
@@ -198,7 +211,8 @@ progress on something they care about — not from Livra manufacturing reasons t
 > the queue empties, and nothing pulls them back. Before launch, answer here what week 9
 > looks like after a completion with an empty queue — the calm, non-nagging version of
 > "what's next" — so the anti-retention principle has a deliberate answer instead of an
-> accidental churn hole.
+> accidental churn hole. (Momentum answers the *within-goal* pull, a reason to show up day to
+> day; the post-completion, empty-queue cliff is still open and separate.)
 
 **Guardrails (check before launch):**
 - [ ] Onboarding leaves the user able to define a goal, a mark, and a daily habit.
@@ -206,8 +220,8 @@ progress on something they care about — not from Livra manufacturing reasons t
 - [ ] A user who skips onboarding still meets each term defined in empty states before relying on it.
 - [ ] Teaching/reflection moments appear only at the fixed events above — not on a timer or
       every session.
-- [ ] No surface re-creates the cut retention layer (streaks, heatmaps, momentum, pace,
-      weekly feed).
+- [ ] No surface re-creates the cut retention layer (brittle streaks, heatmaps, pace banners,
+      weekly feed). Momentum is the one sanctioned exception and must stay forgiving.
 
 ## Voice & Copy
 
@@ -230,12 +244,13 @@ feel *understood*, not *performed at*. When in doubt, the voice errs toward calm
    words. The user is mid-life, not reading an essay.
 5. **Never guilt.** No shame, no loss aversion, no "you broke your streak." A missed day is
    met with reassurance, never a frown. Forgiveness is non-negotiable.
-6. **Own the vocabulary, define it once.** "Goal" and "Mark" are Livra's two nouns — define
-   each the first time it appears, then use it consistently and with warmth everywhere after.
-   Don't define "mark" once and then hide it behind a generic word; the term should recur
-   (milestone marks, "that's one," completion copy) so it becomes the user's own language.
-   "Daily habit" is just an un-goaled mark, not a third term to teach. Never assume the user
-   already knows the model.
+6. **Own the vocabulary, define it once.** "Goal," "Mark," and "Momentum" are Livra's three
+   nouns — define each the first time it appears, then use it consistently and with warmth
+   everywhere after. Don't define "mark" once and then hide it behind a generic word; the term
+   should recur (milestone marks, "that's one," completion copy) so it becomes the user's own
+   language. "Daily habit" is just an un-goaled mark, not a separate term to teach. Momentum is
+   defined where it first appears (not forced into onboarding). Never assume the user already
+   knows the model.
 
 ### Copy formatting
 
@@ -264,19 +279,19 @@ exempt — the example lines below are written dash-free to model the rule.)
 | **Goal completion** | *"You finished what you started. That's rarer than it sounds. Take the moment."* | "Achievement unlocked! 🏆🎉 Share your badge!" |
 | **Paywall nudge** | *"You've filled this goal up. Livra+ lets you carry more when you're ready. No rush."* | "Upgrade now! Limited time! Don't miss out!" |
 | **At-risk status** | *"This one's slipping a little. Want to make it today's single focus?"* | "⚠️ You're falling behind! Catch up now!" |
+| **Momentum (on screen)** | *"Momentum · 12 days. Resting today, and it holds."* | "🔥 12-day streak! Don't break it!" |
 
 > **On "at-risk":** this is an *offer to refocus*, never a penalty — the one allowed
 > nudge that survives the no-guilt rule. It surfaces a choice ("want to make this today's
 > one thing?") and never scores, scolds, counts a loss, or implies a broken state. The
 > moment it starts to feel like streak-panic in softer clothing, it has crossed the line.
 
-> **Stress point — resolve while building:** "On-track / at-risk status" is listed as a
-> shipped free feature in the monetization table, and this callout specifies its tone in
-> detail, but there is **no on-track/at-risk surface in the app**. The only `atRisk` code
-> is `anyStreakAtRisk` (streak-loss notifications in `services/behaviorNotifications.ts`),
-> which is the exact opposite of what this callout describes. When this feature is actually
-> built, it must derive from *progress/consistency* (see `lib/consistency.ts`), never from
-> streaks, and the monetization table should not claim it ships until it does.
+> **Stress point — being resolved (Momentum):** At-risk is no longer a separate feature — it
+> is **Momentum's warning system**. It derives from the per-mark frequency gap (built on
+> `lib/consistency.ts`), never from a raw streak counter, and surfaces as the in-app banner
+> plus the 1+1 rotating notification. See
+> `docs/superpowers/specs/2026-06-17-momentum-design.md` §3–4. The monetization table line
+> should read "Momentum & at-risk status" once shipped.
 
 **Guardrails (check before launch):**
 - [ ] No copy uses guilt, fake urgency, or streak-loss language.
@@ -284,7 +299,8 @@ exempt — the example lines below are written dash-free to model the rule.)
 - [ ] "At-risk" reads as an offer to refocus, never a penalty or a broken-state warning.
 - [ ] Celebration copy is proportionate to what was actually achieved.
 - [ ] Playful lines are the exception, sitting among calm, sincere ones — not wall-to-wall.
-- [ ] Every term of the Goal/Mark/Daily-habit vocabulary is defined before it's relied on.
+- [ ] Every term of the Goal/Mark/Momentum/Daily-habit vocabulary is defined before it's
+      relied on (Momentum at its first appearance).
 
 ### Keeping voice consistent
 
@@ -322,7 +338,8 @@ wrong, not the voice.
 Livra must NOT feel like:
 
 - **Gamified streak apps** (Duolingo-style guilt, streak-loss panic, badge spam,
-  confetti dopamine, dark-pattern nags).
+  confetti dopamine, dark-pattern nags). This bans the *punishing* streak, not momentum
+  itself — Livra's forgiving **Momentum** is the deliberate counter-example.
 - **Cluttered dashboards** (Notion/enterprise density — charts and widgets competing
   for attention).
 - **Corporate / clinical SaaS** (cold, gray, generic productivity-tool aesthetic with
@@ -339,7 +356,7 @@ tools that overwhelm. It competes on **focus and feel**, not feature count.
 
 | Category | What they optimize for | Where Livra differs |
 | --- | --- | --- |
-| **Streak / gamified apps** (Duolingo-style, streak trackers) | Daily return via loss aversion and dopamine | Livra removes the panic. Progress, not streaks; forgiveness, not guilt. |
+| **Streak / gamified apps** (Duolingo-style, streak trackers) | Daily return via loss aversion and dopamine | Momentum without the panic. A forgiving run you can rest from, not a brittle streak that punishes a missed day. |
 | **Habit trackers** (multi-habit grids, checkbox apps) | Breadth — track everything | Livra is deliberately narrow: one active goal, a few marks. Depth over breadth. |
 | **Notion-style / productivity tools** | Configurability and data density | Livra is opinionated and quiet. No setup chore, no dashboard to maintain. |
 
@@ -396,7 +413,7 @@ feel the product's value before they're ever asked to pay.
 | Goal history & stats | ✅ Full | ✅ Full |
 | Presets / templates | ✅ All | ✅ All |
 | AI goal/mark generation | 1 free, ever | Repeat use |
-| On-track / at-risk status | ✅ | ✅ |
+| Momentum & at-risk status | ✅ | ✅ |
 | Share card | ✅ Preset designs | ✅ Custom designs |
 | Custom reminders, CSV export, Apple Health, mark reordering, pace projection | — | ✅ |
 
@@ -491,11 +508,12 @@ real app against each line.
       haptic-only).
 - [ ] Exactly one active goal; the rest clearly queued, not competing.
 - [ ] No screen shows more than a handful of things to do at once.
-- [ ] No streaks, heatmaps, momentum counters, pace banners, or weekly feed anywhere.
+- [ ] No brittle streaks, heatmaps, pace banners, or weekly feed anywhere. (Momentum is the
+      one sanctioned exception: forgiving, frequency-earned, resets only after a real slide.)
 
 **Voice & teaching**
-- [ ] "Goal," "Mark," and "Daily habit" are each defined in copy the user sees before
-      they're expected to use them.
+- [ ] "Goal," "Mark," "Momentum," and "Daily habit" are each defined in copy the user sees
+      before they're expected to use them (Momentum at its first appearance).
 - [ ] Onboarding leaves the user able to define all three terms and explain "one at a time."
 - [ ] Teaching/reflection moments appear only at fixed events (first goal, first miss, first
       completion, milestones) — never on a timer.
