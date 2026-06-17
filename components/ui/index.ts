@@ -10,7 +10,5 @@ export { SectionLabel } from './SectionLabel';
 export { PillButton } from './PillButton';
 export { FAB } from './FAB';
 export { SpeedDialFAB } from './SpeedDialFAB';
-export { StatTile } from './StatTile';
-export { HeroCard } from './HeroCard';
 export { MarkRow } from './MarkRow';
 export { QueueCard } from './QueueCard';
