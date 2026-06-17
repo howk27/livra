@@ -80,10 +80,22 @@ add a goal  →  log marks toward it  →  see progress accrue  →  complete th
 
 ### The vocabulary (define it, don't assume it)
 
-Livra uses a three-tier vocabulary — **Goal → Mark → Daily habit** — that a first-time
-user must not be left to reverse-engineer. A "mark" in particular is unexplained jargon
-until the product defines it. Define each term **once**, early, in onboarding and in the
-relevant empty state, then rely on it consistently.
+Livra runs on **two owned nouns: Goal and Mark.** A **mark** is *not* the act of tapping —
+it is a repeatable action you define and then **log** each time you do it. Logging is the
+gesture; the mark is the thing being logged.
+
+- **Goal** — the meaningful outcome you're working toward (e.g. *run a half-marathon*).
+- **Mark** — a small, repeatable action under that goal, logged each time you show up
+  (e.g. *training run*, logged ~4× a week). A mark that isn't attached to a goal is a
+  standalone **daily habit** — the same object, just goal-free. "Daily habit" is a label
+  for one kind of mark, **not a third concept** the user has to learn.
+
+Worked example — **Goal:** run a half-marathon · **Mark:** "training run," logged ~4×/week ·
+**Daily habit (un-goaled mark):** "stretch."
+
+"Mark" is owned vocabulary, not throwaway jargon: define it **once**, early — in onboarding
+and in the relevant empty state — then **use it consistently and warmly everywhere after**
+(milestone marks, completion, progress copy), never quietly swapping it for a generic word.
 
 ### Not now / not ever
 
@@ -171,8 +183,12 @@ feel *understood*, not *performed at*. When in doubt, the voice errs toward calm
    words. The user is mid-life, not reading an essay.
 5. **Never guilt.** No shame, no loss aversion, no "you broke your streak." A missed day is
    met with reassurance, never a frown. Forgiveness is non-negotiable.
-6. **Speak human, define jargon.** Use "mark," "goal," "daily habit" consistently — and
-   define each the first time it appears. Never assume the user already knows the model.
+6. **Own the vocabulary, define it once.** "Goal" and "Mark" are Livra's two nouns — define
+   each the first time it appears, then use it consistently and with warmth everywhere after.
+   Don't define "mark" once and then hide it behind a generic word; the term should recur
+   (milestone marks, "that's one," completion copy) so it becomes the user's own language.
+   "Daily habit" is just an un-goaled mark, not a third term to teach. Never assume the user
+   already knows the model.
 
 ### Do / Don't (with real lines)
 
@@ -180,15 +196,21 @@ feel *understood*, not *performed at*. When in doubt, the voice errs toward calm
 | --- | --- | --- |
 | **Greeting** | *"Welcome back. One step today is enough."* | "🔥 Day 7! Keep your streak alive!" |
 | **Empty state (no goals)** | *"Nothing here yet — and that's the right place to start. Pick one thing that matters."* | "You have 0 goals. Get started now!" |
-| **What's a mark? (first use)** | *"A mark is one rep toward your goal — small, repeatable, yours. Tap it each time you show up."* | "Tap + to add a counter to your tracker." |
+| **What's a mark? (first use)** | *"A mark is one action you'll repeat toward your goal — small, yours. Log it each time you show up."* | "Tap + to add a counter to your tracker." |
 | **First missed day** | *"Missed yesterday? Good — that means you're human. Today's still open."* | "You broke your 5-day streak. 😟 Don't let it happen again." |
 | **Logging a mark** | *"That's one. It counts."* | "+1 XP! Streak +1! Combo x3!" |
 | **Goal completion** | *"You finished what you started. That's rarer than it sounds — take the moment."* | "Achievement unlocked! 🏆🎉 Share your badge!" |
 | **Paywall nudge** | *"You've filled this goal up. Livra+ lets you carry more when you're ready — no rush."* | "Upgrade now! Limited time! Don't miss out!" |
 | **At-risk status** | *"This one's slipping a little. Want to make it today's single focus?"* | "⚠️ You're falling behind! Catch up now!" |
 
+> **On "at-risk":** this is an *offer to refocus*, never a penalty — the one allowed
+> nudge that survives the no-guilt rule. It surfaces a choice ("want to make this today's
+> one thing?") and never scores, scolds, counts a loss, or implies a broken state. The
+> moment it starts to feel like streak-panic in softer clothing, it has crossed the line.
+
 **Guardrails (check before launch):**
 - [ ] No copy uses guilt, fake urgency, or streak-loss language.
+- [ ] "At-risk" reads as an offer to refocus, never a penalty or a broken-state warning.
 - [ ] Celebration copy is proportionate to what was actually achieved.
 - [ ] Playful lines are the exception, sitting among calm, sincere ones — not wall-to-wall.
 - [ ] Every term of the Goal/Mark/Daily-habit vocabulary is defined before it's relied on.
