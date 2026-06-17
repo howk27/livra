@@ -18,6 +18,12 @@ It exists to do two jobs:
 This is not a backlog or a spec. It says what Livra *is* and what it *refuses to be*; the
 roadmap and individual feature specs are derived from it, not the reverse.
 
+> **Stress points.** Throughout this document, **Stress point — resolve while building**
+> callouts flag places where the stated direction either contradicts the current code,
+> contradicts another section, or carries a known strategic risk. They are not new
+> direction; they are open gaps to close while building the relevant module. Several are
+> launch-blocking — they mark guardrails that are currently *failing*, not aspirational.
+
 ## Register
 
 product
@@ -26,6 +32,14 @@ This is a task-serving app surface, not a marketing or brand showcase. The regis
 is **earned familiarity**: consistent affordances, conventional patterns, no invented
 strangeness. Personality is carried by voice and a few earned moments — never by
 decorating the chrome.
+
+> **Stress point — resolve while building:** This register ("no invented strangeness")
+> sits in unresolved tension with the Brand Personality section's serif-italic greetings
+> and "wise, slightly playful mentor" voice. The doc never draws the line where
+> *personality* becomes *decorating the chrome*, so a reviewer can't actually apply it.
+> When building any screen, decide concretely which moments earn personality (greetings,
+> completion, the fixed teaching events) and which must stay plain chrome (settings, lists,
+> forms). Write that boundary down here once it's settled.
 
 ## Users
 
@@ -77,6 +91,14 @@ add a goal  →  log marks toward it  →  see progress accrue  →  complete th
   not as a streak to protect. Rest is part of it; a missed day is not a broken state.
 - **Complete the goal.** Completion is the emotional peak. It is marked with weight and
   warmth — earned, not manufactured — and the next queued goal steps forward.
+
+> **Stress point — resolve while building:** "One goal is active" collides with the
+> monetization model, which sells "Active goals: 2" on the free tier (`FREE_GOAL_LIMIT = 2`
+> in `lib/gating.ts`). A goal is either active or queued — the words can't both be true.
+> Before building the goals list / queue UI, pick one model and make every surface agree
+> (most likely **1 active + 1 queued slot free**, with Livra+ unlocking an unlimited
+> queue), then fix the monetization table's "Active goals: 2" wording to match. Otherwise
+> this contradiction ships as confusing copy.
 
 ### The vocabulary (define it, don't assume it)
 
@@ -161,6 +183,23 @@ daily-progress card, pace banner, Weekly Review screen) was **intentionally cut*
 growth edge must not quietly re-introduce it. Engagement comes from the user making real
 progress on something they care about — not from Livra manufacturing reasons to return.
 
+> **Stress point — resolve while building:** The doc says the retention layer was
+> "intentionally cut," present tense, but it is still wired throughout the code: an "Enable
+> streak" toggle defaulting on (`app/mark/new.tsx`), `enable_streak: true` on every new
+> goal/mark (`app/onboarding.tsx`, `app/goal/new.tsx`), streak-loss notifications
+> (`anyStreakAtRisk` in `services/behaviorNotifications.ts`), a `streakProtection` flag and
+> "Simulate Streak Loss" tooling (`app/diagnostics.tsx`), and "streak data" named in the
+> privacy policy. "Cut" is the intent, not the state. Treat the streak teardown as a real
+> build task with its own checklist, and don't let any new surface read streak fields.
+
+> **Stress point — resolve while building:** "No manufactured reasons to return" is
+> principled but is also the product's biggest commercial risk, and the doc treats it as
+> pure virtue. A goal-completion app has a structural cliff: a user finishes in ~8 weeks,
+> the queue empties, and nothing pulls them back. Before launch, answer here what week 9
+> looks like after a completion with an empty queue — the calm, non-nagging version of
+> "what's next" — so the anti-retention principle has a deliberate answer instead of an
+> accidental churn hole.
+
 **Guardrails (check before launch):**
 - [ ] Onboarding leaves the user able to define a goal, a mark, and a daily habit.
 - [ ] Onboarding is completable in well under a minute and never traps the user (Skip always works).
@@ -205,6 +244,14 @@ em-dashes (—), en-dashes (–), or hyphens standing in as dashes. Use a period
 short sentences instead. (This rule governs shipped app copy; this spec document itself is
 exempt — the example lines below are written dash-free to model the rule.)
 
+> **Stress point — resolve while building:** This ban (em-dash, en-dash, *and*
+> hyphen-as-dash) is a launch-blocking pass/fail, but it's subjective and hard to QA —
+> distinguishing a hyphen-as-dash from a legitimate hyphen is human judgment, and it
+> regresses every time copy is touched. Either downgrade it from a hard launch gate to a
+> copy-review style note, or give it a mechanical check (a lint rule or CI grep over copy
+> strings) so it's enforced automatically rather than by eyeball. As written it competes
+> for launch attention with guardrails that are actually failing.
+
 ### Do / Don't (with real lines)
 
 | Surface | Do — wise & playful mentor | Don't — off-tone |
@@ -223,6 +270,14 @@ exempt — the example lines below are written dash-free to model the rule.)
 > one thing?") and never scores, scolds, counts a loss, or implies a broken state. The
 > moment it starts to feel like streak-panic in softer clothing, it has crossed the line.
 
+> **Stress point — resolve while building:** "On-track / at-risk status" is listed as a
+> shipped free feature in the monetization table, and this callout specifies its tone in
+> detail, but there is **no on-track/at-risk surface in the app**. The only `atRisk` code
+> is `anyStreakAtRisk` (streak-loss notifications in `services/behaviorNotifications.ts`),
+> which is the exact opposite of what this callout describes. When this feature is actually
+> built, it must derive from *progress/consistency* (see `lib/consistency.ts`), never from
+> streaks, and the monetization table should not claim it ships until it does.
+
 **Guardrails (check before launch):**
 - [ ] No copy uses guilt, fake urgency, or streak-loss language.
 - [ ] No user-facing copy uses an em-dash, en-dash, or a hyphen as a dash.
@@ -238,6 +293,12 @@ checks: all new user-facing copy is held against the Do/Don't table before it sh
 vocabulary term has **one** canonical definition that screens reuse — never re-invented or
 re-worded per surface. If a new string can't be written in this voice, the feature copy is
 wrong, not the voice.
+
+> **Stress point — resolve while building:** "One canonical definition each screen reuses"
+> has no enforcement mechanism, so it will drift one screen at a time exactly as warned. A
+> copy constants file already exists (`lib/copy.ts`); anchor the Goal/Mark/Daily-habit
+> definitions and the recurring lines there as the single source, and have screens import
+> them rather than re-typing strings. A rule with no home file is a hope, not a guardrail.
 
 ## Design Principles
 
@@ -286,6 +347,15 @@ The defensibility is the **personality and the discipline of the cut** — the t
 refuses to do are as load-bearing as the things it does. A competitor can copy a feature;
 copying the restraint means giving up their own growth metrics.
 
+> **Stress point — resolve while building:** The named anti-references are all *gamified*
+> apps (Duolingo-style), but the calm/forgiving lane is the most crowded emerging niche —
+> Finch, Stoic, Daylio, and Fabulous already own "warm and non-punishing," and at least one
+> is well funded. The real threat isn't a streak app; it's a warm incumbent adding a
+> "single goal" mode. "Discipline of the cut" is a *taste* moat, not a structural one.
+> Before leaning on this positioning in store copy, name the live calm-lane competitors
+> here and state what specifically Livra does that they don't, beyond restraint, which is
+> copyable.
+
 ## Monetization Stance
 
 Livra sustains itself through a **Livra+** subscription, sold the way the rest of the
@@ -308,6 +378,15 @@ feel the product's value before they're ever asked to pay.
   nature is stated plainly at the point of use ("one free AI draft"), so it's a deliberate
   choice the user makes, never a wall they discover later.
 
+> **Stress point — resolve while building:** "One free AI draft, ever" (confirmed:
+> `free_use_exhausted` in `app/onboarding.tsx`) is honest but may read as stingy at the
+> exact first-impression moment, in a market trending toward free AI assist as table
+> stakes. The honesty is right; the *generosity* is the open question. This only holds if
+> the free presets/templates path is genuinely good enough that a user who never touches AI
+> still gets a great first goal, so the preset library quality is a hard dependency of this
+> stance, not a side feature. Pressure-test the presets before assuming "one draft ever" is
+> safe.
+
 **The split (locked model):**
 
 | | Free | Livra+ |
@@ -325,16 +404,35 @@ feel the product's value before they're ever asked to pay.
 > user should be able to share. Livra+ adds *custom* designs (themes, layout, branding), so
 > the upgrade sells expression, not the ability to share at all.
 
+> **Stress point — resolve while building:** The code contradicts this directly:
+> `canUseShareCard(isPro)` in `lib/gating.ts` gates the **entire** share card behind
+> Livra+, and `app/paywall.tsx` lists "Share Cards" as a paid feature. The doc's promise
+> (preset designs free, custom designs paid) is not implemented. Building this means
+> splitting the share card into a free preset path and a paid custom path, not a single
+> `isPro` gate. Until that split exists, this is a failing guardrail, not a future nicety.
+
 > **Stats (pre-launch item):** the stats surface is currently hidden and slated to be
 > **rerouted and realigned for the V2 launch**. The "history & stats free, never gated"
 > commitment above is intentional and stands; it just needs the surface re-exposed as part
 > of V2 so the promise is actually reachable in-app.
+
+> **Stress point — resolve while building:** Until the stats surface is re-exposed,
+> "history & stats free, never gated" is the one free-tier promise the user *cannot reach
+> in-app* — a flagship guardrail that can't be checked at launch because it depends on V2
+> work. Treat re-exposing stats as a launch dependency of the monetization promise, not a
+> separate V2 nicety; otherwise the doc commits to something the app doesn't deliver.
 
 **Why these numbers are genuinely useful, not crippled.** A mark is a *recurring action*,
 not a single rep — so 3 marks on a goal is a complete routine (e.g. half-marathon: training
 run · strength · stretch), not a teaser. Two active goals matches the "one at a time, rest
 queued" philosophy: enough to have real work in flight, few enough to stay focused. A free
 user can run, and finish, a meaningful goal — Livra+ adds room, not the basics.
+
+> **Stress point — resolve while building:** The locked-model table is silent on a real
+> shipped gate: free users are capped at 3 un-goaled daily-habit marks (`FREE_HABIT_LIMIT =
+> 3` in `lib/gating.ts`). A source-of-truth monetization table that omits a live limit will
+> surface as a surprise paywall. Add the daily-habit cap to the table so the model the doc
+> settles matches the gates the code enforces.
 
 **Guardrails (check before launch):**
 - [ ] No part of the add → log → progress → complete loop is blocked for free users.
@@ -375,6 +473,13 @@ opacity with no other cue (`focus.tsx`, `MarkFrequencyPicker`). That conveys sta
 alone — a usability bug, not just an a11y nicety — and it contradicts Design Principle 6
 ("every state is designed"). Before launch, the done state must carry a non-dimming cue: a
 check, a label, or a strikethrough.
+
+> **Stress point — resolve while building:** Confirmed in code at `app/(tabs)/focus.tsx`
+> and `app/onboarding.tsx` (both `opacity: 0.45`). The fix pattern already exists in the
+> app: `components/MarkCard.tsx` marks a logged state with a completion line and a
+> color/background change, not dimming. Reuse that treatment rather than inventing a new
+> one, and apply it to `focus.tsx` and `MarkFrequencyPicker` so the done cue is consistent
+> across surfaces.
 
 ## Launch Readiness Check
 
