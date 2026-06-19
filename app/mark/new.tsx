@@ -11,7 +11,6 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { ChartBar } from 'phosphor-react-native';
 import { themedColors, spacing, borderRadius, fontSize, fontWeight, shadow } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useCounters } from '../../hooks/useCounters';
@@ -120,7 +119,6 @@ export default function NewCounterScreen() {
   const [color, setColor] = useState(() => getCategoryColor(getCategoryForIcon(ICON_OPTIONS[0])));
   const [hasManualColorOverride, setHasManualColorOverride] = useState(false);
   const unit: 'sessions' | 'days' | 'items' = 'sessions';
-  const [enableStreak, setEnableStreak] = useState(true);
   const [goalValue, setGoalValue] = useState<number | null>(null);
   const [goalPeriod, setGoalPeriod] = useState<GoalPeriod>('day');
   const [scheduleType, setScheduleType] = useState<ScheduleType>('daily');
@@ -187,7 +185,7 @@ export default function NewCounterScreen() {
         emoji: pendingSuggestedCounter.emoji,
         color: categoryColor,
         unit: 'sessions' as const,
-        enable_streak: true,
+        enable_streak: false,
         user_id: user?.id!,
         dailyTarget,
         frequency_kind: pendingSuggestedCounter.frequencyKind,
@@ -245,7 +243,7 @@ export default function NewCounterScreen() {
         emoji,
         color,
         unit,
-        enable_streak: enableStreak,
+        enable_streak: false,
         user_id: user?.id!,
         dailyTarget,
         goal_value: goalValue,
@@ -598,45 +596,6 @@ export default function NewCounterScreen() {
                 })}
               </View>
             </View>
-
-            <TouchableOpacity
-              style={[
-                styles.card,
-                styles.streakCard,
-                {
-                  backgroundColor: themeColors.surface,
-                  borderColor: themeColors.borderMid,
-                },
-              ]}
-              onPress={() => setEnableStreak(!enableStreak)}
-              activeOpacity={0.85}
-            >
-              <View
-                style={[
-                  styles.streakIconWrap,
-                  { backgroundColor: applyOpacity(color, theme === 'dark' ? 0.22 : 0.14) },
-                ]}
-              >
-                <ChartBar size={20} color={color} weight="duotone" />
-              </View>
-              <View style={styles.streakTextWrap}>
-                <Text style={[styles.toggleLabel, { color: themeColors.inkDark }]}>Enable streak</Text>
-                <Text style={[styles.toggleDescription, { color: themeColors.inkMid }]}>
-                  Track consecutive days with activity
-                </Text>
-              </View>
-              <View
-                style={[
-                  styles.toggleSwitch,
-                  {
-                    backgroundColor: enableStreak ? color : themeColors.borderMid,
-                    alignItems: enableStreak ? 'flex-end' : 'flex-start',
-                  },
-                ]}
-              >
-                <View style={[styles.toggleThumb, { backgroundColor: themeColors.surface }]} />
-              </View>
-            </TouchableOpacity>
 
             {targetGoalId && targetGoalTitle ? (
               <TouchableOpacity

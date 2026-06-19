@@ -106,7 +106,6 @@ export default function EditCounterScreen() {
   const [unit, setUnit] = useState<'sessions' | 'days' | 'items'>(
     (counter?.unit as 'sessions' | 'days' | 'items') || 'sessions'
   );
-  const [enableStreak, setEnableStreak] = useState(counter?.enable_streak ?? true);
   const [goalValue, setGoalValue] = useState<number | null>(counter?.goal_value ?? null);
   const [goalPeriod, setGoalPeriod] = useState<GoalPeriod>((counter?.goal_period as GoalPeriod) ?? 'day');
   const [scheduleType, setScheduleType] = useState<ScheduleType>((counter?.schedule_type as ScheduleType) ?? 'daily');
@@ -143,7 +142,7 @@ export default function EditCounterScreen() {
         emoji,
         color,
         unit,
-        enable_streak: enableStreak,
+        enable_streak: counter?.enable_streak ?? false,
         dailyTarget,
         goal_value: goalValue,
         goal_period: goalPeriod,
@@ -248,31 +247,6 @@ export default function EditCounterScreen() {
             color={color}
             onChange={(t, d) => { setScheduleType(t); setScheduleDays(d); }}
           />
-        </View>
-        {/* Enable Streak Toggle */}
-        <View style={styles.section}>
-          <TouchableOpacity
-            style={[styles.toggleRow, { backgroundColor: themeColors.surface }]}
-            onPress={() => setEnableStreak(!enableStreak)}
-          >
-            <View>
-              <Text style={[styles.toggleLabel, { color: themeColors.inkDark }]}>Enable Streak</Text>
-              <Text style={[styles.toggleDescription, { color: themeColors.inkMid }]}>
-                Track consecutive days with activity
-              </Text>
-            </View>
-            <View
-              style={[
-                styles.toggleSwitch,
-                {
-                  backgroundColor: enableStreak ? color : themeColors.borderMid,
-                  alignItems: enableStreak ? 'flex-end' : 'flex-start',
-                },
-              ]}
-            >
-              <View style={[styles.toggleThumb, { backgroundColor: themeColors.surface }]} />
-            </View>
-          </TouchableOpacity>
         </View>
       </ScrollView>
     </SafeAreaView>
