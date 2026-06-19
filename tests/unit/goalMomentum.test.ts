@@ -4,6 +4,7 @@ import {
   breakGapFor,
   markGapDays,
   markMomentum,
+  goalMomentumState,
 } from '../../lib/goalMomentum';
 
 describe('interval + thresholds', () => {
@@ -51,5 +52,27 @@ describe('markMomentum (2x/week, target 2: at-risk 5 / break 8)', () => {
     expect(markMomentum(mk('2026-06-07'), '2026-06-10').state).toBe('resting');  // gap 3 (<5)
     expect(markMomentum(mk('2026-06-05'), '2026-06-10').state).toBe('slipping'); // gap 5 (<8)
     expect(markMomentum(mk('2026-06-02'), '2026-06-10').state).toBe('broken');   // gap 8 (>=8)
+  });
+});
+
+const mm = (state: string) => ({
+  id: state, intervalDays: 1, atRiskGap: 2, breakGap: 3, gap: 0, state,
+}) as any;
+
+describe('goalMomentumState (weakest link)', () => {
+  it('any broken mark breaks the goal', () => {
+    expect(goalMomentumState([mm('on_track'), mm('broken')])).toBe('broken');
+  });
+  it('any slipping (no broken) makes the goal slipping', () => {
+    expect(goalMomentumState([mm('on_track'), mm('slipping'), mm('resting')])).toBe('slipping');
+  });
+  it('on_track when at least one logged today and none worse', () => {
+    expect(goalMomentumState([mm('on_track'), mm('resting')])).toBe('on_track');
+  });
+  it('resting when all resting', () => {
+    expect(goalMomentumState([mm('resting'), mm('resting')])).toBe('resting');
+  });
+  it('empty goal is resting', () => {
+    expect(goalMomentumState([])).toBe('resting');
   });
 });

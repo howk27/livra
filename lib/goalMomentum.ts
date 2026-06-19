@@ -60,3 +60,12 @@ export function markMomentum(mark: MarkMomentumInput, today: string): MarkMoment
 
   return { id: mark.id, intervalDays, atRiskGap, breakGap, gap, state };
 }
+
+export type GoalMomentumState = 'on_track' | 'resting' | 'slipping' | 'broken';
+
+export function goalMomentumState(marks: MarkMomentum[]): GoalMomentumState {
+  if (marks.some((m) => m.state === 'broken')) return 'broken';
+  if (marks.some((m) => m.state === 'slipping')) return 'slipping';
+  if (marks.some((m) => m.state === 'on_track')) return 'on_track';
+  return 'resting';
+}
