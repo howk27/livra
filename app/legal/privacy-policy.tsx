@@ -65,7 +65,7 @@ export default function PrivacyPolicyScreen() {
               • Email address or login provider information
             </AppText>
             <AppText variant="body" style={[styles.bulletItem, { color: c.inkDark }]}>
-              • Habit marks, progress entries, categories, streak data
+              • Habit marks, progress entries, categories, momentum data
             </AppText>
             <AppText variant="body" style={[styles.bulletItem, { color: c.inkDark }]}>
               • Preferences and app settings
