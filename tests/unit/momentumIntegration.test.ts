@@ -2,7 +2,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useGoalsStore } from '../../state/goalsSlice';
 import { useMarksStore } from '../../state/countersSlice';
-import { loadMomentumRecord } from '../../lib/goalMomentumStore';
+import { activeGoalMomentumSnapshot, evaluateGoalMomentum, loadMomentumRecord } from '../../lib/goalMomentumStore';
 import { yyyyMmDd } from '../../lib/date';
 
 const USER = 'u-mom';
@@ -48,5 +48,29 @@ describe('evaluateActiveGoalsMomentum (trigger 2)', () => {
     expect(snaps.has(queued.id)).toBe(false);
     expect(await loadMomentumRecord(active.id)).toEqual({ goalId: active.id, startDate: TODAY });
     expect(await loadMomentumRecord(queued.id)).toBeNull();
+  });
+});
+
+describe('activeGoalMomentumSnapshot (read-only)', () => {
+  test('returns null when there is no active goal', async () => {
+    expect(await activeGoalMomentumSnapshot(null, [], TODAY)).toBeNull();
+  });
+
+  test('reflects a slipping mark on the active goal', async () => {
+    const goal = { id: 'g-slip', linked_mark_ids: ['m1'] };
+    // daily mark (target 7): at-risk gap 2, break gap 3. gap 2 = slipping.
+    const twoDaysAgo = yyyyMmDd(new Date(Date.now() - 2 * 86400000));
+    const marks = [{ id: 'm1', weekly_target: 7, last_activity_date: twoDaysAgo }];
+    const snap = await activeGoalMomentumSnapshot(goal, marks, TODAY);
+    expect(snap?.state).toBe('slipping');
+    expect(snap?.cushionRemaining).not.toBeNull();
+  });
+
+  test('ignores marks not linked to the goal', async () => {
+    const goal = { id: 'g-x', linked_mark_ids: ['only-this'] };
+    const broken = yyyyMmDd(new Date(Date.now() - 9 * 86400000));
+    const marks = [{ id: 'unlinked', weekly_target: 7, last_activity_date: broken }];
+    const snap = await activeGoalMomentumSnapshot(goal, marks, TODAY);
+    expect(snap?.state).toBe('resting'); // no linked marks => resting, not broken
   });
 });
