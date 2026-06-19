@@ -5,6 +5,8 @@ import {
   markGapDays,
   markMomentum,
   goalMomentumState,
+  cushionFraction,
+  momentumDays,
 } from '../../lib/goalMomentum';
 
 describe('interval + thresholds', () => {
@@ -74,5 +76,25 @@ describe('goalMomentumState (weakest link)', () => {
   });
   it('empty goal is resting', () => {
     expect(goalMomentumState([])).toBe('resting');
+  });
+});
+
+describe('cushionFraction', () => {
+  it('is 1 at the at-risk edge and 0 at the break edge', () => {
+    expect(cushionFraction(3, 3, 5)).toBeCloseTo(1);   // just at-risk
+    expect(cushionFraction(4, 3, 5)).toBeCloseTo(0.5);
+    expect(cushionFraction(5, 3, 5)).toBeCloseTo(0);   // breaking
+  });
+  it('clamps to [0,1]', () => {
+    expect(cushionFraction(2, 3, 5)).toBe(1);
+    expect(cushionFraction(9, 3, 5)).toBe(0);
+  });
+});
+
+describe('momentumDays', () => {
+  it('counts inclusive days since the run started, 0 when not started', () => {
+    expect(momentumDays(null, '2026-06-10')).toBe(0);
+    expect(momentumDays('2026-06-10', '2026-06-10')).toBe(1);
+    expect(momentumDays('2026-05-30', '2026-06-10')).toBe(12);
   });
 });

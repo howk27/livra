@@ -69,3 +69,16 @@ export function goalMomentumState(marks: MarkMomentum[]): GoalMomentumState {
   if (marks.some((m) => m.state === 'on_track')) return 'on_track';
   return 'resting';
 }
+
+/** Fraction of cushion remaining before break, clamped [0,1]. 1 = just at-risk, 0 = breaking. */
+export function cushionFraction(gap: number, atRiskGap: number, breakGap: number): number {
+  if (breakGap <= atRiskGap) return 0;
+  const frac = (breakGap - gap) / (breakGap - atRiskGap);
+  return Math.max(0, Math.min(1, frac));
+}
+
+/** Inclusive count of good-standing days since the run began; 0 when not started. */
+export function momentumDays(startDate: string | null, today: string): number {
+  if (!startDate) return 0;
+  return daysBetween(today, startDate) + 1;
+}
