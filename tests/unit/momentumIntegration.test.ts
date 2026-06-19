@@ -32,3 +32,21 @@ describe('creditMarkToGoals starts a Momentum run on log (trigger 1)', () => {
     expect(rec).toEqual({ goalId: goal.id, startDate: TODAY });
   });
 });
+
+describe('evaluateActiveGoalsMomentum (trigger 2)', () => {
+  test('evaluates active goals, leaves queued goals untouched', async () => {
+    const active = await useGoalsStore.getState().createGoal({ title: 'Active', userId: USER, isPro: false });
+    const queued = await useGoalsStore.getState().createGoal({ title: 'Queued', userId: USER, isPro: false });
+    // createGoal makes the 1st active and the 2nd queued (free cap).
+    useMarksStore.setState({ marks: [seedMark('ma', TODAY), seedMark('mq', TODAY)] } as any);
+    await useGoalsStore.getState().linkMarkToGoal(active.id, 'ma');
+    await useGoalsStore.getState().linkMarkToGoal(queued.id, 'mq');
+
+    const snaps = await useGoalsStore.getState().evaluateActiveGoalsMomentum();
+
+    expect(snaps.get(active.id)?.state).toBe('on_track');
+    expect(snaps.has(queued.id)).toBe(false);
+    expect(await loadMomentumRecord(active.id)).toEqual({ goalId: active.id, startDate: TODAY });
+    expect(await loadMomentumRecord(queued.id)).toBeNull();
+  });
+});

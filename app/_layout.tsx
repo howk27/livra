@@ -240,6 +240,7 @@ export default function RootLayout() {
         checkAndFireMilestones().catch(() => {});
         void syncWidgetData();
         useGoalsStore.getState().checkAllGoalExpiry();
+        void useGoalsStore.getState().evaluateActiveGoalsMomentum();
       }
     };
     const appSub = AppState.addEventListener('change', onAppState);

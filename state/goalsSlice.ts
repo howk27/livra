@@ -14,6 +14,7 @@ import {
 } from '../lib/db/goalsDb';
 import { canAddGoal } from '../lib/gating';
 import { evaluateGoalMomentum } from '../lib/goalMomentumStore';
+import type { MomentumSnapshot } from '../lib/goalMomentum';
 import { yyyyMmDd } from '../lib/date';
 import { useMarksStore } from './countersSlice';
 import {
@@ -60,6 +61,9 @@ export interface GoalsState {
 
   /** Checks all active goals for deadline expiry. Non-blocking; call on app foreground. */
   checkAllGoalExpiry: () => void;
+
+  /** Re-evaluates Momentum for every active goal (trigger 2 — decay). Returns each goal's snapshot. Call on app foreground. */
+  evaluateActiveGoalsMomentum: () => Promise<Map<string, MomentumSnapshot>>;
 
   /** @deprecated Use fetchGoals */
   loadGoals: (userId: string) => Promise<void>;
@@ -358,6 +362,21 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
         }
       }
     });
+  },
+
+  evaluateActiveGoalsMomentum: async () => {
+    const today = yyyyMmDd(new Date());
+    const active = get().goals.filter((g) => g.status === 'active');
+    const allMarks = useMarksStore.getState().marks;
+    const result = new Map<string, MomentumSnapshot>();
+    for (const g of active) {
+      const ids = new Set(g.linked_mark_ids ?? []);
+      const goalMarks = allMarks
+        .filter((m) => !m.deleted_at && ids.has(m.id))
+        .map((m) => ({ id: m.id, weekly_target: m.weekly_target, last_activity_date: m.last_activity_date }));
+      result.set(g.id, await evaluateGoalMomentum(g.id, goalMarks, today));
+    }
+    return result;
   },
 
   // Backward compat
