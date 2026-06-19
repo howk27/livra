@@ -17,6 +17,8 @@ export const colors = {
   inkInverse: '#F0EDE8',
   inkInverseMuted: '#A8C4BC',
   danger: '#C0392B',
+  // Momentum cushion gauge + on-it glow. Warm amber, deliberately NOT danger/alarm-red.
+  momentumAmber: '#C8913F',
   dangerLight: '#FDECEA',
   success: '#2D6A4F',
   borderLight: '#E0DBD4',
@@ -56,6 +58,8 @@ const colorsDark: typeof colors = {
   inkInverse: '#F0EDE8',
   inkInverseMuted: '#A8C4BC',
   danger: '#E07A6D',
+  // Momentum cushion gauge + on-it glow. Warm amber, deliberately NOT danger/alarm-red.
+  momentumAmber: '#D8A658',
   dangerLight: '#3A2422',
   success: '#5FA585',
   borderLight: '#2A3A35',
