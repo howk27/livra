@@ -78,7 +78,7 @@ export default function NewGoalScreen() {
           schedule_type: 'daily',
           dailyTarget: 1,
           total: 0,
-          enable_streak: true,
+          enable_streak: false,
           sort_index: 0,
           goal_id: newGoal.id,
           frequency_kind: sugg.frequencyKind,
