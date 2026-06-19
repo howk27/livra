@@ -16,7 +16,9 @@ It exists to do two jobs:
    [Launch Readiness Check](#launch-readiness-check).
 
 This is not a backlog or a spec. It says what Livra *is* and what it *refuses to be*; the
-roadmap and individual feature specs are derived from it, not the reverse.
+roadmap and individual feature specs are derived from it, not the reverse. The build order and
+status of each part live in [ROADMAP.md](./ROADMAP.md) — every part ships through the same
+brainstorm → spec → plan → subagent-driven TDD → review → PR pipeline.
 
 > **Stress points.** Throughout this document, **Stress point — resolve while building**
 > callouts flag places where the stated direction either contradicts the current code,
