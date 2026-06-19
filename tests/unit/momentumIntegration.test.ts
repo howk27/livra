@@ -4,6 +4,7 @@ import { useGoalsStore } from '../../state/goalsSlice';
 import { useMarksStore } from '../../state/countersSlice';
 import { activeGoalMomentumSnapshot, evaluateGoalMomentum, loadMomentumRecord } from '../../lib/goalMomentumStore';
 import { yyyyMmDd } from '../../lib/date';
+import { seedBrokenMomentum } from '../../lib/db/devTools';
 
 const USER = 'u-mom';
 const TODAY = yyyyMmDd(new Date());
@@ -72,5 +73,19 @@ describe('activeGoalMomentumSnapshot (read-only)', () => {
     const marks = [{ id: 'unlinked', weekly_target: 7, last_activity_date: broken }];
     const snap = await activeGoalMomentumSnapshot(goal, marks, TODAY);
     expect(snap?.state).toBe('resting'); // no linked marks => resting, not broken
+  });
+});
+
+describe('seedBrokenMomentum (diagnostics)', () => {
+  test('resets the active goal Momentum record to broken', async () => {
+    const goal = await useGoalsStore.getState().createGoal({ title: 'Seed', userId: USER, isPro: false });
+    useMarksStore.setState({ marks: [seedMark('m1', TODAY)] } as any);
+    await useGoalsStore.getState().linkMarkToGoal(goal.id, 'm1');
+    await useGoalsStore.getState().creditMarkToGoals('m1'); // start a run
+    expect((await loadMomentumRecord(goal.id))?.startDate).toBe(TODAY);
+
+    await seedBrokenMomentum(USER);
+
+    expect(await loadMomentumRecord(goal.id)).toEqual({ goalId: goal.id, startDate: null });
   });
 });

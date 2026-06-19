@@ -17,7 +17,7 @@ import {
 } from '../lib/experiments/flags';
 import { seedDemoData } from '../lib/dev/seedDemoData';
 import { resetApp } from '../lib/dev/resetApp';
-import { seedBrokenStreak, seedHighUsage, seedPerfectWeek } from '../lib/db/devTools';
+import { seedBrokenMomentum, seedBrokenStreak, seedHighUsage, seedPerfectWeek } from '../lib/db/devTools';
 import { unlockDashboard } from '../lib/debug/dashboardUnlock';
 import { seedWeeklyReviewDemo, type WeeklyReviewSeedScenario } from '../lib/dev/seedWeeklyReviewDemo';
 import { useQueryClient } from '@tanstack/react-query';
@@ -186,21 +186,21 @@ export default function DiagnosticsScreen() {
 
   const handleBrokenStreak = async () => {
     try {
-      await seedBrokenStreak(user?.id);
-      logger.log('[Diagnostics] Seed broken streak');
-      Alert.alert('Simulated', 'Broken streak scenario created.');
-      await AsyncStorage.setItem('livra_last_seed_action', 'seedBrokenStreak');
+      await seedBrokenMomentum(user?.id);
+      logger.log('[Diagnostics] Seed broken momentum');
+      Alert.alert('Simulated', 'Broken momentum scenario created.');
+      await AsyncStorage.setItem('livra_last_seed_action', 'seedBrokenMomentum');
       await queryClient.invalidateQueries({ queryKey: ['weeklyReview'] });
       await queryClient.refetchQueries({ queryKey: ['weeklyReview'] });
       const review = await getWeeklyReview(getAppDate(), user?.id);
-      logger.log('[Diagnostics] Weekly review summary after seedBrokenStreak', {
+      logger.log('[Diagnostics] Weekly review summary after seedBrokenMomentum', {
         totalActivity: review.totalActivity,
         weekStart: review.weekStart,
         weekEnd: review.weekEnd,
       });
       await loadDevStatus();
     } catch (error: any) {
-      Alert.alert('Simulation Failed', error?.message || 'Unable to simulate streak loss.');
+      Alert.alert('Simulation Failed', error?.message || 'Unable to simulate momentum loss.');
     }
   };
 
@@ -550,7 +550,7 @@ export default function DiagnosticsScreen() {
                 onPress={handleBrokenStreak}
               >
                 <AppText variant="button" style={[styles.buttonText, { color: themeColors.inkDark }]}>
-                  Simulate Streak Loss
+                  Simulate Momentum Loss
                 </AppText>
               </TouchableOpacity>
               <TouchableOpacity
