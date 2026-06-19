@@ -13,6 +13,9 @@ import { isMarkActiveOnDate } from '../lib/features';
 import { computeStreak } from '../hooks/useStreaks';
 import type { Counter, CounterEvent } from '../types';
 import { logger } from '../lib/utils/logger';
+import { activeGoalMomentumSnapshot } from '../lib/goalMomentumStore';
+import type { MomentumSnapshot } from '../lib/goalMomentum';
+import { useGoalsStore } from '../state/goalsSlice';
 import { cancelAllLivraScheduledNotifications } from '../lib/notifications/livraScheduledOwnership';
 
 const ENGAGEMENT_KEY = 'livra_bn_engagement_v1';
@@ -135,6 +138,11 @@ export interface DayProgressSnapshot {
   maxCurrentStreak: number;
 }
 
+/** At-risk for notifications = the active goal's Momentum is slipping (spec §3). */
+export function deriveAtRiskFromMomentum(snap: MomentumSnapshot | null): boolean {
+  return snap?.state === 'slipping';
+}
+
 export async function computeDayProgress(userId: string): Promise<DayProgressSnapshot | null> {
   const anchor = getAppDate();
   const todayStr = formatDate(anchor);
@@ -193,16 +201,16 @@ export async function computeDayProgress(userId: string): Promise<DayProgressSna
       const inc = allEvents.filter((e) => e.mark_id === c.id && !e.deleted_at && e.event_type === 'increment');
       const streakData = computeStreak(inc, anchor);
       maxCurrentStreak = Math.max(maxCurrentStreak, streakData.current);
-      const hasActivityToday = count > 0;
-      if (streakData.current > 0 && streakData.lastDate) {
-        const last = new Date(streakData.lastDate + 'T12:00:00');
-        const diffDays = Math.round((anchor.getTime() - last.getTime()) / (86400000));
-        if (diffDays === 1 && !hasActivityToday) {
-          anyStreakAtRisk = true;
-        }
-      }
     }
   }
+
+  const activeGoal = useGoalsStore.getState().getActiveGoal();
+  const momentumSnap = await activeGoalMomentumSnapshot(
+    activeGoal,
+    counters.map((c) => ({ id: c.id, weekly_target: c.weekly_target, last_activity_date: c.last_activity_date })),
+    todayStr,
+  );
+  anyStreakAtRisk = deriveAtRiskFromMomentum(momentumSnap);
 
   return {
     todayStr,
