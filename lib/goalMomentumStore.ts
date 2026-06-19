@@ -50,3 +50,16 @@ export async function evaluateGoalMomentum(
   }
   return momentumSnapshot(marks, record, today);
 }
+
+/** Read-only: the active goal's current Momentum snapshot. Does not persist. */
+export async function activeGoalMomentumSnapshot(
+  activeGoal: { id: string; linked_mark_ids?: string[] } | null | undefined,
+  allMarks: MarkMomentumInput[],
+  today: string = yyyyMmDd(new Date()),
+): Promise<MomentumSnapshot | null> {
+  if (!activeGoal) return null;
+  const ids = new Set(activeGoal.linked_mark_ids ?? []);
+  const goalMarks = allMarks.filter((m) => ids.has(m.id));
+  const record = await loadMomentumRecord(activeGoal.id);
+  return momentumSnapshot(goalMarks, record, today);
+}

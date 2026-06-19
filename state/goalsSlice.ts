@@ -13,6 +13,10 @@ import {
   getLinksForMark,
 } from '../lib/db/goalsDb';
 import { canAddGoal } from '../lib/gating';
+import { evaluateGoalMomentum } from '../lib/goalMomentumStore';
+import type { MomentumSnapshot } from '../lib/goalMomentum';
+import { yyyyMmDd } from '../lib/date';
+import { useMarksStore } from './countersSlice';
 import {
   getActiveGoal,
   getQueuedGoals,
@@ -57,6 +61,9 @@ export interface GoalsState {
 
   /** Checks all active goals for deadline expiry. Non-blocking; call on app foreground. */
   checkAllGoalExpiry: () => void;
+
+  /** Re-evaluates Momentum for every active goal (trigger 2 — decay). Returns each goal's snapshot. Call on app foreground. */
+  evaluateActiveGoalsMomentum: () => Promise<Map<string, MomentumSnapshot>>;
 
   /** @deprecated Use fetchGoals */
   loadGoals: (userId: string) => Promise<void>;
@@ -260,6 +267,20 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
     const map = new Map(toUpdate.map(g => [g.id, g]));
     set(s => ({ goals: s.goals.map(g => map.get(g.id) ?? g) }));
 
+    // Momentum (trigger 1): evaluate each credited active goal on this log.
+    // Same-day eval is what *starts* the run (on_track) and continues it.
+    const today = yyyyMmDd(new Date());
+    const allMarks = useMarksStore.getState().marks;
+    await Promise.all(
+      toUpdate.map((g) => {
+        const ids = new Set(g.linked_mark_ids ?? []);
+        const goalMarks = allMarks
+          .filter((m) => !m.deleted_at && ids.has(m.id))
+          .map((m) => ({ id: m.id, weekly_target: m.weekly_target, last_activity_date: m.last_activity_date }));
+        return evaluateGoalMomentum(g.id, goalMarks, today);
+      }),
+    );
+
     // Check completion for each updated goal
     await Promise.all(toUpdate.map(g => get().checkGoalCompletion(g.id)));
   },
@@ -341,6 +362,21 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
         }
       }
     });
+  },
+
+  evaluateActiveGoalsMomentum: async () => {
+    const today = yyyyMmDd(new Date());
+    const active = get().goals.filter((g) => g.status === 'active');
+    const allMarks = useMarksStore.getState().marks;
+    const result = new Map<string, MomentumSnapshot>();
+    for (const g of active) {
+      const ids = new Set(g.linked_mark_ids ?? []);
+      const goalMarks = allMarks
+        .filter((m) => !m.deleted_at && ids.has(m.id))
+        .map((m) => ({ id: m.id, weekly_target: m.weekly_target, last_activity_date: m.last_activity_date }));
+      result.set(g.id, await evaluateGoalMomentum(g.id, goalMarks, today));
+    }
+    return result;
   },
 
   // Backward compat

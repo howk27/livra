@@ -5,6 +5,7 @@ import { assertDevToolsAccess } from '../dev/access';
 import { logger } from '../dev/logger';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { WEEKLY_REVIEW_SEED_USER_KEY } from '../review/weeklyReview';
+import { useGoalsStore } from '../../state/goalsSlice';
 
 const toLocalDate = (date: Date): string => date.toISOString().split('T')[0];
 
@@ -288,3 +289,11 @@ export const seedPerfectWeek = async (userIdOverride?: string): Promise<{ userId
   logger.log('[DevTools] Seeded perfect week scenario', { userId, counterId });
   return { userId, counterId };
 };
+
+/** Dev: force the active goal's Momentum to broken (fresh-start) state. */
+export async function seedBrokenMomentum(userId?: string): Promise<void> {
+  const goals = useGoalsStore.getState().goals;
+  const active = goals.find((g) => g.status === 'active' && (!userId || g.user_id === userId));
+  if (!active) return;
+  await AsyncStorage.setItem(`@livra_momentum_${active.id}`, JSON.stringify({ goalId: active.id, startDate: null }));
+}

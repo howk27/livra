@@ -120,7 +120,7 @@ export const useMarks = () => {
         emoji: data.emoji,
         color: data.color || '#3B82F6',
         unit: data.unit || 'sessions',
-        enable_streak: data.enable_streak ?? true,
+        enable_streak: data.enable_streak ?? false,
         sort_index: marks.length,
         user_id: data.user_id,
         total: 0,

@@ -80,7 +80,7 @@ export function cushionFraction(gap: number, atRiskGap: number, breakGap: number
 /** Inclusive count of good-standing days since the run began; 0 when not started. */
 export function momentumDays(startDate: string | null, today: string): number {
   if (!startDate) return 0;
-  return daysBetween(today, startDate) + 1;
+  return Math.max(0, daysBetween(today, startDate) + 1);
 }
 
 export type MomentumRecord = { goalId: string; startDate: string | null };

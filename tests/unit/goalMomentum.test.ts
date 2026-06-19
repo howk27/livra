@@ -120,6 +120,21 @@ describe('nextMomentumRecord', () => {
   });
 });
 
+describe('cushionFraction guard', () => {
+  it('returns 0 when breakGap <= atRiskGap (degenerate cushion)', () => {
+    const { cushionFraction } = require('../../lib/goalMomentum');
+    expect(cushionFraction(3, 5, 5)).toBe(0);
+    expect(cushionFraction(3, 6, 5)).toBe(0);
+  });
+});
+
+describe('momentumDays future-start clamp', () => {
+  it('never returns negative days when startDate is in the future', () => {
+    const { momentumDays } = require('../../lib/goalMomentum');
+    expect(momentumDays('2026-06-20', '2026-06-10')).toBe(0);
+  });
+});
+
 describe('momentumSnapshot', () => {
   const T = '2026-06-10';
   it('reports days and on_track when logged today', () => {
