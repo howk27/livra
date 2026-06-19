@@ -8,6 +8,7 @@ import {
   cushionFraction,
   momentumDays,
   nextMomentumRecord,
+  momentumSnapshot,
 } from '../../lib/goalMomentum';
 
 describe('interval + thresholds', () => {
@@ -116,5 +117,36 @@ describe('nextMomentumRecord', () => {
   it('resets the run when broken', () => {
     const prev = { goalId: 'g1', startDate: '2026-06-01' };
     expect(nextMomentumRecord(prev, 'g1', 'broken', T)).toEqual({ goalId: 'g1', startDate: null });
+  });
+});
+
+describe('momentumSnapshot', () => {
+  const T = '2026-06-10';
+  it('reports days and on_track when logged today', () => {
+    const marks = [{ id: 'm1', weekly_target: 7, last_activity_date: '2026-06-10' }];
+    const snap = momentumSnapshot(marks, { goalId: 'g1', startDate: '2026-06-01' }, T);
+    expect(snap.state).toBe('on_track');
+    expect(snap.days).toBe(10);
+    expect(snap.cushionRemaining).toBeNull();
+    expect(snap.slippingMarkId).toBeNull();
+  });
+
+  it('surfaces the worst slipping mark and its cushion', () => {
+    const marks = [
+      { id: 'm1', weekly_target: 7, last_activity_date: '2026-06-08' }, // gap 2: slipping, cushion 1
+      { id: 'm2', weekly_target: 4, last_activity_date: '2026-06-07' }, // gap 3: slipping (3/5), cushion 1
+    ];
+    const snap = momentumSnapshot(marks, { goalId: 'g1', startDate: '2026-06-01' }, T);
+    expect(snap.state).toBe('slipping');
+    // m1 cushion = (3-2)/(3-2) = 1 ; m2 cushion = (5-3)/(5-3) = 1 ; tie -> first found
+    expect(snap.slippingMarkId).toBe('m1');
+    expect(snap.cushionRemaining).toBeCloseTo(1);
+  });
+
+  it('reports 0 days and broken when a mark has fallen off', () => {
+    const marks = [{ id: 'm1', weekly_target: 7, last_activity_date: '2026-06-06' }]; // gap 4 >= 3
+    const snap = momentumSnapshot(marks, { goalId: 'g1', startDate: null }, T);
+    expect(snap.state).toBe('broken');
+    expect(snap.days).toBe(0);
   });
 });

@@ -96,3 +96,38 @@ export function nextMomentumRecord(
   if (state === 'on_track') return { goalId, startDate: today };
   return { goalId, startDate: null };
 }
+
+export type MomentumSnapshot = {
+  state: GoalMomentumState;
+  days: number;
+  cushionRemaining: number | null; // null unless slipping
+  slippingMarkId: string | null;
+};
+
+export function momentumSnapshot(
+  marks: MarkMomentumInput[],
+  record: MomentumRecord | null,
+  today: string,
+): MomentumSnapshot {
+  const mms = marks.map((m) => markMomentum(m, today));
+  const state = goalMomentumState(mms);
+  const days = momentumDays(record?.startDate ?? null, today);
+
+  let cushionRemaining: number | null = null;
+  let slippingMarkId: string | null = null;
+
+  if (state === 'slipping') {
+    let worst: { id: string; c: number } | null = null;
+    for (const m of mms) {
+      if (m.state !== 'slipping' || m.gap === null) continue;
+      const c = cushionFraction(m.gap, m.atRiskGap, m.breakGap);
+      if (worst === null || c < worst.c) worst = { id: m.id, c };
+    }
+    if (worst) {
+      cushionRemaining = worst.c;
+      slippingMarkId = worst.id;
+    }
+  }
+
+  return { state, days, cushionRemaining, slippingMarkId };
+}
