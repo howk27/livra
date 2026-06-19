@@ -13,6 +13,9 @@ import {
   getLinksForMark,
 } from '../lib/db/goalsDb';
 import { canAddGoal } from '../lib/gating';
+import { evaluateGoalMomentum } from '../lib/goalMomentumStore';
+import { yyyyMmDd } from '../lib/date';
+import { useMarksStore } from './countersSlice';
 import {
   getActiveGoal,
   getQueuedGoals,
@@ -259,6 +262,20 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
     await upsertGoals(toUpdate);
     const map = new Map(toUpdate.map(g => [g.id, g]));
     set(s => ({ goals: s.goals.map(g => map.get(g.id) ?? g) }));
+
+    // Momentum (trigger 1): evaluate each credited active goal on this log.
+    // Same-day eval is what *starts* the run (on_track) and continues it.
+    const today = yyyyMmDd(new Date());
+    const allMarks = useMarksStore.getState().marks;
+    await Promise.all(
+      toUpdate.map((g) => {
+        const ids = new Set(g.linked_mark_ids ?? []);
+        const goalMarks = allMarks
+          .filter((m) => !m.deleted_at && ids.has(m.id))
+          .map((m) => ({ id: m.id, weekly_target: m.weekly_target, last_activity_date: m.last_activity_date }));
+        return evaluateGoalMomentum(g.id, goalMarks, today);
+      }),
+    );
 
     // Check completion for each updated goal
     await Promise.all(toUpdate.map(g => get().checkGoalCompletion(g.id)));
