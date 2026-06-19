@@ -59,10 +59,10 @@ Closes the two "being resolved (Momentum)" stress points (`PRODUCT.md:199`, `PRO
 and the Momentum guardrails (`PRODUCT.md:223`, `:282`, `:297`, `:299`, `:303/516`, `:520`).
 Each subsystem consumes the engine's `MomentumSnapshot { state, days, cushionRemaining, slippingMarkId }`.
 
-- [ ] **1.0 — Decide eval cadence (design gate, blocks 1.1–1.3).** A run only *starts* on a
-  same-day `on_track` evaluation. Decide WHEN `evaluateGoalMomentum` is called relative to a
-  log (call it synchronously on the log action, or relax the start condition). ~Half a page;
-  no code. *Resolve before planning the subsystems below.*
+- [x] **1.0 — Decide eval cadence (design gate, blocks 1.1–1.3).** DECIDED: evaluate on every
+  linked log (in `creditMarkToGoals`, starts/continues the run) + re-evaluate on app foreground
+  (catches slipping/broken decay); engine start condition unchanged; 1+1 nudge via pre-scheduled
+  local notifications. See `docs/superpowers/specs/2026-06-19-momentum-eval-cadence.md`.
 - [ ] **1.1 — Streak-machinery transform** (spec §6). Heaviest part; streak refs live in ~16
   files. Remove the "Enable streak" toggle (`app/mark/new.tsx`); stop defaulting
   `enable_streak: true` (`app/onboarding.tsx`, `app/goal/new.tsx`); repurpose `anyStreakAtRisk`
