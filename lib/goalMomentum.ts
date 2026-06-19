@@ -82,3 +82,17 @@ export function momentumDays(startDate: string | null, today: string): number {
   if (!startDate) return 0;
   return daysBetween(today, startDate) + 1;
 }
+
+export type MomentumRecord = { goalId: string; startDate: string | null };
+
+export function nextMomentumRecord(
+  prev: MomentumRecord | null,
+  goalId: string,
+  state: GoalMomentumState,
+  today: string,
+): MomentumRecord {
+  if (state === 'broken') return { goalId, startDate: null };
+  if (prev && prev.startDate) return { goalId, startDate: prev.startDate };
+  if (state === 'on_track') return { goalId, startDate: today };
+  return { goalId, startDate: null };
+}

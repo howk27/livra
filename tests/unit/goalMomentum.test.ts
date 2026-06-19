@@ -7,6 +7,7 @@ import {
   goalMomentumState,
   cushionFraction,
   momentumDays,
+  nextMomentumRecord,
 } from '../../lib/goalMomentum';
 
 describe('interval + thresholds', () => {
@@ -96,5 +97,24 @@ describe('momentumDays', () => {
     expect(momentumDays(null, '2026-06-10')).toBe(0);
     expect(momentumDays('2026-06-10', '2026-06-10')).toBe(1);
     expect(momentumDays('2026-05-30', '2026-06-10')).toBe(12);
+  });
+});
+
+describe('nextMomentumRecord', () => {
+  const T = '2026-06-10';
+  it('does not start a run before the first real log', () => {
+    expect(nextMomentumRecord(null, 'g1', 'resting', T)).toEqual({ goalId: 'g1', startDate: null });
+  });
+  it('starts the run on the first on_track day', () => {
+    expect(nextMomentumRecord(null, 'g1', 'on_track', T)).toEqual({ goalId: 'g1', startDate: T });
+  });
+  it('continues an existing run through resting and slipping', () => {
+    const prev = { goalId: 'g1', startDate: '2026-06-01' };
+    expect(nextMomentumRecord(prev, 'g1', 'resting', T)).toEqual(prev);
+    expect(nextMomentumRecord(prev, 'g1', 'slipping', T)).toEqual(prev);
+  });
+  it('resets the run when broken', () => {
+    const prev = { goalId: 'g1', startDate: '2026-06-01' };
+    expect(nextMomentumRecord(prev, 'g1', 'broken', T)).toEqual({ goalId: 'g1', startDate: null });
   });
 });
