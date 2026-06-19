@@ -63,12 +63,15 @@ Each subsystem consumes the engine's `MomentumSnapshot { state, days, cushionRem
   linked log (in `creditMarkToGoals`, starts/continues the run) + re-evaluate on app foreground
   (catches slipping/broken decay); engine start condition unchanged; 1+1 nudge via pre-scheduled
   local notifications. See `docs/superpowers/specs/2026-06-19-momentum-eval-cadence.md`.
-- [ ] **1.1 — Streak-machinery transform** (spec §6). Heaviest part; streak refs live in ~16
-  files. Remove the "Enable streak" toggle (`app/mark/new.tsx`); stop defaulting
-  `enable_streak: true` (`app/onboarding.tsx`, `app/goal/new.tsx`); repurpose `anyStreakAtRisk`
-  (`services/behaviorNotifications.ts`) to read Momentum; convert `seedBrokenStreak` /
-  "Simulate Streak Loss" (`app/diagnostics.tsx`) to Momentum-state seeds; revisit "streak data"
-  in the privacy policy. Closes `PRODUCT.md:199`, `:223`.
+- [x] **1.1 — Momentum integration (eval wiring + streak-machinery transform)** (spec §6). DONE +
+  merged (`60dc1e8`), 9 TDD tasks, 592 tests, final review = ready. Wired both eval triggers
+  (`creditMarkToGoals` + `evaluateActiveGoalsMomentum`); repurposed `anyStreakAtRisk`
+  (`services/behaviorNotifications.ts`) to read Momentum; removed the "Enable streak" toggle
+  (`app/mark/new.tsx`, `app/mark/[id]/edit.tsx`); stopped defaulting `enable_streak: true`
+  (`app/onboarding.tsx`, `app/goal/new.tsx`, default now false); converted `seedBrokenStreak` /
+  "Simulate Streak Loss" (`app/diagnostics.tsx`) to a Momentum-broken seed; privacy copy now
+  "momentum data". Plan: `docs/superpowers/plans/2026-06-19-momentum-integration.md`. Closes
+  `PRODUCT.md:199`, `:223`.
 - [ ] **1.2 — Representation component** (spec §5). C+A hybrid on `app/(tabs)/focus.tsx`:
   "Momentum · N days" + warm glow; amber cushion gauge (from `cushionRemaining`) shown **only**
   when `state === 'slipping'`. No flame, no countdown number. Closes `PRODUCT.md:282`, `:303/516`, `:538`.
@@ -81,8 +84,11 @@ Each subsystem consumes the engine's `MomentumSnapshot { state, days, cushionRem
 - [ ] **1.5 — Label copy.** Settings/notification toggle reads "Momentum & at-risk status"
   (`PRODUCT.md:294`).
 
-*Deferred Minors from the engine review (fold into 1.x or a cleanup commit): `cushionFraction`
-`breakGap<=atRiskGap` guard test; `momentumDays` future-startDate clamp; JSDoc on a few exports.*
+*Deferred Minors from the engine review: ✅ `cushionFraction` `breakGap<=atRiskGap` guard test +
+✅ `momentumDays` future-startDate clamp (both done in 1.1 Task 9). Remaining: JSDoc on a few
+exports, plus the 1.1-review minors (per-goal try/catch in `evaluateActiveGoalsMomentum`,
+`assertDevToolsAccess` on `seedBrokenMomentum`, `handleBrokenStreak` rename, `anyStreakAtRisk`
+JSDoc, orphaned toggle styles) — fold into 1.2/1.3 when those files are touched.*
 
 ---
 
