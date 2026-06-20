@@ -24,3 +24,14 @@ export function presentMomentum(snap: MomentumSnapshot | null): MomentumDisplay 
   }
   return { visual: 'neutral', label, cushion: null }; // resting
 }
+
+/** Banner shows when any active goal's cached snapshot is slipping and not dismissed today. */
+export function shouldShowMomentumBanner(
+  snapshots: Record<string, MomentumSnapshot>,
+  dismissedDate: string | null,
+  today: string,
+): boolean {
+  const anySlipping = Object.values(snapshots).some((s) => s?.state === 'slipping');
+  if (!anySlipping) return false;
+  return dismissedDate !== today;
+}
