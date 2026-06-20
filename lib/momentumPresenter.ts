@@ -35,3 +35,12 @@ export function shouldShowMomentumBanner(
   if (!anySlipping) return false;
   return dismissedDate !== today;
 }
+
+/**
+ * Celebration line for Momentum banked at goal completion (Phase 1.4).
+ * Null when there is nothing to celebrate (0 / missing). No dashes; pluralized.
+ */
+export function formatBankedMomentum(days: number | null | undefined): string | null {
+  if (days == null || days <= 0) return null;
+  return `Finished with ${days} ${days === 1 ? 'day' : 'days'} of momentum`;
+}

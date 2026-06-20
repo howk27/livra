@@ -22,6 +22,8 @@ export type Goal = {
   created_at: string;
   updated_at: string;
   milestones_fired?: string[];
+  /** Momentum day-count banked at completion (Phase 1.4). Set only on completed goals. */
+  banked_momentum_days?: number | null;
   /** Mark IDs linked to this goal. Populated on fetch from goal_mark_links. */
   linked_mark_ids?: string[];
   /** Commitment tier selected at goal creation (e.g. 'building'). */

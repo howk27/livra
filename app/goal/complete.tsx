@@ -215,6 +215,7 @@ export default function GoalCompleteScreen() {
           levelTitle={levelTitle}
           daysTaken={daysTaken}
           targetDateLabel={targetDateLabel}
+          bankedMomentumDays={completedGoal?.banked_momentum_days}
         />
       </View>
 

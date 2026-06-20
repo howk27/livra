@@ -81,9 +81,13 @@ Each subsystem consumes the engine's `MomentumSnapshot { state, days, cushionRem
   `livra-mw-` namespace split, `momentumWarningNotifications` reconcile service wired into both eval
   points, banner show-predicate + per-day dismiss + `MomentumBanner` on focus. 35 warning/banner tests
   green. Plan: `docs/superpowers/plans/2026-06-19-momentum-at-risk-warning.md`.
-- [ ] **1.4 — Completion banking** (spec §7.4). On goal completion (`state/goalsSlice.ts`) bank
+- [x] **1.4 — Completion banking** (spec §7.4). On goal completion (`state/goalsSlice.ts`) bank
   `days` into the completion record (+ optional share-card line); newly-active queued goal starts
-  at days 0.
+  at days 0. DONE (branch `feat/momentum-completion-banking`): `banked_momentum_days` on the
+  completed goal (AsyncStorage JSON, no migration), pure `formatBankedMomentum`, "Finished with N
+  days of momentum" on the completion overlay and the share card; completed goal's snapshot cleared,
+  promoted queued goal starts at 0. 653/653 tests, type-check + lint clean (no new violations).
+  Plan: `docs/superpowers/plans/2026-06-20-momentum-completion-banking.md`.
 - [ ] **1.5 — Label copy.** Settings/notification toggle reads "Momentum & at-risk status"
   (`PRODUCT.md:294`).
 

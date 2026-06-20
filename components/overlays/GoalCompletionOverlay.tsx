@@ -25,6 +25,7 @@ import { fonts, spacing, themedColors, fontSize } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useGoalCompletionStore } from '../../state/goalCompletionStore';
 import { useGoalsStore } from '../../state/goalsSlice';
+import { formatBankedMomentum } from '../../lib/momentumPresenter';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const DISMISS_THRESHOLD = 120;
@@ -74,6 +75,8 @@ export function GoalCompletionOverlay() {
       bgOpacity.value = withTiming(0, { duration: 200 });
     }
   }, [show, bgOpacity, dividerWidth]);
+
+  const bankedLine = completedGoal ? formatBankedMomentum(completedGoal.banked_momentum_days) : null;
 
   const nextGoal = React.useMemo(() => {
     if (!completedGoal) return null;
@@ -142,6 +145,12 @@ export function GoalCompletionOverlay() {
             <Text style={[styles.completionCopy, { color: c.inkMid }]}>Done. That one's yours forever.</Text>
           </AnimatedElement>
 
+          {bankedLine && (
+            <AnimatedElement delay={925}>
+              <Text style={[styles.bankedLine, { color: c.inkMuted }]}>{bankedLine}</Text>
+            </AnimatedElement>
+          )}
+
           {nextGoal && (
             <AnimatedElement delay={1000}>
               <View style={styles.nextGoalBlock}>
@@ -199,6 +208,12 @@ const styles = StyleSheet.create({
     fontFamily: fonts.serifItalic,
     fontSize: fontSize[22],
     textAlign: 'center',
+  },
+  bankedLine: {
+    fontFamily: fonts.sans,
+    fontSize: fontSize[13],
+    textAlign: 'center',
+    marginTop: spacing.sm,
   },
   nextGoalBlock: {
     alignItems: 'center',

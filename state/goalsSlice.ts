@@ -175,7 +175,14 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
     const completing = goals.find(g => g.id === id);
     if (!completing) return;
 
-    const completed: Goal = { ...completing, status: 'completed', completed_at: now, updated_at: now };
+    const bankedDays = Math.max(0, useMomentumStore.getState().snapshots[id]?.days ?? 0);
+    const completed: Goal = {
+      ...completing,
+      status: 'completed',
+      completed_at: now,
+      updated_at: now,
+      banked_momentum_days: bankedDays,
+    };
     const remaining = goals.filter(g => g.id !== id);
     const next = nextGoalToActivate(remaining);
     const activated: Goal | undefined = next
@@ -205,6 +212,7 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
         return g;
       }),
     }));
+    useMomentumStore.getState().clearSnapshot(id);
   },
 
   reorderQueue: async (orderedIds) => {

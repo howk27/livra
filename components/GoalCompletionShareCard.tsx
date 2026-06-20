@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import { spacing, fontSize, fontWeight, borderRadius } from '../theme/tokens';
+import { formatBankedMomentum } from '../lib/momentumPresenter';
 
 // Fixed brand colors — NOT from theme tokens.
 // This card is a shareable image artifact: it must always look the same
@@ -26,6 +27,7 @@ export interface GoalCompletionShareCardProps {
   levelTitle: string;
   daysTaken: number; // always provided — computed from created_at
   targetDateLabel?: string; // only when goal had a target_date
+  bankedMomentumDays?: number | null; // Momentum banked at completion (Phase 1.4)
   forwardRef?: React.RefObject<View>;
 }
 
@@ -35,9 +37,11 @@ export function GoalCompletionShareCard({
   levelTitle,
   daysTaken,
   targetDateLabel,
+  bankedMomentumDays,
   forwardRef,
 }: GoalCompletionShareCardProps) {
   const displayDate = formatDate(completedDate);
+  const bankedLine = formatBankedMomentum(bankedMomentumDays);
 
   return (
     <View
@@ -67,6 +71,9 @@ export function GoalCompletionShareCard({
           <Text style={styles.metaText}>{daysTaken} days</Text>
           {targetDateLabel != null ? (
             <Text style={styles.metaText}>{targetDateLabel}</Text>
+          ) : null}
+          {bankedLine != null ? (
+            <Text style={styles.metaText}>{bankedLine}</Text>
           ) : null}
         </View>
 
