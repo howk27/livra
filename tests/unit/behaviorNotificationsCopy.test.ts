@@ -21,6 +21,9 @@ jest.mock('../../lib/features', () => ({ isMarkActiveOnDate: jest.fn() }));
 jest.mock('../../hooks/useStreaks', () => ({ computeStreak: jest.fn() }));
 jest.mock('../../lib/notifications/livraScheduledOwnership', () => ({
   cancelAllLivraScheduledNotifications: jest.fn(),
+  cancelLivraScheduledByPrefix: jest.fn(),
+  LIVRA_BEHAVIOR_ID_PREFIX: 'livra-bn-',
+  LIVRA_MOMENTUM_WARNING_ID_PREFIX: 'livra-mw-',
 }));
 
 import { buildCopy } from '../../services/behaviorNotifications';

@@ -13,6 +13,7 @@ import * as Notifications from 'expo-notifications';
 import { logger } from '../utils/logger';
 
 export const LIVRA_BEHAVIOR_ID_PREFIX = 'livra-bn-';
+export const LIVRA_MOMENTUM_WARNING_ID_PREFIX = 'livra-mw-';
 
 const LEGACY_CALENDAR_TYPES = new Set(['daily_reminder', 'streak_warning', 'inactive_reminder']);
 
@@ -60,6 +61,23 @@ export async function cancelAllLivraScheduledNotifications(): Promise<number> {
     }
   } catch (e) {
     logger.warn('[LivraNotif] cancel owned failed', e);
+  }
+  return cancelled;
+}
+
+/** Cancels only scheduled notifications whose identifier starts with `prefix`. */
+export async function cancelLivraScheduledByPrefix(prefix: string): Promise<number> {
+  let cancelled = 0;
+  try {
+    const pending = await Notifications.getAllScheduledNotificationsAsync();
+    for (const p of pending) {
+      if (p.identifier.startsWith(prefix)) {
+        await Notifications.cancelScheduledNotificationAsync(p.identifier);
+        cancelled += 1;
+      }
+    }
+  } catch (e) {
+    logger.warn('[LivraNotif] cancel by prefix failed', e);
   }
   return cancelled;
 }

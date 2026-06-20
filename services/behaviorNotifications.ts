@@ -16,7 +16,10 @@ import { logger } from '../lib/utils/logger';
 import { activeGoalMomentumSnapshot } from '../lib/goalMomentumStore';
 import type { MomentumSnapshot } from '../lib/goalMomentum';
 import { useGoalsStore } from '../state/goalsSlice';
-import { cancelAllLivraScheduledNotifications } from '../lib/notifications/livraScheduledOwnership';
+import {
+  cancelAllLivraScheduledNotifications,
+  cancelLivraScheduledByPrefix,
+} from '../lib/notifications/livraScheduledOwnership';
 
 const ENGAGEMENT_KEY = 'livra_bn_engagement_v1';
 const LAST_FOREGROUND_KEY = 'livra_bn_last_foreground_v1';
@@ -292,7 +295,7 @@ export function buildCopy(
 /**
  * Random fire time inside [start,end] local today, at least `minLeadMs` after `now`, with jitter clamped to window.
  */
-function pickFireInWindow(
+export function pickFireInWindow(
   now: Date,
   dayBase: Date,
   startH: number,
@@ -457,20 +460,20 @@ export async function scheduleBehaviorNotifications(
 
   if (engagement.consecutiveNoTapDays >= 3) {
     logger.log('[BehaviorNotif] skip — consecutive no-tap streak');
-    await cancelAllLivraScheduledNotifications();
+    await cancelLivraScheduledByPrefix(BEHAVIOR_NOTIF_PREFIX);
     return [];
   }
 
   const progress = await computeDayProgress(userId);
   if (!progress || progress.activeMarkCount === 0) {
-    await cancelAllLivraScheduledNotifications();
+    await cancelLivraScheduledByPrefix(BEHAVIOR_NOTIF_PREFIX);
     return [];
   }
 
   const candidates = planCandidates(now, progress, engagement, previousForegroundAt);
   const chosen = pickWithMinGap(candidates);
 
-  await cancelAllLivraScheduledNotifications();
+  await cancelLivraScheduledByPrefix(BEHAVIOR_NOTIF_PREFIX);
 
   const ids: string[] = [];
   let idx = 0;
