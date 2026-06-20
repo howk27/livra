@@ -113,7 +113,7 @@ is the gesture; the mark is the thing being logged.
   (e.g. *training run*, logged ~4× a week). A mark that isn't attached to a goal is a
   standalone **daily habit** — the same object, just goal-free. "Daily habit" is a label
   for one kind of mark, **not a separate concept** the user has to learn.
-- **Momentum** — the active goal's forgiving run: a day count earned by honoring your marks'
+- **Momentum** — each active goal's forgiving run (up to two active at once, one per goal): a day count earned by honoring your marks'
   frequencies. It survives a stumble and only resets after a real slide, so a rest day never
   breaks it. Momentum is *not* a streak in the punishing sense (see "Not now / not ever") and
   is specced in full at `docs/superpowers/specs/2026-06-17-momentum-design.md`.
