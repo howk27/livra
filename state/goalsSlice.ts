@@ -15,6 +15,7 @@ import {
 import { canAddGoal } from '../lib/gating';
 import { evaluateGoalMomentum } from '../lib/goalMomentumStore';
 import type { MomentumSnapshot } from '../lib/goalMomentum';
+import { useMomentumStore } from './momentumSlice';
 import { yyyyMmDd } from '../lib/date';
 import { useMarksStore } from './countersSlice';
 import {
@@ -272,12 +273,13 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
     const today = yyyyMmDd(new Date());
     const allMarks = useMarksStore.getState().marks;
     await Promise.all(
-      toUpdate.map((g) => {
+      toUpdate.map(async (g) => {
         const ids = new Set(g.linked_mark_ids ?? []);
         const goalMarks = allMarks
           .filter((m) => !m.deleted_at && ids.has(m.id))
           .map((m) => ({ id: m.id, weekly_target: m.weekly_target, last_activity_date: m.last_activity_date }));
-        return evaluateGoalMomentum(g.id, goalMarks, today);
+        const snap = await evaluateGoalMomentum(g.id, goalMarks, today);
+        useMomentumStore.getState().setSnapshot(g.id, snap);
       }),
     );
 
@@ -374,7 +376,9 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
       const goalMarks = allMarks
         .filter((m) => !m.deleted_at && ids.has(m.id))
         .map((m) => ({ id: m.id, weekly_target: m.weekly_target, last_activity_date: m.last_activity_date }));
-      result.set(g.id, await evaluateGoalMomentum(g.id, goalMarks, today));
+      const snap = await evaluateGoalMomentum(g.id, goalMarks, today);
+      result.set(g.id, snap);
+      useMomentumStore.getState().setSnapshot(g.id, snap);
     }
     return result;
   },

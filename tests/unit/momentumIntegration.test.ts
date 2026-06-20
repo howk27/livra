@@ -5,6 +5,7 @@ import { useMarksStore } from '../../state/countersSlice';
 import { activeGoalMomentumSnapshot, evaluateGoalMomentum, loadMomentumRecord } from '../../lib/goalMomentumStore';
 import { yyyyMmDd } from '../../lib/date';
 import { seedBrokenMomentum } from '../../lib/db/devTools';
+import { useMomentumStore } from '../../state/momentumSlice';
 
 const USER = 'u-mom';
 const TODAY = yyyyMmDd(new Date());
@@ -87,5 +88,33 @@ describe('seedBrokenMomentum (diagnostics)', () => {
     await seedBrokenMomentum(USER);
 
     expect(await loadMomentumRecord(goal.id)).toEqual({ goalId: goal.id, startDate: null });
+  });
+});
+
+describe('eval triggers write through to the momentum store', () => {
+  beforeEach(() => useMomentumStore.setState({ snapshots: {} }));
+
+  test('creditMarkToGoals caches the active goal snapshot', async () => {
+    const goal = await useGoalsStore.getState().createGoal({ title: 'Cache me', userId: USER, isPro: false });
+    useMarksStore.setState({ marks: [seedMark('m1', TODAY)] } as any);
+    await useGoalsStore.getState().linkMarkToGoal(goal.id, 'm1');
+
+    await useGoalsStore.getState().creditMarkToGoals('m1');
+
+    expect(useMomentumStore.getState().snapshots[goal.id]?.state).toBe('on_track');
+    expect(useMomentumStore.getState().snapshots[goal.id]?.days).toBe(1);
+  });
+
+  test('evaluateActiveGoalsMomentum caches snapshots for active goals only', async () => {
+    const active = await useGoalsStore.getState().createGoal({ title: 'A', userId: USER, isPro: false });
+    const queued = await useGoalsStore.getState().createGoal({ title: 'Q', userId: USER, isPro: false });
+    useMarksStore.setState({ marks: [seedMark('ma', TODAY), seedMark('mq', TODAY)] } as any);
+    await useGoalsStore.getState().linkMarkToGoal(active.id, 'ma');
+    await useGoalsStore.getState().linkMarkToGoal(queued.id, 'mq');
+
+    await useGoalsStore.getState().evaluateActiveGoalsMomentum();
+
+    expect(useMomentumStore.getState().snapshots[active.id]).toBeDefined();
+    expect(useMomentumStore.getState().snapshots[queued.id]).toBeUndefined();
   });
 });
