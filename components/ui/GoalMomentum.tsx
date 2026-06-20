@@ -6,8 +6,7 @@ import React, { useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 
-import { fonts, fontSize, spacing } from '../../theme/tokens';
-import { themedColors } from '../../theme/tokens';
+import { fonts, fontSize, spacing, themedColors } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { applyOpacity } from '../../src/components/icons/color';
 import { presentMomentum } from '../../lib/momentumPresenter';
