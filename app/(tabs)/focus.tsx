@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -28,6 +28,13 @@ import { useAppDateStore } from '../../state/appDateSlice';
 import { useGoalsStore } from '../../state/goalsSlice';
 import { useMomentumStore } from '../../state/momentumSlice';
 import { GoalMomentum } from '../../components/ui/GoalMomentum';
+import { MomentumBanner } from '../../components/ui/MomentumBanner';
+import { shouldShowMomentumBanner } from '../../lib/momentumPresenter';
+import {
+  getMomentumBannerDismissedDate,
+  setMomentumBannerDismissedDate,
+} from '../../lib/momentumBannerDismiss';
+import { getMomentumBannerCopy } from '../../lib/copy';
 import { getAppDate } from '../../lib/appDate';
 import { formatDate } from '../../lib/date';
 import { resolveDailyTarget } from '../../lib/markDailyTarget';
@@ -93,6 +100,29 @@ export default function FocusScreen() {
   );
 
   const momentumSnapshots = useMomentumStore((s) => s.snapshots);
+
+  const [bannerDismissedDate, setBannerDismissedDate] = useState<string | null>(null);
+  useEffect(() => {
+    void getMomentumBannerDismissedDate().then(setBannerDismissedDate);
+  }, [todayStr]);
+
+  const bannerVisible = useMemo(
+    () => shouldShowMomentumBanner(momentumSnapshots, bannerDismissedDate, todayStr),
+    [momentumSnapshots, bannerDismissedDate, todayStr],
+  );
+
+  const bannerLastTemplateRef = useRef<string | undefined>(undefined);
+  const bannerText = useMemo(() => {
+    if (!bannerVisible) return '';
+    const c = getMomentumBannerCopy(bannerLastTemplateRef.current);
+    bannerLastTemplateRef.current = c.template;
+    return c.text;
+  }, [bannerVisible, todayStr]);
+
+  const handleDismissBanner = useCallback(() => {
+    setBannerDismissedDate(todayStr);
+    void setMomentumBannerDismissedDate(todayStr);
+  }, [todayStr]);
 
   // Stable key over the active-goal id SET, so re-eval fires on a same-count
   // identity swap (archive one active goal, activate another), not just when
@@ -342,6 +372,10 @@ export default function FocusScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {bannerVisible && bannerText !== '' && (
+          <MomentumBanner text={bannerText} onDismiss={handleDismissBanner} />
+        )}
+
         {/* ── Greeting ── */}
         <Text style={[styles.greeting, { color: c.inkDark }]}>{greetingText}</Text>
 

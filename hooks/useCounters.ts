@@ -345,10 +345,18 @@ export const useMarks = () => {
             });
         });
 
-        // Fire-and-forget: credit linked goals. Never blocks mark logging.
+        // Fire-and-forget: credit linked goals, then reconcile at-risk warnings. Never blocks logging.
         setTimeout(() => {
           import('../state/goalsSlice').then(({ useGoalsStore }) => {
-            useGoalsStore.getState().creditMarkToGoals(markId).catch(() => {});
+            useGoalsStore
+              .getState()
+              .creditMarkToGoals(markId)
+              .then(() =>
+                import('../services/momentumWarningNotifications').then(({ reconcileMomentumWarnings }) =>
+                  reconcileMomentumWarnings(userId),
+                ),
+              )
+              .catch(() => {});
           });
         }, 0);
 

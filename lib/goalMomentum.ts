@@ -1,7 +1,7 @@
 // Goal-scoped Momentum engine: forgiving, frequency-aware run.
 // Pure functions only — no I/O. Distinct from the legacy per-mark lib/momentum.ts.
 
-import { daysBetween } from './date';
+import { daysBetween, addDays, parseISO, formatDate } from './date';
 
 /** Expected days between logs for a mark, from its weekly target. Default 3/week. */
 export function expectedInterval(weeklyTarget?: number | null): number {
@@ -130,4 +130,41 @@ export function momentumSnapshot(
   }
 
   return { state, days, cushionRemaining, slippingMarkId };
+}
+
+export type MomentumWarningDates = { atRiskDate: string; breakDate: string };
+
+/**
+ * Weakest-link warning dates for a goal, from the last log of each mark.
+ * atRiskDate = lastActivity + atRiskGap (first nudge); breakDate = lastActivity + breakGap.
+ * Weakest link = soonest breakDate, ties by soonest atRiskDate, then lowest cushion fraction.
+ * Null only when no marks or no mark has ever been logged. Dates may be in the future
+ * (predictive pre-scheduling); callers skip past-window nudges.
+ */
+export function momentumWarningDates(
+  marks: MarkMomentumInput[],
+  today: string,
+): MomentumWarningDates | null {
+  type Cand = { atRiskDate: string; breakDate: string; cushion: number };
+  const cands: Cand[] = [];
+  for (const m of marks) {
+    if (!m.last_activity_date) continue;
+    const interval = expectedInterval(m.weekly_target);
+    const atRiskGap = atRiskGapFor(interval);
+    const breakGap = breakGapFor(interval);
+    const last = parseISO(m.last_activity_date);
+    const atRiskDate = formatDate(addDays(last, atRiskGap));
+    const breakDate = formatDate(addDays(last, breakGap));
+    const gap = markGapDays(m.last_activity_date, today) ?? 0;
+    const cushion = cushionFraction(gap, atRiskGap, breakGap);
+    cands.push({ atRiskDate, breakDate, cushion });
+  }
+  if (cands.length === 0) return null;
+  cands.sort((a, b) => {
+    if (a.breakDate !== b.breakDate) return a.breakDate < b.breakDate ? -1 : 1;
+    if (a.atRiskDate !== b.atRiskDate) return a.atRiskDate < b.atRiskDate ? -1 : 1;
+    return a.cushion - b.cushion;
+  });
+  const w = cands[0]!;
+  return { atRiskDate: w.atRiskDate, breakDate: w.breakDate };
 }
