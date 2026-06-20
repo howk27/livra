@@ -26,6 +26,8 @@ import { useNotifications } from '../../hooks/useNotifications';
 import { useEventsStore } from '../../state/eventsSlice';
 import { useAppDateStore } from '../../state/appDateSlice';
 import { useGoalsStore } from '../../state/goalsSlice';
+import { useMomentumStore } from '../../state/momentumSlice';
+import { GoalMomentum } from '../../components/ui/GoalMomentum';
 import { getAppDate } from '../../lib/appDate';
 import { formatDate } from '../../lib/date';
 import { resolveDailyTarget } from '../../lib/markDailyTarget';
@@ -89,6 +91,13 @@ export default function FocusScreen() {
     () => goals.filter((g) => g.status === 'active').slice(0, 2),
     [goals],
   );
+
+  const momentumSnapshots = useMomentumStore((s) => s.snapshots);
+
+  useEffect(() => {
+    if (activeGoals.length === 0) return;
+    void useGoalsStore.getState().evaluateActiveGoalsMomentum();
+  }, [activeGoals.length, todayStr]);
 
   // ── Weekly state per mark ─────────────────────────────────────────────────
 
@@ -415,6 +424,10 @@ export default function FocusScreen() {
                     </Text>
                   </TouchableOpacity>
 
+                  <View style={styles.momentumRow}>
+                    <GoalMomentum snapshot={momentumSnapshots[goal.id] ?? null} />
+                  </View>
+
                   {/* Due marks */}
                   {visibleDue.map((mark, idx) =>
                     renderMarkRow(mark, idx === visibleDue.length - 1 && doneMarks.length === 0 && hiddenCount === 0)
@@ -598,6 +611,10 @@ const styles = StyleSheet.create({
   goalCardMeta: {
     fontFamily: fonts.sans,
     fontSize: fontSize.sm,
+  },
+  momentumRow: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.sm,
   },
   expanderRow: {
     paddingHorizontal: spacing.lg,
