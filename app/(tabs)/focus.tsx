@@ -94,10 +94,15 @@ export default function FocusScreen() {
 
   const momentumSnapshots = useMomentumStore((s) => s.snapshots);
 
+  // Stable key over the active-goal id SET, so re-eval fires on a same-count
+  // identity swap (archive one active goal, activate another), not just when
+  // the count changes. Empty string when there are no active goals.
+  const activeGoalIdsKey = useMemo(() => activeGoals.map((g) => g.id).join(','), [activeGoals]);
+
   useEffect(() => {
-    if (activeGoals.length === 0) return;
+    if (!activeGoalIdsKey) return;
     void useGoalsStore.getState().evaluateActiveGoalsMomentum();
-  }, [activeGoals.length, todayStr]);
+  }, [activeGoalIdsKey, todayStr]);
 
   // ── Weekly state per mark ─────────────────────────────────────────────────
 
