@@ -88,8 +88,13 @@ Each subsystem consumes the engine's `MomentumSnapshot { state, days, cushionRem
   days of momentum" on the completion overlay and the share card; completed goal's snapshot cleared,
   promoted queued goal starts at 0. 653/653 tests, type-check + lint clean (no new violations).
   Plan: `docs/superpowers/plans/2026-06-20-momentum-completion-banking.md`.
-- [ ] **1.5 — Label copy.** Settings/notification toggle reads "Momentum & at-risk status"
-  (`PRODUCT.md:294`).
+- [x] **1.5 — Notification master switch + daily guardrail.** Settings/Notifications is a single
+  persisted master switch (reuses `livra_reminders_enabled_v1`) governing daily, momentum/at-risk, and
+  mark reminders. Livra-initiated notifications are capped at 2/day with at-risk priority: on an at-risk
+  day the routine daily reminder is suppressed (`lib/notificationSystem.ts`), so the at-risk nudge stands
+  alone; mark reminders are exempt from the cap but obey the master. Spec:
+  `docs/superpowers/specs/2026-06-20-momentum-at-risk-toggle-design.md`; plan:
+  `docs/superpowers/plans/2026-06-20-notifications-master-switch.md`.
 
 *Deferred Minors from the engine review: ✅ `cushionFraction` `breakGap<=atRiskGap` guard test +
 ✅ `momentumDays` future-startDate clamp (both done in 1.1 Task 9). Remaining: JSDoc on a few
