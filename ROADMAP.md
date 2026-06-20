@@ -37,9 +37,6 @@ changes unstaged; scope every commit to the part's files.
 - [ ] No banned pattern reintroduced (brittle streaks, guilt copy, dashes in user copy, paywalled core loop).
 - [ ] PRODUCT.md stress-point callout updated or removed; this roadmap item checked off.
 
-> Note: a Semgrep Guardian hook currently blocks `npm` in the main session — run test/lint/type-check
-> through a subagent (they are not blocked), or log in the guardian MCP first.
-
 ---
 
 ## Phase 0 — Momentum engine ✅ DONE
@@ -77,9 +74,13 @@ Each subsystem consumes the engine's `MomentumSnapshot { state, days, cushionRem
   when `state === 'slipping'`. No flame, no countdown number. Closes `PRODUCT.md:282`, `:303/516`, `:538`.
   DONE + merged (aad3dec): momentumSlice cache, pure momentumPresenter, GoalMomentum component,
   momentumAmber token, per-goal render on focus.tsx. 606 tests; final opus review = ready.
-- [ ] **1.3 — At-risk banner + 1+1 notification** (spec §4, §10). In-app banner on `focus.tsx`
+- [x] **1.3 — At-risk banner + 1+1 notification** (spec §4, §10). In-app banner on `focus.tsx`
   when slipping; one push entering at-risk + one final before break; rotating copy pool added to
   `lib/copy.ts`; honors quiet hours / reminder prefs. Closes `PRODUCT.md:289`, `:297`, `:299`, `:520`.
+  DONE + merged (`841ce15`): pure `momentumWarningDates` + `momentumWarningPlanner` (≤1 push/day),
+  `livra-mw-` namespace split, `momentumWarningNotifications` reconcile service wired into both eval
+  points, banner show-predicate + per-day dismiss + `MomentumBanner` on focus. 35 warning/banner tests
+  green. Plan: `docs/superpowers/plans/2026-06-19-momentum-at-risk-warning.md`.
 - [ ] **1.4 — Completion banking** (spec §7.4). On goal completion (`state/goalsSlice.ts`) bank
   `days` into the completion record (+ optional share-card line); newly-active queued goal starts
   at days 0.

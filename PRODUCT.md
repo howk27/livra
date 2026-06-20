@@ -288,12 +288,12 @@ exempt — the example lines below are written dash-free to model the rule.)
 > one thing?") and never scores, scolds, counts a loss, or implies a broken state. The
 > moment it starts to feel like streak-panic in softer clothing, it has crossed the line.
 
-> **Stress point — being resolved (Momentum):** At-risk is no longer a separate feature — it
-> is **Momentum's warning system**. It derives from the per-mark frequency gap (built on
+> **Stress point — RESOLVED (Momentum 1.3, `841ce15`):** At-risk is no longer a separate feature —
+> it is **Momentum's warning system**. It derives from the per-mark frequency gap (built on
 > `lib/consistency.ts`), never from a raw streak counter, and surfaces as the in-app banner
 > plus the 1+1 rotating notification. See
-> `docs/superpowers/specs/2026-06-17-momentum-design.md` §3–4. The monetization table line
-> should read "Momentum & at-risk status" once shipped.
+> `docs/superpowers/specs/2026-06-17-momentum-design.md` §3–4. Remaining: the monetization table
+> line should read "Momentum & at-risk status" (Phase 1.5, not yet shipped).
 
 **Guardrails (check before launch):**
 - [ ] No copy uses guilt, fake urgency, or streak-loss language.
