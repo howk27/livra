@@ -72,9 +72,11 @@ Each subsystem consumes the engine's `MomentumSnapshot { state, days, cushionRem
   "Simulate Streak Loss" (`app/diagnostics.tsx`) to a Momentum-broken seed; privacy copy now
   "momentum data". Plan: `docs/superpowers/plans/2026-06-19-momentum-integration.md`. Closes
   `PRODUCT.md:199`, `:223`.
-- [ ] **1.2 — Representation component** (spec §5). C+A hybrid on `app/(tabs)/focus.tsx`:
+- [x] **1.2 — Representation component** (spec §5). C+A hybrid on `app/(tabs)/focus.tsx`:
   "Momentum · N days" + warm glow; amber cushion gauge (from `cushionRemaining`) shown **only**
   when `state === 'slipping'`. No flame, no countdown number. Closes `PRODUCT.md:282`, `:303/516`, `:538`.
+  DONE + merged (aad3dec): momentumSlice cache, pure momentumPresenter, GoalMomentum component,
+  momentumAmber token, per-goal render on focus.tsx. 606 tests; final opus review = ready.
 - [ ] **1.3 — At-risk banner + 1+1 notification** (spec §4, §10). In-app banner on `focus.tsx`
   when slipping; one push entering at-risk + one final before break; rotating copy pool added to
   `lib/copy.ts`; honors quiet hours / reminder prefs. Closes `PRODUCT.md:289`, `:297`, `:299`, `:520`.
