@@ -1,4 +1,4 @@
-# Phase 1.5 — Momentum & at-risk toggle + real notification prefs
+# Phase 1.5 — One master notification switch + daily nudge guardrail
 
 Date: 2026-06-20
 Branch (planned): `feat/momentum-label-copy` off `docs/product-direction`
@@ -7,119 +7,155 @@ Related: `docs/superpowers/specs/2026-06-17-momentum-design.md` (Momentum), `PRO
 
 ## Problem
 
-ROADMAP 1.5 says: "Settings/notification toggle reads 'Momentum & at-risk status'." Investigation shows
-the real situation is larger than a label swap:
+ROADMAP 1.5 was scoped as "Settings/notification toggle reads 'Momentum & at-risk status'." Investigation
+showed the settings screen is broken in a deeper way, and the product owner chose to redesign the model
+rather than relabel:
 
-1. **No momentum toggle exists.** `app/settings/notifications.tsx` has four toggles (Daily Reminder,
-   Goal Progress Updates, Weekly Summary, Mark Reminders) and none for momentum/at-risk.
-2. **The toggles are fake.** All four are local `useState` (lines 85-88) — nothing persists or wires to a
-   notification subsystem. This violates the project rule "Zustand slices only — never useState for
-   persistent data" and means flipping any switch does nothing.
-3. **The momentum gate is invisible and coupled.** Momentum warnings *are* gated, but by the master key
-   `livra_reminders_enabled_v1` (`getLivraRemindersEnabled`), which **also** gates the daily reminder. That
-   key has no UI surface, and it couples two unrelated behaviors.
-4. **Two toggles have no backend at all.** Goal Progress Updates and Weekly Summary schedule no
-   notification — milestones are folded into the daily notification ("Tier 4" in `lib/notificationSystem.ts`),
-   and the weekly review is an in-app prompt (`lib/review/weeklyReview.ts`), not a push.
+1. **The four toggles are fake.** `app/settings/notifications.tsx` shows Daily Reminder, Goal Progress
+   Updates, Weekly Summary, Mark Reminders — all local `useState` (lines 85-88). Nothing persists or wires
+   to a notification subsystem. Flipping any switch does nothing. (Violates "Zustand slices only — never
+   useState for persistent data.")
+2. **The real gate is invisible.** The only working control is the master key `livra_reminders_enabled_v1`
+   (`getLivraRemindersEnabled`), which gates the daily reminder and momentum warnings but has no UI surface.
+3. **Two toggles have no backend.** Goal Progress Updates and Weekly Summary schedule no notification
+   (milestones fold into the daily notification; the weekly review is an in-app prompt).
+4. **The master switch does not cover everything.** `scheduleMarkReminder`
+   (`lib/notifications/markReminder.ts`) is ungated, so even the working master key does not silence
+   mark reminders. A user who turned reminders "off" still received mark reminders.
+
+## How notifications actually fire today (verified)
+
+- **Daily reminder** — `scheduleContextualDailyNotification` (`lib/notificationSystem.ts`): exactly one per
+  day (single identifier).
+- **Momentum / at-risk** — `reconcileMomentumWarnings` (`services/momentumWarningNotifications.ts`) via
+  `planMomentumWarnings` (`lib/momentumWarningPlanner.ts`): **at most one push per calendar day** (multiple
+  at-risk goals are merged into one combined notification).
+- **Pace notification** — `schedulePaceNotification` exists but is **dead code: no caller anywhere**. Never
+  fires today.
+- **Mark reminders** — `scheduleMarkReminder`: one per mark for which the user set a time. The only category
+  that can stack.
+
+So Livra's own nudges are already ≤2/day. The "4-5 notifications" risk comes almost entirely from
+user-configured mark reminders.
 
 ## Decisions (locked during brainstorming)
 
-- **Scope:** add a real Momentum toggle *and* make the remaining toggles real persisted prefs.
-- **Backend-less toggles removed:** drop Goal Progress Updates and Weekly Summary. Every remaining switch
-  must gate a real notification. Final screen = three toggles.
-- **Persistence:** source of truth = AsyncStorage helper functions (extend the existing
-  `lib/notifications/livraReminderPrefs.ts` pattern), because background schedulers run outside React and
-  read prefs with `await`. UI binds via a custom hook that hydrates on mount and writes through — replacing
-  the fake `useState`. (A Zustand slice was rejected: background, notification-triggered launches may run
-  before a persisted store hydrates.)
-- **Out of scope (YAGNI):** notification backends for Goal Progress / Weekly Summary; a pace-notification
-  toggle (Livra+, configured per-goal elsewhere); daily-reminder-hour UI changes.
+- **One master switch.** Collapse the four fake toggles into a single persisted "Notifications" master switch
+  governing every Livra notification (daily, momentum/at-risk, mark reminders).
+- **Daily nudge guardrail.** A hard ceiling of **2 Livra-initiated notifications per calendar day**, with
+  **at-risk as the top-priority item**. Mark reminders are **exempt** from the cap (the user set those times
+  deliberately) but still obey the master switch.
+- **At-risk day suppresses the routine daily.** On a day a goal is genuinely at-risk, only the at-risk nudge
+  fires; the routine daily reminder is suppressed for that day. Normal days fire only the daily reminder.
+  Net lived experience: **≤1 Livra-initiated nudge per day** today, with headroom of 2 as the ceiling.
+- **One switch is sufficient.** No dedicated at-risk sub-toggle. The 2/day ceiling plus the existing
+  no-guilt copy keep at-risk gentle enough; PRODUCT.md / ROADMAP get updated to record this.
+- **Removed:** Goal Progress Updates and Weekly Summary toggles (no backend).
+- **Out of scope (YAGNI):** wiring the dead pace notification; building Goal Progress / Weekly Summary
+  notification backends; daily-reminder-hour UI.
 
 ## Pref model
 
-Split the master key into three independent, single-purpose AsyncStorage keys.
+Reuse the existing single master key — no new keys, no split.
 
-| Toggle | Key | Default | Gates |
+| Control | Key | Default | Governs |
 |---|---|---|---|
-| **Daily Reminder** | `livra_reminders_enabled_v1` (existing — narrowed to "daily") | on | `scheduleContextualDailyNotification` (`lib/notificationSystem.ts:169`), `notificationService.updateNotifications` (`services/notificationService.ts:137`) |
-| **Momentum & at-risk status** | `livra_momentum_warnings_enabled_v1` (new) | inherits master on first read, then independent | `reconcileMomentumWarnings` (`services/momentumWarningNotifications.ts:52`) |
-| **Mark Reminders** | `livra_mark_reminders_enabled_v1` (new) | on | `scheduleMarkReminder` (`lib/notifications/markReminder.ts`) |
+| **Notifications** (master) | `livra_reminders_enabled_v1` (existing) | on | daily reminder, momentum/at-risk, **and** mark reminders |
 
-### Migration safety
+`getLivraRemindersEnabled` / `setLivraRemindersEnabled` stay. The change is that **mark reminders now also
+respect this key** (previously ungated).
 
-`getMomentumWarningsEnabled()` does **lazy migration**: if its key is unset, it reads the current
-`livra_reminders_enabled_v1` value, writes it back to the momentum key once, and returns it. This preserves
-existing user intent — someone who had turned reminders *off* does not suddenly start receiving momentum
-warnings after the split; everyone else defaults on. After the first read the two keys are fully decoupled.
+### Migration / behavior change
 
-`livra_mark_reminders_enabled_v1` defaults on with no inheritance: mark reminders were never gated, so
-default-on preserves current behavior exactly.
+- Master **on** (default): unchanged for daily + momentum; mark reminders continue to fire (they were
+  effectively on). No user-visible change.
+- Master **off**: mark reminders now stop too. Previously a master-off user still received mark reminders —
+  that was a leak. After this change, "off" means off. This is the intended correct behavior; called out so
+  it is a deliberate, documented change rather than a surprise.
 
-The existing `getLivraRemindersEnabled` / `setLivraRemindersEnabled` and their call sites in
-`lib/notificationSystem.ts`, `services/notificationService.ts`, and `hooks/useNotifications.ts` are
-unchanged — they already mean "daily reminder."
+## Guardrail mechanism
+
+The 2/day ceiling and at-risk priority are enforced by three cooperating rules — no separate counter store
+needed, because each category is already ≤1/day:
+
+1. **Daily reminder ≤1/day** — already true (single identifier).
+2. **Momentum/at-risk ≤1/day** — already true (`planMomentumWarnings` merges to one push per day).
+3. **At-risk suppresses the routine daily.** `scheduleContextualDailyNotification` checks whether a momentum
+   warning is planned for *today* before scheduling the daily; if so, it skips the daily (the at-risk nudge
+   is the more important one). The check uses the same planner inputs
+   (`momentumWarningDates` / `planMomentumWarnings`) so it is deterministic and independent of scheduling
+   order — it does not rely on querying the OS notification queue.
+
+**Invariant (documented):** any future Livra-initiated notification type MUST route through this same
+priority/suppression check before scheduling, so the 2/day ceiling holds. This is the single place to extend.
 
 ## Components
 
-- **`lib/notifications/livraReminderPrefs.ts`** — keep the existing daily getter/setter. Add:
-  - `getMomentumWarningsEnabled()` / `setMomentumWarningsEnabled(enabled)` with lazy inherit-and-write-back.
-  - `getMarkRemindersEnabled()` / `setMarkRemindersEnabled(enabled)` (default on).
-  - Export the two new key constants. NOTE: the account-delete cleanup that clears
-    `livra_reminders_enabled_v1` lives in `app/(tabs)/settings.tsx`, which is currently uncommitted WIP and
-    must not be touched in this branch. Adding the two new keys to that cleanup list is **deferred** (a
-    leftover pref after account delete is harmless — defaults restore on next use). Revisit when settings.tsx
-    lands.
+- **`app/settings/notifications.tsx`** — remove all four existing rows; render **one** master `ToggleRow`
+  ("Notifications"). Bind it via a small hook (below) to the existing master key. Switch is disabled until
+  hydrated. Update the intro/explanatory copy to describe the calm, capped model.
 
-- **`hooks/useNotificationPrefs.ts` (new)** — hydrates the three booleans on mount from the helpers; exposes
-  per-toggle `{ value }` plus a `hydrated` flag and write-through setters. Each setter (a) persists via the
-  helper and (b) fires the matching side effect:
-  - Daily Reminder → trigger the existing daily reschedule path (`notificationService.updateNotifications`
-    / `requestLivraLocalNotificationReschedule`), which already cancels when disabled.
-  - Momentum → `reconcileMomentumWarnings(userId)` (cancels when its key is off; reschedules when on).
-  - Mark Reminders → `reconcileMarkReminders(...)` (cancel-all when off; reschedule-from-stored when on).
-  - `userId` is obtained from the same session source used in `app/_layout.tsx` / `hooks/useCounters.ts`.
+- **`hooks/useNotificationsMaster.ts` (new, small)** — hydrates the master boolean on mount from
+  `getLivraRemindersEnabled`; exposes `{ enabled, hydrated, setEnabled }`. `setEnabled` persists via
+  `setLivraRemindersEnabled` and fires the reconcile side effects:
+  - daily reschedule (`notificationService.updateNotifications` / existing reschedule path),
+  - `reconcileMomentumWarnings(userId)`,
+  - `reconcileMarkReminders(marks)` (new — see below).
+  `userId` / `marks` come from the same session + store sources used in `app/_layout.tsx` and
+  `hooks/useCounters.ts`.
 
-- **`app/settings/notifications.tsx`** — remove the Goal Progress Updates and Weekly Summary rows; render
-  three `ToggleRow`s bound to the hook; add the "Momentum & at-risk status" row. Switches render disabled
-  until `hydrated`.
+- **`lib/notifications/markReminder.ts`** — `scheduleMarkReminder` guards on `getLivraRemindersEnabled()`
+  (no-ops when master off). Add `reconcileMarkReminders(marks)`: when master off, cancel all per-mark
+  reminders; when on, reschedule each from its stored time (`getMarkReminderTime`).
 
-- **`lib/notifications/markReminder.ts`** — `scheduleMarkReminder` guards on `getMarkRemindersEnabled()`
-  (no-ops when off). Add `reconcileMarkReminders(marks)`: when off, cancel all per-mark reminders; when on,
-  reschedule from stored per-mark times (`getMarkReminderTime`).
-
-- **`services/momentumWarningNotifications.ts:52`** — read `getMomentumWarningsEnabled()` instead of
-  `getLivraRemindersEnabled()`.
+- **`lib/notificationSystem.ts`** — in `scheduleContextualDailyNotification`, before scheduling today's
+  daily, skip if a momentum warning is planned for today (suppress-on-at-risk). Extract a small shared helper
+  (e.g. `hasMomentumWarningPlannedForToday(userId, today)`) so both this and the momentum service can reuse
+  the planner without duplicating logic.
 
 ## Copy (no-guilt guardrail — `PRODUCT.md:298`)
 
-- **Momentum & at-risk status** — subtitle: "A gentle nudge when a goal needs attention. Never a penalty."
-  - No streak-loss, guilt, or fake-urgency language. No em-dash, en-dash, or hyphen-as-dash.
+- Master row label: **"Notifications"**; subtitle: "Gentle nudges only — at most a couple a day, and never
+  guilt." (No streak-loss / fake-urgency language; no em-dash, en-dash, or hyphen-as-dash.)
+- Keep the screen intro line "Livra never sends guilt. Only momentum." (already compliant).
+- At-risk notification copy is unchanged (already shipped in Phase 1.3, already no-guilt). Prioritizing it is
+  a scheduling decision, not a copy change — no "you're losing your streak" language is introduced.
 
 ## States (empty / loading / error)
 
-- **Loading:** hook exposes `hydrated`; switches are disabled until hydration completes. Default values match
-  the helper defaults, so there is no value flicker on render.
-- **Error:** persist failures are caught and logged via the existing helper `try/catch` pattern; UI stays
-  optimistic (the toggle reflects the user's intent even if the write fails).
-- **No permission:** unchanged — permission gating stays inside the scheduling services. Toggling a pref still
-  persists; scheduling simply no-ops without permission.
+- **Loading:** hook exposes `hydrated`; the switch is disabled until hydration completes. Default matches the
+  helper default (on), so no value flicker.
+- **Error:** persist failures are caught and logged (existing helper `try/catch` pattern); UI stays optimistic.
+- **No permission:** unchanged — permission gating stays inside the scheduling services; toggling still
+  persists the pref.
+
+## Doc updates
+
+- **`ROADMAP.md:91`** — rewrite item 1.5 from "toggle reads 'Momentum & at-risk status'" to the
+  single-master-switch + 2/day guardrail model described here.
+- **`PRODUCT.md`** — the monetization table line (`PRODUCT.md:418`, "Momentum & at-risk status ✅ ✅") stays.
+  Update the §294 stress-point note: the settings model is a single master notification switch with a 2/day
+  Livra-initiated ceiling and at-risk priority; at-risk controllability is satisfied by the calm cap rather
+  than a dedicated off-switch.
 
 ## Testing (tests-first)
 
-- `livraReminderPrefs`: new getters/setters; momentum lazy-inherit + one-time write-back; mark default-on.
-- `momentumWarningNotifications` (extend `tests/unit/momentumWarningNotifications.test.ts`): gated by the
-  momentum key — off cancels by prefix, on proceeds; independent of the daily key.
-- `markReminder`: `scheduleMarkReminder` no-ops when global gate off; `reconcileMarkReminders` cancels all
-  when off and reschedules from stored times when on.
-- Copy guardrail: assert the new subtitle contains no guilt/dash language.
-- Hook (if practical under the RN test setup): hydrate from helpers + write-through; otherwise rely on the
-  thoroughly-tested helper layer.
+- `markReminder`: `scheduleMarkReminder` no-ops when master off; `reconcileMarkReminders` cancels all when
+  off and reschedules from stored times when on.
+- `notificationSystem`: daily reminder is suppressed when a momentum warning is planned for today; fires
+  normally when none is.
+- `hasMomentumWarningPlannedForToday` helper: true on an at-risk fire day, false otherwise (pure, planner-based).
+- `momentumWarningNotifications`: still gated by the master key (unchanged behavior; keep existing coverage).
+- Copy guardrail: assert the master subtitle contains no guilt/dash language.
+- Hook (if practical under the RN test setup): hydrate + write-through; otherwise rely on the helper layer.
 
 ## Acceptance
 
-- Settings → Notifications shows exactly three toggles, each gating a real notification subsystem.
-- A "Momentum & at-risk status" toggle exists, persists, and independently enables/disables momentum
-  warnings without affecting the daily reminder.
-- No toggle uses local `useState` for its persisted value.
-- Existing users' effective behavior is unchanged on first launch after the split (migration safety holds).
+- Settings → Notifications shows exactly one master switch; it persists across navigation.
+- Master off silences everything, including mark reminders.
+- On an at-risk day, the user receives the at-risk nudge and NOT the routine daily reminder.
+- Livra-initiated notifications never exceed 2 on any calendar day; at-risk is always the kept priority.
+- Mark reminders fire on their user-set times when the master is on, and are not throttled by the cap.
+- No persisted toggle uses local `useState`.
+- ROADMAP 1.5 and the PRODUCT.md §294 note reflect the single-switch model.
 - Full suite green, type-check + lint clean (no new violations).
