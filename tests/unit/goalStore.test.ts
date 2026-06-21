@@ -229,3 +229,13 @@ test('fetchGoals normalizes legacy queued goals to active', async () => {
   await useGoalsStore.getState().fetchGoals(STORE_USER);
   expect(useGoalsStore.getState().goals.every(g => g.status !== 'queued')).toBe(true);
 });
+
+test('completing one goal leaves other active goals active (no auto-activation)', async () => {
+  const s = useGoalsStore.getState();
+  const a = await s.createGoal({ userId: STORE_USER, isPro: false, title: 'A' });
+  await s.createGoal({ userId: STORE_USER, isPro: false, title: 'B' });
+  await s.completeGoal(a.id);
+  const after = useGoalsStore.getState().goals;
+  expect(after.find(g => g.id === a.id)?.status).toBe('completed');
+  expect(after.filter(g => g.status === 'active')).toHaveLength(1);
+});

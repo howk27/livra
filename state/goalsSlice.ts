@@ -183,14 +183,7 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
       updated_at: now,
       banked_momentum_days: bankedDays,
     };
-    const remaining = goals.filter(g => g.id !== id);
-    const next = nextGoalToActivate(remaining);
-    const activated: Goal | undefined = next
-      ? { ...next, status: 'active', updated_at: now }
-      : undefined;
-
-    const writes = [completed, ...(activated ? [activated] : [])];
-    await upsertGoals(writes);
+    await upsertGoals([completed]);
 
     // Fire-and-forget XP (anti-cheat: must be ≥ 14 days old)
     const goalAgeDays = (Date.now() - new Date(completing.created_at).getTime()) / 86_400_000;
@@ -206,11 +199,7 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
     }
 
     set(s => ({
-      goals: s.goals.map(g => {
-        if (g.id === completed.id) return completed;
-        if (activated && g.id === activated.id) return activated;
-        return g;
-      }),
+      goals: s.goals.map(g => (g.id === completed.id ? completed : g)),
     }));
     useMomentumStore.getState().clearSnapshot(id);
   },
@@ -308,21 +297,8 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
     if (isDeadlineExpired(goal)) {
       const expired: Goal = { ...goal, status: 'expired', updated_at: now };
       await upsertGoal(expired);
-
-      // Activate next in queue
-      const remaining = get().goals.filter(g => g.id !== goalId);
-      const next = nextGoalToActivate(remaining);
-      const activated: Goal | undefined = next
-        ? { ...next, status: 'active', updated_at: now }
-        : undefined;
-      if (activated) await upsertGoal(activated);
-
       set(s => ({
-        goals: s.goals.map(g => {
-          if (g.id === goalId) return expired;
-          if (activated && g.id === activated.id) return activated;
-          return g;
-        }),
+        goals: s.goals.map(g => (g.id === goalId ? expired : g)),
       }));
     }
   },
