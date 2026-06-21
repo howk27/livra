@@ -35,13 +35,30 @@ is **earned familiarity**: consistent affordances, conventional patterns, no inv
 strangeness. Personality is carried by voice and a few earned moments — never by
 decorating the chrome.
 
-> **Stress point — resolve while building:** This register ("no invented strangeness")
-> sits in unresolved tension with the Brand Personality section's serif-italic greetings
-> and "wise, slightly playful mentor" voice. The doc never draws the line where
-> *personality* becomes *decorating the chrome*, so a reviewer can't actually apply it.
-> When building any screen, decide concretely which moments earn personality (greetings,
-> completion, the fixed teaching events) and which must stay plain chrome (settings, lists,
-> forms). Write that boundary down here once it's settled.
+### Voice register boundary (resolves the stress point above)
+
+Apply this per string. Classify each piece of copy as an **earned moment** or
+**chrome**, then:
+
+**Earned personality** (voice is wanted):
+- Home greeting and the living header
+- Mark-log confirmation
+- Goal completion and the all-complete closure state
+- Fixed first-use teaching moments (what's a mark, first missed day)
+- Milestone moments (streak and momentum milestones)
+- Inviting empty states (no goals yet)
+
+**Plain chrome** (conventional copy only, no personality):
+- Settings and every settings sub-screen
+- Lists and list rows
+- Forms, field labels, and placeholders
+- Buttons and navigation
+- Loading skeletons
+- Error states (standard message plus retry, never a bare string)
+
+A reviewer takes any screen, classifies each string by this list, and gets a
+deterministic yes/no on whether personality belongs there. Resolved by
+`docs/superpowers/specs/2026-06-21-voice-copy-discipline-design.md`.
 
 ## Users
 
