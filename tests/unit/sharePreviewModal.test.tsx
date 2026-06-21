@@ -3,15 +3,6 @@ import { render, fireEvent } from '@testing-library/react-native';
 import { SharePreviewModal } from '../../components/SharePreviewModal';
 import { DEFAULT_SHARE_CARD_STYLE } from '../../lib/sharing/shareCardThemes';
 
-jest.mock('expo-sharing', () => ({ shareAsync: jest.fn() }));
-jest.mock('expo-media-library', () => ({
-  requestPermissionsAsync: jest.fn().mockResolvedValue({ status: 'granted' }),
-  saveToLibraryAsync: jest.fn().mockResolvedValue(undefined),
-}));
-jest.mock('expo-haptics', () => ({
-  impactAsync: jest.fn(),
-  ImpactFeedbackStyle: { Medium: 'medium' },
-}));
 jest.mock('../../state/uiSlice', () => ({ useEffectiveTheme: () => 'dark' }));
 jest.mock('../../components/GoalCompletionShareCard', () => ({
   GoalCompletionShareCard: () => null,
@@ -33,7 +24,6 @@ const baseProps = {
     levelTitle: 'Focused',
     daysTaken: 42,
   },
-  forwardRef: React.createRef(),
 };
 
 describe('SharePreviewModal', () => {

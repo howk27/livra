@@ -50,7 +50,6 @@ export interface SharePreviewModalProps {
   onClose: () => void;
   saveLabel: string;
   cardProps: SharePreviewModalCardProps;
-  forwardRef?: React.RefObject<View>;
 }
 
 // ---------------------------------------------------------------------------
@@ -94,7 +93,6 @@ export const SharePreviewModal: React.FC<SharePreviewModalProps> = ({
   onClose,
   saveLabel,
   cardProps,
-  forwardRef,
 }) => {
   const theme = useEffectiveTheme();
   const c = themedColors(theme);
@@ -129,7 +127,7 @@ export const SharePreviewModal: React.FC<SharePreviewModalProps> = ({
               accessibilityLabel="Close"
               accessibilityRole="button"
             >
-              <Text style={[styles.closeIcon, { color: c.inkMid }]}>x</Text>
+              <Text style={[styles.closeIcon, { color: c.inkMid }]}>✕</Text>
             </TouchableOpacity>
           </View>
 
@@ -144,7 +142,6 @@ export const SharePreviewModal: React.FC<SharePreviewModalProps> = ({
               <GoalCompletionShareCard
                 {...cardProps}
                 style={style}
-                forwardRef={forwardRef}
               />
             </View>
           </View>
