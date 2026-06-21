@@ -24,9 +24,13 @@ import { GoalCompletionShareCard } from './GoalCompletionShareCard';
 const COLOR_WHITE = '#FFFFFF';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+// CARD_WIDTH matches GoalCompletionShareCard's full-screen width
+const CARD_WIDTH = SCREEN_WIDTH;
 const PREVIEW_WIDTH = SCREEN_WIDTH - spacing.xl * 2;
 // 16:9 aspect ratio (landscape share card)
 const PREVIEW_HEIGHT = (PREVIEW_WIDTH * 9) / 16;
+// Scale factor so the full-size card fits exactly inside the preview container
+const PREVIEW_SCALE = PREVIEW_WIDTH / CARD_WIDTH;
 
 export interface SharePreviewModalCardProps {
   goalTitle: string;
@@ -137,7 +141,7 @@ export const SharePreviewModal: React.FC<SharePreviewModalProps> = ({
               { backgroundColor: c.surfaceAlt },
             ]}
           >
-            <View style={styles.previewScale}>
+            <View style={[styles.previewScale, { transform: [{ scale: PREVIEW_SCALE }] }]}>
               <GoalCompletionShareCard
                 {...cardProps}
                 style={style}
