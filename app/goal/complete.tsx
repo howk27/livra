@@ -111,12 +111,8 @@ export default function GoalCompleteScreen() {
   }, [logoOpacity, titleOpacity, copyOpacity, dividerOpacity, nextOpacity]);
 
   const handleNext = useCallback(() => {
-    const nextActive = useGoalsStore.getState().getActiveGoal();
-    if (nextActive) {
-      router.replace('/(tabs)/focus' as any);
-    } else {
-      router.replace('/goal/queue');
-    }
+    const hasActive = useGoalsStore.getState().getActiveGoals().length > 0;
+    router.replace(hasActive ? ('/(tabs)/focus' as any) : ('/(tabs)/goals' as any));
   }, [router]);
 
   const handleReflectSubmit = useCallback(() => {
