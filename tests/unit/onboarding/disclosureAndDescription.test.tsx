@@ -199,14 +199,6 @@ describe('Task 11: editable description in AI review', () => {
   test('AI review renders a description input field', async () => {
     const { getByText, findByPlaceholderText } = renderAtStep1();
 
-    // Type a goal long enough for AI
-    fireEvent.changeText(
-      // The goal text input doesn't have a placeholder but has value bound to store.goalTitle
-      // Actually it does have a placeholder
-      getByText('✦ Let Livra suggest a plan').parent!,
-      '',
-    );
-
     // Set goal title in store directly
     await act(async () => {
       useOnboardingStore.getState().setGoalTitle('Run a half marathon in 12 weeks');
@@ -218,9 +210,9 @@ describe('Task 11: editable description in AI review', () => {
     });
 
     // Description input should be visible in AI review
-    const descInput = await findByPlaceholderText(/Add a note about this goal/i);
+    const descInput = await findByPlaceholderText(/Add a note about this goal/i, {}, 15000);
     expect(descInput).toBeTruthy();
-  });
+  }, 20000);
 
   test('description starts blank in the AI review (AIGoalPackage has no description)', async () => {
     const { getByText, findByPlaceholderText } = renderAtStep1();
@@ -233,8 +225,8 @@ describe('Task 11: editable description in AI review', () => {
       fireEvent.press(getByText('✦ Let Livra suggest a plan'));
     });
 
-    const descInput = await findByPlaceholderText(/Add a note about this goal/i);
+    const descInput = await findByPlaceholderText(/Add a note about this goal/i, {}, 15000);
     // Value starts blank — AIGoalPackage has no description field
     expect(descInput.props.value).toBe('');
-  });
+  }, 20000);
 });

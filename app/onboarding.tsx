@@ -335,7 +335,7 @@ export default function OnboardingScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.stepTitle}>Here's what Livra suggests.</Text>
+          <Text style={styles.stepTitle}>{"Here's what Livra suggests."}</Text>
           <Text style={styles.stepSubtitle}>Edit anything before you commit.</Text>
 
           {/* Editable goal title */}
@@ -484,7 +484,7 @@ export default function OnboardingScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Text style={styles.stepTitle}>{"What's the goal you're after?"}</Text>
-        <Text style={styles.stepSubtitle}>Be specific. "Run a marathon" beats "get fit."</Text>
+        <Text style={styles.stepSubtitle}>{'Be specific. "Run a marathon" beats "get fit."'}</Text>
 
         <View style={styles.fieldBlock}>
           <TextInput
@@ -509,7 +509,7 @@ export default function OnboardingScreen() {
             styles.aiHatch,
             (aiLoading || store.goalTitle.trim().length < MIN_GOAL_LENGTH) && { opacity: 0.4 },
           ]}
-          onPress={handleAIGenerate}
+          onPress={() => handleAIGenerate(false)}
           disabled={aiLoading || store.goalTitle.trim().length < MIN_GOAL_LENGTH}
           activeOpacity={0.75}
         >
