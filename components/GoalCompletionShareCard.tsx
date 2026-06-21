@@ -2,14 +2,11 @@ import React from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import { spacing, fontSize, fontWeight, borderRadius } from '../theme/tokens';
 import { formatBankedMomentum } from '../lib/momentumPresenter';
-
-// Fixed brand colors — NOT from theme tokens.
-// This card is a shareable image artifact: it must always look the same
-// regardless of the user's theme setting.
-const CARD_BG = '#1C2826';
-const CARD_TEXT = '#F0E6D0';
-const CARD_MUTED = 'rgba(240,230,208,0.55)';
-const CARD_ACCENT = '#C47E8A';
+import {
+  DEFAULT_SHARE_CARD_STYLE,
+  resolveCardColors,
+  type ShareCardStyle,
+} from '../lib/sharing/shareCardThemes';
 
 const CARD_WIDTH = Dimensions.get('window').width;
 const CARD_HEIGHT = Math.round((CARD_WIDTH * 9) / 16);
@@ -29,6 +26,7 @@ export interface GoalCompletionShareCardProps {
   targetDateLabel?: string; // only when goal had a target_date
   bankedMomentumDays?: number | null; // Momentum banked at completion (Phase 1.4)
   forwardRef?: React.RefObject<View>;
+  style?: ShareCardStyle;
 }
 
 export function GoalCompletionShareCard({
@@ -39,53 +37,49 @@ export function GoalCompletionShareCard({
   targetDateLabel,
   bankedMomentumDays,
   forwardRef,
+  style = DEFAULT_SHARE_CARD_STYLE,
 }: GoalCompletionShareCardProps) {
+  const colors = resolveCardColors(style);
   const displayDate = formatDate(completedDate);
   const bankedLine = formatBankedMomentum(bankedMomentumDays);
 
   return (
-    <View
-      ref={forwardRef}
-      collapsable={false}
-      style={styles.card}
-    >
-      {/* Top: LIVRA wordmark */}
+    <View ref={forwardRef} collapsable={false} style={[styles.card, { backgroundColor: colors.bg }]}>
       <View style={styles.topSection}>
-        <Text style={styles.wordmark}>LIVRA</Text>
+        <Text style={[styles.wordmark, { color: colors.accent }]}>LIVRA</Text>
       </View>
 
-      {/* Body: centered content */}
       <View style={styles.body}>
-        <Text
-          style={styles.goalTitle}
-          numberOfLines={4}
-          adjustsFontSizeToFit
-        >
+        <Text style={[styles.goalTitle, { color: colors.text }]} numberOfLines={4} adjustsFontSizeToFit>
           {goalTitle}
         </Text>
 
-        <Text style={styles.completionCopy}>{"Done. That one's yours forever."}</Text>
+        <Text style={[styles.completionCopy, { color: colors.muted }]}>
+          {"Done. That one's yours forever."}
+        </Text>
 
-        <View style={styles.metaRow}>
-          <Text style={styles.metaText}>{displayDate}</Text>
-          <Text style={styles.metaText}>{daysTaken} days</Text>
-          {targetDateLabel != null ? (
-            <Text style={styles.metaText}>{targetDateLabel}</Text>
-          ) : null}
-          {bankedLine != null ? (
-            <Text style={styles.metaText}>{bankedLine}</Text>
-          ) : null}
-        </View>
+        {(style.showDate || style.showMomentum) ? (
+          <View style={styles.metaRow}>
+            {style.showDate ? <Text style={[styles.metaText, { color: colors.muted }]}>{displayDate}</Text> : null}
+            {style.showDate ? <Text style={[styles.metaText, { color: colors.muted }]}>{daysTaken} days</Text> : null}
+            {style.showDate && targetDateLabel != null ? (
+              <Text style={[styles.metaText, { color: colors.muted }]}>{targetDateLabel}</Text>
+            ) : null}
+            {style.showMomentum && bankedLine != null ? (
+              <Text style={[styles.metaText, { color: colors.muted }]}>{bankedLine}</Text>
+            ) : null}
+          </View>
+        ) : null}
 
-        {/* Level badge */}
-        <View style={styles.levelBadge}>
-          <Text style={styles.levelBadgeText}>{levelTitle}</Text>
-        </View>
+        {style.showBadge ? (
+          <View style={[styles.levelBadge, { borderColor: colors.accent }]}>
+            <Text style={[styles.levelBadgeText, { color: colors.accent }]}>{levelTitle}</Text>
+          </View>
+        ) : null}
       </View>
 
-      {/* Bottom: footer */}
       <View style={styles.bottomSection}>
-        <Text style={styles.footer}>livra app</Text>
+        <Text style={[styles.footer, { color: colors.muted }]}>livra app</Text>
       </View>
     </View>
   );
@@ -95,7 +89,6 @@ const styles = StyleSheet.create({
   card: {
     width: CARD_WIDTH,
     height: CARD_HEIGHT,
-    backgroundColor: CARD_BG,
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -106,7 +99,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   wordmark: {
-    color: CARD_ACCENT,
     fontSize: fontSize.lg,
     fontWeight: fontWeight.bold,
     letterSpacing: 4,
@@ -120,14 +112,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
   goalTitle: {
-    color: CARD_TEXT,
     fontSize: fontSize['5xl'],
     fontWeight: fontWeight.bold,
     textAlign: 'center',
     lineHeight: 44,
   },
   completionCopy: {
-    color: CARD_MUTED,
     fontSize: fontSize.base,
     fontStyle: 'italic',
     textAlign: 'center',
@@ -139,20 +129,17 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   metaText: {
-    color: CARD_MUTED,
     fontSize: fontSize.sm,
     textAlign: 'center',
   },
   levelBadge: {
     borderWidth: 1,
-    borderColor: CARD_ACCENT,
     borderRadius: borderRadius.full,
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.lg,
     marginTop: spacing.sm,
   },
   levelBadgeText: {
-    color: CARD_ACCENT,
     fontSize: fontSize.sm,
     fontWeight: fontWeight.medium,
     letterSpacing: 0.5,
@@ -161,7 +148,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   footer: {
-    color: CARD_MUTED,
     fontSize: fontSize.xs,
     letterSpacing: 1,
     textAlign: 'center',

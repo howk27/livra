@@ -425,12 +425,12 @@ feel the product's value before they're ever asked to pay.
 > user should be able to share. Livra+ adds *custom* designs (themes, layout, branding), so
 > the upgrade sells expression, not the ability to share at all.
 
-> **Stress point — resolve while building:** The code contradicts this directly:
-> `canUseShareCard(isPro)` in `lib/gating.ts` gates the **entire** share card behind
-> Livra+, and `app/paywall.tsx` lists "Share Cards" as a paid feature. The doc's promise
-> (preset designs free, custom designs paid) is not implemented. Building this means
-> splitting the share card into a free preset path and a paid custom path, not a single
-> `isPro` gate. Until that split exists, this is a failing guardrail, not a future nicety.
+> **Stress point — RESOLVED (Phase 2.2):** Sharing the completion card is now free (the inline
+> Pro bounce in `app/goal/complete.tsx` is gone). Customization is the Livra+ tier:
+> `canCustomizeShareCard(isPro)` in `lib/gating.ts` gates a 4-theme picker, accent swatches, and
+> element toggles surfaced inline in `SharePreviewModal`; free users get the default preset and a
+> soft "Customize · Livra+" nudge. `canUseShareCard` (dead code) was removed. Paywall reframed to
+> "Custom Share Cards". Design: `docs/superpowers/specs/2026-06-21-share-card-split-design.md`.
 
 > **Stats (pre-launch item) — RESOLVED (Phase 2.1):** the history surface
 > (`app/goal/history.tsx`) is free and now reachable in-app from the Goals tab via an

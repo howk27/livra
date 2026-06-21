@@ -5,11 +5,12 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  withSpring,
   withTiming,
   withDelay,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
+import * as Sharing from 'expo-sharing';
+import * as MediaLibrary from 'expo-media-library';
 import { themedColors, spacing, fontSize, fontWeight, borderRadius, fonts } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useXPStore } from '../../state/xpSlice';
@@ -17,8 +18,10 @@ import { getLevelForXP, LEVEL_TITLES } from '../../lib/xpEngine';
 import { useGoalsStore } from '../../state/goalsSlice';
 import { getAppDate } from '../../lib/appDate';
 import { checkProStatus } from '../../lib/iap/iap';
+import { canCustomizeShareCard } from '../../lib/gating';
 import { logger } from '../../lib/utils/logger';
 import { generateShareCard } from '../../lib/sharing/generateShareCard';
+import { useShareCardStore } from '../../state/shareCardSlice';
 import { GoalCompletionShareCard } from '../../components/GoalCompletionShareCard';
 import { SharePreviewModal } from '../../components/SharePreviewModal';
 import { SvgLogo } from '../../components/ui/SvgLogo';
@@ -38,8 +41,17 @@ export default function GoalCompleteScreen() {
   // Share flow state
   const shareCardRef = useRef<View>(null) as React.RefObject<View>;
   const [shareModalVisible, setShareModalVisible] = useState(false);
-  const [shareImageUri, setShareImageUri] = useState<string | null>(null);
-  const [shareLoading, setShareLoading] = useState(false);
+  const [canCustomize, setCanCustomize] = useState(false);
+  const [saveLabel, setSaveLabel] = useState('Save to Photos');
+
+  // Persisted share card style from Zustand slice
+  const style = useShareCardStore((s) => s.style);
+  const updateStyle = useShareCardStore((s) => s.updateStyle);
+  const loadShareCardStyle = useShareCardStore((s) => s.loadShareCardStyle);
+
+  useEffect(() => {
+    loadShareCardStyle();
+  }, [loadShareCardStyle]);
 
   // Derive level title
   const xp = useXPStore((s) => s.totalXP ?? 0);
@@ -111,24 +123,29 @@ export default function GoalCompleteScreen() {
     router.replace('/(tabs)/focus' as any);
   }, [router]);
 
-  const handleSharePress = async () => {
-    if (shareLoading) return;
-    const { effectiveUnlocked: isPro } = await checkProStatus();
-    if (!isPro) {
-      router.push('/paywall');
-      return;
-    }
-    setShareLoading(true);
+  const handleSharePress = useCallback(async () => {
+    const { effectiveUnlocked } = await checkProStatus();
+    setCanCustomize(canCustomizeShareCard(effectiveUnlocked));
+    setShareModalVisible(true);
+  }, []);
+
+  const handleShareImage = useCallback(async () => {
+    try { await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); } catch {}
     try {
       const uri = await generateShareCard(shareCardRef);
-      setShareImageUri(uri);
-      setShareModalVisible(true);
-    } catch (e) {
-      logger.debug('[Share] Card capture failed', e);
-    } finally {
-      setShareLoading(false);
-    }
-  };
+      await Sharing.shareAsync(uri, { mimeType: 'image/jpeg', dialogTitle: 'Share your goal' });
+    } catch (e) { logger.debug('[Share] failed', e); }
+  }, []);
+
+  const handleSaveImage = useCallback(async () => {
+    try {
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') { setSaveLabel('Failed, try again'); return; }
+      const uri = await generateShareCard(shareCardRef);
+      await MediaLibrary.saveToLibraryAsync(uri);
+      setSaveLabel('Saved');
+    } catch { setSaveLabel('Failed, try again'); }
+  }, []);
 
   if (phase === 'reflect') {
     return (
@@ -196,12 +213,9 @@ export default function GoalCompleteScreen() {
             <TouchableOpacity
               style={styles.shareBtn}
               onPress={handleSharePress}
-              disabled={shareLoading}
               accessibilityRole="button"
             >
-              <Text style={styles.shareBtnText}>
-                {shareLoading ? 'Preparing…' : 'Share this moment'}
-              </Text>
+              <Text style={styles.shareBtnText}>Share this moment</Text>
             </TouchableOpacity>
           </View>
         </Animated.View>
@@ -216,16 +230,31 @@ export default function GoalCompleteScreen() {
           daysTaken={daysTaken}
           targetDateLabel={targetDateLabel}
           bankedMomentumDays={completedGoal?.banked_momentum_days}
+          style={style}
         />
       </View>
 
       <SharePreviewModal
         visible={shareModalVisible}
-        imageUri={shareImageUri}
         goalTitle={goalTitle ?? ''}
+        canCustomize={canCustomize}
+        style={style}
+        onStyleChange={(patch) => updateStyle(patch)}
+        onRequestUpgrade={() => router.push('/paywall')}
+        onShare={handleShareImage}
+        onSave={handleSaveImage}
+        saveLabel={saveLabel}
+        cardProps={{
+          goalTitle: goalTitle ?? '',
+          completedDate: getAppDate().toISOString().slice(0, 10),
+          levelTitle,
+          daysTaken,
+          targetDateLabel,
+          bankedMomentumDays: completedGoal?.banked_momentum_days,
+        }}
         onClose={() => {
           setShareModalVisible(false);
-          setShareImageUri(null);
+          setSaveLabel('Save to Photos');
         }}
       />
     </SafeAreaView>

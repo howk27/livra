@@ -113,8 +113,9 @@ JSDoc, orphaned toggle styles) — fold into 1.2/1.3 when those files are touche
   wired into `app/(tabs)/goals.tsx` (replacing the gated COMPLETED block). History stays free and
   empty-safe. Spec: `docs/superpowers/specs/2026-06-20-stats-reexpose-design.md`;
   plan: `docs/superpowers/plans/2026-06-20-stats-reexpose.md`.
-- [ ] **2.2 — Share card free/paid split** (`PRODUCT.md:424`). `canUseShareCard` currently gates
+- [x] **2.2 — Share card free/paid split** (`PRODUCT.md:424`). `canUseShareCard` currently gates
   the whole card behind Pro; PRODUCT promises presets free / custom designs paid.
+  DONE (feat/share-card-split): sharing free, Livra+ customization (themes/accent/toggles) inline in SharePreviewModal, canUseShareCard removed. Plan: docs/superpowers/plans/2026-06-21-share-card-split.md.
 - [ ] **2.3 — Monetization coherence** (`PRODUCT.md:95`, `:448`). Reconcile "one goal is active"
   with the free tier's 2 goals; make the locked-model table explicit about the daily-habit cap.
 - [ ] **2.4 — Opacity done-state a11y** (`PRODUCT.md:494`). `focus.tsx` + `MarkFrequencyPicker`

@@ -1,85 +1,104 @@
-import React, { useState, useCallback } from 'react';
+import React from 'react';
 import {
   Modal,
   View,
   Text,
-  Image,
-  ActivityIndicator,
+  Switch,
   TouchableOpacity,
   StyleSheet,
   Dimensions,
 } from 'react-native';
-import * as Sharing from 'expo-sharing';
-import * as MediaLibrary from 'expo-media-library';
-import * as Haptics from 'expo-haptics';
-import { themedColors } from '../theme/tokens';
-import { spacing, fontSize, fontWeight, borderRadius } from '../theme/tokens';
+import { themedColors, spacing, fontSize, fontWeight, borderRadius } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
-
-export interface SharePreviewModalProps {
-  visible: boolean;
-  imageUri: string | null;
-  goalTitle: string;
-  onClose: () => void;
-}
+import {
+  SHARE_CARD_THEME_IDS,
+  SHARE_CARD_ACCENT_IDS,
+  SHARE_CARD_THEME_LABELS,
+  SHARE_CARD_ACCENT_HEX,
+  resolveCardColors,
+  type ShareCardStyle,
+  type ShareCardThemeId,
+} from '../lib/sharing/shareCardThemes';
+import { GoalCompletionShareCard } from './GoalCompletionShareCard';
 
 const COLOR_WHITE = '#FFFFFF';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+// CARD_WIDTH matches GoalCompletionShareCard's full-screen width
+const CARD_WIDTH = SCREEN_WIDTH;
 const PREVIEW_WIDTH = SCREEN_WIDTH - spacing.xl * 2;
-// 9:16 aspect ratio (portrait share card)
-const PREVIEW_HEIGHT = (PREVIEW_WIDTH * 16) / 9;
+// 16:9 aspect ratio (landscape share card)
+const PREVIEW_HEIGHT = (PREVIEW_WIDTH * 9) / 16;
+// Scale factor so the full-size card fits exactly inside the preview container
+const PREVIEW_SCALE = PREVIEW_WIDTH / CARD_WIDTH;
+
+export interface SharePreviewModalCardProps {
+  goalTitle: string;
+  completedDate: string;
+  levelTitle: string;
+  daysTaken: number;
+  targetDateLabel?: string;
+  bankedMomentumDays?: number | null;
+}
+
+export interface SharePreviewModalProps {
+  visible: boolean;
+  goalTitle: string;
+  canCustomize: boolean;
+  style: ShareCardStyle;
+  onStyleChange: (patch: Partial<ShareCardStyle>) => void;
+  onRequestUpgrade: () => void;
+  onShare: () => void;
+  onSave: () => void;
+  onClose: () => void;
+  saveLabel: string;
+  cardProps: SharePreviewModalCardProps;
+}
+
+// ---------------------------------------------------------------------------
+// Local ToggleRow
+// ---------------------------------------------------------------------------
+
+interface ToggleRowProps {
+  label: string;
+  value: boolean;
+  onToggle: () => void;
+  c: ReturnType<typeof themedColors>;
+}
+
+function ToggleRow({ label, value, onToggle, c }: ToggleRowProps) {
+  return (
+    <View style={styles.toggleRow} accessibilityRole="none">
+      <Text style={[styles.toggleLabel, { color: c.inkMid }]}>{label}</Text>
+      <Switch
+        value={value}
+        onValueChange={onToggle}
+        accessibilityLabel={label}
+        accessibilityRole="switch"
+      />
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// SharePreviewModal
+// ---------------------------------------------------------------------------
 
 export const SharePreviewModal: React.FC<SharePreviewModalProps> = ({
   visible,
-  imageUri,
   goalTitle,
+  canCustomize,
+  style,
+  onStyleChange,
+  onRequestUpgrade,
+  onShare,
+  onSave,
   onClose,
+  saveLabel,
+  cardProps,
 }) => {
   const theme = useEffectiveTheme();
   const c = themedColors(theme);
-
-  const [saveState, setSaveState] = useState<'idle' | 'saved' | 'error'>('idle');
-
-  const handleShare = useCallback(async () => {
-    if (!imageUri) return;
-    try {
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    } catch {
-      // haptics unavailable — ignore
-    }
-    try {
-      await Sharing.shareAsync(imageUri, {
-        mimeType: 'image/jpeg',
-        dialogTitle: 'Share your goal',
-      });
-    } catch {
-      // share dismissed or unavailable — ignore
-    }
-  }, [imageUri]);
-
-  const handleSave = useCallback(async () => {
-    if (!imageUri) return;
-    setSaveState('idle');
-    try {
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status !== 'granted') {
-        setSaveState('error');
-        return;
-      }
-      await MediaLibrary.saveToLibraryAsync(imageUri);
-      setSaveState('saved');
-    } catch {
-      setSaveState('error');
-    }
-  }, [imageUri]);
-
-  const saveLabel =
-    saveState === 'saved'
-      ? 'Saved ✓'
-      : saveState === 'error'
-        ? 'Failed — try again'
-        : 'Save to Photos';
 
   return (
     <Modal
@@ -115,33 +134,108 @@ export const SharePreviewModal: React.FC<SharePreviewModalProps> = ({
             </TouchableOpacity>
           </View>
 
-          {/* Image preview */}
+          {/* Live card preview */}
           <View
             style={[
               styles.previewContainer,
               { backgroundColor: c.surfaceAlt },
             ]}
           >
-            {imageUri == null ? (
-              <ActivityIndicator color={c.forest} size="large" />
-            ) : (
-              <Image
-                source={{ uri: imageUri }}
-                style={styles.previewImage}
-                resizeMode="cover"
-                accessibilityLabel={`Share card preview for ${goalTitle}`}
+            <View style={[styles.previewScale, { transform: [{ scale: PREVIEW_SCALE }] }]}>
+              <GoalCompletionShareCard
+                {...cardProps}
+                style={style}
               />
-            )}
+            </View>
           </View>
+
+          {/* Customize section */}
+          {canCustomize ? (
+            <View style={styles.customize}>
+              <Text style={[styles.customizeHeader, { color: c.inkMid }]}>Customize</Text>
+
+              {/* Theme swatches */}
+              <View style={styles.swatchRow}>
+                {SHARE_CARD_THEME_IDS.map((id: ShareCardThemeId) => {
+                  const colors = resolveCardColors({ ...style, themeId: id });
+                  return (
+                    <TouchableOpacity
+                      key={id}
+                      onPress={() => onStyleChange({ themeId: id })}
+                      accessibilityRole="button"
+                      accessibilityLabel={SHARE_CARD_THEME_LABELS[id]}
+                      style={[
+                        styles.swatch,
+                        {
+                          backgroundColor: colors.bg,
+                          borderColor: style.themeId === id ? c.forest : 'transparent',
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.swatchLabel, { color: colors.text }]}>
+                        {SHARE_CARD_THEME_LABELS[id]}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* Accent swatches */}
+              <View style={styles.swatchRow}>
+                {SHARE_CARD_ACCENT_IDS.map((id) => (
+                  <TouchableOpacity
+                    key={id}
+                    onPress={() => onStyleChange({ accentId: id })}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Accent ${id}`}
+                    style={[
+                      styles.accentSwatch,
+                      {
+                        backgroundColor: SHARE_CARD_ACCENT_HEX[id],
+                        borderColor: style.accentId === id ? c.inkDark : 'transparent',
+                      },
+                    ]}
+                  />
+                ))}
+              </View>
+
+              {/* Element toggles */}
+              <ToggleRow
+                label="Momentum line"
+                value={style.showMomentum}
+                onToggle={() => onStyleChange({ showMomentum: !style.showMomentum })}
+                c={c}
+              />
+              <ToggleRow
+                label="Level badge"
+                value={style.showBadge}
+                onToggle={() => onStyleChange({ showBadge: !style.showBadge })}
+                c={c}
+              />
+              <ToggleRow
+                label="Date"
+                value={style.showDate}
+                onToggle={() => onStyleChange({ showDate: !style.showDate })}
+                c={c}
+              />
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.lockedNudge}
+              onPress={onRequestUpgrade}
+              accessibilityRole="button"
+              accessibilityLabel="Customize with Livra+"
+            >
+              <Text style={[styles.lockedNudgeText, { color: c.inkMid }]}>
+                Customize · Livra+
+              </Text>
+            </TouchableOpacity>
+          )}
 
           {/* Primary: Share button */}
           <TouchableOpacity
-            style={[
-              styles.button,
-              { backgroundColor: c.forest, opacity: imageUri == null ? 0.45 : 1 },
-            ]}
-            onPress={handleShare}
-            disabled={imageUri == null}
+            style={[styles.button, { backgroundColor: c.forest }]}
+            onPress={onShare}
             activeOpacity={0.82}
             accessibilityRole="button"
             accessibilityLabel="Share your goal"
@@ -149,35 +243,19 @@ export const SharePreviewModal: React.FC<SharePreviewModalProps> = ({
             <Text style={styles.primaryButtonText}>Share</Text>
           </TouchableOpacity>
 
-          {/* Secondary: Save to Photos button */}
+          {/* Secondary: Save button */}
           <TouchableOpacity
             style={[
               styles.button,
               styles.secondaryButton,
-              {
-                borderColor: c.borderMid,
-                opacity: imageUri == null ? 0.45 : 1,
-              },
+              { borderColor: c.borderMid },
             ]}
-            onPress={handleSave}
-            disabled={imageUri == null}
+            onPress={onSave}
             activeOpacity={0.82}
             accessibilityRole="button"
             accessibilityLabel={saveLabel}
           >
-            <Text
-              style={[
-                styles.secondaryButtonText,
-                {
-                  color:
-                    saveState === 'saved'
-                      ? c.success
-                      : saveState === 'error'
-                        ? c.danger
-                        : c.inkMid,
-                },
-              ]}
-            >
+            <Text style={[styles.secondaryButtonText, { color: c.inkMid }]}>
               {saveLabel}
             </Text>
           </TouchableOpacity>
@@ -219,15 +297,71 @@ const styles = StyleSheet.create({
     height: PREVIEW_HEIGHT,
     borderRadius: borderRadius.xl,
     overflow: 'hidden',
+    alignSelf: 'center',
+    marginBottom: spacing.xl,
+  },
+  previewScale: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: spacing.xl,
-    alignSelf: 'center',
+    overflow: 'hidden',
   },
-  previewImage: {
-    width: PREVIEW_WIDTH,
-    height: PREVIEW_HEIGHT,
+  // Customize section
+  customize: {
+    marginBottom: spacing.lg,
   },
+  customizeHeader: {
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.semibold,
+    marginBottom: spacing.sm,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  swatchRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  swatch: {
+    flex: 1,
+    borderRadius: borderRadius.md,
+    borderWidth: 2,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  swatchLabel: {
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.medium,
+  },
+  accentSwatch: {
+    flex: 1,
+    height: 28,
+    borderRadius: borderRadius.full,
+    borderWidth: 2,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.xs,
+  },
+  toggleLabel: {
+    fontSize: fontSize.base,
+    fontWeight: fontWeight.normal,
+  },
+  // Locked nudge
+  lockedNudge: {
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.lg,
+  },
+  lockedNudgeText: {
+    fontSize: fontSize.base,
+    fontWeight: fontWeight.medium,
+  },
+  // Buttons
   button: {
     borderRadius: borderRadius.xl,
     paddingVertical: spacing.lg,

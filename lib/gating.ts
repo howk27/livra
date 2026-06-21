@@ -55,7 +55,7 @@ export function canExportData(isPro: boolean): boolean {
   return isPro;
 }
 
-/** Sharing a progress/momentum card image is a Livra+ feature. */
-export function canUseShareCard(isPro: boolean): boolean {
+/** Customizing the share card (themes, accent, element toggles) is a Livra+ feature. Sharing itself is free. */
+export function canCustomizeShareCard(isPro: boolean): boolean {
   return isPro;
 }
