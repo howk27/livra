@@ -7,7 +7,7 @@ import {
   countUnlinkedMarks,
   canUseCustomReminders,
   canExportData,
-  canUseShareCard,
+  canCustomizeShareCard,
   FREE_GOAL_LIMIT,
   FREE_HABIT_LIMIT,
   FREE_MARK_LIMIT,
@@ -115,8 +115,20 @@ describe('Livra+ feature gates', () => {
     expect(canExportData(false)).toBe(false);
     expect(canExportData(true)).toBe(true);
   });
-  test('share card: free blocked, pro allowed', () => {
-    expect(canUseShareCard(false)).toBe(false);
-    expect(canUseShareCard(true)).toBe(true);
+  test('customize share card: free blocked, pro allowed', () => {
+    expect(canCustomizeShareCard(false)).toBe(false);
+    expect(canCustomizeShareCard(true)).toBe(true);
+  });
+});
+
+describe('canCustomizeShareCard', () => {
+  it('allows customization only for Pro users', () => {
+    expect(canCustomizeShareCard(true)).toBe(true);
+    expect(canCustomizeShareCard(false)).toBe(false);
+  });
+
+  it('no longer exports the old canUseShareCard gate', () => {
+    const gating = require('../../lib/gating');
+    expect(gating.canUseShareCard).toBeUndefined();
   });
 });
