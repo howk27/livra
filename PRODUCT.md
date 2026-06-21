@@ -83,24 +83,16 @@ add a goal  →  log marks toward it  →  see progress accrue  →  complete th
      └──────────────────── queue the next one ──────────────────────────┘
 ```
 
-- **Add a goal.** The user names something that matters. One goal is active; the rest
-  wait in a queue. Adding is light — presets, templates, or a single AI-assisted
-  generation get them moving without a setup chore.
+- **Add a goal.** The user names something that matters. Free users run up to two goals at once, each accruing its own progress. Livra+ unlocks unlimited goals. Adding is light — presets, templates, or a single AI-assisted generation get them moving without a setup chore.
 - **Log marks.** A mark is the smallest repeatable unit of progress (the daily/weekly
   action). Logging is the core gesture of the app and must be near-frictionless: one
   tap, with visible confirmation.
-- **See progress.** Progress accrues visibly and honestly — toward the active goal,
+- **See progress.** Progress accrues visibly and honestly — toward each active goal,
   not as a streak to protect. Rest is part of it; a missed day is not a broken state.
 - **Complete the goal.** Completion is the emotional peak. It is marked with weight and
-  warmth — earned, not manufactured — and the next queued goal steps forward.
+  warmth — earned, not manufactured — and the next goal the user chooses steps forward.
 
-> **Stress point — resolve while building:** "One goal is active" collides with the
-> monetization model, which sells "Active goals: 2" on the free tier (`FREE_GOAL_LIMIT = 2`
-> in `lib/gating.ts`). A goal is either active or queued — the words can't both be true.
-> Before building the goals list / queue UI, pick one model and make every surface agree
-> (most likely **1 active + 1 queued slot free**, with Livra+ unlocking an unlimited
-> queue), then fix the monetization table's "Active goals: 2" wording to match. Otherwise
-> this contradiction ships as confusing copy.
+> **Stress point — RESOLVED (Phase 2.3):** Free users run up to two concurrent active goals (both progressing); Livra+ unlocks unlimited goals. The queue/active split is retired. All copy and the monetization table now reflect this model. Design: `docs/superpowers/specs/2026-06-21-free-tier-coherence-design.md`.
 
 ### The vocabulary (define it, don't assume it)
 
@@ -361,7 +353,7 @@ tools that overwhelm. It competes on **focus and feel**, not feature count.
 | Category | What they optimize for | Where Livra differs |
 | --- | --- | --- |
 | **Streak / gamified apps** (Duolingo-style, streak trackers) | Daily return via loss aversion and dopamine | Momentum without the panic. A forgiving run you can rest from, not a brittle streak that punishes a missed day. |
-| **Habit trackers** (multi-habit grids, checkbox apps) | Breadth — track everything | Livra is deliberately narrow: one active goal, a few marks. Depth over breadth. |
+| **Habit trackers** (multi-habit grids, checkbox apps) | Breadth — track everything | Livra is deliberately narrow: a couple of goals, a few marks each. Not a habit grid of everything. Depth over breadth. |
 | **Notion-style / productivity tools** | Configurability and data density | Livra is opinionated and quiet. No setup chore, no dashboard to maintain. |
 
 The defensibility is the **personality and the discipline of the cut** — the things Livra
@@ -412,8 +404,9 @@ feel the product's value before they're ever asked to pay.
 
 | | Free | Livra+ |
 | --- | --- | --- |
-| Active goals | 2 | Unlimited queue |
+| Active goals | 2 | Unlimited |
 | Marks per goal | 3 | Unlimited |
+| Daily habit marks (un-goaled) | Up to 3 | Unlimited |
 | Goal history & stats | ✅ Full | ✅ Full |
 | Presets / templates | ✅ All | ✅ All |
 | AI goal/mark generation | 1 free, ever | Repeat use |
@@ -440,15 +433,11 @@ feel the product's value before they're ever asked to pay.
 
 **Why these numbers are genuinely useful, not crippled.** A mark is a *recurring action*,
 not a single rep — so 3 marks on a goal is a complete routine (e.g. half-marathon: training
-run · strength · stretch), not a teaser. Two active goals matches the "one at a time, rest
-queued" philosophy: enough to have real work in flight, few enough to stay focused. A free
-user can run, and finish, a meaningful goal — Livra+ adds room, not the basics.
+run · strength · stretch), not a teaser. Two concurrent active goals is enough to have real
+work in flight and few enough to stay focused. A free user can run, and finish, a meaningful
+goal — Livra+ adds room, not the basics.
 
-> **Stress point — resolve while building:** The locked-model table is silent on a real
-> shipped gate: free users are capped at 3 un-goaled daily-habit marks (`FREE_HABIT_LIMIT =
-> 3` in `lib/gating.ts`). A source-of-truth monetization table that omits a live limit will
-> surface as a surprise paywall. Add the daily-habit cap to the table so the model the doc
-> settles matches the gates the code enforces.
+> **Stress point — RESOLVED (Phase 2.3):** The daily-habit cap (`FREE_HABIT_LIMIT = 3` in `lib/gating.ts`) is now explicit in the locked-model table above. Free: up to 3 un-goaled daily-habit marks; Livra+: unlimited. Design: `docs/superpowers/specs/2026-06-21-free-tier-coherence-design.md`.
 
 **Guardrails (check before launch):**
 - [ ] No part of the add → log → progress → complete loop is blocked for free users.

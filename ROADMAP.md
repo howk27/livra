@@ -116,8 +116,9 @@ JSDoc, orphaned toggle styles) — fold into 1.2/1.3 when those files are touche
 - [x] **2.2 — Share card free/paid split** (`PRODUCT.md:424`). `canUseShareCard` currently gates
   the whole card behind Pro; PRODUCT promises presets free / custom designs paid.
   DONE (feat/share-card-split): sharing free, Livra+ customization (themes/accent/toggles) inline in SharePreviewModal, canUseShareCard removed. Plan: docs/superpowers/plans/2026-06-21-share-card-split.md.
-- [ ] **2.3 — Monetization coherence** (`PRODUCT.md:95`, `:448`). Reconcile "one goal is active"
+- [x] **2.3 — Monetization coherence** (`PRODUCT.md:95`, `:448`). Reconcile "one goal is active"
   with the free tier's 2 goals; make the locked-model table explicit about the daily-habit cap.
+  DONE (free-tier coherence): two concurrent active goals, queued status retired, habit cap added to table. Plan: docs/superpowers/plans/2026-06-21-free-tier-coherence.md.
 - [ ] **2.4 — Opacity done-state a11y** (`PRODUCT.md:494`). `focus.tsx` + `MarkFrequencyPicker`
   signal done with opacity 0.45 only; reuse the `MarkCard` completion-line pattern (icon/label/strikethrough).
 - [ ] **2.5 — Retention cliff answer** (`PRODUCT.md:208`). Post-completion empty-queue gap
