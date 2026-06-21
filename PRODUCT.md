@@ -65,7 +65,7 @@ Designing for those users would pull Livra toward the very things it rejects.
 ## Product Purpose
 
 Livra turns goals into a small set of daily/weekly **marks** and helps the user keep
-showing up — one goal active at a time, with the rest queued. Success is the user
+showing up — up to two active goals at once, each accruing its own progress. Success is the user
 completing real goals over weeks and months while feeling calmer and more in control,
 not more surveilled. The app is a companion for execution, not a tracking spreadsheet.
 
@@ -122,7 +122,7 @@ and in the relevant empty state — then **use it consistently and warmly everyw
 
 To protect focus, Livra explicitly refuses to become:
 
-- **A multi-habit dashboard.** No "track 20 things at once" grid. One active goal is the
+- **A multi-habit dashboard.** No "track 20 things at once" grid. Depth over breadth is the
   whole point.
 - **A streak-panic engine.** No *brittle* streaks that punish a missed day, no loss-aversion
   mechanics, no "don't break the chain" pressure. Livra's **Momentum** is the sanctioned
@@ -141,7 +141,7 @@ To protect focus, Livra explicitly refuses to become:
 **Guardrails (check before launch):**
 - [ ] Logging a mark is reachable in one tap from the primary screen and gives visible
       confirmation (not haptic-only).
-- [ ] Exactly one goal is presented as "active"; the rest are clearly queued, not competing.
+- [ ] At most two active goals are presented as co-equal; no twenty-thing grid, no queue.
 - [ ] No screen presents the user with more than a handful of things to do at once.
 - [ ] "Mark," "Goal," and "Daily habit" are each defined in copy the user actually sees
       before they're expected to use them.
@@ -312,8 +312,8 @@ wrong, not the voice.
 
 ## Design Principles
 
-1. **One mark at a time.** Focus over breadth. The interface protects attention; one
-   active goal, the rest queued. Never present the user with twenty things to do.
+1. **One mark at a time.** Focus over breadth. The interface protects attention; a couple of
+   active goals, never a twenty-thing grid.
 2. **Forgiveness over guilt.** Missing a day is not a failure state. No streak panic,
    no loss aversion as a lever. Reassure at the low moments.
 3. **Earned celebration, not cheap dopamine.** Mark real milestones and completions
@@ -490,7 +490,7 @@ real app against each line.
 **Core loop & focus**
 - [ ] Log a mark in one tap from the primary screen, with visible confirmation (not
       haptic-only).
-- [ ] Exactly one active goal; the rest clearly queued, not competing.
+- [ ] At most two active goals, presented as co-equal; no queue, no twenty-thing grid.
 - [ ] No screen shows more than a handful of things to do at once.
 - [ ] No brittle streaks, heatmaps, pace banners, or weekly feed anywhere. (Momentum is the
       one sanctioned exception: forgiving, frequency-earned, resets only after a real slide.)
@@ -498,7 +498,7 @@ real app against each line.
 **Voice & teaching**
 - [ ] "Goal," "Mark," "Momentum," and "Daily habit" are each defined in copy the user sees
       before they're expected to use them (Momentum at its first appearance).
-- [ ] Onboarding leaves the user able to define all three terms and explain "one at a time."
+- [ ] Onboarding leaves the user able to define all three terms (Goal, Mark, Momentum) under the two-goal model.
 - [ ] Teaching/reflection moments appear only at fixed events (first goal, first miss, first
       completion, milestones) — never on a timer.
 - [ ] No copy uses guilt, fake urgency, or streak-loss language.
