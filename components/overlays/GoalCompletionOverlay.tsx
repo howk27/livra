@@ -16,15 +16,12 @@ import Animated, {
 } from 'react-native-reanimated';
 import { GestureDetector, Gesture, GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
-import { ArrowRight } from 'phosphor-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SvgLogo } from '../ui/SvgLogo';
 import { PillButton } from '../ui/PillButton';
-import { SectionLabel } from '../ui/SectionLabel';
 import { fonts, spacing, themedColors, fontSize } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useGoalCompletionStore } from '../../state/goalCompletionStore';
-import { useGoalsStore } from '../../state/goalsSlice';
 import { formatBankedMomentum } from '../../lib/momentumPresenter';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -58,8 +55,6 @@ export function GoalCompletionOverlay() {
   const theme = useEffectiveTheme();
   const c = themedColors(theme);
   const { completedGoal, show, hideCompletion } = useGoalCompletionStore();
-  const goals = useGoalsStore((s) => s.goals);
-
   const bgOpacity = useSharedValue(0);
   const translateY = useSharedValue(0);
   const dividerWidth = useSharedValue(0);
@@ -78,14 +73,6 @@ export function GoalCompletionOverlay() {
 
   const bankedLine = completedGoal ? formatBankedMomentum(completedGoal.banked_momentum_days) : null;
 
-  const nextGoal = React.useMemo(() => {
-    if (!completedGoal) return null;
-    return goals.find(
-      (g) => g.status === 'active' && g.id !== completedGoal.id,
-    ) ?? goals.find(
-      (g) => g.status === 'queued',
-    ) ?? null;
-  }, [goals, completedGoal]);
 
   const dismiss = useCallback(() => {
     translateY.value = withSpring(SCREEN_HEIGHT, { damping: 20, stiffness: 200 }, () => {
@@ -151,18 +138,6 @@ export function GoalCompletionOverlay() {
             </AnimatedElement>
           )}
 
-          {nextGoal && (
-            <AnimatedElement delay={1000}>
-              <View style={styles.nextGoalBlock}>
-                <SectionLabel color={c.inkMuted} style={styles.nextLabel}>NEXT IN LINE</SectionLabel>
-                <Text style={[styles.nextTitle, { color: c.inkDark }]}>{nextGoal.title}</Text>
-                <View style={styles.nextArrow}>
-                  <ArrowRight size={14} color={c.inkMuted} weight="bold" />
-                </View>
-              </View>
-            </AnimatedElement>
-          )}
-
           <AnimatedElement delay={1200}>
             <View style={styles.actions}>
               <PillButton
@@ -214,24 +189,6 @@ const styles = StyleSheet.create({
     fontSize: fontSize[13],
     textAlign: 'center',
     marginTop: spacing.sm,
-  },
-  nextGoalBlock: {
-    alignItems: 'center',
-    marginTop: spacing.xl,
-    gap: spacing.xs,
-  },
-  nextLabel: {
-    textAlign: 'center',
-  },
-  nextTitle: {
-    fontFamily: fonts.sansMedium,
-    fontSize: fontSize[17],
-    textAlign: 'center',
-    marginTop: spacing.sm,
-  },
-  nextArrow: {
-    alignItems: 'center',
-    marginTop: spacing.xs,
   },
   actions: {
     marginTop: spacing.xxl,
