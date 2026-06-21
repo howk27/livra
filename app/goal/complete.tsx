@@ -16,6 +16,7 @@ import { useEffectiveTheme } from '../../state/uiSlice';
 import { useXPStore } from '../../state/xpSlice';
 import { getLevelForXP, LEVEL_TITLES } from '../../lib/xpEngine';
 import { useGoalsStore } from '../../state/goalsSlice';
+import { resolveCompletionState } from '../../lib/completionState';
 import { getAppDate } from '../../lib/appDate';
 import { checkProStatus } from '../../lib/iap/iap';
 import { canCustomizeShareCard } from '../../lib/gating';
@@ -65,6 +66,11 @@ export default function GoalCompleteScreen() {
   const nextGoal = useGoalsStore((s) =>
     s.goals.find((g) => g.status === 'active' && g.id !== goalId) ?? null
   );
+
+  const closure = resolveCompletionState(goals);
+  const completedGoals = useGoalsStore.getState().getCompletedGoals();
+  const completedCount = completedGoals.length;
+  const marksLogged = completedGoals.reduce((sum, g) => sum + (g.current_mark_count ?? 0), 0);
 
   const daysTaken: number = (() => {
     if (!completedGoal?.created_at) return 1;
@@ -199,13 +205,22 @@ export default function GoalCompleteScreen() {
           <SectionLabel color={c.inkMuted} style={styles.nextLabel}>
             {"WHAT'S NEXT?"}
           </SectionLabel>
-          {nextGoal ? (
+          {closure === 'all-complete' ? (
+            <View>
+              <Text style={styles.nextTitle}>You finished everything you set out to do.</Text>
+              <Text style={[styles.closureStat, { color: c.inkMuted }]}>
+                {`${completedCount} ${completedCount === 1 ? 'goal' : 'goals'} complete. ${marksLogged} marks logged.`}
+              </Text>
+            </View>
+          ) : nextGoal ? (
             <Text style={styles.nextTitle}>{nextGoal.title}</Text>
-          ) : (
-            <Text style={styles.nextTitle}>Your queue is clear.</Text>
-          )}
+          ) : null}
           <View style={styles.actions}>
-            <PillButton label="Continue" onPress={handleNext} fullWidth />
+            <PillButton
+              label={closure === 'all-complete' ? 'Start your next goal' : 'Continue'}
+              onPress={handleNext}
+              fullWidth
+            />
             <TouchableOpacity
               style={styles.shareBtn}
               onPress={handleSharePress}
@@ -307,6 +322,12 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     color: c.inkDark,
     textAlign: 'center',
     marginTop: spacing.sm,
+  },
+  closureStat: {
+    fontFamily: fonts.sans,
+    fontSize: fontSize.sm,
+    textAlign: 'center',
+    marginTop: spacing.xs,
   },
   actions: {
     width: '100%',
