@@ -7,7 +7,7 @@ jest.mock('expo-router', () => ({
 }));
 
 jest.mock('../../lib/iap/iap', () => ({
-  checkProStatus: jest.fn().mockResolvedValue({ effectiveUnlocked: true }),
+  checkProStatus: jest.fn().mockResolvedValue({ effectiveUnlocked: false }),
 }));
 
 jest.mock('../../lib/sharing/generateShareCard', () => ({
@@ -15,7 +15,7 @@ jest.mock('../../lib/sharing/generateShareCard', () => ({
 }));
 
 jest.mock('../../state/goalsSlice', () => ({
-  useGoalsStore: jest.fn((fn: any) => fn({ goals: [] })),
+  useGoalsStore: jest.fn((fn: any) => fn({ goals: [], getActiveGoal: () => null })),
 }));
 
 jest.mock('../../state/xpSlice', () => ({
@@ -29,7 +29,9 @@ jest.mock('../../lib/xpEngine', () => ({
 
 jest.mock('expo-haptics', () => ({
   notificationAsync: jest.fn(),
+  impactAsync: jest.fn(),
   NotificationFeedbackType: { Success: 'success' },
+  ImpactFeedbackStyle: { Medium: 'medium' },
 }));
 
 jest.mock('react-native-reanimated', () => {
@@ -61,8 +63,40 @@ jest.mock('../../lib/appDate', () => ({ getAppDate: () => new Date('2026-05-30T1
 jest.mock('../../components/GoalCompletionShareCard', () => ({
   GoalCompletionShareCard: () => null,
 }));
-jest.mock('../../components/SharePreviewModal', () => ({
-  SharePreviewModal: () => null,
+
+// Mock SharePreviewModal — render Save to Photos button when visible so we can assert modal opened
+jest.mock('../../components/SharePreviewModal', () => {
+  const React = require('react');
+  const { Text, TouchableOpacity } = require('react-native');
+  return {
+    SharePreviewModal: ({ visible, onSave, saveLabel }: any) => {
+      if (!visible) return null;
+      return React.createElement(
+        TouchableOpacity,
+        { onPress: onSave, accessibilityLabel: saveLabel },
+        React.createElement(Text, null, saveLabel ?? 'Save to Photos')
+      );
+    },
+  };
+});
+
+// add slice mock
+jest.mock('../../state/shareCardSlice', () => {
+  const { DEFAULT_SHARE_CARD_STYLE } = require('../../lib/sharing/shareCardThemes');
+  return {
+    useShareCardStore: jest.fn((fn: any) =>
+      fn({ style: DEFAULT_SHARE_CARD_STYLE, updateStyle: jest.fn(), loadShareCardStyle: jest.fn() })
+    ),
+  };
+});
+
+jest.mock('expo-sharing', () => ({
+  shareAsync: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock('expo-media-library', () => ({
+  requestPermissionsAsync: jest.fn().mockResolvedValue({ status: 'granted' }),
+  saveToLibraryAsync: jest.fn().mockResolvedValue(undefined),
 }));
 
 import GoalCompleteScreen from '../../app/goal/complete';
@@ -80,5 +114,15 @@ describe('GoalCompleteScreen share integration', () => {
     await waitFor(() => {
       expect(checkProStatus).toHaveBeenCalled();
     });
+  });
+
+  it('free user can open the share modal without being sent to the paywall', async () => {
+    const push = jest.fn();
+    jest.spyOn(require('expo-router'), 'useRouter').mockReturnValue({ replace: jest.fn(), push });
+    const { getByText, findByText } = render(<GoalCompleteScreen />);
+    fireEvent.press(getByText('Share this moment'));
+    // modal opens; Save to Photos button visible; paywall NOT pushed
+    expect(await findByText('Save to Photos')).toBeTruthy();
+    expect(push).not.toHaveBeenCalledWith('/paywall');
   });
 });
