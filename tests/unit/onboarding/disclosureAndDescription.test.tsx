@@ -107,11 +107,14 @@ jest.mock('../../../state/uiSlice', () => ({
   useUIStore: (fn: any) => fn({ completeOnboarding: jest.fn().mockResolvedValue(undefined) }),
 }));
 
+const mockCreateGoal = jest.fn().mockResolvedValue({ id: 'goal-1' });
+const mockLinkMarkToGoal = jest.fn().mockResolvedValue(undefined);
+
 jest.mock('../../../state/goalsSlice', () => ({
   useGoalsStore: (fn: any) =>
     fn({
-      createGoal: jest.fn().mockResolvedValue({ id: 'goal-1' }),
-      linkMarkToGoal: jest.fn().mockResolvedValue(undefined),
+      createGoal: mockCreateGoal,
+      linkMarkToGoal: mockLinkMarkToGoal,
     }),
 }));
 
@@ -229,4 +232,39 @@ describe('Task 11: editable description in AI review', () => {
     // Value starts blank — AIGoalPackage has no description field
     expect(descInput.props.value).toBe('');
   }, 20000);
+
+  test('edited description is threaded into createGoal on AI review confirm', async () => {
+    const { getByText, findByPlaceholderText, findByText } = renderAtStep1();
+
+    await act(async () => {
+      useOnboardingStore.getState().setGoalTitle('Run a half marathon in 12 weeks');
+    });
+
+    // Trigger AI generation
+    await act(async () => {
+      fireEvent.press(getByText('✦ Let Livra suggest a plan'));
+    });
+
+    // Wait for AI review to appear and edit the description
+    const descInput = await findByPlaceholderText(/Add a note about this goal/i, {}, 15000);
+    await act(async () => {
+      fireEvent.changeText(descInput, 'my test note');
+    });
+
+    // Confirm AI review — advances to step 3 (marks screen)
+    await act(async () => {
+      fireEvent.press(getByText('Looks good →'));
+    });
+
+    // Advance through step 3 marks screen to trigger handleMarksNext → createGoal
+    const continueBtn = await findByText('Continue', {}, 5000);
+    await act(async () => {
+      fireEvent.press(continueBtn);
+    });
+
+    // createGoal must have been called with the edited description
+    expect(mockCreateGoal).toHaveBeenCalledWith(
+      expect.objectContaining({ description: 'my test note' }),
+    );
+  }, 30000);
 });

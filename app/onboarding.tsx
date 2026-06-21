@@ -151,10 +151,10 @@ export default function OnboardingScreen() {
       setAiReviewActive(true);
     } else {
       const msgs: Record<string, string> = {
-        low_confidence: "Couldn't make sense of that — try describing your goal in one sentence.",
-        free_use_exhausted: 'You’ve used your free AI plan. Livra+ unlocks unlimited AI goal plans — or continue manually below.',
-        invalid_output: 'Something went wrong — continue manually below.',
-        network_error: "Couldn't reach Livra AI — check your connection or continue manually.",
+        low_confidence: "Couldn’t make sense of that. Try describing your goal in one sentence.",
+        free_use_exhausted: "You’ve used your free AI plan. Livra+ unlocks unlimited AI goal plans. Or continue manually below.",
+        invalid_output: "Something went wrong. Continue manually below.",
+        network_error: "Couldn’t reach Livra AI. Check your connection or continue manually.",
         goal_too_short: '',
       };
       setAiError(msgs[result.reason] ?? 'Something went wrong.');
@@ -523,7 +523,7 @@ export default function OnboardingScreen() {
           <Text style={styles.aiError}>{aiError}</Text>
         ) : (
           <Text style={styles.aiHatchSub}>
-            Describe it above — Livra suggests a goal and marks. You edit before committing.
+            Describe it above. Livra suggests a goal and marks. You edit before committing.
           </Text>
         )}
 
