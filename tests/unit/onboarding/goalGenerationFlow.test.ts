@@ -65,7 +65,7 @@ describe('generateGoalPackage (Edge Function proxy)', () => {
     const result = await generateGoalPackage('Run a half marathon in 12 weeks');
 
     expect(mockInvoke).toHaveBeenCalledWith('ai-goal-generation', {
-      body: { goalText: 'Run a half marathon in 12 weeks' },
+      body: { goalText: 'Run a half marathon in 12 weeks', isRegen: false },
     });
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.source).toBe('api');

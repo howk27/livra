@@ -205,9 +205,11 @@ Deno.serve(async (req: Request) => {
 
   // Parse body.
   let goalText = '';
+  let isRegen = false;
   try {
     const body = await req.json();
     goalText = String(body?.goalText ?? '').trim();
+    isRegen = body?.isRegen === true;
   } catch {
     return json(400, { ok: false, reason: 'invalid_output' });
   }
@@ -243,7 +245,11 @@ Deno.serve(async (req: Request) => {
   const usesCount = (profile as { ai_uses_count?: number } | null)?.ai_uses_count ?? 0;
 
   // 3. Free-use gate (server-enforced). Pro bypasses; "1 free ever" otherwise.
-  if (!isPro && usesCount >= 1) {
+  //    Regenerations (isRegen=true) are part of the same free draft session:
+  //    the initial call already incremented the counter, so regens pass through
+  //    without consuming an additional use. An exhausted non-regen caller is
+  //    blocked as before.
+  if (!isPro && usesCount >= 1 && !isRegen) {
     return json(200, { ok: false, reason: 'free_use_exhausted' });
   }
 
@@ -274,10 +280,12 @@ Deno.serve(async (req: Request) => {
     return json(200, { ok: false, reason: 'low_confidence' });
   }
 
-  // 7. Consume one free use (non-Pro only) via service-role.
+  // 7. Consume one free use (non-Pro, initial call only) via service-role.
+  //    Regens are free within the same draft session — the initial call already
+  //    incremented ai_uses_count, so we skip the increment for regens.
   //    Prefer the atomic RPC; fall back to a direct update. Both run as
   //    service_role, so the Task 1 profiles trigger guard permits the write.
-  if (!isPro) {
+  if (!isPro && !isRegen) {
     const { error: rpcErr } = await admin.rpc('increment_ai_uses_count', { p_user_id: user.id });
     if (rpcErr) {
       await admin.from('profiles').update({ ai_uses_count: usesCount + 1 }).eq('id', user.id);
