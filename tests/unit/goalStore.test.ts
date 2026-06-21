@@ -177,3 +177,55 @@ describe('GoalStatus types', () => {
     expect(getQueuedGoals(goals)).toHaveLength(0);
   });
 });
+
+// ── useGoalsStore: active-only model ─────────────────────────────────────────
+
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useGoalsStore } from '../../state/goalsSlice';
+
+const STORE_USER = 'u-store';
+
+async function resetStore() {
+  await AsyncStorage.clear();
+  useGoalsStore.setState({ goals: [], isLoading: false, error: null } as any);
+}
+
+// Mock loadGoalsForUser for fetchGoals normalization test
+jest.mock('../../lib/db/goalsDb', () => {
+  const original = jest.requireActual('../../lib/db/goalsDb');
+  return {
+    ...original,
+    loadGoalsForUser: jest.fn().mockResolvedValue([
+      {
+        id: 'legacy-1', user_id: 'u-store', title: 'Legacy', sort_index: 0,
+        status: 'queued', current_mark_count: 0,
+        created_at: '2026-01-01', updated_at: '2026-01-01',
+      },
+    ]),
+  };
+});
+
+beforeEach(resetStore);
+
+test('createGoal makes every new goal active (no queue)', async () => {
+  const s = useGoalsStore.getState();
+  await s.createGoal({ userId: STORE_USER, isPro: false, title: 'One' });
+  await s.createGoal({ userId: STORE_USER, isPro: false, title: 'Two' });
+  const statuses = useGoalsStore.getState().goals.map(g => g.status);
+  expect(statuses).toEqual(['active', 'active']);
+});
+
+test('free tier blocks a third active goal', async () => {
+  const s = useGoalsStore.getState();
+  await s.createGoal({ userId: STORE_USER, isPro: false, title: 'One' });
+  await s.createGoal({ userId: STORE_USER, isPro: false, title: 'Two' });
+  await expect(
+    s.createGoal({ userId: STORE_USER, isPro: false, title: 'Three' })
+  ).rejects.toThrow(/2 goals/);
+});
+
+test('fetchGoals normalizes legacy queued goals to active', async () => {
+  // loadGoalsForUser mocked to return a goal with status 'queued'
+  await useGoalsStore.getState().fetchGoals(STORE_USER);
+  expect(useGoalsStore.getState().goals.every(g => g.status !== 'queued')).toBe(true);
+});
