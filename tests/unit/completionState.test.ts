@@ -8,3 +8,6 @@ test('all-complete when no active and >=1 completed', () => {
 test('has-active when an active goal remains', () => {
   expect(resolveCompletionState([g({ status: 'active' }), g({ status: 'completed' })])).toBe('has-active');
 });
+test('has-active when there are no goals at all', () => {
+  expect(resolveCompletionState([])).toBe('has-active');
+});

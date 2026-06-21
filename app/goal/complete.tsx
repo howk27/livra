@@ -207,7 +207,7 @@ export default function GoalCompleteScreen() {
         {/* What's Next */}
         <Animated.View style={[styles.nextBlock, nextStyle]}>
           <SectionLabel color={c.inkMuted} style={styles.nextLabel}>
-            {"WHAT'S NEXT?"}
+            {closure === 'all-complete' ? 'WHAT YOU BUILT' : "WHAT'S NEXT?"}
           </SectionLabel>
           {closure === 'all-complete' ? (
             <View>
