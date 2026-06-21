@@ -335,3 +335,14 @@ export function getMomentumBannerCopy(lastTemplate?: string): MomentumCopy {
   const template = rotatePick(MOMENTUM_BANNER, lastTemplate);
   return { template, text: template };
 }
+
+// ─── Canonical term definitions (single source; screens import these) ────────
+// New shared copy (anything shown on more than one screen, and every core-term
+// definition) lives in this file. One-off copy may stay inline.
+
+export const TERMS = {
+  goal: "A goal is something you're working toward. Pick one or two that matter and give them the time.",
+  mark: "A mark is one action you'll repeat toward your goal. Small, yours. Log it each time you show up.",
+  momentum: "Momentum is how your effort adds up over time. Miss a day and it bends, it does not break.",
+  dailyHabit: "A daily habit is a mark you keep on its own, not tied to any goal.",
+} as const;
