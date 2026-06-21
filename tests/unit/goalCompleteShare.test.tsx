@@ -15,7 +15,9 @@ jest.mock('../../lib/sharing/generateShareCard', () => ({
 }));
 
 jest.mock('../../state/goalsSlice', () => ({
-  useGoalsStore: jest.fn((fn: any) => fn({ goals: [], getActiveGoal: () => null })),
+  useGoalsStore: jest.fn((fn: any) =>
+    fn({ goals: [], getActiveGoal: () => null, getCompletedGoals: () => [] })
+  ),
 }));
 
 jest.mock('../../state/xpSlice', () => ({

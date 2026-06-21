@@ -392,9 +392,13 @@ export default function GoalsScreen() {
             <View style={{ opacity: 0.35 }}>
               <SvgLogo color={c.inkMuted} width={32} height={16} />
             </View>
-            <Text style={[styles.emptyTitle, { color: c.inkDark }]}>No goals yet.</Text>
+            <Text style={[styles.emptyTitle, { color: c.inkDark }]}>
+              {completedCount > 0 ? 'You finished everything.' : 'No goals yet.'}
+            </Text>
             <Text style={[styles.emptySubtitle, { color: c.inkMuted }]}>
-              Add your first goal to begin.
+              {completedCount > 0
+                ? 'Start your next goal when you are ready.'
+                : 'Add your first goal to begin.'}
             </Text>
             <TouchableOpacity
               style={[styles.emptyAddBtn, { backgroundColor: c.forest }]}

@@ -68,9 +68,13 @@ export default function GoalCompleteScreen() {
   );
 
   const closure = resolveCompletionState(goals);
-  const completedGoals = useGoalsStore.getState().getCompletedGoals();
+  const getCompletedGoals = useGoalsStore((s) => s.getCompletedGoals);
+  const completedGoals = useMemo(() => getCompletedGoals(), [getCompletedGoals, goals]);
   const completedCount = completedGoals.length;
-  const marksLogged = completedGoals.reduce((sum, g) => sum + (g.current_mark_count ?? 0), 0);
+  const marksLogged = useMemo(
+    () => completedGoals.reduce((sum, g) => sum + (g.current_mark_count ?? 0), 0),
+    [completedGoals],
+  );
 
   const daysTaken: number = (() => {
     if (!completedGoal?.created_at) return 1;
