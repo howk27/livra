@@ -119,17 +119,24 @@ export default function OnboardingScreen() {
   const [reviewWeeks, setReviewWeeks] = useState(12);
   const [reviewMarks, setReviewMarks] = useState<AIGoalMark[]>([]);
   const [reviewMarkSelected, setReviewMarkSelected] = useState<Set<number>>(new Set());
+  const [reviewDescription, setReviewDescription] = useState('');
+  const reviewDescriptionRef = React.useRef('');
+
+  const handleReviewDescriptionChange = useCallback((text: string) => {
+    reviewDescriptionRef.current = text;
+    setReviewDescription(text);
+  }, []);
 
   const advance = useCallback(() => setStep((s) => s + 1), []);
 
   // ── AI hatch: generate → review ─────────────────────────────────────────
 
-  const handleAIGenerate = useCallback(async () => {
+  const handleAIGenerate = useCallback(async (isRegen = false) => {
     const goalText = store.goalTitle.trim();
     setAiLoading(true);
     setAiError(null);
 
-    const result = await generateGoalPackage(goalText);
+    const result = await generateGoalPackage(goalText, { isRegen });
     setAiLoading(false);
 
     if (result.ok) {
@@ -139,6 +146,8 @@ export default function OnboardingScreen() {
       setReviewWeeks(pkg.timeframeWeeks);
       setReviewMarks(pkg.marks);
       setReviewMarkSelected(new Set(pkg.marks.map((_, i) => i)));
+      setReviewDescription('');
+      reviewDescriptionRef.current = '';
       setAiReviewActive(true);
     } else {
       const msgs: Record<string, string> = {
@@ -156,7 +165,7 @@ export default function OnboardingScreen() {
     if (store.aiRegenerationsUsed >= 2) return;
     store.incrementAiRegenerations();
     setAiReviewActive(false);
-    await handleAIGenerate();
+    await handleAIGenerate(true);
   }, [store, handleAIGenerate]);
 
   const handleAIReviewConfirm = useCallback(() => {
@@ -250,8 +259,10 @@ export default function OnboardingScreen() {
 
     try {
       // 2. Create the goal
+      const descriptionDraft = reviewDescriptionRef.current.trim() || undefined;
       const newGoal = await createGoal({
         title: goalTitle.trim() || 'My first goal',
+        description: descriptionDraft,
         userId,
         isPro: false,
       });
@@ -344,6 +355,20 @@ export default function OnboardingScreen() {
           <View style={{ marginTop: spacing.md }}>
             <Text style={styles.reviewLabel}>TIMEFRAME</Text>
             <Text style={styles.reviewTimeframe}>{reviewWeeks} weeks</Text>
+          </View>
+
+          {/* Editable description */}
+          <View style={styles.fieldBlock}>
+            <Text style={styles.reviewLabel}>NOTES (OPTIONAL)</Text>
+            <TextInput
+              style={styles.reviewDescriptionInput}
+              value={reviewDescription}
+              onChangeText={handleReviewDescriptionChange}
+              placeholder="Add a note about this goal (optional)."
+              placeholderTextColor={c.inkMuted}
+              multiline
+              maxLength={280}
+            />
           </View>
 
           {/* Marks with why */}
@@ -476,6 +501,9 @@ export default function OnboardingScreen() {
         </View>
 
         {/* AI escape hatch */}
+        <Text style={[styles.aiDisclosure, { color: c.inkMuted }]}>
+          This is your one free AI draft. You can edit everything before you save it, and presets are always free.
+        </Text>
         <TouchableOpacity
           style={[
             styles.aiHatch,
@@ -818,6 +846,16 @@ function createStyles(c: ReturnType<typeof themedColors>) {
       justifyContent: 'center',
     },
 
+    // AI disclosure (shown above the generate button)
+    aiDisclosure: {
+      fontFamily: fonts.sans,
+      fontSize: fontSize.sm,
+      lineHeight: 18,
+      textAlign: 'center' as const,
+      marginTop: spacing.lg,
+      paddingHorizontal: spacing.sm,
+    },
+
     // AI hatch
     aiHatch: {
       marginTop: spacing.lg,
@@ -851,6 +889,21 @@ function createStyles(c: ReturnType<typeof themedColors>) {
       textAlign: 'center' as const,
       marginTop: spacing.xs,
       lineHeight: 18,
+    },
+
+    // Editable description in AI review
+    reviewDescriptionInput: {
+      minHeight: 72,
+      backgroundColor: c.surfaceAlt,
+      borderRadius: radius.md,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      fontFamily: fonts.sans,
+      fontSize: fontSize.md,
+      color: c.inkDark,
+      borderWidth: 1,
+      borderColor: c.borderLight,
+      textAlignVertical: 'top' as const,
     },
 
     // AI review
