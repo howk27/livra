@@ -3,14 +3,14 @@ import type { MarkEvent } from '../types';
 
 export { FREE_GOAL_LIMIT, canAddGoal } from './gating';
 
-export function getActiveGoal(goals: Goal[]): Goal | undefined {
-  return goals.find(g => g.status === 'active');
+export function getActiveGoals(goals: Goal[]): Goal[] {
+  return goals
+    .filter(g => g.status === 'active')
+    .sort((a, b) => a.sort_index - b.sort_index);
 }
 
-export function getQueuedGoals(goals: Goal[]): Goal[] {
-  return goals
-    .filter(g => g.status === 'queued')
-    .sort((a, b) => a.sort_index - b.sort_index);
+export function getActiveGoal(goals: Goal[]): Goal | undefined {
+  return getActiveGoals(goals)[0];
 }
 
 export function getCompletedGoals(goals: Goal[]): Goal[] {
@@ -23,10 +23,6 @@ export function getExpiredGoals(goals: Goal[]): Goal[] {
   return goals
     .filter(g => g.status === 'expired')
     .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
-}
-
-export function nextGoalToActivate(goals: Goal[]): Goal | undefined {
-  return getQueuedGoals(goals)[0];
 }
 
 /** True if goal has met its mark count target */

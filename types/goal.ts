@@ -1,6 +1,6 @@
 import type { TierId, FrequencyId } from '../lib/goalMarkSuggestions';
 
-export type GoalStatus = 'active' | 'queued' | 'completed' | 'expired' | 'paused';
+export type GoalStatus = 'active' | 'completed' | 'expired' | 'paused';
 
 export type Goal = {
   id: string;
