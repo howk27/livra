@@ -106,8 +106,13 @@ JSDoc, orphaned toggle styles) — fold into 1.2/1.3 when those files are touche
 
 ## Phase 2 — Remaining PRODUCT.md stress points (big-first)
 
-- [ ] **2.1 — Stats surface re-expose** (`PRODUCT.md:436`). Unhide + reroute the hidden `stats`
-  tab so "history & stats are free" is reachable in-app. *(Next module after Momentum.)*
+- [x] **2.1 — Stats surface re-expose** (`PRODUCT.md:436`). There was no hidden `stats` tab to
+  unhide (`(tabs)/stats.tsx` was deleted in `2f53510`); the real gap was that the only in-app
+  entry to the free `app/goal/history.tsx` was gated behind `completedCount > 0`, hiding it from
+  new users. DONE (`feat/stats-reexpose`): extracted always-visible `components/goals/HistoryRow.tsx`,
+  wired into `app/(tabs)/goals.tsx` (replacing the gated COMPLETED block). History stays free and
+  empty-safe. Spec: `docs/superpowers/specs/2026-06-20-stats-reexpose-design.md`;
+  plan: `docs/superpowers/plans/2026-06-20-stats-reexpose.md`.
 - [ ] **2.2 — Share card free/paid split** (`PRODUCT.md:424`). `canUseShareCard` currently gates
   the whole card behind Pro; PRODUCT promises presets free / custom designs paid.
 - [ ] **2.3 — Monetization coherence** (`PRODUCT.md:95`, `:448`). Reconcile "one goal is active"

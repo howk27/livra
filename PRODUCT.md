@@ -432,16 +432,11 @@ feel the product's value before they're ever asked to pay.
 > splitting the share card into a free preset path and a paid custom path, not a single
 > `isPro` gate. Until that split exists, this is a failing guardrail, not a future nicety.
 
-> **Stats (pre-launch item):** the stats surface is currently hidden and slated to be
-> **rerouted and realigned for the V2 launch**. The "history & stats free, never gated"
-> commitment above is intentional and stands; it just needs the surface re-exposed as part
-> of V2 so the promise is actually reachable in-app.
-
-> **Stress point — resolve while building:** Until the stats surface is re-exposed,
-> "history & stats free, never gated" is the one free-tier promise the user *cannot reach
-> in-app* — a flagship guardrail that can't be checked at launch because it depends on V2
-> work. Treat re-exposing stats as a launch dependency of the monetization promise, not a
-> separate V2 nicety; otherwise the doc commits to something the app doesn't deliver.
+> **Stats (pre-launch item) — RESOLVED (Phase 2.1):** the history surface
+> (`app/goal/history.tsx`) is free and now reachable in-app from the Goals tab via an
+> always-visible History entry, including for accounts with zero completed goals. The
+> "history & stats free, never gated" commitment is satisfied: free (no Pro gate), and
+> reachable (no longer hidden behind a completed-count condition).
 
 **Why these numbers are genuinely useful, not crippled.** A mark is a *recurring action*,
 not a single rep — so 3 marks on a goal is a complete routine (e.g. half-marathon: training
