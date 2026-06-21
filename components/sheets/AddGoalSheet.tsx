@@ -153,7 +153,7 @@ export function AddGoalSheet({ visible, onClose }: AddGoalSheetProps) {
         // Soft cap surface — never a hard wall.
         Alert.alert(
           'Two goals at a time',
-          'Free keeps you to 2 active goals so you can actually finish them. Livra+ opens an unlimited queue.',
+          'Free keeps you to 2 goals at once so you can actually finish them. Livra+ opens unlimited goals.',
           [
             { text: 'Not now', style: 'cancel' },
             { text: 'See Livra+', onPress: () => router.push('/paywall') },
@@ -299,7 +299,7 @@ export function AddGoalSheet({ visible, onClose }: AddGoalSheetProps) {
             )}
 
             <PillButton
-              label={saving ? 'Adding…' : 'Add to queue'}
+              label={saving ? 'Adding…' : 'Add goal'}
               onPress={handleSave}
               disabled={saving || !title.trim()}
               style={[styles.cta, { opacity: (!title.trim() && !saving) ? 0.4 : 1 }]}

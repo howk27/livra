@@ -49,7 +49,7 @@ import { SvgLogo } from '../components/ui/SvgLogo';
 // Mark reordering and pace projection are built but not yet wired into a screen, so they
 // are intentionally omitted here and added when their entry points ship (Phase 5 audit §5).
 const PRO_FEATURES: { icon: Icon; title: string; description: string }[] = [
-  { icon: Flag,         title: 'Unlimited Goals',      description: 'Keep an unlimited goal queue — past the 2 free.' },
+  { icon: Flag,         title: 'Unlimited Goals',      description: 'Run as many goals at once as you want, past the 2 free.' },
   { icon: InfinityIcon, title: 'Unlimited Marks',      description: 'Add as many marks per goal as you need.' },
   { icon: Sparkle,      title: 'AI Goal Plans',        description: 'Describe a goal; Livra drafts the marks to get there.' },
   { icon: ShareNetwork, title: 'Custom Share Cards',    description: 'Restyle your finish. Themes, accent, and layout.' },
