@@ -82,6 +82,27 @@ describe('GoalCompletionShareCard styling', () => {
     expect(queryByText('42 days')).toBeNull();
   });
 
+  it('renders the momentum line when showDate is false but showMomentum is true', () => {
+    const { queryByText, getByText } = render(
+      React.createElement(GoalCompletionShareCard, {
+        ...base,
+        style: { ...DEFAULT_SHARE_CARD_STYLE, showDate: false, showMomentum: true },
+      })
+    );
+    expect(queryByText('42 days')).toBeNull();
+    expect(getByText('Finished with 12 days of momentum')).toBeTruthy();
+  });
+
+  it('hides the momentum line when showMomentum is false', () => {
+    const { queryByText } = render(
+      React.createElement(GoalCompletionShareCard, {
+        ...base,
+        style: { ...DEFAULT_SHARE_CARD_STYLE, showMomentum: false },
+      })
+    );
+    expect(queryByText('Finished with 12 days of momentum')).toBeNull();
+  });
+
   it('always renders goal title and completion line regardless of toggles', () => {
     const { getByText } = render(
       React.createElement(GoalCompletionShareCard, {
