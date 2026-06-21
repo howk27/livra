@@ -11,13 +11,12 @@ async function reset() {
 beforeEach(reset);
 
 describe('Active-goal cap (2 free)', () => {
-  test('free user can create 2 goals (1 active + 1 queued)', async () => {
+  test('free user can create 2 goals (both active)', async () => {
     await useGoalsStore.getState().createGoal({ title: 'Goal one', userId: USER, isPro: false });
     await useGoalsStore.getState().createGoal({ title: 'Goal two', userId: USER, isPro: false });
     const goals = useGoalsStore.getState().goals.filter((g) => g.user_id === USER);
     expect(goals).toHaveLength(2);
-    expect(goals.filter((g) => g.status === 'active')).toHaveLength(1);
-    expect(goals.filter((g) => g.status === 'queued')).toHaveLength(1);
+    expect(goals.filter((g) => g.status === 'active')).toHaveLength(2);
   });
 
   test('free user blocked on the 3rd active goal', async () => {

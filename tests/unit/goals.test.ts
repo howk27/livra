@@ -1,9 +1,7 @@
 import {
   canAddGoal,
   getActiveGoal,
-  getQueuedGoals,
   getCompletedGoals,
-  nextGoalToActivate,
   FREE_GOAL_LIMIT,
 } from '../../lib/goalLogic';
 import type { Goal } from '../../types/goal';
@@ -13,8 +11,9 @@ function makeGoal(overrides: Partial<Goal> = {}): Goal {
     id: 'g1',
     user_id: 'u1',
     title: 'Run a marathon',
-    status: 'queued',
+    status: 'active',
     sort_index: 0,
+    current_mark_count: 0,
     created_at: '2026-05-25T00:00:00Z',
     updated_at: '2026-05-25T00:00:00Z',
     ...overrides,
@@ -46,44 +45,22 @@ describe('canAddGoal', () => {
 });
 
 describe('getActiveGoal', () => {
-  test('returns the active goal', () => {
+  test('returns the first active goal by sort_index', () => {
     const goals = [
-      makeGoal({ id: '1', status: 'queued' }),
-      makeGoal({ id: '2', status: 'active' }),
+      makeGoal({ id: '1', status: 'active', sort_index: 1 }),
+      makeGoal({ id: '2', status: 'active', sort_index: 0 }),
       makeGoal({ id: '3', status: 'completed' }),
     ];
     expect(getActiveGoal(goals)?.id).toBe('2');
   });
 
   test('returns undefined when no active goal', () => {
-    const goals = [makeGoal({ status: 'queued' })];
+    const goals = [makeGoal({ status: 'expired' })];
     expect(getActiveGoal(goals)).toBeUndefined();
   });
 
   test('returns undefined for empty list', () => {
     expect(getActiveGoal([])).toBeUndefined();
-  });
-});
-
-describe('getQueuedGoals', () => {
-  test('returns only queued goals', () => {
-    const goals = [
-      makeGoal({ id: '1', status: 'active' }),
-      makeGoal({ id: '2', status: 'queued', sort_index: 1 }),
-      makeGoal({ id: '3', status: 'completed' }),
-    ];
-    const queued = getQueuedGoals(goals);
-    expect(queued.length).toBe(1);
-    expect(queued[0].id).toBe('2');
-  });
-
-  test('sorts by sort_index ascending', () => {
-    const goals = [
-      makeGoal({ id: 'b', status: 'queued', sort_index: 2 }),
-      makeGoal({ id: 'a', status: 'queued', sort_index: 0 }),
-      makeGoal({ id: 'c', status: 'queued', sort_index: 1 }),
-    ];
-    expect(getQueuedGoals(goals).map(g => g.id)).toEqual(['a', 'c', 'b']);
   });
 });
 
@@ -102,24 +79,5 @@ describe('getCompletedGoals', () => {
       makeGoal({ id: 'new', status: 'completed', completed_at: '2026-05-01T00:00:00Z' }),
     ];
     expect(getCompletedGoals(goals)[0].id).toBe('new');
-  });
-});
-
-describe('nextGoalToActivate', () => {
-  test('returns queued goal with lowest sort_index', () => {
-    const goals = [
-      makeGoal({ id: '1', status: 'queued', sort_index: 2 }),
-      makeGoal({ id: '2', status: 'queued', sort_index: 0 }),
-    ];
-    expect(nextGoalToActivate(goals)?.id).toBe('2');
-  });
-
-  test('returns undefined when no queued goals', () => {
-    const goals = [makeGoal({ status: 'active' })];
-    expect(nextGoalToActivate(goals)).toBeUndefined();
-  });
-
-  test('returns undefined for empty list', () => {
-    expect(nextGoalToActivate([])).toBeUndefined();
   });
 });
