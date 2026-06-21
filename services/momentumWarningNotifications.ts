@@ -6,12 +6,8 @@ import * as Notifications from 'expo-notifications';
 import { logger } from '../lib/utils/logger';
 import { getAppDate } from '../lib/appDate';
 import { formatDate, parseISO } from '../lib/date';
-import { momentumWarningDates } from '../lib/goalMomentum';
-import type { MarkMomentumInput } from '../lib/goalMomentum';
-import {
-  planMomentumWarnings,
-  type GoalWarningInput,
-} from '../lib/momentumWarningPlanner';
+import { planMomentumWarnings } from '../lib/momentumWarningPlanner';
+import { buildMomentumWarningInputs } from '../lib/notifications/momentumWarningPlan';
 import {
   getMomentumFirstNudgeCopy,
   getMomentumFinalNudgeCopy,
@@ -59,25 +55,10 @@ export async function reconcileMomentumWarnings(userId: string | undefined): Pro
   const now = getAppDate();
   const today = formatDate(now);
 
-  const goals = useGoalsStore.getState().goals.filter((g) => g.status === 'active');
+  const goals = useGoalsStore.getState().goals;
   const allMarks = useMarksStore.getState().marks;
 
-  const inputs: GoalWarningInput[] = [];
-  for (const g of goals) {
-    const ids = new Set(g.linked_mark_ids ?? []);
-    const goalMarks: MarkMomentumInput[] = allMarks
-      .filter((m: any) => !m.deleted_at && ids.has(m.id))
-      .map((m: any) => ({
-        id: m.id,
-        weekly_target: m.weekly_target,
-        last_activity_date: m.last_activity_date,
-      }));
-    const dates = momentumWarningDates(goalMarks, today);
-    if (dates) {
-      inputs.push({ goalId: g.id, title: g.title, atRiskDate: dates.atRiskDate, breakDate: dates.breakDate });
-    }
-  }
-
+  const inputs = buildMomentumWarningInputs(goals as any, allMarks as any, today);
   const planned = planMomentumWarnings(inputs, today);
 
   // Always cancel the previous set first (recovery / replace / drop).

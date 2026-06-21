@@ -1,7 +1,10 @@
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { cancelAllLivraScheduledNotifications, LIVRA_BEHAVIOR_ID_PREFIX } from './notifications/livraScheduledOwnership';
+import { LIVRA_BEHAVIOR_ID_PREFIX } from './notifications/livraScheduledOwnership';
 import { getLivraRemindersEnabled } from './notifications/livraReminderPrefs';
+import { hasMomentumWarningPlannedForToday } from './notifications/momentumWarningPlan';
+import { useGoalsStore } from '../state/goalsSlice';
+import { useMarksStore } from '../state/countersSlice';
 import { getDailyHeader } from './copy';
 import type { HeaderState } from './copy';
 import { query } from './db';
@@ -168,11 +171,21 @@ export async function scheduleContextualDailyNotification(userId: string): Promi
   try {
     const enabled = await getLivraRemindersEnabled();
     if (!enabled) return;
-    await cancelAllLivraScheduledNotifications();
 
     const now = getAppDate();
     const today = formatDate(now);
     const identifier = `${LIVRA_BEHAVIOR_ID_PREFIX}contextual-daily`;
+
+    // At-risk days belong to the momentum warning, not a second routine nudge.
+    // Suppress the daily (and clear any previously-scheduled daily slot) so we never
+    // double-nudge. This replaces the old blanket cancelAllLivraScheduledNotifications(),
+    // which also wiped mark reminders and momentum warnings on every run.
+    const goals = useGoalsStore.getState().goals;
+    const marks = useMarksStore.getState().marks;
+    if (hasMomentumWarningPlannedForToday(goals as any, marks as any, today)) {
+      await Notifications.cancelScheduledNotificationAsync(identifier).catch(() => {});
+      return;
+    }
 
     const allDates = await getAllLoggedDates(userId);
     const completedToday = await getCompletedTodayCount(userId, today);

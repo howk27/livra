@@ -292,8 +292,10 @@ exempt — the example lines below are written dash-free to model the rule.)
 > it is **Momentum's warning system**. It derives from the per-mark frequency gap (built on
 > `lib/consistency.ts`), never from a raw streak counter, and surfaces as the in-app banner
 > plus the 1+1 rotating notification. See
-> `docs/superpowers/specs/2026-06-17-momentum-design.md` §3–4. Remaining: the monetization table
-> line should read "Momentum & at-risk status" (Phase 1.5, not yet shipped).
+> `docs/superpowers/specs/2026-06-17-momentum-design.md` §3–4. Settings exposes a single master
+> notification switch (Phase 1.5); at-risk controllability is satisfied by the calm 2/day cap and
+> no-guilt copy rather than a dedicated at-risk off-switch. The monetization table line already reads
+> "Momentum & at-risk status".
 
 **Guardrails (check before launch):**
 - [ ] No copy uses guilt, fake urgency, or streak-loss language.
