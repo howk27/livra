@@ -4,6 +4,7 @@ import { applyNotificationsMaster } from '../services/notificationsMaster';
 import { useAuth } from './useAuth';
 import { useMarksStore } from '../state/countersSlice';
 import type { ReconcileMark } from '../lib/notifications/markReminder';
+import { logger } from '../lib/utils/logger';
 
 export function useNotificationsMaster() {
   const [enabled, setEnabledState] = useState(true);
@@ -25,11 +26,17 @@ export function useNotificationsMaster() {
 
   const setEnabled = useCallback(
     async (v: boolean) => {
+      const prior = enabled;
       setEnabledState(v); // optimistic
       const marks = useMarksStore.getState().marks as unknown as ReconcileMark[];
-      await applyNotificationsMaster(v, user?.id, marks);
+      try {
+        await applyNotificationsMaster(v, user?.id, marks);
+      } catch (err) {
+        logger.warn('[NotificationsMaster] applyNotificationsMaster failed; reverting toggle', err);
+        setEnabledState(prior);
+      }
     },
-    [user?.id],
+    [enabled, user],
   );
 
   return { enabled, hydrated, setEnabled };
