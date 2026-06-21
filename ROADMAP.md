@@ -135,8 +135,10 @@ JSDoc, orphaned toggle styles) — fold into 1.2/1.3 when those files are touche
 - [ ] **2.9 — Competitor / anti-reference naming** (`PRODUCT.md:367`).
 - [x] **2.10 — AI generosity** (`PRODUCT.md:398`). DONE (branch `feat/free-tier-coherence`):
   one-time nature disclosed at the point of use before the draft is spent; draft fully
-  editable before saving. Preset path remains the primary free-tier route; preset quality
-  is a launch dependency. Plan: `docs/superpowers/plans/2026-06-21-free-tier-coherence.md`.
+  editable (title, notes, marks) before saving. Regeneration not offered to free users;
+  server rejects it and the review screen provides editing instead. Preset path remains
+  the primary free-tier route; preset quality is a launch dependency.
+  Plan: `docs/superpowers/plans/2026-06-21-free-tier-coherence.md`.
 
 ---
 

@@ -161,13 +161,6 @@ export default function OnboardingScreen() {
     }
   }, [store]);
 
-  const handleAIRegen = useCallback(async () => {
-    if (store.aiRegenerationsUsed >= 2) return;
-    store.incrementAiRegenerations();
-    setAiReviewActive(false);
-    await handleAIGenerate();
-  }, [store, handleAIGenerate]);
-
   const handleAIReviewConfirm = useCallback(() => {
     const selectedAIMarks = reviewMarks.filter((_, i) => reviewMarkSelected.has(i));
     if (selectedAIMarks.length === 0) return;
@@ -324,7 +317,6 @@ export default function OnboardingScreen() {
   // ─── AI Review render ─────────────────────────────────────────────────────
 
   const renderAIReview = () => {
-    const canRegen = store.aiRegenerationsUsed < 2;
     return (
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -424,25 +416,6 @@ export default function OnboardingScreen() {
             disabled={reviewMarkSelected.size === 0}
             style={{ ...styles.primaryBtn, opacity: reviewMarkSelected.size === 0 ? 0.4 : 1 }}
           />
-
-          {/* Regenerate or cap message */}
-          {canRegen ? (
-            <TouchableOpacity
-              style={{ alignItems: 'center', marginTop: spacing.md }}
-              onPress={handleAIRegen}
-              disabled={aiLoading}
-            >
-              {aiLoading ? (
-                <ActivityIndicator size="small" color={c.accent} />
-              ) : (
-                <Text style={styles.secondaryLink}>↺ Try a different suggestion</Text>
-              )}
-            </TouchableOpacity>
-          ) : (
-            <Text style={[styles.paceFootnote, { marginTop: spacing.md }]}>
-              Edit these or set it up yourself below.
-            </Text>
-          )}
 
           <TouchableOpacity
             style={{ alignItems: 'center', marginTop: spacing.sm }}

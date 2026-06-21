@@ -391,9 +391,10 @@ feel the product's value before they're ever asked to pay.
 
 > **Stress point — RESOLVED (Phase 2.10):** The one-time nature of the free AI draft is
 > disclosed at the point of use ("one free AI draft") before the user spends it, and the
-> generated draft is fully editable before saving — so it is a deliberate choice, not a
-> wall discovered after the fact. The preset path remains the primary free-tier route and
-> must remain genuinely good; preset quality is a launch dependency, not a side feature.
+> generated draft is fully editable (title, notes, marks) before saving. Regeneration is
+> not offered to free users (the server rejects it); the review screen provides editing
+> instead. The preset path remains the primary free-tier route and must remain genuinely
+> good; preset quality is a launch dependency, not a side feature.
 > Design: `docs/superpowers/specs/2026-06-21-free-tier-coherence-design.md`.
 
 **The split (locked model):**

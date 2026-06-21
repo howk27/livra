@@ -207,13 +207,18 @@ export async function computeDayProgress(userId: string): Promise<DayProgressSna
     }
   }
 
-  const activeGoal = useGoalsStore.getState().getActiveGoal();
-  const momentumSnap = await activeGoalMomentumSnapshot(
-    activeGoal,
-    counters.map((c) => ({ id: c.id, weekly_target: c.weekly_target, last_activity_date: c.last_activity_date })),
-    todayStr,
-  );
-  anyStreakAtRisk = deriveAtRiskFromMomentum(momentumSnap);
+  const activeGoals = useGoalsStore.getState().getActiveGoals();
+  const markInputs = counters.map((c) => ({
+    id: c.id,
+    weekly_target: c.weekly_target,
+    last_activity_date: c.last_activity_date,
+  }));
+  if (activeGoals.length > 0) {
+    const snapshots = await Promise.all(
+      activeGoals.map((goal) => activeGoalMomentumSnapshot(goal, markInputs, todayStr)),
+    );
+    anyStreakAtRisk = snapshots.some((snap) => deriveAtRiskFromMomentum(snap));
+  }
 
   return {
     todayStr,
