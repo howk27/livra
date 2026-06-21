@@ -199,14 +199,12 @@ real progress on something they care about — not from Livra manufacturing reas
 > `docs/superpowers/specs/2026-06-17-momentum-design.md` §6 for the per-file plan. The brittle
 > streak goes; the forgiving run takes its place.
 
-> **Stress point — resolve while building:** "No manufactured reasons to return" is
-> principled but is also the product's biggest commercial risk, and the doc treats it as
-> pure virtue. A goal-completion app has a structural cliff: a user finishes in ~8 weeks,
-> the queue empties, and nothing pulls them back. Before launch, answer here what week 9
-> looks like after a completion with an empty queue — the calm, non-nagging version of
-> "what's next" — so the anti-retention principle has a deliberate answer instead of an
-> accidental churn hole. (Momentum answers the *within-goal* pull, a reason to show up day to
-> day; the post-completion, empty-queue cliff is still open and separate.)
+> **Stress point — RESOLVED (Phase 2.5):** The all-complete moment now shows a warm closure
+> state ("You finished everything you set out to do.") with a calm invite to start the next
+> goal when ready — no manufactured urgency, no nag. The goals tab empty state also
+> distinguishes first-run from finished-everything. No manufactured reason to return; the
+> deliberate answer is a dignified off-ramp. Design:
+> `docs/superpowers/specs/2026-06-21-free-tier-coherence-design.md`.
 
 **Guardrails (check before launch):**
 - [ ] Onboarding leaves the user able to define a goal, a mark, and a daily habit.
@@ -391,14 +389,12 @@ feel the product's value before they're ever asked to pay.
   nature is stated plainly at the point of use ("one free AI draft"), so it's a deliberate
   choice the user makes, never a wall they discover later.
 
-> **Stress point — resolve while building:** "One free AI draft, ever" (confirmed:
-> `free_use_exhausted` in `app/onboarding.tsx`) is honest but may read as stingy at the
-> exact first-impression moment, in a market trending toward free AI assist as table
-> stakes. The honesty is right; the *generosity* is the open question. This only holds if
-> the free presets/templates path is genuinely good enough that a user who never touches AI
-> still gets a great first goal, so the preset library quality is a hard dependency of this
-> stance, not a side feature. Pressure-test the presets before assuming "one draft ever" is
-> safe.
+> **Stress point — RESOLVED (Phase 2.10):** The one-time nature of the free AI draft is
+> disclosed at the point of use ("one free AI draft") before the user spends it, and the
+> generated draft is fully editable before saving — so it is a deliberate choice, not a
+> wall discovered after the fact. The preset path remains the primary free-tier route and
+> must remain genuinely good; preset quality is a launch dependency, not a side feature.
+> Design: `docs/superpowers/specs/2026-06-21-free-tier-coherence-design.md`.
 
 **The split (locked model):**
 
