@@ -11,4 +11,3 @@ export { PillButton } from './PillButton';
 export { FAB } from './FAB';
 export { SpeedDialFAB } from './SpeedDialFAB';
 export { MarkRow } from './MarkRow';
-export { QueueCard } from './QueueCard';

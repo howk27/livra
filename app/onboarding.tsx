@@ -119,6 +119,13 @@ export default function OnboardingScreen() {
   const [reviewWeeks, setReviewWeeks] = useState(12);
   const [reviewMarks, setReviewMarks] = useState<AIGoalMark[]>([]);
   const [reviewMarkSelected, setReviewMarkSelected] = useState<Set<number>>(new Set());
+  const [reviewDescription, setReviewDescription] = useState('');
+  const reviewDescriptionRef = React.useRef('');
+
+  const handleReviewDescriptionChange = useCallback((text: string) => {
+    reviewDescriptionRef.current = text;
+    setReviewDescription(text);
+  }, []);
 
   const advance = useCallback(() => setStep((s) => s + 1), []);
 
@@ -139,25 +146,20 @@ export default function OnboardingScreen() {
       setReviewWeeks(pkg.timeframeWeeks);
       setReviewMarks(pkg.marks);
       setReviewMarkSelected(new Set(pkg.marks.map((_, i) => i)));
+      setReviewDescription('');
+      reviewDescriptionRef.current = '';
       setAiReviewActive(true);
     } else {
       const msgs: Record<string, string> = {
-        low_confidence: "Couldn't make sense of that — try describing your goal in one sentence.",
-        free_use_exhausted: 'You’ve used your free AI plan. Livra+ unlocks unlimited AI goal plans — or continue manually below.',
-        invalid_output: 'Something went wrong — continue manually below.',
-        network_error: "Couldn't reach Livra AI — check your connection or continue manually.",
+        low_confidence: "Couldn’t make sense of that. Try describing your goal in one sentence.",
+        free_use_exhausted: "You’ve used your free AI plan. Livra+ unlocks unlimited AI goal plans. Or continue manually below.",
+        invalid_output: "Something went wrong. Continue manually below.",
+        network_error: "Couldn’t reach Livra AI. Check your connection or continue manually.",
         goal_too_short: '',
       };
       setAiError(msgs[result.reason] ?? 'Something went wrong.');
     }
   }, [store]);
-
-  const handleAIRegen = useCallback(async () => {
-    if (store.aiRegenerationsUsed >= 2) return;
-    store.incrementAiRegenerations();
-    setAiReviewActive(false);
-    await handleAIGenerate();
-  }, [store, handleAIGenerate]);
 
   const handleAIReviewConfirm = useCallback(() => {
     const selectedAIMarks = reviewMarks.filter((_, i) => reviewMarkSelected.has(i));
@@ -250,8 +252,10 @@ export default function OnboardingScreen() {
 
     try {
       // 2. Create the goal
+      const descriptionDraft = reviewDescriptionRef.current.trim() || undefined;
       const newGoal = await createGoal({
         title: goalTitle.trim() || 'My first goal',
+        description: descriptionDraft,
         userId,
         isPro: false,
       });
@@ -313,7 +317,6 @@ export default function OnboardingScreen() {
   // ─── AI Review render ─────────────────────────────────────────────────────
 
   const renderAIReview = () => {
-    const canRegen = store.aiRegenerationsUsed < 2;
     return (
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -324,7 +327,7 @@ export default function OnboardingScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.stepTitle}>Here's what Livra suggests.</Text>
+          <Text style={styles.stepTitle}>{"Here's what Livra suggests."}</Text>
           <Text style={styles.stepSubtitle}>Edit anything before you commit.</Text>
 
           {/* Editable goal title */}
@@ -344,6 +347,20 @@ export default function OnboardingScreen() {
           <View style={{ marginTop: spacing.md }}>
             <Text style={styles.reviewLabel}>TIMEFRAME</Text>
             <Text style={styles.reviewTimeframe}>{reviewWeeks} weeks</Text>
+          </View>
+
+          {/* Editable description */}
+          <View style={styles.fieldBlock}>
+            <Text style={styles.reviewLabel}>NOTES (OPTIONAL)</Text>
+            <TextInput
+              style={styles.reviewDescriptionInput}
+              value={reviewDescription}
+              onChangeText={handleReviewDescriptionChange}
+              placeholder="Add a note about this goal (optional)."
+              placeholderTextColor={c.inkMuted}
+              multiline
+              maxLength={280}
+            />
           </View>
 
           {/* Marks with why */}
@@ -400,25 +417,6 @@ export default function OnboardingScreen() {
             style={{ ...styles.primaryBtn, opacity: reviewMarkSelected.size === 0 ? 0.4 : 1 }}
           />
 
-          {/* Regenerate or cap message */}
-          {canRegen ? (
-            <TouchableOpacity
-              style={{ alignItems: 'center', marginTop: spacing.md }}
-              onPress={handleAIRegen}
-              disabled={aiLoading}
-            >
-              {aiLoading ? (
-                <ActivityIndicator size="small" color={c.accent} />
-              ) : (
-                <Text style={styles.secondaryLink}>↺ Try a different suggestion</Text>
-              )}
-            </TouchableOpacity>
-          ) : (
-            <Text style={[styles.paceFootnote, { marginTop: spacing.md }]}>
-              Edit these or set it up yourself below.
-            </Text>
-          )}
-
           <TouchableOpacity
             style={{ alignItems: 'center', marginTop: spacing.sm }}
             onPress={handleAIReviewDismiss}
@@ -459,7 +457,7 @@ export default function OnboardingScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Text style={styles.stepTitle}>{"What's the goal you're after?"}</Text>
-        <Text style={styles.stepSubtitle}>Be specific. "Run a marathon" beats "get fit."</Text>
+        <Text style={styles.stepSubtitle}>{'Be specific. "Run a marathon" beats "get fit."'}</Text>
 
         <View style={styles.fieldBlock}>
           <TextInput
@@ -476,12 +474,15 @@ export default function OnboardingScreen() {
         </View>
 
         {/* AI escape hatch */}
+        <Text style={[styles.aiDisclosure, { color: c.inkMuted }]}>
+          This is your one free AI draft. You can edit everything before you save it, and presets are always free.
+        </Text>
         <TouchableOpacity
           style={[
             styles.aiHatch,
             (aiLoading || store.goalTitle.trim().length < MIN_GOAL_LENGTH) && { opacity: 0.4 },
           ]}
-          onPress={handleAIGenerate}
+          onPress={() => handleAIGenerate()}
           disabled={aiLoading || store.goalTitle.trim().length < MIN_GOAL_LENGTH}
           activeOpacity={0.75}
         >
@@ -495,7 +496,7 @@ export default function OnboardingScreen() {
           <Text style={styles.aiError}>{aiError}</Text>
         ) : (
           <Text style={styles.aiHatchSub}>
-            Describe it above — Livra suggests a goal and marks. You edit before committing.
+            Describe it above. Livra suggests a goal and marks. You edit before committing.
           </Text>
         )}
 
@@ -818,6 +819,16 @@ function createStyles(c: ReturnType<typeof themedColors>) {
       justifyContent: 'center',
     },
 
+    // AI disclosure (shown above the generate button)
+    aiDisclosure: {
+      fontFamily: fonts.sans,
+      fontSize: fontSize.sm,
+      lineHeight: 18,
+      textAlign: 'center' as const,
+      marginTop: spacing.lg,
+      paddingHorizontal: spacing.sm,
+    },
+
     // AI hatch
     aiHatch: {
       marginTop: spacing.lg,
@@ -851,6 +862,21 @@ function createStyles(c: ReturnType<typeof themedColors>) {
       textAlign: 'center' as const,
       marginTop: spacing.xs,
       lineHeight: 18,
+    },
+
+    // Editable description in AI review
+    reviewDescriptionInput: {
+      minHeight: 72,
+      backgroundColor: c.surfaceAlt,
+      borderRadius: radius.md,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      fontFamily: fonts.sans,
+      fontSize: fontSize.md,
+      color: c.inkDark,
+      borderWidth: 1,
+      borderColor: c.borderLight,
+      textAlignVertical: 'top' as const,
     },
 
     // AI review

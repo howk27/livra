@@ -116,13 +116,16 @@ JSDoc, orphaned toggle styles) — fold into 1.2/1.3 when those files are touche
 - [x] **2.2 — Share card free/paid split** (`PRODUCT.md:424`). `canUseShareCard` currently gates
   the whole card behind Pro; PRODUCT promises presets free / custom designs paid.
   DONE (feat/share-card-split): sharing free, Livra+ customization (themes/accent/toggles) inline in SharePreviewModal, canUseShareCard removed. Plan: docs/superpowers/plans/2026-06-21-share-card-split.md.
-- [ ] **2.3 — Monetization coherence** (`PRODUCT.md:95`, `:448`). Reconcile "one goal is active"
+- [x] **2.3 — Monetization coherence** (`PRODUCT.md:95`, `:448`). Reconcile "one goal is active"
   with the free tier's 2 goals; make the locked-model table explicit about the daily-habit cap.
+  DONE (free-tier coherence): two concurrent active goals, queued status retired, habit cap added to table. Plan: docs/superpowers/plans/2026-06-21-free-tier-coherence.md.
 - [ ] **2.4 — Opacity done-state a11y** (`PRODUCT.md:494`). `focus.tsx` + `MarkFrequencyPicker`
   signal done with opacity 0.45 only; reuse the `MarkCard` completion-line pattern (icon/label/strikethrough).
-- [ ] **2.5 — Retention cliff answer** (`PRODUCT.md:208`). Post-completion empty-queue gap
-  (Momentum only covers the within-goal pull). Decide what an empty queue offers without
-  manufacturing reasons to return.
+- [x] **2.5 — Retention cliff answer** (`PRODUCT.md:208`). DONE (branch
+  `feat/free-tier-coherence`): calm all-complete closure state on the completion screen
+  ("You finished everything you set out to do.") + goals-tab empty-state distinguishes
+  finished-everything from first-run. No manufactured return hook; dignified off-ramp.
+  Plan: `docs/superpowers/plans/2026-06-21-free-tier-coherence.md`.
 - [ ] **2.6 — Voice: one canonical definition per screen** (`PRODUCT.md:313`). Centralize the
   Goal/Mark/Momentum/Daily-habit definitions each screen reuses (lands in `lib/copy.ts`).
 - [ ] **2.7 — Dash-rule enforcement** (`PRODUCT.md:262`). No em-dash, en-dash, or hyphen-as-dash
@@ -130,8 +133,12 @@ JSDoc, orphaned toggle styles) — fold into 1.2/1.3 when those files are touche
 - [ ] **2.8 — Register boundary** (`PRODUCT.md:36`). Draw the line where *personality* becomes
   *decorating the chrome* so a reviewer can apply it.
 - [ ] **2.9 — Competitor / anti-reference naming** (`PRODUCT.md:367`).
-- [ ] **2.10 — AI generosity** (`PRODUCT.md:398`). Make "one free AI draft, ever" honest and
-  disclosed before it's spent.
+- [x] **2.10 — AI generosity** (`PRODUCT.md:398`). DONE (branch `feat/free-tier-coherence`):
+  one-time nature disclosed at the point of use before the draft is spent; draft fully
+  editable (title, notes, marks) before saving. Regeneration not offered to free users;
+  server rejects it and the review screen provides editing instead. Preset path remains
+  the primary free-tier route; preset quality is a launch dependency.
+  Plan: `docs/superpowers/plans/2026-06-21-free-tier-coherence.md`.
 
 ---
 

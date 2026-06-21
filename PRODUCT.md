@@ -65,7 +65,7 @@ Designing for those users would pull Livra toward the very things it rejects.
 ## Product Purpose
 
 Livra turns goals into a small set of daily/weekly **marks** and helps the user keep
-showing up — one goal active at a time, with the rest queued. Success is the user
+showing up — up to two active goals at once, each accruing its own progress. Success is the user
 completing real goals over weeks and months while feeling calmer and more in control,
 not more surveilled. The app is a companion for execution, not a tracking spreadsheet.
 
@@ -80,27 +80,19 @@ clearer, calmer, or more rewarding, it doesn't belong.
 ```
 add a goal  →  log marks toward it  →  see progress accrue  →  complete the goal
      ↑                                                                  │
-     └──────────────────── queue the next one ──────────────────────────┘
+     └──────────────────── start the next one ──────────────────────────┘
 ```
 
-- **Add a goal.** The user names something that matters. One goal is active; the rest
-  wait in a queue. Adding is light — presets, templates, or a single AI-assisted
-  generation get them moving without a setup chore.
+- **Add a goal.** The user names something that matters. Free users run up to two goals at once, each accruing its own progress; Livra+ unlocks unlimited goals. Adding is light: presets, templates, or a single AI-assisted generation get them moving without a setup chore.
 - **Log marks.** A mark is the smallest repeatable unit of progress (the daily/weekly
   action). Logging is the core gesture of the app and must be near-frictionless: one
   tap, with visible confirmation.
-- **See progress.** Progress accrues visibly and honestly — toward the active goal,
+- **See progress.** Progress accrues visibly and honestly — toward each active goal,
   not as a streak to protect. Rest is part of it; a missed day is not a broken state.
 - **Complete the goal.** Completion is the emotional peak. It is marked with weight and
-  warmth — earned, not manufactured — and the next queued goal steps forward.
+  warmth — earned, not manufactured — and the next goal the user chooses steps forward.
 
-> **Stress point — resolve while building:** "One goal is active" collides with the
-> monetization model, which sells "Active goals: 2" on the free tier (`FREE_GOAL_LIMIT = 2`
-> in `lib/gating.ts`). A goal is either active or queued — the words can't both be true.
-> Before building the goals list / queue UI, pick one model and make every surface agree
-> (most likely **1 active + 1 queued slot free**, with Livra+ unlocking an unlimited
-> queue), then fix the monetization table's "Active goals: 2" wording to match. Otherwise
-> this contradiction ships as confusing copy.
+> **Stress point — RESOLVED (Phase 2.3):** Free users run up to two concurrent active goals (both progressing); Livra+ unlocks unlimited goals. The queue/active split is retired. All copy and the monetization table now reflect this model. Design: `docs/superpowers/specs/2026-06-21-free-tier-coherence-design.md`.
 
 ### The vocabulary (define it, don't assume it)
 
@@ -130,7 +122,7 @@ and in the relevant empty state — then **use it consistently and warmly everyw
 
 To protect focus, Livra explicitly refuses to become:
 
-- **A multi-habit dashboard.** No "track 20 things at once" grid. One active goal is the
+- **A multi-habit dashboard.** No "track 20 things at once" grid. Depth over breadth is the
   whole point.
 - **A streak-panic engine.** No *brittle* streaks that punish a missed day, no loss-aversion
   mechanics, no "don't break the chain" pressure. Livra's **Momentum** is the sanctioned
@@ -149,7 +141,7 @@ To protect focus, Livra explicitly refuses to become:
 **Guardrails (check before launch):**
 - [ ] Logging a mark is reachable in one tap from the primary screen and gives visible
       confirmation (not haptic-only).
-- [ ] Exactly one goal is presented as "active"; the rest are clearly queued, not competing.
+- [ ] At most two active goals are presented as co-equal; no twenty-thing grid, no queue.
 - [ ] No screen presents the user with more than a handful of things to do at once.
 - [ ] "Mark," "Goal," and "Daily habit" are each defined in copy the user actually sees
       before they're expected to use them.
@@ -207,14 +199,12 @@ real progress on something they care about — not from Livra manufacturing reas
 > `docs/superpowers/specs/2026-06-17-momentum-design.md` §6 for the per-file plan. The brittle
 > streak goes; the forgiving run takes its place.
 
-> **Stress point — resolve while building:** "No manufactured reasons to return" is
-> principled but is also the product's biggest commercial risk, and the doc treats it as
-> pure virtue. A goal-completion app has a structural cliff: a user finishes in ~8 weeks,
-> the queue empties, and nothing pulls them back. Before launch, answer here what week 9
-> looks like after a completion with an empty queue — the calm, non-nagging version of
-> "what's next" — so the anti-retention principle has a deliberate answer instead of an
-> accidental churn hole. (Momentum answers the *within-goal* pull, a reason to show up day to
-> day; the post-completion, empty-queue cliff is still open and separate.)
+> **Stress point — RESOLVED (Phase 2.5):** The all-complete moment now shows a warm closure
+> state ("You finished everything you set out to do.") with a calm invite to start the next
+> goal when ready — no manufactured urgency, no nag. The goals tab empty state also
+> distinguishes first-run from finished-everything. No manufactured reason to return; the
+> deliberate answer is a dignified off-ramp. Design:
+> `docs/superpowers/specs/2026-06-21-free-tier-coherence-design.md`.
 
 **Guardrails (check before launch):**
 - [ ] Onboarding leaves the user able to define a goal, a mark, and a daily habit.
@@ -322,8 +312,8 @@ wrong, not the voice.
 
 ## Design Principles
 
-1. **One mark at a time.** Focus over breadth. The interface protects attention; one
-   active goal, the rest queued. Never present the user with twenty things to do.
+1. **One mark at a time.** Focus over breadth. The interface protects attention; a couple of
+   active goals, never a twenty-thing grid.
 2. **Forgiveness over guilt.** Missing a day is not a failure state. No streak panic,
    no loss aversion as a lever. Reassure at the low moments.
 3. **Earned celebration, not cheap dopamine.** Mark real milestones and completions
@@ -361,7 +351,7 @@ tools that overwhelm. It competes on **focus and feel**, not feature count.
 | Category | What they optimize for | Where Livra differs |
 | --- | --- | --- |
 | **Streak / gamified apps** (Duolingo-style, streak trackers) | Daily return via loss aversion and dopamine | Momentum without the panic. A forgiving run you can rest from, not a brittle streak that punishes a missed day. |
-| **Habit trackers** (multi-habit grids, checkbox apps) | Breadth — track everything | Livra is deliberately narrow: one active goal, a few marks. Depth over breadth. |
+| **Habit trackers** (multi-habit grids, checkbox apps) | Breadth — track everything | Livra is deliberately narrow: a couple of goals, a few marks each. Not a habit grid of everything. Depth over breadth. |
 | **Notion-style / productivity tools** | Configurability and data density | Livra is opinionated and quiet. No setup chore, no dashboard to maintain. |
 
 The defensibility is the **personality and the discipline of the cut** — the things Livra
@@ -399,21 +389,21 @@ feel the product's value before they're ever asked to pay.
   nature is stated plainly at the point of use ("one free AI draft"), so it's a deliberate
   choice the user makes, never a wall they discover later.
 
-> **Stress point — resolve while building:** "One free AI draft, ever" (confirmed:
-> `free_use_exhausted` in `app/onboarding.tsx`) is honest but may read as stingy at the
-> exact first-impression moment, in a market trending toward free AI assist as table
-> stakes. The honesty is right; the *generosity* is the open question. This only holds if
-> the free presets/templates path is genuinely good enough that a user who never touches AI
-> still gets a great first goal, so the preset library quality is a hard dependency of this
-> stance, not a side feature. Pressure-test the presets before assuming "one draft ever" is
-> safe.
+> **Stress point — RESOLVED (Phase 2.10):** The one-time nature of the free AI draft is
+> disclosed at the point of use ("one free AI draft") before the user spends it, and the
+> generated draft is fully editable (title, notes, marks) before saving. Regeneration is
+> not offered to free users (the server rejects it); the review screen provides editing
+> instead. The preset path remains the primary free-tier route and must remain genuinely
+> good; preset quality is a launch dependency, not a side feature.
+> Design: `docs/superpowers/specs/2026-06-21-free-tier-coherence-design.md`.
 
 **The split (locked model):**
 
 | | Free | Livra+ |
 | --- | --- | --- |
-| Active goals | 2 | Unlimited queue |
+| Active goals | 2 | Unlimited |
 | Marks per goal | 3 | Unlimited |
+| Daily habit marks (un-goaled) | Up to 3 | Unlimited |
 | Goal history & stats | ✅ Full | ✅ Full |
 | Presets / templates | ✅ All | ✅ All |
 | AI goal/mark generation | 1 free, ever | Repeat use |
@@ -440,15 +430,11 @@ feel the product's value before they're ever asked to pay.
 
 **Why these numbers are genuinely useful, not crippled.** A mark is a *recurring action*,
 not a single rep — so 3 marks on a goal is a complete routine (e.g. half-marathon: training
-run · strength · stretch), not a teaser. Two active goals matches the "one at a time, rest
-queued" philosophy: enough to have real work in flight, few enough to stay focused. A free
-user can run, and finish, a meaningful goal — Livra+ adds room, not the basics.
+run · strength · stretch), not a teaser. Two concurrent active goals is enough to have real
+work in flight and few enough to stay focused. A free user can run, and finish, a meaningful
+goal — Livra+ adds room, not the basics.
 
-> **Stress point — resolve while building:** The locked-model table is silent on a real
-> shipped gate: free users are capped at 3 un-goaled daily-habit marks (`FREE_HABIT_LIMIT =
-> 3` in `lib/gating.ts`). A source-of-truth monetization table that omits a live limit will
-> surface as a surprise paywall. Add the daily-habit cap to the table so the model the doc
-> settles matches the gates the code enforces.
+> **Stress point — RESOLVED (Phase 2.3):** The daily-habit cap (`FREE_HABIT_LIMIT = 3` in `lib/gating.ts`) is now explicit in the locked-model table above. Free: up to 3 un-goaled daily-habit marks; Livra+: unlimited. Design: `docs/superpowers/specs/2026-06-21-free-tier-coherence-design.md`.
 
 **Guardrails (check before launch):**
 - [ ] No part of the add → log → progress → complete loop is blocked for free users.
@@ -505,7 +491,7 @@ real app against each line.
 **Core loop & focus**
 - [ ] Log a mark in one tap from the primary screen, with visible confirmation (not
       haptic-only).
-- [ ] Exactly one active goal; the rest clearly queued, not competing.
+- [ ] At most two active goals, presented as co-equal; no queue, no twenty-thing grid.
 - [ ] No screen shows more than a handful of things to do at once.
 - [ ] No brittle streaks, heatmaps, pace banners, or weekly feed anywhere. (Momentum is the
       one sanctioned exception: forgiving, frequency-earned, resets only after a real slide.)
@@ -513,7 +499,7 @@ real app against each line.
 **Voice & teaching**
 - [ ] "Goal," "Mark," "Momentum," and "Daily habit" are each defined in copy the user sees
       before they're expected to use them (Momentum at its first appearance).
-- [ ] Onboarding leaves the user able to define all three terms and explain "one at a time."
+- [ ] Onboarding leaves the user able to define all three terms (Goal, Mark, Momentum) under the two-goal model.
 - [ ] Teaching/reflection moments appear only at fixed events (first goal, first miss, first
       completion, milestones) — never on a timer.
 - [ ] No copy uses guilt, fake urgency, or streak-loss language.

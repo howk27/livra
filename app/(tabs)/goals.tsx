@@ -25,7 +25,6 @@ import Animated, {
 import { fonts, spacing, radius, themedColors, fontSize } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { LivraWordmark } from '../../components/ui/LivraWordmark';
-import { QueueCard } from '../../components/ui/QueueCard';
 import { SvgLogo } from '../../components/ui/SvgLogo';
 import { SectionLabel } from '../../components/ui/SectionLabel';
 import { HistoryRow } from '../../components/goals/HistoryRow';
@@ -122,7 +121,6 @@ function ActiveGoalCard({ goal, progress, threshold, canComplete, onPress }: Act
 
 interface DraggableRowProps {
   goal: Goal;
-  sequenceNumber: number;
   index: number;
   count: number;
   slotHeight: SharedValue<number>;
@@ -135,7 +133,6 @@ interface DraggableRowProps {
 
 function DraggableRow({
   goal,
-  sequenceNumber,
   index,
   count,
   slotHeight,
@@ -147,6 +144,8 @@ function DraggableRow({
 }: DraggableRowProps) {
   const theme = useEffectiveTheme();
   const c = themedColors(theme);
+  const getGoalProgress = useGoalsStore((s) => s.getGoalProgress);
+  const progress = getGoalProgress(goal.id);
   const translateY = useSharedValue(0);
   const isActive = useSharedValue(false);
   const startSlot = useSharedValue(index);
@@ -240,9 +239,13 @@ function DraggableRow({
       style={[styles.draggableRow, animatedStyle]}
       onLayout={index === 0 ? handleLayout : undefined}
     >
-      <TouchableOpacity onPress={onPress} activeOpacity={0.8}>
-        <QueueCard title={goal.title} sequenceNumber={sequenceNumber} />
-      </TouchableOpacity>
+      <ActiveGoalCard
+        goal={goal}
+        progress={progress.progress}
+        threshold={progress.threshold}
+        canComplete={progress.canComplete}
+        onPress={onPress}
+      />
       {count > 1 && (
         <GestureDetector gesture={pan}>
           <Animated.View style={styles.dragHandle} hitSlop={spacing.sm}>
@@ -256,14 +259,13 @@ function DraggableRow({
 
 // ── Draggable list ────────────────────────────────────────────────────────────
 
-interface DraggableQueueListProps {
+interface DraggableGoalListProps {
   goals: Goal[];
-  sequenceOffset: number;
   onPressGoal: (goalId: string) => void;
 }
 
-function DraggableQueueList({ goals, sequenceOffset, onPressGoal }: DraggableQueueListProps) {
-  const reorderQueue = useGoalsStore((s) => s.reorderQueue);
+function DraggableGoalList({ goals, onPressGoal }: DraggableGoalListProps) {
+  const reorderGoals = useGoalsStore((s) => s.reorderGoals);
 
   const slotHeight = useSharedValue(0);
   const activeId = useSharedValue<string | null>(null);
@@ -288,8 +290,8 @@ function DraggableQueueList({ goals, sequenceOffset, onPressGoal }: DraggableQue
     const ordered = [...goals].sort(
       (a, b) => (positions.value[a.id] ?? 0) - (positions.value[b.id] ?? 0),
     );
-    void reorderQueue(ordered.map((g) => g.id));
-  }, [goals, positions, reorderQueue]);
+    void reorderGoals(ordered.map((g) => g.id));
+  }, [goals, positions, reorderGoals]);
 
   return (
     <View style={styles.listWrapper}>
@@ -299,7 +301,6 @@ function DraggableQueueList({ goals, sequenceOffset, onPressGoal }: DraggableQue
           goal={goal}
           index={index}
           count={goals.length}
-          sequenceNumber={sequenceOffset + index + 1}
           slotHeight={slotHeight}
           positions={positions}
           activeId={activeId}
@@ -323,21 +324,13 @@ export default function GoalsScreen() {
   const goals = useGoalsStore((s) => s.goals);
   const isLoading = useGoalsStore((s) => s.isLoading);
   const error = useGoalsStore((s) => s.error);
-  const getGoalProgress = useGoalsStore((s) => s.getGoalProgress);
-  const getActiveGoal = useGoalsStore((s) => s.getActiveGoal);
-  const getQueuedGoals = useGoalsStore((s) => s.getQueuedGoals);
+  const getActiveGoals = useGoalsStore((s) => s.getActiveGoals);
   const getCompletedGoals = useGoalsStore((s) => s.getCompletedGoals);
 
-  const active = useMemo(() => getActiveGoal(), [getActiveGoal, goals]);
-  const queued = useMemo(() => getQueuedGoals(), [getQueuedGoals, goals]);
+  const active = useMemo(() => getActiveGoals(), [getActiveGoals, goals]);
   const completedCount = useMemo(() => getCompletedGoals().length, [getCompletedGoals, goals]);
 
-  const activeProgress = useMemo(
-    () => (active ? getGoalProgress(active.id) : null),
-    [active, getGoalProgress],
-  );
-
-  const isEmpty = !isLoading && !active && queued.length === 0;
+  const isEmpty = !isLoading && active.length === 0;
 
   const handleAddGoal = useCallback(() => {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -399,9 +392,13 @@ export default function GoalsScreen() {
             <View style={{ opacity: 0.35 }}>
               <SvgLogo color={c.inkMuted} width={32} height={16} />
             </View>
-            <Text style={[styles.emptyTitle, { color: c.inkDark }]}>No goals yet.</Text>
+            <Text style={[styles.emptyTitle, { color: c.inkDark }]}>
+              {completedCount > 0 ? 'You finished everything.' : 'No goals yet.'}
+            </Text>
             <Text style={[styles.emptySubtitle, { color: c.inkMuted }]}>
-              Add your first goal to begin.
+              {completedCount > 0
+                ? 'Start your next goal when you are ready.'
+                : 'Add your first goal to begin.'}
             </Text>
             <TouchableOpacity
               style={[styles.emptyAddBtn, { backgroundColor: c.forest }]}
@@ -413,27 +410,12 @@ export default function GoalsScreen() {
           </View>
         )}
 
-        {/* Active goal */}
-        {active && activeProgress && (
+        {/* Active goals — draggable list */}
+        {active.length > 0 && (
           <>
             <SectionLabel style={styles.sectionLabel}>ACTIVE</SectionLabel>
-            <ActiveGoalCard
-              goal={active}
-              progress={activeProgress.progress}
-              threshold={activeProgress.threshold}
-              canComplete={activeProgress.canComplete}
-              onPress={() => handleOpenGoal(active.id)}
-            />
-          </>
-        )}
-
-        {/* Up next (queued, draggable) */}
-        {queued.length > 0 && (
-          <>
-            <SectionLabel style={styles.sectionLabel}>UP NEXT</SectionLabel>
-            <DraggableQueueList
-              goals={queued}
-              sequenceOffset={active ? 1 : 0}
+            <DraggableGoalList
+              goals={active}
               onPressGoal={handleOpenGoal}
             />
           </>

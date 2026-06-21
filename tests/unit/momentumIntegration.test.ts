@@ -36,20 +36,20 @@ describe('creditMarkToGoals starts a Momentum run on log (trigger 1)', () => {
 });
 
 describe('evaluateActiveGoalsMomentum (trigger 2)', () => {
-  test('evaluates active goals, leaves queued goals untouched', async () => {
-    const active = await useGoalsStore.getState().createGoal({ title: 'Active', userId: USER, isPro: false });
-    const queued = await useGoalsStore.getState().createGoal({ title: 'Queued', userId: USER, isPro: false });
-    // createGoal makes the 1st active and the 2nd queued (free cap).
-    useMarksStore.setState({ marks: [seedMark('ma', TODAY), seedMark('mq', TODAY)] } as any);
-    await useGoalsStore.getState().linkMarkToGoal(active.id, 'ma');
-    await useGoalsStore.getState().linkMarkToGoal(queued.id, 'mq');
+  test('evaluates all active goals', async () => {
+    const first = await useGoalsStore.getState().createGoal({ title: 'First', userId: USER, isPro: false });
+    const second = await useGoalsStore.getState().createGoal({ title: 'Second', userId: USER, isPro: false });
+    // Both goals are active under the new active-only model.
+    useMarksStore.setState({ marks: [seedMark('ma', TODAY), seedMark('mb', TODAY)] } as any);
+    await useGoalsStore.getState().linkMarkToGoal(first.id, 'ma');
+    await useGoalsStore.getState().linkMarkToGoal(second.id, 'mb');
 
     const snaps = await useGoalsStore.getState().evaluateActiveGoalsMomentum();
 
-    expect(snaps.get(active.id)?.state).toBe('on_track');
-    expect(snaps.has(queued.id)).toBe(false);
-    expect(await loadMomentumRecord(active.id)).toEqual({ goalId: active.id, startDate: TODAY });
-    expect(await loadMomentumRecord(queued.id)).toBeNull();
+    expect(snaps.get(first.id)?.state).toBe('on_track');
+    expect(snaps.get(second.id)?.state).toBe('on_track');
+    expect(await loadMomentumRecord(first.id)).toEqual({ goalId: first.id, startDate: TODAY });
+    expect(await loadMomentumRecord(second.id)).toEqual({ goalId: second.id, startDate: TODAY });
   });
 });
 
@@ -105,16 +105,16 @@ describe('eval triggers write through to the momentum store', () => {
     expect(useMomentumStore.getState().snapshots[goal.id]?.days).toBe(1);
   });
 
-  test('evaluateActiveGoalsMomentum caches snapshots for active goals only', async () => {
-    const active = await useGoalsStore.getState().createGoal({ title: 'A', userId: USER, isPro: false });
-    const queued = await useGoalsStore.getState().createGoal({ title: 'Q', userId: USER, isPro: false });
-    useMarksStore.setState({ marks: [seedMark('ma', TODAY), seedMark('mq', TODAY)] } as any);
-    await useGoalsStore.getState().linkMarkToGoal(active.id, 'ma');
-    await useGoalsStore.getState().linkMarkToGoal(queued.id, 'mq');
+  test('evaluateActiveGoalsMomentum caches snapshots for all active goals', async () => {
+    const first = await useGoalsStore.getState().createGoal({ title: 'A', userId: USER, isPro: false });
+    const second = await useGoalsStore.getState().createGoal({ title: 'B', userId: USER, isPro: false });
+    useMarksStore.setState({ marks: [seedMark('ma', TODAY), seedMark('mb', TODAY)] } as any);
+    await useGoalsStore.getState().linkMarkToGoal(first.id, 'ma');
+    await useGoalsStore.getState().linkMarkToGoal(second.id, 'mb');
 
     await useGoalsStore.getState().evaluateActiveGoalsMomentum();
 
-    expect(useMomentumStore.getState().snapshots[active.id]).toBeDefined();
-    expect(useMomentumStore.getState().snapshots[queued.id]).toBeUndefined();
+    expect(useMomentumStore.getState().snapshots[first.id]).toBeDefined();
+    expect(useMomentumStore.getState().snapshots[second.id]).toBeDefined();
   });
 });

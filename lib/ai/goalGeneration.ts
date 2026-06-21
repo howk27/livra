@@ -243,13 +243,16 @@ const KNOWN_FAIL_REASONS: ReadonlySet<string> = new Set([
  * Generates an AIGoalPackage by invoking the `ai-goal-generation` Edge Function.
  *
  * The function authenticates the caller (JWT), checks the per-user cache,
- * enforces the free-use gate server-side, calls Anthropic with a server-held
+ * enforces the free-use gate server-side, calls the model with a server-held
  * key, validates the contract, and increments ai_uses_count via service-role.
  *
  * The client never sees the API key and cannot bypass the free-use gate.
+ * Every generation (including regenerations) counts as a use for non-Pro users.
  * The typed goal text is preserved on every failure path (caller keeps it).
  */
-export async function generateGoalPackage(goalText: string): Promise<GenerationResult> {
+export async function generateGoalPackage(
+  goalText: string,
+): Promise<GenerationResult> {
   const trimmed = goalText.trim();
   if (trimmed.length < MIN_GOAL_LENGTH) {
     return { ok: false, reason: 'goal_too_short' };

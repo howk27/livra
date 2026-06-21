@@ -3,9 +3,7 @@ import {
   isDeadlineExpired,
   progressPercent,
   getActiveGoal,
-  getQueuedGoals,
   getExpiredGoals,
-  nextGoalToActivate,
 } from '../../lib/goalLogic';
 import type { Goal } from '../../types/goal';
 
@@ -73,9 +71,9 @@ describe('isDeadlineExpired', () => {
     expect(isDeadlineExpired(makeGoal({ deadline_date: past, status: 'completed' }))).toBe(false);
   });
 
-  test('false when deadline has passed but status is queued', () => {
+  test('false when deadline has passed but status is paused', () => {
     const past = new Date(Date.now() - 86_400_000).toISOString();
-    expect(isDeadlineExpired(makeGoal({ deadline_date: past, status: 'queued' }))).toBe(false);
+    expect(isDeadlineExpired(makeGoal({ deadline_date: past, status: 'paused' }))).toBe(false);
   });
 
   test('falls back to target_date when deadline_date absent', () => {
@@ -108,33 +106,20 @@ describe('progressPercent', () => {
   });
 });
 
-// ── getActiveGoal / getQueuedGoals / getExpiredGoals ─────────────────────────
+// ── getActiveGoal / getExpiredGoals ───────────────────────────────────────────
 
 describe('getActiveGoal', () => {
-  test('returns the active goal', () => {
+  test('returns the first active goal by sort_index', () => {
     const goals = [
-      makeGoal({ id: 'g1', status: 'queued', sort_index: 0 }),
+      makeGoal({ id: 'g1', status: 'active', sort_index: 1 }),
       makeGoal({ id: 'g2', status: 'active', sort_index: 0 }),
     ];
     expect(getActiveGoal(goals)?.id).toBe('g2');
   });
 
   test('returns undefined when no active goal', () => {
-    const goals = [makeGoal({ id: 'g1', status: 'queued', sort_index: 0 })];
+    const goals = [makeGoal({ id: 'g1', status: 'completed', sort_index: 0 })];
     expect(getActiveGoal(goals)).toBeUndefined();
-  });
-});
-
-describe('getQueuedGoals', () => {
-  test('returns queued goals sorted by sort_index', () => {
-    const goals = [
-      makeGoal({ id: 'g3', status: 'queued', sort_index: 2 }),
-      makeGoal({ id: 'g1', status: 'queued', sort_index: 0 }),
-      makeGoal({ id: 'g2', status: 'queued', sort_index: 1 }),
-      makeGoal({ id: 'g4', status: 'active', sort_index: 0 }),
-    ];
-    const result = getQueuedGoals(goals);
-    expect(result.map(g => g.id)).toEqual(['g1', 'g2', 'g3']);
   });
 });
 
@@ -150,30 +135,77 @@ describe('getExpiredGoals', () => {
   });
 });
 
-describe('nextGoalToActivate', () => {
-  test('returns the queued goal with lowest sort_index', () => {
-    const goals = [
-      makeGoal({ id: 'g2', status: 'queued', sort_index: 1 }),
-      makeGoal({ id: 'g1', status: 'queued', sort_index: 0 }),
-    ];
-    expect(nextGoalToActivate(goals)?.id).toBe('g1');
-  });
-
-  test('returns undefined when no queued goals', () => {
-    expect(nextGoalToActivate([])).toBeUndefined();
-  });
-});
-
 // ── GoalStatus: expired and paused are valid ──────────────────────────────────
 
 describe('GoalStatus types', () => {
-  test('expired goals are excluded from active/queued queries', () => {
+  test('expired and paused goals are excluded from active queries', () => {
     const goals = [
       makeGoal({ id: 'g1', status: 'active' }),
       makeGoal({ id: 'g2', status: 'expired' }),
       makeGoal({ id: 'g3', status: 'paused' }),
     ];
     expect(getActiveGoal(goals)?.id).toBe('g1');
-    expect(getQueuedGoals(goals)).toHaveLength(0);
   });
+});
+
+// ── useGoalsStore: active-only model ─────────────────────────────────────────
+
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useGoalsStore } from '../../state/goalsSlice';
+
+const STORE_USER = 'u-store';
+
+async function resetStore() {
+  await AsyncStorage.clear();
+  useGoalsStore.setState({ goals: [], isLoading: false, error: null } as any);
+}
+
+// Mock loadGoalsForUser for fetchGoals normalization test
+jest.mock('../../lib/db/goalsDb', () => {
+  const original = jest.requireActual('../../lib/db/goalsDb');
+  return {
+    ...original,
+    loadGoalsForUser: jest.fn().mockResolvedValue([
+      {
+        id: 'legacy-1', user_id: 'u-store', title: 'Legacy', sort_index: 0,
+        status: 'queued', current_mark_count: 0,
+        created_at: '2026-01-01', updated_at: '2026-01-01',
+      },
+    ]),
+  };
+});
+
+beforeEach(resetStore);
+
+test('createGoal makes every new goal active (no queue)', async () => {
+  const s = useGoalsStore.getState();
+  await s.createGoal({ userId: STORE_USER, isPro: false, title: 'One' });
+  await s.createGoal({ userId: STORE_USER, isPro: false, title: 'Two' });
+  const statuses = useGoalsStore.getState().goals.map(g => g.status);
+  expect(statuses).toEqual(['active', 'active']);
+});
+
+test('free tier blocks a third active goal', async () => {
+  const s = useGoalsStore.getState();
+  await s.createGoal({ userId: STORE_USER, isPro: false, title: 'One' });
+  await s.createGoal({ userId: STORE_USER, isPro: false, title: 'Two' });
+  await expect(
+    s.createGoal({ userId: STORE_USER, isPro: false, title: 'Three' })
+  ).rejects.toThrow(/2 goals/);
+});
+
+test('fetchGoals normalizes legacy queued goals to active', async () => {
+  // loadGoalsForUser mocked to return a goal with status 'queued'
+  await useGoalsStore.getState().fetchGoals(STORE_USER);
+  expect(useGoalsStore.getState().goals.every(g => g.status !== 'queued')).toBe(true);
+});
+
+test('completing one goal leaves other active goals active (no auto-activation)', async () => {
+  const s = useGoalsStore.getState();
+  const a = await s.createGoal({ userId: STORE_USER, isPro: false, title: 'A' });
+  await s.createGoal({ userId: STORE_USER, isPro: false, title: 'B' });
+  await s.completeGoal(a.id);
+  const after = useGoalsStore.getState().goals;
+  expect(after.find(g => g.id === a.id)?.status).toBe('completed');
+  expect(after.filter(g => g.status === 'active')).toHaveLength(1);
 });

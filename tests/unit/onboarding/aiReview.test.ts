@@ -6,7 +6,11 @@
  *   2. Abandoning (dismiss) does not spend free use — no RPC called.
  *   3. Confirm fills aiPackageDraft and selectedMarkTargets from the AI frequencies.
  *   4. resolveMarkForAIIcon provides correct emoji/color for all valid icons.
- *   5. Regeneration cap at 2 via aiRegenerationsUsed.
+ *
+ * Note: regeneration is not offered in the onboarding UI (the server rejects
+ * free regen with free_use_exhausted after the first generation). The regen
+ * slice fields remain in onboardingSlice for tracking but the "Try a different
+ * suggestion" button has been removed from the review screen.
  */
 
 import { resolveMarkForAIIcon, VALID_ICONS, type AIGoalPackage } from '../../../lib/ai/goalGeneration';
@@ -85,27 +89,14 @@ describe('abandon AI review — no usage spent', () => {
     useOnboardingStore.getState().reset();
   });
 
-  test('clearing draft (dismiss) does not increment aiRegenerationsUsed', () => {
+  test('clearing draft (dismiss / Set it up myself) leaves aiRegenerationsUsed unchanged', () => {
     const store = useOnboardingStore.getState();
     store.setAiPackageDraft(SAMPLE_PACKAGE);
     // Dismiss: clear draft without confirming
     store.setAiPackageDraft(null);
 
-    // aiRegenerationsUsed was NOT incremented by dismiss
+    // The dismiss path never touches the regen counter
     expect(useOnboardingStore.getState().aiRegenerationsUsed).toBe(0);
-  });
-
-  test('only incrementAiRegenerations increments the session regen counter', () => {
-    const store = useOnboardingStore.getState();
-    store.setAiPackageDraft(SAMPLE_PACKAGE);
-
-    // Explicit regen
-    store.incrementAiRegenerations();
-    expect(useOnboardingStore.getState().aiRegenerationsUsed).toBe(1);
-
-    // Dismiss doesn't touch the counter
-    store.setAiPackageDraft(null);
-    expect(useOnboardingStore.getState().aiRegenerationsUsed).toBe(1);
   });
 });
 
@@ -186,32 +177,9 @@ describe('resolveMarkForAIIcon — review display', () => {
   });
 });
 
-// ─── Regeneration cap ─────────────────────────────────────────────────────────
-
-describe('regeneration cap', () => {
-  beforeEach(() => {
-    useOnboardingStore.getState().reset();
-  });
-
-  test('canRegen is true when aiRegenerationsUsed < 2', () => {
-    const store = useOnboardingStore.getState();
-    store.incrementAiRegenerations(); // 1
-    expect(useOnboardingStore.getState().aiRegenerationsUsed < 2).toBe(true);
-  });
-
-  test('canRegen is false when aiRegenerationsUsed >= 2', () => {
-    const store = useOnboardingStore.getState();
-    store.incrementAiRegenerations(); // 1
-    store.incrementAiRegenerations(); // 2
-    expect(useOnboardingStore.getState().aiRegenerationsUsed >= 2).toBe(true);
-  });
-
-  test('third regen would exceed cap — UI must block', () => {
-    const store = useOnboardingStore.getState();
-    store.incrementAiRegenerations();
-    store.incrementAiRegenerations();
-    // At this point aiRegenerationsUsed === 2, UI shows "Edit these or set it up yourself"
-    const atCap = useOnboardingStore.getState().aiRegenerationsUsed >= 2;
-    expect(atCap).toBe(true);
-  });
-});
+// Regeneration cap tests removed: the "Try a different suggestion" button has
+// been removed from the onboarding AI review screen. The server-side
+// free_use_exhausted gate means free users cannot regenerate. The slice
+// fields aiRegenerationsUsed / incrementAiRegenerations remain in
+// onboardingSlice.ts but are no longer surfaced in UI. Slice-level tests
+// for those fields live in onboardingSlice.test.ts.

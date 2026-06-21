@@ -50,15 +50,15 @@ describe('completeGoal banks Momentum days', () => {
     expect(useMomentumStore.getState().snapshots[goal.id]).toBeUndefined();
   });
 
-  test('newly-activated queued goal starts with no banked days', async () => {
-    const active = await useGoalsStore.getState().createGoal({ title: 'First', userId: USER, isPro: false });
-    const queued = await useGoalsStore.getState().createGoal({ title: 'Second', userId: USER, isPro: false });
-    useMomentumStore.getState().setSnapshot(active.id, snap(8));
+  test('sibling active goal is untouched (no banked days) when another completes', async () => {
+    const first = await useGoalsStore.getState().createGoal({ title: 'First', userId: USER, isPro: false });
+    const second = await useGoalsStore.getState().createGoal({ title: 'Second', userId: USER, isPro: false });
+    useMomentumStore.getState().setSnapshot(first.id, snap(8));
 
-    await useGoalsStore.getState().completeGoal(active.id);
+    await useGoalsStore.getState().completeGoal(first.id);
 
-    const promoted = useGoalsStore.getState().goals.find((g) => g.id === queued.id);
-    expect(promoted?.status).toBe('active');
-    expect(promoted?.banked_momentum_days ?? undefined).toBeUndefined();
+    const sibling = useGoalsStore.getState().goals.find((g) => g.id === second.id);
+    expect(sibling?.status).toBe('active');
+    expect(sibling?.banked_momentum_days ?? undefined).toBeUndefined();
   });
 });

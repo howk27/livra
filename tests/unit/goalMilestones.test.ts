@@ -78,8 +78,8 @@ describe('getMilestonesToFire — dateless goals', () => {
 });
 
 describe('getMilestonesToFire — status guard', () => {
-  it('returns [] for queued goals', () => {
-    const goal: Goal = { ...BASE_GOAL, status: 'queued' };
+  it('returns [] for paused goals', () => {
+    const goal: Goal = { ...BASE_GOAL, status: 'paused' };
     expect(getMilestonesToFire(goal, daysAfterCreated(90))).toEqual([]);
   });
 
