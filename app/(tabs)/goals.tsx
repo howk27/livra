@@ -28,6 +28,7 @@ import { LivraWordmark } from '../../components/ui/LivraWordmark';
 import { QueueCard } from '../../components/ui/QueueCard';
 import { SvgLogo } from '../../components/ui/SvgLogo';
 import { SectionLabel } from '../../components/ui/SectionLabel';
+import { HistoryRow } from '../../components/goals/HistoryRow';
 import { useGoalsStore } from '../../state/goalsSlice';
 import type { Goal } from '../../types/goal';
 
@@ -438,22 +439,8 @@ export default function GoalsScreen() {
           </>
         )}
 
-        {/* Completed */}
-        {completedCount > 0 && (
-          <>
-            <SectionLabel style={styles.sectionLabel}>COMPLETED</SectionLabel>
-            <TouchableOpacity
-              style={[styles.completedRow, { backgroundColor: c.surface }]}
-              onPress={handleViewCompleted}
-              activeOpacity={0.8}
-            >
-              <Text style={[styles.completedLabel, { color: c.inkMid }]}>
-                {completedCount} goal{completedCount !== 1 ? 's' : ''} completed
-              </Text>
-              <CaretRight size={16} color={c.inkMuted} weight="regular" />
-            </TouchableOpacity>
-          </>
-        )}
+        {/* History — always reachable; free per PRODUCT.md:436 */}
+        <HistoryRow completedCount={completedCount} onPress={handleViewCompleted} />
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
@@ -586,21 +573,6 @@ const styles = StyleSheet.create({
     width: 44,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-
-  // Completed row
-  completedRow: {
-    marginHorizontal: spacing.lg,
-    borderRadius: radius.lg,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  completedLabel: {
-    fontFamily: fonts.sans,
-    fontSize: fontSize.base,
   },
 
   // Error banner
