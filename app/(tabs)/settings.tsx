@@ -37,7 +37,7 @@ import { LivraHeader } from '../../components/ui/LivraHeader';
 import { SectionLabel } from '../../components/ui/SectionLabel';
 import { LevelProgressBar } from '../../components/LevelProgressBar';
 import { fonts, spacing, radius, shadow, themedColors, fontSize } from '../../theme/tokens';
-import { useEffectiveTheme } from '../../state/uiSlice';
+import { useEffectiveTheme, useUIStore } from '../../state/uiSlice';
 import { ProfileEditSheet } from '../../components/sheets/ProfileEditSheet';
 
 import { useAuth } from '../../hooks/useAuth';
@@ -147,6 +147,7 @@ const rowStyles = StyleSheet.create({
 export default function SettingsScreen() {
   const theme = useEffectiveTheme();
   const c = themedColors(theme);
+  const setThemeMode = useUIStore((s) => s.setThemeMode);
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -563,7 +564,31 @@ export default function SettingsScreen() {
           <SettingsRow
             icon={Sun}
             label="Appearance"
-            onPress={() => router.push('/settings/appearance' as any)}
+            hideChevron
+            rightElement={
+              <View style={[styles.themeToggle, { backgroundColor: c.surfaceAlt }]}>
+                {(['light', 'dark'] as const).map((t) => {
+                  const active = theme === t;
+                  return (
+                    <TouchableOpacity
+                      key={t}
+                      style={[styles.themeTogglePill, active && { backgroundColor: c.forest }]}
+                      onPress={() => { void setThemeMode(t); }}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        style={[
+                          styles.themeToggleText,
+                          { color: active ? c.inkInverse : c.inkMid },
+                        ]}
+                      >
+                        {t === 'light' ? 'Light' : 'Dark'}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            }
           />
           <SettingsRow
             icon={Calendar}
@@ -753,6 +778,22 @@ const styles = StyleSheet.create({
   // Inline row right-side hints
   inlineHint: {
     fontFamily: fonts.sans,
+    fontSize: fontSize[13],
+  },
+
+  // Inline light/dark theme toggle
+  themeToggle: {
+    flexDirection: 'row',
+    borderRadius: radius.full,
+    padding: 2,
+  },
+  themeTogglePill: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.full,
+  },
+  themeToggleText: {
+    fontFamily: fonts.sansMedium,
     fontSize: fontSize[13],
   },
 

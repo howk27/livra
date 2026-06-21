@@ -619,7 +619,6 @@ function RootNavigator() {
         <Stack.Screen name="goal/history" options={{ headerShown: false }} />
         <Stack.Screen name="settings/notifications" options={{ headerShown: false }} />
         <Stack.Screen name="settings/privacy" options={{ headerShown: false }} />
-        <Stack.Screen name="settings/appearance" options={{ headerShown: false }} />
         <Stack.Screen name="settings/profile" options={{ headerShown: false }} />
         <Stack.Screen name="settings/about" options={{ headerShown: false }} />
         <Stack.Screen name="signin" options={{ headerShown: false }} />
