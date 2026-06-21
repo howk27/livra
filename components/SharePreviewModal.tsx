@@ -8,8 +8,7 @@ import {
   StyleSheet,
   Dimensions,
 } from 'react-native';
-import { themedColors } from '../theme/tokens';
-import { spacing, fontSize, fontWeight, borderRadius } from '../theme/tokens';
+import { themedColors, spacing, fontSize, fontWeight, borderRadius } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
 import {
   SHARE_CARD_THEME_IDS,
