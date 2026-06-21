@@ -73,7 +73,6 @@ export function GoalCompletionOverlay() {
 
   const bankedLine = completedGoal ? formatBankedMomentum(completedGoal.banked_momentum_days) : null;
 
-
   const dismiss = useCallback(() => {
     translateY.value = withSpring(SCREEN_HEIGHT, { damping: 20, stiffness: 200 }, () => {
       runOnJS(hideCompletion)();
