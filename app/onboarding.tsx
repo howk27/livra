@@ -131,12 +131,12 @@ export default function OnboardingScreen() {
 
   // ── AI hatch: generate → review ─────────────────────────────────────────
 
-  const handleAIGenerate = useCallback(async (isRegen = false) => {
+  const handleAIGenerate = useCallback(async () => {
     const goalText = store.goalTitle.trim();
     setAiLoading(true);
     setAiError(null);
 
-    const result = await generateGoalPackage(goalText, { isRegen });
+    const result = await generateGoalPackage(goalText);
     setAiLoading(false);
 
     if (result.ok) {
@@ -165,7 +165,7 @@ export default function OnboardingScreen() {
     if (store.aiRegenerationsUsed >= 2) return;
     store.incrementAiRegenerations();
     setAiReviewActive(false);
-    await handleAIGenerate(true);
+    await handleAIGenerate();
   }, [store, handleAIGenerate]);
 
   const handleAIReviewConfirm = useCallback(() => {
@@ -509,7 +509,7 @@ export default function OnboardingScreen() {
             styles.aiHatch,
             (aiLoading || store.goalTitle.trim().length < MIN_GOAL_LENGTH) && { opacity: 0.4 },
           ]}
-          onPress={() => handleAIGenerate(false)}
+          onPress={() => handleAIGenerate()}
           disabled={aiLoading || store.goalTitle.trim().length < MIN_GOAL_LENGTH}
           activeOpacity={0.75}
         >

@@ -243,19 +243,15 @@ const KNOWN_FAIL_REASONS: ReadonlySet<string> = new Set([
  * Generates an AIGoalPackage by invoking the `ai-goal-generation` Edge Function.
  *
  * The function authenticates the caller (JWT), checks the per-user cache,
- * enforces the free-use gate server-side, calls Anthropic with a server-held
+ * enforces the free-use gate server-side, calls the model with a server-held
  * key, validates the contract, and increments ai_uses_count via service-role.
  *
- * Pass `isRegen: true` for regeneration calls. The Edge Function treats the
- * initial call + up to 2 regens as one free draft: regens bypass the gate and
- * do not increment ai_uses_count (the initial call already consumed the use).
- *
  * The client never sees the API key and cannot bypass the free-use gate.
+ * Every generation (including regenerations) counts as a use for non-Pro users.
  * The typed goal text is preserved on every failure path (caller keeps it).
  */
 export async function generateGoalPackage(
   goalText: string,
-  options: { isRegen?: boolean } = {},
 ): Promise<GenerationResult> {
   const trimmed = goalText.trim();
   if (trimmed.length < MIN_GOAL_LENGTH) {
@@ -265,7 +261,7 @@ export async function generateGoalPackage(
   try {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase.functions.invoke('ai-goal-generation', {
-      body: { goalText: trimmed, isRegen: options.isRegen ?? false },
+      body: { goalText: trimmed },
     });
 
     if (error) {
