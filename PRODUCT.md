@@ -80,10 +80,10 @@ clearer, calmer, or more rewarding, it doesn't belong.
 ```
 add a goal  →  log marks toward it  →  see progress accrue  →  complete the goal
      ↑                                                                  │
-     └──────────────────── queue the next one ──────────────────────────┘
+     └──────────────────── start the next one ──────────────────────────┘
 ```
 
-- **Add a goal.** The user names something that matters. Free users run up to two goals at once, each accruing its own progress. Livra+ unlocks unlimited goals. Adding is light — presets, templates, or a single AI-assisted generation get them moving without a setup chore.
+- **Add a goal.** The user names something that matters. Free users run up to two goals at once, each accruing its own progress; Livra+ unlocks unlimited goals. Adding is light: presets, templates, or a single AI-assisted generation get them moving without a setup chore.
 - **Log marks.** A mark is the smallest repeatable unit of progress (the daily/weekly
   action). Logging is the core gesture of the app and must be near-frictionless: one
   tap, with visible confirmation.
