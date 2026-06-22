@@ -414,21 +414,14 @@ Expected: FAIL — `chipTextDisabled` currently sets `opacity: 0.6` and no color
 
 - [ ] **Step 4: Replace the opacity cue with a color cue**
 
-In `components/ui/MarkFrequencyPicker.tsx`, update `chipTextDisabled` and apply a themed muted color. Change the static style:
+In `components/ui/MarkFrequencyPicker.tsx`, remove the opacity-based `chipTextDisabled` style entirely (delete the `chipTextDisabled: { opacity: 0.6 }` block and its `disabled && styles.chipTextDisabled` usage). The disabled cue becomes a muted *color* plus a dashed border, not opacity.
 
-```typescript
-  chipTextDisabled: {
-    textDecorationLine: 'line-through',
-  },
-```
-
-And where the disabled chip text color is composed (the `chipText` render around line 113), give disabled text a muted token color. Locate the chip `Text` and set its color dynamically when disabled, e.g.:
+Where the disabled chip text color is composed (the `chipText` render around line 113), give disabled text a muted token color. Locate the chip `Text` and set its color dynamically when disabled, e.g.:
 
 ```tsx
               style={[
                 styles.chipText,
                 { color: disabled ? c.inkMuted : c.inkDark },
-                disabled && styles.chipTextDisabled,
               ]}
 ```
 
