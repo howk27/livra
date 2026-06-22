@@ -48,6 +48,7 @@ interface MarkRowProps {
   category?: string;
   icon?: PhosphorIcon;
   loggedToday?: boolean;
+  done?: boolean;
   onPress?: () => void;
   onLog?: () => void;
   isLast?: boolean;
@@ -63,6 +64,7 @@ export function MarkRow({
   category,
   icon: iconOverride,
   loggedToday,
+  done,
   onPress,
   onLog,
   isLast,
@@ -86,10 +88,12 @@ export function MarkRow({
 
   return (
     <TouchableOpacity
+      testID="mark-row"
       style={[styles.row, !isLast && [styles.border, { borderBottomColor: c.borderLight }]]}
       onPress={onPress}
       onLongPress={onLongPress}
       activeOpacity={onPress ? 0.7 : 1}
+      accessibilityState={done ? { checked: true } : undefined}
     >
       {/* Left accent bar */}
       <View style={[styles.accentBar, { backgroundColor: accent }]} />
@@ -106,7 +110,7 @@ export function MarkRow({
 
       {/* Center */}
       <View style={styles.center}>
-        <Text style={[styles.title, { color: c.inkDark }]}>{title}</Text>
+        <Text style={[styles.title, { color: c.inkDark }, done && styles.titleDone]}>{title}</Text>
         {subtitle ? <Text style={[styles.subtitle, { color: c.inkMuted }]}>{subtitle}</Text> : null}
         {showWeeklyCount && weeklyTarget > 0 && (
           <View style={styles.progressTrackWrap}>
@@ -169,6 +173,9 @@ const styles = StyleSheet.create({
   title: {
     fontFamily: fonts.sansMedium,
     fontSize: fontSize.md,
+  },
+  titleDone: {
+    textDecorationLine: 'line-through',
   },
   subtitle: {
     fontFamily: fonts.sans,
