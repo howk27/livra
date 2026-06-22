@@ -26,7 +26,7 @@ describe('notification coherence guards', () => {
   });
 
   it('no banned daily-nag copy strings remain in source', () => {
-    const banned = [/ends at midnight/i, /One more today/i, /Close it out before midnight/i, /starting over tomorrow/i, /You said you'd do this today/i, /See you tomorrow/i];
+    const banned = [/ends at midnight/i, /One more today/i, /Close it out before midnight/i, /starting over tomorrow/i, /You said you['']d do this today/i, /See you tomorrow/i];
     const offenders: string[] = [];
     for (const dir of SRC_DIRS) for (const f of walk(dir)) {
       if (!/\.(ts|tsx)$/.test(f)) continue;

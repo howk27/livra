@@ -60,17 +60,6 @@ export async function recordBehaviorAppForeground(): Promise<void> {
   }
 }
 
-export async function getLastBehaviorForegroundMs(): Promise<number | null> {
-  try {
-    const raw = await AsyncStorage.getItem(LAST_FOREGROUND_KEY);
-    if (!raw) return null;
-    const t = new Date(raw).getTime();
-    return Number.isFinite(t) ? t : null;
-  } catch {
-    return null;
-  }
-}
-
 function clampToDayWindow(d: Date, dayStart: Date, windowStart: Date, windowEnd: Date): Date {
   const t = d.getTime();
   const ws = Math.max(windowStart.getTime(), dayStart.getTime());

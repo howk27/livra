@@ -12,7 +12,7 @@ export async function applyNotificationsMaster(
   marks: ReconcileMark[],
 ): Promise<void> {
   await setLivraRemindersEnabled(enabled);
-  // updateNotifications cancels all Livra schedules when off, reschedules the daily when on.
+  // updateNotifications cancels all Livra schedules when off; when on, it pumps the owner (re-engage nudge).
   await updateNotifications(userId);
   await reconcileMomentumWarnings(userId);
   await reconcileMarkReminders(marks);

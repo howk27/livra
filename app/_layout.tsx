@@ -48,6 +48,7 @@ import {
   recordBehaviorNotificationTap,
   recordBehaviorAppForeground,
 } from '../services/behaviorNotifications';
+import { requestLivraLocalNotificationReschedule } from '../services/livraLocalNotificationOwner';
 import { getSupabaseClient } from '../lib/supabase';
 import { getMilestonesToFire, MILESTONE_COPY } from '../lib/goalMilestones';
 import { getAppDate } from '../lib/appDate';
@@ -237,6 +238,7 @@ export default function RootLayout() {
         checkAndFireMilestones().catch(() => {});
         void syncWidgetData();
         useGoalsStore.getState().checkAllGoalExpiry();
+        requestLivraLocalNotificationReschedule(user?.id);
         void useGoalsStore
           .getState()
           .evaluateActiveGoalsMomentum()
