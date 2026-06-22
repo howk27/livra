@@ -10,11 +10,8 @@ import * as Notifications from 'expo-notifications';
 import { logger } from '../lib/utils/logger';
 import { cancelAllLivraScheduledNotifications } from '../lib/notifications/livraScheduledOwnership';
 import { getLivraRemindersEnabled } from '../lib/notifications/livraReminderPrefs';
-import {
-  getLastBehaviorForegroundMs,
-  recordBehaviorAppForeground,
-  scheduleBehaviorNotifications,
-} from './behaviorNotifications';
+import { recordBehaviorAppForeground } from './behaviorNotifications';
+import { scheduleReengageNudge } from '../lib/notifications/reengageNudge';
 
 const COALESCE_MS = 400;
 
@@ -52,9 +49,8 @@ async function flushCoalescedReschedule(): Promise<void> {
     return;
   }
 
-  const previousFg = await getLastBehaviorForegroundMs();
   try {
-    await scheduleBehaviorNotifications(userId, previousFg);
+    await scheduleReengageNudge(userId);
   } catch (e) {
     logger.error('[LivraNotifOwner] schedule failed', e);
   } finally {

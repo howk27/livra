@@ -1,88 +1,54 @@
 /**
- * Livra's only shipped local scheduling model: behavior DATE triggers (max 2/day, jittered windows).
- * Re-planned via `livraLocalNotificationOwner` on foreground / data changes / tap.
- * Times and `occurred_local_date` assumptions are device-local (no IANA timezone layer).
+ * Livra behavior notification primitives: foreground/tap bookkeeping and window-picking utility.
+ * The nag scheduling engine (scheduleBehaviorNotifications et al.) was removed in refactor 3.1.
+ * `pickFireInWindow` is still consumed by momentumWarningNotifications.ts.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Notifications from 'expo-notifications';
-import { query } from '../lib/db';
 import { formatDate } from '../lib/date';
 import { getAppDate } from '../lib/appDate';
-import { resolveDailyTarget } from '../lib/markDailyTarget';
-import { isMarkActiveOnDate } from '../lib/features';
-import { computeStreak } from '../hooks/useStreaks';
-import type { Counter, CounterEvent } from '../types';
 import { logger } from '../lib/utils/logger';
-import { activeGoalMomentumSnapshot } from '../lib/goalMomentumStore';
-import type { MomentumSnapshot } from '../lib/goalMomentum';
-import { useGoalsStore } from '../state/goalsSlice';
-import {
-  cancelAllLivraScheduledNotifications,
-  cancelLivraScheduledByPrefix,
-} from '../lib/notifications/livraScheduledOwnership';
 
 const ENGAGEMENT_KEY = 'livra_bn_engagement_v1';
-const LAST_FOREGROUND_KEY = 'livra_bn_last_foreground_v1';
-const BEHAVIOR_NOTIF_PREFIX = 'livra-bn-';
+export const LAST_FOREGROUND_KEY = 'livra_bn_last_foreground_v1';
 
-export type BehaviorNotifType = 'momentum' | 'midday' | 'end_of_day' | 'win';
-
-export interface PlannedBehaviorNotification {
-  type: BehaviorNotifType;
-  fireAt: Date;
-  title: string;
-  body: string;
-}
-
-interface EngagementState {
-  /** Calendar day (YYYY-MM-DD) we last rolled daily counters for */
-  lastRollDay: string;
-  /** We scheduled ≥1 behavior notif on that local calendar day */
-  hadScheduleOnDay: Record<string, boolean>;
-  /** User opened app via tapping our notification on that day */
+interface EngagementTapState {
   tappedNotifOnDay: Record<string, boolean>;
-  /** Consecutive prior days with schedule but no tap (capped at 10) */
-  consecutiveNoTapDays: number;
 }
 
-const defaultEngagement = (): EngagementState => ({
-  lastRollDay: '',
-  hadScheduleOnDay: {},
+const defaultTapState = (): EngagementTapState => ({
   tappedNotifOnDay: {},
-  consecutiveNoTapDays: 0,
 });
 
-async function loadEngagement(): Promise<EngagementState> {
+async function loadTapState(): Promise<EngagementTapState> {
   try {
     const raw = await AsyncStorage.getItem(ENGAGEMENT_KEY);
-    if (!raw) return defaultEngagement();
-    const p = JSON.parse(raw) as EngagementState;
+    if (!raw) return defaultTapState();
+    const p = JSON.parse(raw) as Partial<EngagementTapState>;
     return {
-      ...defaultEngagement(),
-      ...p,
-      hadScheduleOnDay: p.hadScheduleOnDay ?? {},
       tappedNotifOnDay: p.tappedNotifOnDay ?? {},
     };
   } catch {
-    return defaultEngagement();
+    return defaultTapState();
   }
 }
 
-async function saveEngagement(s: EngagementState): Promise<void> {
+async function saveTapState(s: EngagementTapState): Promise<void> {
   try {
-    await AsyncStorage.setItem(ENGAGEMENT_KEY, JSON.stringify(s));
+    // Merge with existing stored object to avoid clobbering other keys written by legacy code
+    const raw = await AsyncStorage.getItem(ENGAGEMENT_KEY);
+    const existing = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
+    await AsyncStorage.setItem(ENGAGEMENT_KEY, JSON.stringify({ ...existing, ...s }));
   } catch (e) {
-    logger.warn('[BehaviorNotif] persist engagement failed', e);
+    logger.warn('[BehaviorNotif] persist tap state failed', e);
   }
 }
 
 /** Call when user taps a behavior notification (opens app from it). */
 export async function recordBehaviorNotificationTap(): Promise<void> {
   const today = formatDate(getAppDate());
-  const s = await loadEngagement();
+  const s = await loadTapState();
   s.tappedNotifOnDay[today] = true;
-  s.consecutiveNoTapDays = 0;
-  await saveEngagement(s);
+  await saveTapState(s);
 }
 
 /** Call on every app foreground (active). */
@@ -130,173 +96,6 @@ function startOfLocalDay(d: Date): Date {
   return x;
 }
 
-export interface DayProgressSnapshot {
-  todayStr: string;
-  activeMarkCount: number;
-  completedCount: number;
-  incompleteCount: number;
-  incompleteNames: string[];
-  /** True when any active goal's Momentum is slipping (legacy field name; reads Momentum, not a streak). */
-  anyStreakAtRisk: boolean;
-  maxCurrentStreak: number;
-}
-
-/** At-risk for notifications = the active goal's Momentum is slipping (spec §3). */
-export function deriveAtRiskFromMomentum(snap: MomentumSnapshot | null): boolean {
-  return snap?.state === 'slipping';
-}
-
-export async function computeDayProgress(userId: string): Promise<DayProgressSnapshot | null> {
-  const anchor = getAppDate();
-  const todayStr = formatDate(anchor);
-
-  const counters = await query<Counter>(
-    'SELECT * FROM lc_counters WHERE deleted_at IS NULL AND user_id = ? ORDER BY sort_index',
-    [userId],
-  );
-  if (counters.length === 0) return null;
-
-  const counterIds = counters.map((c) => c.id);
-  const placeholders = counterIds.map(() => '?').join(',');
-  const eventsQuery =
-    counterIds.length > 0
-      ? `SELECT id, user_id, counter_id as mark_id, event_type, amount, occurred_at, occurred_local_date, meta, deleted_at, created_at, updated_at FROM lc_events WHERE deleted_at IS NULL AND counter_id IN (${placeholders})`
-      : '';
-  const allEvents: CounterEvent[] =
-    counterIds.length > 0 ? await query<CounterEvent>(eventsQuery, counterIds) : [];
-
-  const activeMarks = counters.filter((c) => isMarkActiveOnDate(c, anchor));
-  if (activeMarks.length === 0) {
-    return {
-      todayStr,
-      activeMarkCount: 0,
-      completedCount: 0,
-      incompleteCount: 0,
-      incompleteNames: [],
-      anyStreakAtRisk: false,
-      maxCurrentStreak: 0,
-    };
-  }
-
-  let completedCount = 0;
-  const incompleteNames: string[] = [];
-  let anyStreakAtRisk = false;
-  let maxCurrentStreak = 0;
-
-  for (const c of activeMarks) {
-    const target = resolveDailyTarget(c);
-    const count = allEvents
-      .filter(
-        (e) =>
-          e.mark_id === c.id &&
-          !e.deleted_at &&
-          e.event_type === 'increment' &&
-          e.occurred_local_date === todayStr,
-      )
-      .reduce((s, e) => s + (e.amount ?? 1), 0);
-    if (count >= target) {
-      completedCount++;
-    } else {
-      incompleteNames.push(c.name);
-    }
-
-    if (c.enable_streak) {
-      const inc = allEvents.filter((e) => e.mark_id === c.id && !e.deleted_at && e.event_type === 'increment');
-      const streakData = computeStreak(inc, anchor);
-      maxCurrentStreak = Math.max(maxCurrentStreak, streakData.current);
-    }
-  }
-
-  const activeGoals = useGoalsStore.getState().getActiveGoals();
-  const markInputs = counters.map((c) => ({
-    id: c.id,
-    weekly_target: c.weekly_target,
-    last_activity_date: c.last_activity_date,
-  }));
-  if (activeGoals.length > 0) {
-    const snapshots = await Promise.all(
-      activeGoals.map((goal) => activeGoalMomentumSnapshot(goal, markInputs, todayStr)),
-    );
-    anyStreakAtRisk = snapshots.some((snap) => deriveAtRiskFromMomentum(snap));
-  }
-
-  return {
-    todayStr,
-    activeMarkCount: activeMarks.length,
-    completedCount,
-    incompleteCount: activeMarks.length - completedCount,
-    incompleteNames,
-    anyStreakAtRisk,
-    maxCurrentStreak,
-  };
-}
-
-export function buildCopy(
-  type: BehaviorNotifType,
-  p: DayProgressSnapshot,
-): { title: string; body: string } {
-  const rem = p.incompleteCount;
-  const done = p.completedCount;
-  const total = p.activeMarkCount;
-
-  switch (type) {
-    case 'momentum': {
-      // Single incomplete mark — name it directly for a personal, goal-anchored nudge
-      if (rem === 1 && p.incompleteNames[0]?.trim()) {
-        return {
-          title: p.incompleteNames[0],
-          body: "You said you'd do this today. There's still time.",
-        };
-      }
-      const titles = ['Your marks are waiting', 'Time to show up', "Today's on you"];
-      const t = titles[Math.floor(Math.random() * titles.length)]!;
-      const body =
-        rem === total
-          ? total === 1
-            ? 'You have one mark today. One tap is all it takes.'
-            : `You have ${total} marks today. Pick the easiest one first.`
-          : `${rem} marks still open. Even one moves the day forward.`;
-      return { title: t, body };
-    }
-
-    case 'midday': {
-      const titles = ['Halfway through', 'Still time today', 'Pick up where you left off'];
-      const t = titles[Math.floor(Math.random() * titles.length)]!;
-      const body =
-        done > 0
-          ? `${done} of ${total} done. Finish the rest this afternoon.`
-          : `${total} marks waiting. A few minutes now is all it takes.`;
-      return { title: t, body };
-    }
-
-    case 'end_of_day': {
-      const titles = ['Before the day ends', 'One more thing', "Today isn't done yet"];
-      const t = titles[Math.floor(Math.random() * titles.length)]!;
-      const body =
-        rem === 1
-          ? '1 mark left. Close it out before midnight.'
-          : `${rem} marks still open. A few taps now beat starting over tomorrow.`;
-      return { title: t, body };
-    }
-
-    case 'win': {
-      const allDoneHere = done >= total;
-      const titles = allDoneHere
-        ? ['You showed up today', "That's the work", 'Full day — done']
-        : ['Strong progress today', 'Almost there', "You're close"];
-      const t = titles[Math.floor(Math.random() * titles.length)]!;
-      const body = allDoneHere
-        ? total <= 1
-          ? 'Every mark for today is done. See you tomorrow.'
-          : `All ${total} marks complete. That's what showing up looks like.`
-        : rem === 1
-          ? `1 mark left — you're ${done} of ${total}. Finish the set.`
-          : `${done} of ${total} done. Close it out and make today a full win.`;
-      return { title: t, body };
-    }
-  }
-}
-
 /**
  * Random fire time inside [start,end] local today, at least `minLeadMs` after `now`, with jitter clamped to window.
  */
@@ -320,202 +119,3 @@ export function pickFireInWindow(
   return jitterWithinWindow(raw, winLo, winHi);
 }
 
-async function rollEngagementForNewDay(todayStr: string): Promise<EngagementState> {
-  const s = await loadEngagement();
-  if (s.lastRollDay === todayStr) return s;
-
-  const yesterday = new Date(getAppDate());
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yStr = formatDate(yesterday);
-
-  const hadY = !!s.hadScheduleOnDay[yStr];
-  const tappedY = !!s.tappedNotifOnDay[yStr];
-  if (hadY && !tappedY) {
-    s.consecutiveNoTapDays = Math.min(10, s.consecutiveNoTapDays + 1);
-  } else if (tappedY) {
-    s.consecutiveNoTapDays = 0;
-  }
-
-  s.lastRollDay = todayStr;
-  await saveEngagement(s);
-  return s;
-}
-
-function planCandidates(
-  now: Date,
-  p: DayProgressSnapshot,
-  engagement: EngagementState,
-  previousForegroundAt: number | null,
-): PlannedBehaviorNotification[] {
-  const candidates: PlannedBehaviorNotification[] = [];
-  if (p.activeMarkCount === 0) return candidates;
-
-  if (engagement.consecutiveNoTapDays >= 3) {
-    return [];
-  }
-
-  const dayBase = startOfLocalDay(now);
-  const hour = now.getHours();
-  const minute = now.getMinutes();
-  const mins = hour * 60 + minute;
-
-  const allDone = p.completedCount >= p.activeMarkCount && p.activeMarkCount > 0;
-  const partial = p.completedCount > 0 && p.completedCount < p.activeMarkCount;
-  const strongRatio = p.activeMarkCount > 0 && p.completedCount / p.activeMarkCount >= 0.8;
-  const openedRecently =
-    previousForegroundAt !== null &&
-    now.getTime() - previousForegroundAt < 2 * 60 * 60 * 1000;
-
-  // Win reinforcement
-  if (allDone || strongRatio) {
-    const fire = pickFireInWindow(now, dayBase, 17, 0, 20, 30, 25 * 60 * 1000);
-    if (fire) {
-      const { title, body } = buildCopy('win', p);
-      candidates.push({ type: 'win', fireAt: fire, title, body });
-    }
-  }
-
-  if (allDone) {
-    return candidates;
-  }
-
-  // Momentum: 0–1 completed today, idle 3h+, 9am–8pm (uses previous session foreground, not this open)
-  const lastFg = previousForegroundAt;
-  const idleOk = lastFg === null || now.getTime() - lastFg >= 3 * 60 * 60 * 1000;
-  if (p.completedCount <= 1 && idleOk && !openedRecently && mins >= 9 * 60 && mins < 20 * 60) {
-    const fire = pickFireInWindow(now, dayBase, 9, 0, 20, 0, 45 * 60 * 1000);
-    if (fire) {
-      const { title, body } = buildCopy('momentum', p);
-      candidates.push({ type: 'momentum', fireAt: fire, title, body });
-    }
-  }
-
-  // Midday nudge: partial, 11:30–15:00 window (spec 11–3pm extended slightly for jitter)
-  if (partial && mins >= 10 * 60 && mins < 15 * 60) {
-    const winLo = new Date(dayBase);
-    winLo.setHours(11, 30, 0, 0);
-    const winHi = new Date(dayBase);
-    winHi.setHours(15, 0, 0, 0);
-    const earliest = new Date(Math.max(now.getTime() + 20 * 60 * 1000, winLo.getTime()));
-    if (earliest < winHi) {
-      const span = winHi.getTime() - earliest.getTime();
-      const raw = new Date(earliest.getTime() + Math.random() * span);
-      const fire = jitterWithinWindow(raw, winLo, winHi);
-      const { title, body } = buildCopy('midday', p);
-      candidates.push({ type: 'midday', fireAt: fire, title, body });
-    }
-  }
-
-  // End-of-day: incomplete, ~last hours (18:00–22:30)
-  if (p.incompleteCount > 0 && mins >= 16 * 60) {
-    const fire = pickFireInWindow(now, dayBase, 18, 0, 22, 30, 20 * 60 * 1000);
-    if (fire) {
-      const { title, body } = buildCopy('end_of_day', p);
-      candidates.push({ type: 'end_of_day', fireAt: fire, title, body });
-    }
-  }
-
-  const filtered = openedRecently ? candidates.filter((c) => c.type === 'win') : candidates;
-  filtered.sort((a, b) => a.fireAt.getTime() - b.fireAt.getTime());
-  return filtered;
-}
-
-const MIN_GAP_MS = 3 * 60 * 60 * 1000;
-const MAX_PER_DAY = 2;
-
-function pickWithMinGap(sorted: PlannedBehaviorNotification[]): PlannedBehaviorNotification[] {
-  const out: PlannedBehaviorNotification[] = [];
-  for (const c of sorted) {
-    if (out.length >= MAX_PER_DAY) break;
-    if (out.length === 0) {
-      out.push(c);
-      continue;
-    }
-    const last = out[out.length - 1]!;
-    if (c.fireAt.getTime() - last.fireAt.getTime() >= MIN_GAP_MS) {
-      out.push(c);
-    }
-  }
-  return out;
-}
-
-/** @deprecated Use `cancelAllLivraScheduledNotifications` — kept for external imports during refactor. */
-export async function cancelBehaviorNotifications(): Promise<void> {
-  await cancelAllLivraScheduledNotifications();
-}
-
-export async function scheduleBehaviorNotifications(
-  userId: string | undefined,
-  previousForegroundAt: number | null = null,
-): Promise<string[]> {
-  if (!userId) {
-    logger.log('[BehaviorNotif] skip — no user');
-    return [];
-  }
-
-  const { status } = await Notifications.getPermissionsAsync();
-  if (status !== 'granted') {
-    logger.log('[BehaviorNotif] skip — no permission');
-    return [];
-  }
-
-  const now = new Date();
-  const todayStr = formatDate(getAppDate());
-  const engagement = await rollEngagementForNewDay(todayStr);
-
-  if (engagement.consecutiveNoTapDays >= 3) {
-    logger.log('[BehaviorNotif] skip — consecutive no-tap streak');
-    await cancelLivraScheduledByPrefix(BEHAVIOR_NOTIF_PREFIX);
-    return [];
-  }
-
-  const progress = await computeDayProgress(userId);
-  if (!progress || progress.activeMarkCount === 0) {
-    await cancelLivraScheduledByPrefix(BEHAVIOR_NOTIF_PREFIX);
-    return [];
-  }
-
-  const candidates = planCandidates(now, progress, engagement, previousForegroundAt);
-  const chosen = pickWithMinGap(candidates);
-
-  await cancelLivraScheduledByPrefix(BEHAVIOR_NOTIF_PREFIX);
-
-  const ids: string[] = [];
-  let idx = 0;
-  for (const plan of chosen) {
-    if (plan.fireAt.getTime() <= now.getTime() + 30 * 1000) continue;
-
-    const identifier = `${BEHAVIOR_NOTIF_PREFIX}${todayStr}-${plan.type}-${idx++}`;
-    try {
-      const id = await Notifications.scheduleNotificationAsync({
-        identifier,
-        content: {
-          title: plan.title,
-          body: plan.body,
-          data: {
-            type: `behavior_${plan.type}`,
-            behavior: true,
-            livraOwner: true,
-            planDay: todayStr,
-          },
-        },
-        trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.DATE,
-          date: plan.fireAt,
-        },
-      });
-      if (id) ids.push(id);
-    } catch (e) {
-      logger.error('[BehaviorNotif] schedule failed', e);
-    }
-  }
-
-  if (ids.length > 0) {
-    const nextEngagement = await loadEngagement();
-    nextEngagement.hadScheduleOnDay[todayStr] = true;
-    await saveEngagement(nextEngagement);
-  }
-
-  logger.log(`[BehaviorNotif] scheduled ${ids.length} for ${todayStr}`, ids);
-  return ids;
-}
