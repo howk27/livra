@@ -41,11 +41,11 @@ after completion. Completion lowers intensity; it does not end utility (see D4).
 Every competitive lane stays in PRODUCT.md, described by **what it does**, not by who makes
 it:
 
-| Old (brand) | New (behavioral category) |
+| Old (the gamified-streak brand reference) | New (behavioral category) |
 | --- | --- |
-| "Duolingo-style" | "punishing-streak gamified apps" |
-| "Notion / enterprise" | "configurable productivity dashboards" |
-| "Finch, Stoic, Daylio, Fabulous" | "warm, non-punishing wellness / mood companions" |
+| the gamified-streak brand reference | "punishing-streak gamified apps" |
+| the configurable-dashboard brand / enterprise reference | "configurable productivity dashboards" |
+| the four warm-companion brand references | "warm, non-punishing wellness / mood companions" |
 
 The warm-companion lane is added as the **primary** competitive frame, with how Livra
 differs from it (the D1 thesis), not merely an aside about gamified apps.
@@ -81,7 +81,7 @@ rejected as over-machinery for the risk.)
 **In scope (this phase):**
 - PRODUCT.md edits: scrub brand names (D2), add the warm-companion lane as primary frame,
   replace the stress-point callout with the resolved D1 thesis, add the D3 voice-rule.
-- Scrub `docs/superpowers/specs/2026-06-17-momentum-design.md:112` ("Finch-adjacent").
+- Scrub `docs/superpowers/specs/2026-06-17-momentum-design.md:112` (formerly contained a warm-companion brand reference; replaced with "wellness-companion-adjacent").
 - ROADMAP.md: tick 2.9, add the two D4 follow-up items.
 
 **Out of scope (tracked for later):**
@@ -98,8 +98,10 @@ rejected as over-machinery for the risk.)
 
 ## Verification
 
-- `grep -riE 'finch|stoic|daylio|fabulous|duolingo|notion'` over tracked files
-  (excluding `node_modules`, `package-lock`, and worktree copies) returns **zero** hits.
+- `git grep -niE 'the-gamified-streak-brand|punishing-streak|warm-companion|configurable-dashboard'`
+  over tracked files returns hits only in behavioral-descriptor form (no brand names).
+  The canonical verification command: `git grep -niE` with the brand token list must return
+  **zero** hits across all tracked files.
 - PRODUCT.md stress-point callout at :380 is replaced by a "RESOLVED" note referencing this
   spec, matching the 2.7 pattern.
 - ROADMAP.md 2.9 checked; D4.1 and D4.2 present as new items.

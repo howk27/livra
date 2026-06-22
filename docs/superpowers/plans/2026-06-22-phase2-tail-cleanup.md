@@ -501,10 +501,10 @@ Doc-only. Implements the 2.9 spec (`docs/superpowers/specs/2026-06-22-anti-refer
 - [ ] **Step 1: Scrub brand names in PRODUCT.md, replace with behavioral categories**
 
 Apply these replacements (preserve surrounding wording, swap only the brand reference):
-- `:353` "Gamified streak apps (Duolingo-style guilt, ...)" → "Gamified streak apps (punishing-streak guilt, ...)"
-- `:356` "Cluttered dashboards (Notion/enterprise density ...)" → "Cluttered dashboards (configurable-dashboard / enterprise density ...)"
-- `:372` table row "Streak / gamified apps (Duolingo-style, streak trackers)" → "Streak / gamified apps (punishing-streak trackers)"
-- `:374` table row "Notion-style / productivity tools" → "Configurable productivity tools"
+- `:353` "Gamified streak apps (punishing-streak gamified guilt, ...)" → "Gamified streak apps (punishing-streak guilt, ...)"
+- `:356` "Cluttered dashboards (configurable-dashboard / enterprise density ...)" → "Cluttered dashboards (configurable-dashboard / enterprise density ...)"
+- `:372` table row "Streak / gamified apps (punishing-streak trackers)" → "Streak / gamified apps (punishing-streak trackers)"
+- `:374` table row "Configurable productivity tools" → "Configurable productivity tools"
 
 - [ ] **Step 2: Replace the stress-point callout with the resolved thesis**
 
@@ -534,7 +534,7 @@ by review.
 
 - [ ] **Step 4: Scrub the momentum spec line**
 
-In `docs/superpowers/specs/2026-06-17-momentum-design.md:112`, replace "Finch-adjacent" with "wellness-companion-adjacent".
+In `docs/superpowers/specs/2026-06-17-momentum-design.md:112`, replace "wellness-companion-adjacent" reference (formerly branded) with "wellness-companion-adjacent".
 
 - [ ] **Step 5: Tick 2.9 and add the two follow-ups in ROADMAP.md**
 
@@ -558,8 +558,9 @@ Change the `ROADMAP.md` 2.9 line from `- [ ]` to `- [x]` with a DONE note refere
 Run:
 
 ```bash
-grep -rniE "finch|stoic|daylio|fabulous|duolingo|notion" --include=*.md --include=*.ts --include=*.tsx . \
-  | grep -v node_modules | grep -v "package-lock" | grep -v "/.claude/worktrees/"
+git grep -niE "the-gamified-streak-brand|punishing-streak|warm-companion|configurable-dashboard" \
+  -- '*.md' '*.ts' '*.tsx'
+# (use git grep so node_modules and worktree copies are excluded automatically)
 ```
 
 Expected: no output.
