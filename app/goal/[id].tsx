@@ -262,44 +262,58 @@ export default function GoalDetailScreen() {
         </TouchableOpacity>
       </ScrollView>
 
-      {/* Date picker modal */}
-      <Modal
-        visible={showDatePicker}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowDatePicker(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowDatePicker(false)}
+      {/* Date picker — iOS bottom sheet */}
+      {Platform.OS === 'ios' && (
+        <Modal
+          visible={showDatePicker}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowDatePicker(false)}
         >
           <TouchableOpacity
-            style={[styles.modalSheet, { backgroundColor: c.surface }]}
+            style={styles.modalOverlay}
             activeOpacity={1}
+            onPress={() => setShowDatePicker(false)}
           >
-            <Text style={[styles.modalLabel, { color: c.inkMuted }]}>TARGET DATE</Text>
-            {Platform.OS === 'ios' && (
-              <>
-                <DateTimePicker
-                  value={pickerDate}
-                  mode="date"
-                  display="spinner"
-                  minimumDate={new Date()}
-                  onChange={(_, date) => { if (date) setPickerDate(date); }}
-                  style={{ width: '100%' }}
-                />
-                <TouchableOpacity
-                  style={[styles.dateSetBtn, { backgroundColor: c.forest }]}
-                  onPress={() => handleSaveDate(pickerDate)}
-                >
-                  <Text style={styles.dateSetBtnText}>Set date</Text>
-                </TouchableOpacity>
-              </>
-            )}
+            <TouchableOpacity
+              style={[styles.modalSheet, { backgroundColor: c.surface }]}
+              activeOpacity={1}
+            >
+              <Text style={[styles.modalLabel, { color: c.inkMuted }]}>TARGET DATE</Text>
+              <DateTimePicker
+                value={pickerDate}
+                mode="date"
+                display="spinner"
+                minimumDate={new Date()}
+                onChange={(_, date) => { if (date) setPickerDate(date); }}
+                style={{ width: '100%' }}
+              />
+              <TouchableOpacity
+                style={[styles.dateSetBtn, { backgroundColor: c.forest }]}
+                onPress={() => handleSaveDate(pickerDate)}
+              >
+                <Text style={styles.dateSetBtnText}>Set date</Text>
+              </TouchableOpacity>
+            </TouchableOpacity>
           </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
+        </Modal>
+      )}
+
+      {/* Date picker — Android native dialog */}
+      {Platform.OS === 'android' && showDatePicker && (
+        <DateTimePicker
+          value={pickerDate}
+          mode="date"
+          display="default"
+          minimumDate={new Date()}
+          onChange={(event, date) => {
+            setShowDatePicker(false);
+            if (event.type === 'set' && date) {
+              void handleSaveDate(date);
+            }
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 }
