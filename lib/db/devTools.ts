@@ -292,6 +292,7 @@ export const seedPerfectWeek = async (userIdOverride?: string): Promise<{ userId
 
 /** Dev: force the active goal's Momentum to broken (fresh-start) state. */
 export async function seedBrokenMomentum(userId?: string): Promise<void> {
+  assertDevToolsAccess('seedBrokenMomentum');
   const goals = useGoalsStore.getState().goals;
   const active = goals.find((g) => g.status === 'active' && (!userId || g.user_id === userId));
   if (!active) return;
