@@ -110,7 +110,7 @@ export function MarkFrequencyPicker({ mark, onChange, disabled = false }: Props)
                 isSelected
                   ? { color: '#FFFFFF', fontFamily: fonts.sansSemibold }
                   : { color: c.inkDark, fontFamily: fonts.sans },
-                disabled && { color: c.inkMuted },
+                disabled && !isSelected && { color: c.inkMuted },
               ]}
             >
               {frequencyLabel(value)}

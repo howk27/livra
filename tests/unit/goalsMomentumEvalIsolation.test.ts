@@ -30,5 +30,6 @@ describe('evaluateActiveGoalsMomentum failure isolation', () => {
 
     expect(result.has('g1')).toBe(false);
     expect(result.get('g2')).toEqual(okSnap);
+    expect(useMomentumStore.getState().snapshots['g2']).toEqual(okSnap);
   });
 });
