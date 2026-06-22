@@ -177,8 +177,8 @@ describe('getWeekArc', () => {
   test('Thursday → Keep it going.', () => {
     expect(getWeekArc(baseWeekArc({ now: makeDate(9, 4), weekLoggedDays: 2 }))).toBe('Keep it going.');
   });
-  test('Friday → Weekend incoming — the real test.', () => {
-    expect(getWeekArc(baseWeekArc({ now: makeDate(9, 5) }))).toBe('Weekend incoming — the real test.');
+  test('Friday → Weekend incoming. The real test.', () => {
+    expect(getWeekArc(baseWeekArc({ now: makeDate(9, 5) }))).toBe('Weekend incoming. The real test.');
   });
   test('Saturday → The weekend test.', () => {
     expect(getWeekArc(baseWeekArc({ now: makeDate(9, 6) }))).toBe('The weekend test.');
