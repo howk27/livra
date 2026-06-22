@@ -1,6 +1,6 @@
 /**
  * All dynamic copy for Livra 2.0.
- * Pure functions — no side effects, no React Native imports.
+ * Pure functions, no side effects, no React Native imports.
  * Every string the user sees that changes with context lives here.
  */
 
@@ -17,7 +17,7 @@ export interface HeaderState {
 
 export interface WeekArcState {
   now: Date;
-  /** Unique days with any activity in the current Mon–Sun week. */
+  /** Unique days with any activity in the current Monday to Sunday week. */
   weekLoggedDays: number;
   /** True if every day from Monday up to (and including) today has at least one log. */
   isPerfectWeekSoFar: boolean;
@@ -55,7 +55,7 @@ export function getDailyHeader(state: HeaderState): DailyHeader {
   const noneLogged = completedToday === 0;
   const isReturning = daysSinceLastLog >= 3;
 
-  // All marks done — streak milestones evaluated most-specific first
+  // All marks done. Streak milestones evaluated most-specific first
   if (allDone && streakDays >= 30) {
     return { title: 'Thirty days.', subtitle: 'This is rare.' };
   }
@@ -81,7 +81,7 @@ export function getDailyHeader(state: HeaderState): DailyHeader {
     return { title: "Don't let Sunday slip.", subtitle: null };
   }
 
-  // Evening, nothing logged, streak 5+ days — brevity = urgency
+  // Evening, nothing logged, streak 5+ days, brevity = urgency
   if (hour >= 19 && noneLogged && streakDays >= 5) {
     return { title: 'Still tonight.', subtitle: null };
   }
@@ -132,7 +132,7 @@ export function getWeekArc(state: WeekArcState): string {
   // Mon=0 … Sun=6, used to know how many days into the week we are
   const dayIndex = dow === 0 ? 6 : dow - 1;
 
-  // Perfect week so far (more than 1 day in — Monday "perfect so far" is just day 1)
+  // Perfect week so far (more than 1 day in, so Monday "perfect so far" is just day 1)
   if (isPerfectWeekSoFar && dayIndex >= 1) {
     return "Perfect week so far. Don't stop.";
   }
@@ -152,7 +152,7 @@ export function getWeekArc(state: WeekArcState): string {
     case 2: return 'Day 2 of 7.';
     case 3: return 'Halfway.';
     case 4: return 'Keep it going.';
-    case 5: return 'Weekend incoming — the real test.';
+    case 5: return 'Weekend incoming. The real test.';
     case 6: return 'The weekend test.';
     case 0: return hour >= 18 ? 'Final call.' : 'One day left.';
     default: return 'Keep going.';
@@ -242,7 +242,7 @@ export function getPostLogMessage(state: PostLogState): string {
   return chosen.text;
 }
 
-// ─── Tracking screen — week sentiment header ───────────────────────────────
+// ─── Tracking screen, week sentiment header ───────────────────────────────
 
 /**
  * Large bold statement at the top of the tracking screen.
