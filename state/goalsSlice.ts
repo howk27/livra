@@ -356,13 +356,17 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
     const allMarks = useMarksStore.getState().marks;
     const result = new Map<string, MomentumSnapshot>();
     for (const g of active) {
-      const ids = new Set(g.linked_mark_ids ?? []);
-      const goalMarks = allMarks
-        .filter((m) => !m.deleted_at && ids.has(m.id))
-        .map((m) => ({ id: m.id, weekly_target: m.weekly_target, last_activity_date: m.last_activity_date }));
-      const snap = await evaluateGoalMomentum(g.id, goalMarks, today);
-      result.set(g.id, snap);
-      useMomentumStore.getState().setSnapshot(g.id, snap);
+      try {
+        const ids = new Set(g.linked_mark_ids ?? []);
+        const goalMarks = allMarks
+          .filter((m) => !m.deleted_at && ids.has(m.id))
+          .map((m) => ({ id: m.id, weekly_target: m.weekly_target, last_activity_date: m.last_activity_date }));
+        const snap = await evaluateGoalMomentum(g.id, goalMarks, today);
+        result.set(g.id, snap);
+        useMomentumStore.getState().setSnapshot(g.id, snap);
+      } catch (err) {
+        console.warn(`[Momentum] evaluation failed for goal ${g.id}:`, err);
+      }
     }
     return result;
   },
