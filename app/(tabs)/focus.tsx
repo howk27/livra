@@ -22,7 +22,6 @@ import { SpeedDialFAB } from '../../components/ui/SpeedDialFAB';
 import { useCounters } from '../../hooks/useCounters';
 import { useAuth } from '../../hooks/useAuth';
 import { useSync } from '../../hooks/useSync';
-import { useNotifications } from '../../hooks/useNotifications';
 import { useEventsStore } from '../../state/eventsSlice';
 import { useAppDateStore } from '../../state/appDateSlice';
 import { useGoalsStore } from '../../state/goalsSlice';
@@ -60,8 +59,6 @@ export default function FocusScreen() {
   const { user } = useAuth();
   const { counters, loading, incrementCounter, deleteCounter } = useCounters();
   const { sync } = useSync();
-  const { updateSmartNotifications, permissionGranted } = useNotifications();
-
   const appDateKey = useAppDateStore((s) => s.debugDateOverride ?? '');
   const todayStr = useMemo(() => formatDate(getAppDate()), [appDateKey]);
 
@@ -218,15 +215,6 @@ export default function FocusScreen() {
     return 'Your journey continues today.';
   }, [firstName]);
 
-  // ── Side effects ──────────────────────────────────────────────────────────
-
-  useEffect(() => {
-    if (!permissionGranted || counters.length === 0) return;
-    updateSmartNotifications(user?.id).catch((e) =>
-      logger.error('Error updating notifications:', e),
-    );
-  }, [counters, permissionGranted, user?.id, updateSmartNotifications]);
-
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   const handleQuickIncrement = useCallback(
@@ -237,16 +225,11 @@ export default function FocusScreen() {
       }
       try {
         await incrementCounter(markId, user.id, 1);
-        if (permissionGranted) {
-          updateSmartNotifications(user?.id).catch((e) =>
-            logger.error('Error updating notifications after increment:', e),
-          );
-        }
       } catch (error: unknown) {
         logger.error('Error incrementing mark:', error);
       }
     },
-    [user?.id, incrementCounter, permissionGranted, updateSmartNotifications],
+    [user?.id, incrementCounter],
   );
 
   const handleMarkLongPress = useCallback((markId: string, markName: string) => {

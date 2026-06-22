@@ -70,14 +70,6 @@ export const useNotifications = () => {
     return await analyzeCountersForNotifications(userId);
   }, []);
 
-  /** No-op: contextual daily notification engine removed in 3.1. Kept for call-site compat. */
-  const updateSmartNotifications = useCallback(
-    async (_userId?: string) => {
-      // Engine deleted; re-engagement is now owner-driven (Task 3).
-    },
-    [],
-  );
-
   const setLivraRemindersEnabled = useCallback(
     async (userId: string | undefined, enabled: boolean) => {
       await persistLivraRemindersEnabledPref(enabled);
@@ -104,7 +96,6 @@ export const useNotifications = () => {
     checkPermissions,
     getScheduledReminders,
     analyzeNotifications,
-    updateSmartNotifications,
     setLivraRemindersEnabled,
     refreshLivraRemindersPref,
   };
