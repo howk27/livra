@@ -346,3 +346,9 @@ export const TERMS = {
   momentum: "Momentum is how your effort adds up over time. Miss a day and it bends, it does not break.",
   dailyHabit: "A daily habit is a mark you keep on its own, not tied to any goal.",
 } as const;
+
+// ─── Recurring shared lines ──────────────────────────────────────────────────
+
+/** Shown when a free user hits the 2-goal cap (goal/new + AddGoalSheet). */
+export const GOAL_LIMIT_MESSAGE =
+  'Free keeps you to 2 goals at once so you can actually finish them. Livra+ opens unlimited goals.';

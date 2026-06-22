@@ -35,6 +35,7 @@ import { useMarksStore } from '../../state/countersSlice';
 import { useAuth } from '../../hooks/useAuth';
 import { useIapSubscriptions } from '../../hooks/useIapSubscriptions';
 import { logger } from '../../lib/utils/logger';
+import { GOAL_LIMIT_MESSAGE } from '@/lib/copy';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const SHEET_HEIGHT = SCREEN_HEIGHT * 0.85;
@@ -153,7 +154,7 @@ export function AddGoalSheet({ visible, onClose }: AddGoalSheetProps) {
         // Soft cap surface — never a hard wall.
         Alert.alert(
           'Two goals at a time',
-          'Free keeps you to 2 goals at once so you can actually finish them. Livra+ opens unlimited goals.',
+          GOAL_LIMIT_MESSAGE,
           [
             { text: 'Not now', style: 'cancel' },
             { text: 'See Livra+', onPress: () => router.push('/paywall') },
