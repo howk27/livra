@@ -6,8 +6,6 @@ import {
   setLivraRemindersEnabled as persistLivraRemindersEnabledPref,
 } from '../lib/notifications/livraReminderPrefs';
 import { applyLivraRemindersPreference } from '../services/livraLocalNotificationOwner';
-import { scheduleContextualDailyNotification } from '../lib/notificationSystem';
-
 // Configure notification behavior (banners for delivered push/local notifications)
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -72,18 +70,12 @@ export const useNotifications = () => {
     return await analyzeCountersForNotifications(userId);
   }, []);
 
-  /** Schedule contextual daily notification using the 5-tier system. */
+  /** No-op: contextual daily notification engine removed in 3.1. Kept for call-site compat. */
   const updateSmartNotifications = useCallback(
-    async (userId?: string) => {
-      if (!state.permissionGranted) {
-        const granted = await requestPermissions();
-        if (!granted) return;
-      }
-      if (userId) {
-        await scheduleContextualDailyNotification(userId);
-      }
+    async (_userId?: string) => {
+      // Engine deleted; re-engagement is now owner-driven (Task 3).
     },
-    [state.permissionGranted, requestPermissions],
+    [],
   );
 
   const setLivraRemindersEnabled = useCallback(

@@ -12,7 +12,6 @@ import { useIapSubscriptions } from './useIapSubscriptions';
 import { logger } from '../lib/utils/logger';
 import { getAppDate, getAppDateTime, isDebugAppDateActive } from '../lib/appDate';
 import { useAppDateStore } from '../state/appDateSlice';
-import { scheduleContextualDailyNotification } from '../lib/notificationSystem';
 import {
   canAddMarkToGoal,
   countMarksInGoal,
@@ -141,8 +140,6 @@ export const useMarks = () => {
           logger.error('Error syncing after mark creation:', error);
         });
       }
-
-      void scheduleContextualDailyNotification(data.user_id);
 
       evaluateMarkBadges(mark.id, data.user_id).catch((error) => {
         logger.error('Error initializing badges for new mark:', error);
@@ -610,8 +607,6 @@ export const useMarks = () => {
           logger.error('Error syncing after mark update:', error);
         });
       }
-      const m = getMark(markId);
-      if (m?.user_id) void scheduleContextualDailyNotification(m.user_id);
     },
     [updateMarkAction, user, sync, getMark]
   );
@@ -630,7 +625,6 @@ export const useMarks = () => {
           logger.error('Error syncing after mark delete:', error);
         }
       }
-      if (user?.id) void scheduleContextualDailyNotification(user.id);
     },
     [deleteMarkAction, user, sync]
   );

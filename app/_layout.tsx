@@ -48,7 +48,6 @@ import {
   recordBehaviorNotificationTap,
   recordBehaviorAppForeground,
 } from '../services/behaviorNotifications';
-import { scheduleContextualDailyNotification } from '../lib/notificationSystem';
 import { getSupabaseClient } from '../lib/supabase';
 import { getMilestonesToFire, MILESTONE_COPY } from '../lib/goalMilestones';
 import { getAppDate } from '../lib/appDate';
@@ -227,7 +226,6 @@ export default function RootLayout() {
       handleBehaviorResponse(response);
       handleMilestoneResponse(response);
       void recordBehaviorAppForeground();
-      if (user?.id) scheduleContextualDailyNotification(user.id).catch(() => {});
     });
 
     const onAppState = (next: AppStateStatus) => {
@@ -236,7 +234,6 @@ export default function RootLayout() {
       appStateRef.current = next;
       if (next === 'active' && wasBackground) {
         void recordBehaviorAppForeground();
-        if (user?.id) scheduleContextualDailyNotification(user.id).catch(() => {});
         checkAndFireMilestones().catch(() => {});
         void syncWidgetData();
         useGoalsStore.getState().checkAllGoalExpiry();
