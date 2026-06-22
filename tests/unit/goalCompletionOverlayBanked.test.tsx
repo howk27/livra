@@ -52,6 +52,34 @@ jest.mock('react-native-reanimated', () => {
   };
 });
 
+// Share flow deps pulled in by the overlay (wired in 3.1) — stub so this test stays
+// focused on the banked-momentum line.
+jest.mock('expo-media-library', () => ({
+  requestPermissionsAsync: jest.fn().mockResolvedValue({ status: 'granted' }),
+  saveToLibraryAsync: jest.fn().mockResolvedValue(undefined),
+}));
+jest.mock('expo-sharing', () => ({
+  shareAsync: jest.fn().mockResolvedValue(undefined),
+  isAvailableAsync: jest.fn().mockResolvedValue(true),
+}));
+jest.mock('../../lib/iap/iap', () => ({
+  checkProStatus: jest.fn().mockResolvedValue({ effectiveUnlocked: false }),
+}));
+jest.mock('../../lib/sharing/generateShareCard', () => ({
+  generateShareCard: jest.fn().mockResolvedValue('file://card.jpg'),
+}));
+jest.mock('../../components/GoalCompletionShareCard', () => ({
+  GoalCompletionShareCard: () => null,
+}));
+jest.mock('../../components/SharePreviewModal', () => {
+  const ReactMod = require('react');
+  const { Text } = require('react-native');
+  return {
+    SharePreviewModal: ({ visible, saveLabel }: any) =>
+      visible ? ReactMod.createElement(Text, null, saveLabel) : null,
+  };
+});
+
 import { GoalCompletionOverlay } from '../../components/overlays/GoalCompletionOverlay';
 import { useGoalCompletionStore } from '../../state/goalCompletionStore';
 import { useGoalsStore } from '../../state/goalsSlice';
