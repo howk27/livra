@@ -60,6 +60,8 @@ function daysIdleFromMarks(activeMarkDates: (string | null | undefined)[], today
 export async function scheduleReengageNudge(userId: string | undefined): Promise<void> {
   try {
     if (!userId) return;
+    // Always evict any prior slot — even before toggle/permission checks, so it never lingers.
+    await Notifications.cancelScheduledNotificationAsync(REENGAGE_ID).catch(() => {});
     if (!(await getLivraRemindersEnabled())) return;
     const { status } = await Notifications.getPermissionsAsync();
     if (status !== 'granted') return;
@@ -86,8 +88,6 @@ export async function scheduleReengageNudge(userId: string | undefined): Promise
       today,
     });
 
-    // Always clear a prior re-engage slot so it never lingers when conditions lapse.
-    await Notifications.cancelScheduledNotificationAsync(REENGAGE_ID).catch(() => {});
     if (!plan) return;
 
     const fireAt = new Date(now.getTime() + 60 * 60 * 1000); // ~1 hour out

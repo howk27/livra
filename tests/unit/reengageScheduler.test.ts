@@ -35,6 +35,7 @@ describe('scheduleReengageNudge', () => {
     (getLivraRemindersEnabled as jest.Mock).mockResolvedValueOnce(false);
     await scheduleReengageNudge('u1');
     expect(Notifications.scheduleNotificationAsync).not.toHaveBeenCalled();
+    expect(Notifications.cancelScheduledNotificationAsync).toHaveBeenCalledWith('livra-bn-reengage');
   });
 
   it('schedules nothing when not idle long enough', async () => {
