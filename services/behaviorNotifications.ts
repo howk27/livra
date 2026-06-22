@@ -136,7 +136,7 @@ export interface DayProgressSnapshot {
   completedCount: number;
   incompleteCount: number;
   incompleteNames: string[];
-  /** Any streak-enabled mark at risk today (derived, same as notifications analysis) */
+  /** True when any active goal's Momentum is slipping (legacy field name; reads Momentum, not a streak). */
   anyStreakAtRisk: boolean;
   maxCurrentStreak: number;
 }
