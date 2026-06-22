@@ -57,7 +57,9 @@ single, infrequent, dormancy-based re-engagement nudge. Delete the daily-complet
   4. no active goal, or `daysIdle < 7`, or `< 7` days since `lastReengageNudgeDate`.
 - **Copy (no guilt, no urgency, references rest):**
   - Title: `Your goal is still here.`
-  - Body: `No streak to lose, nothing to catch up on. Pick it back up whenever you're ready.`
+  - Body: `Whenever you're ready, pick up where you left off. There's no rush.`
+  - (Body chosen to pass the no-banned-token copy guard — an earlier draft used "No streak to
+    lose…" which trips the literal `streak`/`lose` tokens despite reassuring intent.)
 
 ## Architecture / consolidation
 
