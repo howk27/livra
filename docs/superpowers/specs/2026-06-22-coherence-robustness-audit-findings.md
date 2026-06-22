@@ -24,7 +24,11 @@ empty goal-detail state dead-ends. `grep` confirms `/counter/new` appears nowher
 
 ## P1 — fix this pass
 
-### P1-1 · Daily-nag notification engines contradict the business model (systemic) — `services/behaviorNotifications.ts`, `lib/notificationSystem.ts`
+### P1-1 · Daily-nag notification engines contradict the business model (systemic) — `services/behaviorNotifications.ts`, `lib/notificationSystem.ts` — ✅ RESOLVED 2026-06-22 (commits `ca4a792..c81cd9f`; spec `2026-06-22-notification-coherence-design.md`)
+> Replaced both daily-nag engines with one gentle 7-day-idle re-engagement nudge (per-app, weekly
+> cap, at-risk-suppressed); `notificationSystem.ts` deleted, nag engine stripped from
+> `behaviorNotifications.ts` (primitives preserved), Home copy de-leaned, regression guard added.
+> Final review caught + fixed a Critical foreground-trigger gap. 161 suites/1403 tests green.
 **Lens A.** Two live local-notification engines are built on a daily-completion, don't-miss-the-day
 model with manufactured urgency and loss-aversion — the exact patterns PRODUCT.md bans (Launch
 Readiness: "No copy uses guilt, fake urgency, or streak-loss language"; "No surface re-creates the
