@@ -119,8 +119,11 @@ JSDoc, orphaned toggle styles) — fold into 1.2/1.3 when those files are touche
 - [x] **2.3 — Monetization coherence** (`PRODUCT.md:95`, `:448`). Reconcile "one goal is active"
   with the free tier's 2 goals; make the locked-model table explicit about the daily-habit cap.
   DONE (free-tier coherence): two concurrent active goals, queued status retired, habit cap added to table. Plan: docs/superpowers/plans/2026-06-21-free-tier-coherence.md.
-- [ ] **2.4 — Opacity done-state a11y** (`PRODUCT.md:494`). `focus.tsx` + `MarkFrequencyPicker`
-  signal done with opacity 0.45 only; reuse the `MarkCard` completion-line pattern (icon/label/strikethrough).
+- [x] **2.4 — Opacity done-state a11y** (`PRODUCT.md:494`). DONE (branch `feat/phase2-tail-cleanup`):
+  done/disabled/selected state no longer relies on opacity alone. `MarkRow` gains a `done` prop
+  (strikethrough title + `accessibilityState` checked) wired from `focus.tsx`; `MarkFrequencyPicker`
+  disabled chips use a muted color token + dashed border instead of opacity; onboarding review rows
+  expose `accessibilityRole`/`accessibilityState`. Plan: `docs/superpowers/plans/2026-06-22-phase2-tail-cleanup.md`.
 - [x] **2.5 — Retention cliff answer** (`PRODUCT.md:208`). DONE (branch
   `feat/free-tier-coherence`): calm all-complete closure state on the completion screen
   ("You finished everything you set out to do.") + goals-tab empty-state distinguishes
@@ -138,13 +141,28 @@ JSDoc, orphaned toggle styles) — fold into 1.2/1.3 when those files are touche
   *decorating the chrome* so a reviewer can apply it.
   DONE (feat/voice-copy-discipline): PRODUCT.md section 36 now names the boundary explicitly (voice and a few moments carry personality; chrome decoration is out of scope), giving reviewers a concrete test.
   Spec: docs/superpowers/specs/2026-06-21-voice-copy-discipline-design.md.
-- [ ] **2.9 — Competitor / anti-reference naming** (`PRODUCT.md:367`).
+- [x] **2.9 — Competitor / anti-reference naming** (`PRODUCT.md:367`).
+  DONE (branch `docs/product-direction`): brand names scrubbed from PRODUCT.md and momentum spec; wedge thesis replaced with "release its grip" RESOLVED block; no-brand-names voice rule added to Copy-formatting; two D4 follow-ups recorded in ROADMAP.
+  Spec: `docs/superpowers/specs/2026-06-22-anti-reference-naming-design.md`.
 - [x] **2.10 — AI generosity** (`PRODUCT.md:398`). DONE (branch `feat/free-tier-coherence`):
   one-time nature disclosed at the point of use before the draft is spent; draft fully
   editable (title, notes, marks) before saving. Regeneration not offered to free users;
   server rejects it and the review screen provides editing instead. Preset path remains
   the primary free-tier route; preset quality is a launch dependency.
   Plan: `docs/superpowers/plans/2026-06-21-free-tier-coherence.md`.
+
+---
+
+## Phase 3 — Tracked follow-ups (from 2.9)
+
+- [ ] **3.1 — Post-completion marks (maintenance mode).** Marks persist in `lc_counters`
+  after `completeGoal` (`state/goalsSlice.ts`) but no surface shows a mark once its goal is
+  done (`app/(tabs)/focus.tsx` renders only `status === 'active'` goals). Build a first-class
+  way to keep a habit going after its goal completes, so the "habits persist" positioning is
+  real. Needs its own brainstorm.
+- [ ] **3.2 — Business-coherence edge-case sweep.** Audit the app for other places where
+  behavior contradicts the "finish and rest" model (3.1 is one instance). Run after this
+  Phase 2 tail bundle merges.
 
 ---
 

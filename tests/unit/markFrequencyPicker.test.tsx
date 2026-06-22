@@ -1,9 +1,9 @@
 /**
  * Tests for MarkFrequencyPicker helpers.
  *
- * NOTE: Full render tests would require @testing-library/react-native with
- * proper RN mocks; the pure-logic tests below cover all exported helper
- * functions and the chip-value derivation algorithm used by the component.
+ * NOTE: The pure-logic tests below cover all exported helper functions and the
+ * chip-value derivation algorithm used by the component. The render tests at
+ * the bottom validate the visual/a11y disabled cue.
  */
 
 import { frequencyLabel, deriveChipValues } from '../../components/ui/MarkFrequencyPicker';
@@ -71,5 +71,47 @@ describe('deriveChipValues', () => {
     // Even if inputs are misordered the result should be sorted
     const result = deriveChipValues(7, 3, 5);
     expect(result).toEqual([3, 5, 7]);
+  });
+});
+
+// ── MarkFrequencyPicker disabled cue (render tests) ───────────────────────────
+
+jest.mock('../../state/uiSlice', () => ({ useEffectiveTheme: () => 'light' }));
+
+import React from 'react';
+import { render } from '@testing-library/react-native';
+import { MarkFrequencyPicker } from '../../components/ui/MarkFrequencyPicker';
+
+const baseMark = {
+  frequency_min: 1,
+  frequency_recommended: 3,
+  frequency_max: 7,
+  weekly_target: 3,
+  frequency_kind: null as null,
+  name: 'Test',
+};
+
+describe('MarkFrequencyPicker disabled cue', () => {
+  it('signals disabled chips with a muted color, not opacity alone', () => {
+    const { getByText } = render(
+      <MarkFrequencyPicker mark={baseMark} onChange={() => {}} disabled />,
+    );
+    // frequencyLabel(1) === 'Once a week' — the first chip in [1, 3, 7]
+    const chipText = getByText('Once a week');
+    const flat = Array.isArray(chipText.props.style)
+      ? Object.assign({}, ...chipText.props.style.flat())
+      : chipText.props.style;
+    expect(flat.opacity).toBeUndefined();
+    expect(typeof flat.color).toBe('string');
+  });
+
+  it('keeps accessibilityState.disabled on disabled chips', () => {
+    const { getAllByRole } = render(
+      <MarkFrequencyPicker mark={baseMark} onChange={() => {}} disabled />,
+    );
+    const buttons = getAllByRole('button');
+    buttons.forEach((btn) => {
+      expect(btn.props.accessibilityState?.disabled).toBe(true);
+    });
   });
 });

@@ -184,7 +184,7 @@ export default function DiagnosticsScreen() {
     }
   };
 
-  const handleBrokenStreak = async () => {
+  const handleBrokenMomentum = async () => {
     try {
       await seedBrokenMomentum(user?.id);
       logger.log('[Diagnostics] Seed broken momentum');
@@ -547,7 +547,7 @@ export default function DiagnosticsScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.button, { backgroundColor: themeColors.surface }]}
-                onPress={handleBrokenStreak}
+                onPress={handleBrokenMomentum}
               >
                 <AppText variant="button" style={[styles.buttonText, { color: themeColors.inkDark }]}>
                   Simulate Momentum Loss

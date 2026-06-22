@@ -375,6 +375,8 @@ export default function OnboardingScreen() {
                     key={i}
                     style={[styles.reviewMarkRow, !selected && styles.markRowDeselected]}
                     activeOpacity={0.75}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: selected }}
                     onPress={() => {
                       setReviewMarkSelected((prev) => {
                         const next = new Set(prev);

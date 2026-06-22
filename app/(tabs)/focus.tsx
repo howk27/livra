@@ -331,6 +331,7 @@ export default function FocusScreen() {
                 title={mark.name}
                 category={category}
                 loggedToday={isDoneForWeek}
+                done={isDoneForWeek}
                 onPress={() => router.push(`/mark/${mark.id}` as any)}
                 onLog={() => handleQuickIncrement(mark.id)}
                 onLongPress={() => handleMarkLongPress(mark.id, mark.name)}

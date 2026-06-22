@@ -109,8 +109,8 @@ export function MarkFrequencyPicker({ mark, onChange, disabled = false }: Props)
                 styles.chipText,
                 isSelected
                   ? { color: '#FFFFFF', fontFamily: fonts.sansSemibold }
-                  : { color: c.inkMuted, fontFamily: fonts.sans },
-                disabled && styles.chipTextDisabled,
+                  : { color: c.inkDark, fontFamily: fonts.sans },
+                disabled && !isSelected && { color: c.inkMuted },
               ]}
             >
               {frequencyLabel(value)}
@@ -143,12 +143,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   chipDisabled: {
-    opacity: 0.45,
+    borderStyle: 'dashed',
   },
   chipText: {
     fontSize: fontSize.sm,
-  },
-  chipTextDisabled: {
-    opacity: 0.6,
   },
 });
