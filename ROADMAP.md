@@ -119,8 +119,11 @@ JSDoc, orphaned toggle styles) — fold into 1.2/1.3 when those files are touche
 - [x] **2.3 — Monetization coherence** (`PRODUCT.md:95`, `:448`). Reconcile "one goal is active"
   with the free tier's 2 goals; make the locked-model table explicit about the daily-habit cap.
   DONE (free-tier coherence): two concurrent active goals, queued status retired, habit cap added to table. Plan: docs/superpowers/plans/2026-06-21-free-tier-coherence.md.
-- [ ] **2.4 — Opacity done-state a11y** (`PRODUCT.md:494`). `focus.tsx` + `MarkFrequencyPicker`
-  signal done with opacity 0.45 only; reuse the `MarkCard` completion-line pattern (icon/label/strikethrough).
+- [x] **2.4 — Opacity done-state a11y** (`PRODUCT.md:494`). DONE (branch `feat/phase2-tail-cleanup`):
+  done/disabled/selected state no longer relies on opacity alone. `MarkRow` gains a `done` prop
+  (strikethrough title + `accessibilityState` checked) wired from `focus.tsx`; `MarkFrequencyPicker`
+  disabled chips use a muted color token + dashed border instead of opacity; onboarding review rows
+  expose `accessibilityRole`/`accessibilityState`. Plan: `docs/superpowers/plans/2026-06-22-phase2-tail-cleanup.md`.
 - [x] **2.5 — Retention cliff answer** (`PRODUCT.md:208`). DONE (branch
   `feat/free-tier-coherence`): calm all-complete closure state on the completion screen
   ("You finished everything you set out to do.") + goals-tab empty-state distinguishes
