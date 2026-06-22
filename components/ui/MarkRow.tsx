@@ -56,6 +56,7 @@ interface MarkRowProps {
   weeklyCount?: number;
   weeklyTarget?: number;
   onLongPress?: () => void;
+  testID?: string;
 }
 
 export function MarkRow({
@@ -72,6 +73,7 @@ export function MarkRow({
   weeklyCount = 0,
   weeklyTarget = 7,
   onLongPress,
+  testID,
 }: MarkRowProps) {
   const theme = useEffectiveTheme();
   const c = themedColors(theme);
@@ -88,7 +90,7 @@ export function MarkRow({
 
   return (
     <TouchableOpacity
-      testID="mark-row"
+      testID={testID}
       style={[styles.row, !isLast && [styles.border, { borderBottomColor: c.borderLight }]]}
       onPress={onPress}
       onLongPress={onLongPress}

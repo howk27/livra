@@ -47,7 +47,7 @@ import { MarkRow } from '../../components/ui/MarkRow';
 describe('MarkRow done cue', () => {
   it('strikes through the title and marks the row checked when done', () => {
     const { getByText, getByTestId } = render(
-      <MarkRow title="Read" category="custom" done showWeeklyCount weeklyCount={3} weeklyTarget={3} />,
+      <MarkRow title="Read" category="custom" done showWeeklyCount weeklyCount={3} weeklyTarget={3} testID="mark-row" />,
     );
     const title = getByText('Read');
     const flat = Array.isArray(title.props.style)
@@ -60,13 +60,15 @@ describe('MarkRow done cue', () => {
   });
 
   it('does not strike through the title when not done', () => {
-    const { getByText } = render(
-      <MarkRow title="Read" category="custom" showWeeklyCount weeklyCount={1} weeklyTarget={3} />,
+    const { getByText, getByTestId } = render(
+      <MarkRow title="Read" category="custom" showWeeklyCount weeklyCount={1} weeklyTarget={3} testID="mark-row" />,
     );
     const title = getByText('Read');
     const flat = Array.isArray(title.props.style)
       ? Object.assign({}, ...title.props.style.flat())
       : title.props.style;
     expect(flat.textDecorationLine).toBeUndefined();
+    const row = getByTestId('mark-row');
+    expect(row.props.accessibilityState?.checked).toBeUndefined();
   });
 });
