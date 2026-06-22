@@ -224,7 +224,7 @@ export default function GoalDetailScreen() {
               </Text>
               <TouchableOpacity
                 style={[styles.addMarkBtn, { backgroundColor: c.forest }]}
-                onPress={() => router.push({ pathname: '/counter/new', params: { goalId: id } } as any)}
+                onPress={() => router.push({ pathname: '/mark/new', params: { goalId: id } } as any)}
               >
                 <Plus size={14} color={c.inkInverse} weight="bold" />
                 <Text style={styles.addMarkBtnText}>Add a mark</Text>
