@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Platform,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useRouter } from 'expo-router';
@@ -44,6 +45,7 @@ import {
 } from '../../lib/features';
 import { computeWeek } from '../../lib/consistency';
 import { logger } from '../../lib/utils/logger';
+import { useNotification } from '../../contexts/NotificationContext';
 import { MARK_LIBRARY } from '../../lib/suggestedCounters';
 import { resolveCounterIconType } from '../../src/components/icons/IconResolver';
 import { applyOpacity } from '../../src/components/icons/color';
@@ -57,7 +59,8 @@ export default function FocusScreen() {
   const c = themedColors(theme);
   const router = useRouter();
   const { user } = useAuth();
-  const { counters, loading, incrementCounter, deleteCounter } = useCounters();
+  const { counters, loading, error, incrementCounter, deleteCounter } = useCounters();
+  const { showError } = useNotification();
   const { sync } = useSync();
   const appDateKey = useAppDateStore((s) => s.debugDateOverride ?? '');
   const todayStr = useMemo(() => formatDate(getAppDate()), [appDateKey]);
@@ -227,9 +230,10 @@ export default function FocusScreen() {
         await incrementCounter(markId, user.id, 1);
       } catch (error: unknown) {
         logger.error('Error incrementing mark:', error);
+        showError('Could not log that. Try again.');
       }
     },
-    [user?.id, incrementCounter],
+    [user?.id, incrementCounter, showError],
   );
 
   const handleMarkLongPress = useCallback((markId: string, markName: string) => {
@@ -362,6 +366,18 @@ export default function FocusScreen() {
 
         {/* ── Greeting ── */}
         <Text style={[styles.greeting, { color: c.inkDark }]}>{greetingText}</Text>
+
+        {/* ── Loading / error states ── */}
+        {loading && activeCounters.length === 0 && (
+          <View style={styles.loadingState}>
+            <ActivityIndicator size="small" color={c.accent} />
+          </View>
+        )}
+        {!loading && error && (
+          <View style={[styles.errorBanner, { backgroundColor: applyOpacity(c.danger, 0.13) }]}>
+            <Text style={[styles.errorBannerText, { color: c.danger }]}>{error}</Text>
+          </View>
+        )}
 
         {/* ── Compact Progress Banner ── */}
         <View style={[
@@ -689,6 +705,21 @@ const styles = StyleSheet.create({
     fontFamily: fonts.sans,
     fontSize: fontSize.base,
     textAlign: 'center',
+  },
+
+  loadingState: {
+    paddingVertical: spacing.xxl,
+    alignItems: 'center',
+  },
+  errorBanner: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    borderRadius: radius.md,
+    padding: spacing.md,
+  },
+  errorBannerText: {
+    fontFamily: fonts.sans,
+    fontSize: fontSize.sm,
   },
 
   swipeDelete: {
