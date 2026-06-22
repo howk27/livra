@@ -211,8 +211,8 @@ export default function FocusScreen() {
   }, [user]);
 
   const greetingText = useMemo(() => {
-    if (firstName) return `${firstName}, your journey continues today.`;
-    return 'Your journey continues today.';
+    if (firstName) return `${firstName}, one step is enough.`;
+    return 'One step is enough.';
   }, [firstName]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
@@ -408,7 +408,7 @@ export default function FocusScreen() {
         {allDoneForDay && activeCounters.length > 0 && (
           <View style={[styles.allDoneBanner, { backgroundColor: c.surface }]}>
             <Text style={[styles.allDoneText, { color: c.inkMid }]}>
-              {"That's today done. See you tomorrow."}
+              {"That's everything for today."}
             </Text>
           </View>
         )}
