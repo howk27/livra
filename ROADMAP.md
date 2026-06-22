@@ -126,12 +126,18 @@ JSDoc, orphaned toggle styles) — fold into 1.2/1.3 when those files are touche
   ("You finished everything you set out to do.") + goals-tab empty-state distinguishes
   finished-everything from first-run. No manufactured return hook; dignified off-ramp.
   Plan: `docs/superpowers/plans/2026-06-21-free-tier-coherence.md`.
-- [ ] **2.6 — Voice: one canonical definition per screen** (`PRODUCT.md:313`). Centralize the
+- [x] **2.6 — Voice: one canonical definition per screen** (`PRODUCT.md:313`). Centralize the
   Goal/Mark/Momentum/Daily-habit definitions each screen reuses (lands in `lib/copy.ts`).
-- [ ] **2.7 — Dash-rule enforcement** (`PRODUCT.md:262`). No em-dash, en-dash, or hyphen-as-dash
+  DONE (feat/voice-copy-discipline): TERMS block in lib/copy.ts centralizes Goal, Mark, Momentum, and Daily-habit definitions; GOAL_LIMIT_MESSAGE centralizes the recurring goal-limit line.
+  Spec: docs/superpowers/specs/2026-06-21-voice-copy-discipline-design.md.
+- [x] **2.7 — Dash-rule enforcement** (`PRODUCT.md:262`). No em-dash, en-dash, or hyphen-as-dash
   in user-facing copy; add a check.
-- [ ] **2.8 — Register boundary** (`PRODUCT.md:36`). Draw the line where *personality* becomes
+  DONE (feat/voice-copy-discipline): Jest suite at tests/unit/copyDashRule.test.ts enforces the ban over lib/copy.ts and lib/weeklyReflectionCopy.ts; legacy dashes cleaned from weeklyReflectionCopy.ts.
+  Spec: docs/superpowers/specs/2026-06-21-voice-copy-discipline-design.md.
+- [x] **2.8 — Register boundary** (`PRODUCT.md:36`). Draw the line where *personality* becomes
   *decorating the chrome* so a reviewer can apply it.
+  DONE (feat/voice-copy-discipline): PRODUCT.md section 36 now names the boundary explicitly (voice and a few moments carry personality; chrome decoration is out of scope), giving reviewers a concrete test.
+  Spec: docs/superpowers/specs/2026-06-21-voice-copy-discipline-design.md.
 - [ ] **2.9 — Competitor / anti-reference naming** (`PRODUCT.md:367`).
 - [x] **2.10 — AI generosity** (`PRODUCT.md:398`). DONE (branch `feat/free-tier-coherence`):
   one-time nature disclosed at the point of use before the draft is spent; draft fully

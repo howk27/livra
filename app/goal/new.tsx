@@ -17,6 +17,7 @@ import { useGoalsStore, GoalLimitError } from '../../state/goalsSlice';
 import { useMarksStore } from '../../state/countersSlice';
 import { useAuth } from '../../hooks/useAuth';
 import { checkProStatus } from '../../lib/iap/iap';
+import { GOAL_LIMIT_MESSAGE } from '@/lib/copy';
 import { getMarksForGoal } from '../../lib/goalMarkSuggestions';
 import { CommitmentScreen, CommitmentSelection } from '../../components/CommitmentScreen';
 import { MarkDefinition } from '../../lib/suggestedCounters';
@@ -97,7 +98,7 @@ export default function NewGoalScreen() {
       if (err instanceof GoalLimitError) {
         Alert.alert(
           'Two goals at a time',
-          'Free keeps you to 2 goals at once so you can actually finish them. Livra+ opens unlimited goals.',
+          GOAL_LIMIT_MESSAGE,
           [
             { text: 'Not now', style: 'cancel' },
             { text: 'See Livra+', onPress: () => router.push('/paywall') },

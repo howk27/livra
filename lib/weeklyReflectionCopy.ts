@@ -13,15 +13,15 @@ const TIER_COPY: Record<ReflectionTier, TierCopy[]> = {
     { title: 'Building rhythm.', body: "You showed up more than you didn't. Keep building on that." },
   ],
   inconsistent: [
-    { title: 'Needs more.', body: "You showed up some days — more than nothing. But you know you can do more." },
+    { title: 'Needs more.', body: "You showed up some days, more than nothing. But you know you can do more." },
     { title: 'Uneven week.', body: 'Hit-or-miss. Reset Monday and pick one day to protect first.' },
   ],
   missing: [
     { title: "It didn't happen.", body: 'This mark got skipped this week. Monday is the reset.' },
-    { title: 'No movement here.', body: "Zero this week. It's not too late to start over — start Monday." },
+    { title: 'No movement here.', body: "Zero this week. It's not too late to start over. Start Monday." },
   ],
   first_week: [
-    { title: 'First week.', body: "The hardest part is starting — you did that. Stack another week." },
+    { title: 'First week.', body: "The hardest part is starting. You did that. Stack another week." },
     { title: 'You started.', body: 'First week with this mark. Build on it.' },
   ],
 };
