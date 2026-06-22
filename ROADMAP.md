@@ -155,14 +155,19 @@ JSDoc, orphaned toggle styles) — fold into 1.2/1.3 when those files are touche
 
 ## Phase 3 — Tracked follow-ups (from 2.9)
 
-- [ ] **3.1 — Post-completion marks (maintenance mode).** Marks persist in `lc_counters`
-  after `completeGoal` (`state/goalsSlice.ts`) but no surface shows a mark once its goal is
-  done (`app/(tabs)/focus.tsx` renders only `status === 'active'` goals). Build a first-class
-  way to keep a habit going after its goal completes, so the "habits persist" positioning is
-  real. Needs its own brainstorm.
-- [ ] **3.2 — Business-coherence edge-case sweep.** Audit the app for other places where
-  behavior contradicts the "finish and rest" model (3.1 is one instance). Run after this
-  Phase 2 tail bundle merges.
+**Build order:** the coherence audit (3.1) runs first and feeds the cleanup; the
+maintenance-marks build (3.2) is deliberately **last**, after everything else is cleaned up.
+
+- [ ] **3.1 — Business-coherence edge-case sweep (NEXT — brainstorm first).** Audit the app for
+  places where actual behavior contradicts the "designed to release its grip" / "finish and
+  rest" business model. The post-completion marks gap (3.2) is one known instance; the sweep
+  surfaces the rest *before* any of them are built. Start with a brainstorm in a fresh session.
+  Kickoff: `docs/superpowers/2026-06-22-business-coherence-audit-kickoff.md`.
+- [ ] **3.2 — Post-completion marks (maintenance mode) (LAST — after all other cleanup).** Marks
+  persist in `lc_counters` after `completeGoal` (`state/goalsSlice.ts`) but no surface shows a
+  mark once its goal is done (`app/(tabs)/focus.tsx` renders only `status === 'active'` goals).
+  Build a first-class way to keep a habit going after its goal completes, so the "habits persist"
+  positioning is real. Deferred to last; needs its own brainstorm.
 
 ---
 
