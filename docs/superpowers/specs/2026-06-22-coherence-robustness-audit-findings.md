@@ -2,9 +2,13 @@
 
 **Date:** 2026-06-22
 **Design:** `docs/superpowers/specs/2026-06-22-coherence-robustness-audit-design.md`
-**Status:** audit COMPLETE — all core, supporting, and notification surfaces deep-audited; auth +
-profile/about spot-checked; dev/static Tier-3 skipped. See Coverage table at the end. 1×P0,
-6×P1, 14×P2. Ready for fix-phase prioritization.
+**Status:** audit COMPLETE; **fixes COMPLETE** (2026-06-22). 1×P0, 6×P1, 14×P2 found.
+- **P1-1** (notifications) ✅ RESOLVED — commits `ca4a792..c81cd9f` (own spec/plan; final review caught+fixed a Critical).
+- **Batch-1** ✅ RESOLVED — commits on `docs/product-direction` (plan `2026-06-22-coherence-robustness-fixes.md`):
+  P0-1 dead `/counter/new` route, P1-2 completion-overlay share no-op, P1-3 Home loading/error +
+  silent-log feedback, P1-4 Android date picker, P1-5 misleading privacy toggles. Full suite
+  163 suites / 1405 tests green, type-check clean, lint-neutral.
+- **Deferred:** P1-6 expired-goal UI closure → 3.2; all 14 P2 items → backlog.
 
 Severity: **P0** crash/data-loss/broken core flow · **P1** clear contradiction or broken/missing
 state · **P2** deferrable polish/subjective. Lens **A** = business coherence, **B** = robustness.
