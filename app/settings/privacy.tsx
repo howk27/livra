@@ -1,16 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Switch, TouchableOpacity } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-} from 'react-native-reanimated';
+import { View, Text, StyleSheet, ScrollView, Switch } from 'react-native';
 import * as LocalAuthentication from 'expo-local-authentication';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LivraHeader } from '../../components/ui/LivraHeader';
 import { SectionLabel } from '../../components/ui/SectionLabel';
 import { fonts, spacing, radius, shadow, themedColors, fontSize } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
+import { useSync } from '../../hooks/useSync';
 
 export const BIOMETRIC_LOCK_KEY = 'biometric_lock_enabled';
 
@@ -20,41 +16,11 @@ interface ToggleRowProps {
   value: boolean;
   onToggle: (v: boolean) => void;
   isLast?: boolean;
-  subRow?: React.ReactNode;
-  subRowVisible?: boolean;
   disabled?: boolean;
 }
 
-function ToggleRow({
-  label,
-  subtitle,
-  value,
-  onToggle,
-  isLast,
-  subRow,
-  subRowVisible,
-  disabled,
-}: ToggleRowProps) {
+function ToggleRow({ label, subtitle, value, onToggle, isLast, disabled }: ToggleRowProps) {
   const c = themedColors(useEffectiveTheme());
-  const height = useSharedValue(0);
-  const opacity = useSharedValue(0);
-
-  React.useEffect(() => {
-    if (subRowVisible) {
-      height.value = withTiming(52, { duration: 250 });
-      opacity.value = withTiming(1, { duration: 250 });
-    } else {
-      height.value = withTiming(0, { duration: 200 });
-      opacity.value = withTiming(0, { duration: 150 });
-    }
-  }, [subRowVisible, height, opacity]);
-
-  const subRowStyle = useAnimatedStyle(() => ({
-    height: height.value,
-    opacity: opacity.value,
-    overflow: 'hidden',
-  }));
-
   return (
     <View style={[styles.rowWrap, !isLast && [styles.rowBorder, { borderBottomColor: c.borderLight }]]}>
       <View style={styles.toggleRow}>
@@ -70,24 +36,14 @@ function ToggleRow({
           disabled={disabled}
         />
       </View>
-      {subRow && (
-        <Animated.View style={subRowStyle}>
-          {subRow}
-        </Animated.View>
-      )}
     </View>
   );
 }
 
-const AUTO_LOCK_OPTIONS = ['1 min', '5 min', '15 min', 'Never'];
-
 export default function PrivacyScreen() {
   const c = themedColors(useEffectiveTheme());
-  const [analytics, setAnalytics] = useState(true);
-  const [crashReports, setCrashReports] = useState(true);
+  const { syncState } = useSync();
   const [faceId, setFaceId] = useState(false);
-  const [autoLock, setAutoLock] = useState(false);
-  const [autoLockOption, setAutoLockOption] = useState(1);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
 
   // On mount: check hardware + enrollment, load persisted preference
@@ -126,27 +82,19 @@ export default function PrivacyScreen() {
     }
   };
 
+  const syncStatusText = syncState.isSyncing
+    ? 'Syncing…'
+    : syncState.error
+      ? 'Sync error'
+      : syncState.lastSyncedAt
+        ? `Synced ${new Date(syncState.lastSyncedAt).toLocaleTimeString()}`
+        : 'Up to date';
+  const syncStatusColor = syncState.error ? c.danger : c.success;
+
   return (
     <View style={[styles.screen, { backgroundColor: c.linen }]}>
       <LivraHeader showBack title="Privacy" />
       <ScrollView contentContainerStyle={styles.content}>
-
-        <SectionLabel style={styles.sectionLabel}>DATA COLLECTION</SectionLabel>
-        <View style={[styles.card, { backgroundColor: c.surface }]}>
-          <ToggleRow
-            label="Analytics"
-            subtitle="Helps improve Livra (anonymous)"
-            value={analytics}
-            onToggle={setAnalytics}
-          />
-          <ToggleRow
-            label="Crash Reports"
-            subtitle="Automatically send crash data"
-            value={crashReports}
-            onToggle={setCrashReports}
-            isLast
-          />
-        </View>
 
         <SectionLabel style={styles.sectionLabel}>SECURITY</SectionLabel>
         <View style={[styles.card, { backgroundColor: c.surface }]}>
@@ -160,30 +108,7 @@ export default function PrivacyScreen() {
             value={faceId}
             onToggle={(v) => { void handleFaceIdToggle(v); }}
             disabled={!biometricAvailable}
-          />
-          <ToggleRow
-            label="Auto-lock"
-            subtitle="Lock after inactivity"
-            value={autoLock}
-            onToggle={setAutoLock}
             isLast
-            subRowVisible={autoLock}
-            subRow={
-              <View style={styles.subRow}>
-                {AUTO_LOCK_OPTIONS.map((opt, i) => (
-                  <TouchableOpacity
-                    key={opt}
-                    style={[styles.optPill, { backgroundColor: autoLockOption === i ? c.forest : c.surfaceAlt }]}
-                    onPress={() => setAutoLockOption(i)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.optText, { color: autoLockOption === i ? c.inkInverse : c.inkMid }]}>
-                      {opt}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            }
           />
         </View>
 
@@ -194,7 +119,7 @@ export default function PrivacyScreen() {
               <Text style={[styles.rowLabel, { color: c.inkDark }]}>Supabase Sync</Text>
             </View>
             <View style={[styles.syncBadge, { backgroundColor: c.surfaceAlt }]}>
-              <Text style={[styles.syncBadgeText, { color: c.success }]}>Synced</Text>
+              <Text style={[styles.syncBadgeText, { color: syncStatusColor }]}>{syncStatusText}</Text>
             </View>
           </View>
         </View>
@@ -240,22 +165,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.sans,
     fontSize: fontSize.sm,
     marginTop: 2,
-  },
-  subRow: {
-    flexDirection: 'row',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.sm,
-    flexWrap: 'wrap',
-  },
-  optPill: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: 6,
-    borderRadius: radius.full,
-  },
-  optText: {
-    fontFamily: fonts.sansMedium,
-    fontSize: fontSize[13],
   },
   syncRow: {
     flexDirection: 'row',
