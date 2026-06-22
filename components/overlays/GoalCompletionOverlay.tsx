@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -16,12 +16,24 @@ import Animated, {
 } from 'react-native-reanimated';
 import { GestureDetector, Gesture, GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
+import * as Sharing from 'expo-sharing';
+import * as MediaLibrary from 'expo-media-library';
+import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SvgLogo } from '../ui/SvgLogo';
 import { PillButton } from '../ui/PillButton';
+import { GoalCompletionShareCard } from '../GoalCompletionShareCard';
+import { SharePreviewModal } from '../SharePreviewModal';
 import { fonts, spacing, themedColors, fontSize } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useGoalCompletionStore } from '../../state/goalCompletionStore';
+import { useShareCardStore } from '../../state/shareCardSlice';
+import { useXPStore } from '../../state/xpSlice';
+import { getLevelForXP, LEVEL_TITLES } from '../../lib/xpEngine';
+import { checkProStatus } from '../../lib/iap/iap';
+import { canCustomizeShareCard } from '../../lib/gating';
+import { generateShareCard } from '../../lib/sharing/generateShareCard';
+import { logger } from '../../lib/utils/logger';
 import { formatBankedMomentum } from '../../lib/momentumPresenter';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -55,6 +67,77 @@ export function GoalCompletionOverlay() {
   const theme = useEffectiveTheme();
   const c = themedColors(theme);
   const { completedGoal, show, hideCompletion } = useGoalCompletionStore();
+  const router = useRouter();
+  const shareCardRef = useRef<View>(null) as React.RefObject<View>;
+  const [shareModalVisible, setShareModalVisible] = useState(false);
+  const [canCustomize, setCanCustomize] = useState(false);
+  const [saveLabel, setSaveLabel] = useState('Save to Photos');
+  const style = useShareCardStore((s) => s.style);
+  const updateStyle = useShareCardStore((s) => s.updateStyle);
+  const loadShareCardStyle = useShareCardStore((s) => s.loadShareCardStyle);
+  const xp = useXPStore((s) => s.totalXP ?? 0);
+  const levelTitle = LEVEL_TITLES[getLevelForXP(xp) - 1] ?? 'Livra';
+
+  useEffect(() => {
+    loadShareCardStyle();
+  }, [loadShareCardStyle]);
+
+  const completedDate = (completedGoal?.completed_at ?? new Date().toISOString()).slice(0, 10);
+  const daysTaken =
+    completedGoal?.created_at && completedGoal?.completed_at
+      ? Math.max(
+          1,
+          Math.round(
+            (new Date(completedGoal.completed_at).getTime() -
+              new Date(completedGoal.created_at).getTime()) /
+              86_400_000,
+          ),
+        )
+      : 1;
+  const targetDateLabel: string | undefined =
+    completedGoal?.target_date && completedGoal?.completed_at
+      ? (() => {
+          const diff = Math.round(
+            (new Date(completedGoal.completed_at).getTime() -
+              new Date(completedGoal.target_date).getTime()) /
+              86_400_000,
+          );
+          if (diff < 0) return `Finished ${Math.abs(diff)} days early`;
+          if (diff > 0) return `Finished ${diff} days late`;
+          return 'Finished right on time';
+        })()
+      : undefined;
+
+  const handleSharePress = useCallback(async () => {
+    const { effectiveUnlocked } = await checkProStatus();
+    setCanCustomize(canCustomizeShareCard(effectiveUnlocked));
+    setShareModalVisible(true);
+  }, []);
+
+  const handleShareImage = useCallback(async () => {
+    try {
+      const uri = await generateShareCard(shareCardRef);
+      await Sharing.shareAsync(uri, { mimeType: 'image/jpeg', dialogTitle: 'Share your goal' });
+    } catch (e) {
+      logger.debug('[Share] failed', e);
+    }
+  }, []);
+
+  const handleSaveImage = useCallback(async () => {
+    try {
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        setSaveLabel('Failed, try again');
+        return;
+      }
+      const uri = await generateShareCard(shareCardRef);
+      await MediaLibrary.saveToLibraryAsync(uri);
+      setSaveLabel('Saved');
+    } catch {
+      setSaveLabel('Failed, try again');
+    }
+  }, []);
+
   const bgOpacity = useSharedValue(0);
   const translateY = useSharedValue(0);
   const dividerWidth = useSharedValue(0);
@@ -144,13 +227,58 @@ export function GoalCompletionOverlay() {
                 onPress={dismiss}
                 style={styles.continueBtn}
               />
-              <TouchableOpacity onPress={() => {}}>
+              <TouchableOpacity onPress={handleSharePress}>
                 <Text style={[styles.shareText, { color: c.inkMuted }]}>Share your win</Text>
               </TouchableOpacity>
             </View>
           </AnimatedElement>
         </Animated.View>
       </GestureDetector>
+
+      {completedGoal && (
+        <View
+          style={{ position: 'absolute', left: -10000, top: 0, opacity: 0 }}
+          pointerEvents="none"
+        >
+          <GoalCompletionShareCard
+            forwardRef={shareCardRef}
+            goalTitle={completedGoal.title}
+            completedDate={completedDate}
+            levelTitle={levelTitle}
+            daysTaken={daysTaken}
+            targetDateLabel={targetDateLabel}
+            bankedMomentumDays={completedGoal.banked_momentum_days}
+            style={style}
+          />
+        </View>
+      )}
+
+      <SharePreviewModal
+        visible={shareModalVisible}
+        goalTitle={completedGoal?.title ?? ''}
+        canCustomize={canCustomize}
+        style={style}
+        onStyleChange={(patch) => updateStyle(patch)}
+        onRequestUpgrade={() => {
+          setShareModalVisible(false);
+          router.push('/paywall');
+        }}
+        onShare={handleShareImage}
+        onSave={handleSaveImage}
+        saveLabel={saveLabel}
+        cardProps={{
+          goalTitle: completedGoal?.title ?? '',
+          completedDate,
+          levelTitle,
+          daysTaken,
+          targetDateLabel,
+          bankedMomentumDays: completedGoal?.banked_momentum_days,
+        }}
+        onClose={() => {
+          setShareModalVisible(false);
+          setSaveLabel('Save to Photos');
+        }}
+      />
     </Animated.View>
   );
 }
