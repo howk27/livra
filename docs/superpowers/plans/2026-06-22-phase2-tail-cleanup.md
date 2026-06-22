@@ -553,17 +553,13 @@ Change the `ROADMAP.md` 2.9 line from `- [ ]` to `- [x]` with a DONE note refere
   Phase 2 tail bundle merges.
 ```
 
-- [ ] **Step 6: Verify zero brand names remain in tracked files**
+- [ ] **Step 6: Verify no brand names remain in tracked files**
 
-Run:
-
-```bash
-git grep -niE "the-gamified-streak-brand|punishing-streak|warm-companion|configurable-dashboard" \
-  -- '*.md' '*.ts' '*.tsx'
-# (use git grep so node_modules and worktree copies are excluded automatically)
-```
-
-Expected: no output.
+The no-brand-names rule is enforced by the D3 prose voice-rule plus human review, not an
+enumerated automated check (enumerating the brands would re-commit the names). At
+implementation time, verify the one-time scrub by grepping the actual competitor brand list
+(kept out of this committed doc) over git-tracked files and confirming zero hits before
+committing.
 
 - [ ] **Step 7: Commit**
 

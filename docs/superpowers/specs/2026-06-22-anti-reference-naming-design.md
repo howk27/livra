@@ -98,10 +98,9 @@ rejected as over-machinery for the risk.)
 
 ## Verification
 
-- `git grep -niE 'the-gamified-streak-brand|punishing-streak|warm-companion|configurable-dashboard'`
-  over tracked files returns hits only in behavioral-descriptor form (no brand names).
-  The canonical verification command: `git grep -niE` with the brand token list must return
-  **zero** hits across all tracked files.
+- The one-time scrub is verified by grepping the competitor brand list (kept out of this
+  committed spec) over git-tracked files and confirming zero hits. Ongoing enforcement is the
+  D3 prose voice-rule plus review, not an enumerated automated check.
 - PRODUCT.md stress-point callout at :380 is replaced by a "RESOLVED" note referencing this
   spec, matching the 2.7 pattern.
 - ROADMAP.md 2.9 checked; D4.1 and D4.2 present as new items.
