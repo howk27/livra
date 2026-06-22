@@ -1,6 +1,6 @@
 /**
  * Livra behavior notification primitives: foreground/tap bookkeeping and window-picking utility.
- * The nag scheduling engine (scheduleBehaviorNotifications et al.) was removed in refactor 3.1.
+ * The nag scheduling engine (the former daily-nag schedulers) was removed in refactor 3.1.
  * `pickFireInWindow` is still consumed by momentumWarningNotifications.ts.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';

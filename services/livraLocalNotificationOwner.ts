@@ -60,7 +60,7 @@ async function flushCoalescedReschedule(): Promise<void> {
 
 /**
  * Request a reschedule from current SQLite + prefs. Coalesced: multiple calls within COALESCE_MS
- * result in one `scheduleBehaviorNotifications` with the latest `userId`.
+ * result in one `scheduleReengageNudge` call with the latest `userId`.
  */
 export function requestLivraLocalNotificationReschedule(userId: string | undefined): void {
   pendingUserId = userId;
