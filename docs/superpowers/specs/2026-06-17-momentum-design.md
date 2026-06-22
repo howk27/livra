@@ -109,7 +109,7 @@ when you're fine, legible exactly when the edge is near and the user can act on 
 matches "every interruption is earned" and keeps daily use quiet.
 
 Options considered and rejected: **B** (soft ring) reads as "today's target," colliding with
-mark completion; **D** (organic growth metaphor) risks cutesy and Finch-adjacent
+mark completion; **D** (organic growth metaphor) risks cutesy and wellness-companion-adjacent
 (anti-reference); **A alone** (always-on depleting gauge) manufactures the exact anxiety we
 removed; **C alone** hides the cushion entirely. The hybrid takes C's calm default and adds
 A's gauge only in the at-risk moment.

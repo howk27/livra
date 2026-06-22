@@ -277,6 +277,11 @@ exempt — the example lines below are written dash-free to model the rule.)
 > for launch attention with guardrails that are actually failing.
 > **Stress point RESOLVED (Phase 2.7):** A mechanical Jest check (`tests/unit/copyDashRule.test.ts`) now enforces the em-dash/en-dash ban and the ` - ` hyphen-as-dash proxy inside string literals across `lib/copy.ts` and `lib/weeklyReflectionCopy.ts`. Resolved by the voice-copy-discipline spec (`docs/superpowers/specs/2026-06-21-voice-copy-discipline-design.md`).
 
+**No competitor brand names in any committed artifact.** Docs, specs, and shipped copy
+describe competitive lanes by behavior (what they optimize for), never by brand. This keeps
+positioning honest and keeps the repo free of names we would not market at a user. Enforced
+by review.
+
 ### Do / Don't (with real lines)
 
 | Surface | Do — wise & playful mentor | Don't — off-tone |
@@ -350,10 +355,10 @@ wrong, not the voice.
 
 Livra must NOT feel like:
 
-- **Gamified streak apps** (Duolingo-style guilt, streak-loss panic, badge spam,
+- **Gamified streak apps** (punishing-streak guilt, streak-loss panic, badge spam,
   confetti dopamine, dark-pattern nags). This bans the *punishing* streak, not momentum
   itself — Livra's forgiving **Momentum** is the deliberate counter-example.
-- **Cluttered dashboards** (Notion/enterprise density — charts and widgets competing
+- **Cluttered dashboards** (configurable-dashboard / enterprise density — charts and widgets competing
   for attention).
 - **Corporate / clinical SaaS** (cold, gray, generic productivity-tool aesthetic with
   no soul).
@@ -369,22 +374,22 @@ tools that overwhelm. It competes on **focus and feel**, not feature count.
 
 | Category | What they optimize for | Where Livra differs |
 | --- | --- | --- |
-| **Streak / gamified apps** (Duolingo-style, streak trackers) | Daily return via loss aversion and dopamine | Momentum without the panic. A forgiving run you can rest from, not a brittle streak that punishes a missed day. |
+| **Streak / gamified apps** (punishing-streak trackers) | Daily return via loss aversion and dopamine | Momentum without the panic. A forgiving run you can rest from, not a brittle streak that punishes a missed day. |
 | **Habit trackers** (multi-habit grids, checkbox apps) | Breadth — track everything | Livra is deliberately narrow: a couple of goals, a few marks each. Not a habit grid of everything. Depth over breadth. |
-| **Notion-style / productivity tools** | Configurability and data density | Livra is opinionated and quiet. No setup chore, no dashboard to maintain. |
+| **Configurable productivity tools** | Configurability and data density | Livra is opinionated and quiet. No setup chore, no dashboard to maintain. |
 
 The defensibility is the **personality and the discipline of the cut** — the things Livra
 refuses to do are as load-bearing as the things it does. A competitor can copy a feature;
 copying the restraint means giving up their own growth metrics.
 
-> **Stress point — resolve while building:** The named anti-references are all *gamified*
-> apps (Duolingo-style), but the calm/forgiving lane is the most crowded emerging niche —
-> Finch, Stoic, Daylio, and Fabulous already own "warm and non-punishing," and at least one
-> is well funded. The real threat isn't a streak app; it's a warm incumbent adding a
-> "single goal" mode. "Discipline of the cut" is a *taste* moat, not a structural one.
-> Before leaning on this positioning in store copy, name the live calm-lane competitors
-> here and state what specifically Livra does that they don't, beyond restraint, which is
-> copyable.
+> **Stress point RESOLVED (Phase 2.9):** The competitive lane that matters is the warm,
+> non-punishing wellness / mood companions, not the gamified apps. Livra's wedge is
+> structural, not taste: it is designed to release its grip. Completing a goal ends the
+> pressure of active pursuit, not the relationship. You return for your next goal, not every
+> day, and the habits you built persist. An incumbent whose revenue depends on daily-active
+> users cannot adopt that rhythm without punishing its own core metric. It can copy a
+> single-goal screen; it cannot copy a model that is glad to let you rest. Resolved by the
+> anti-reference naming spec (`docs/superpowers/specs/2026-06-22-anti-reference-naming-design.md`).
 
 ## Monetization Stance
 
