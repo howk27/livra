@@ -176,6 +176,11 @@ maintenance-marks build (3.2) is deliberately **last**, after everything else is
   Spec: `docs/superpowers/specs/2026-06-22-post-completion-maintenance-marks-design.md`.
   **Known follow-up (out of scope):** expired goals (`status: 'expired'`) orphan their marks the
   same way; that closure path is separately deferred and not handled here.
+- [ ] **3.3 — Expired-goal closure path.** A goal reaching `status: 'expired'`
+  (`state/goalsSlice.ts:302-306`) orphans its marks the same way completion did before 3.2.
+  Decide the closure UX (maintenance-graduate like 3.2, or a distinct expired off-ramp) and
+  implement. Surfaced by the 3.1 coherence sweep (finding F4); see
+  `docs/superpowers/specs/2026-06-23-business-coherence-sweep-findings.md`.
 
 ---
 
