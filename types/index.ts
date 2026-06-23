@@ -35,6 +35,8 @@ export type Mark = {
   health_kit_type?: HealthKitType | null;
   health_kit_config?: { stepGoal?: number } | null;
   goal_id?: string | null;
+  /** Phase 3.2: set when a mark continues past its goal's completion; the id of the goal it graduated from. */
+  maintenance_of?: string | null;
   // Phase 1: Frequency model
   frequency_min?: number | null;
   frequency_recommended?: number | null;

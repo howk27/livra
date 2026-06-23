@@ -38,6 +38,7 @@ import { getMomentumBannerCopy } from '../../lib/copy';
 import { getAppDate } from '../../lib/appDate';
 import { formatDate } from '../../lib/date';
 import { resolveDailyTarget } from '../../lib/markDailyTarget';
+import { partitionMarks } from '../../lib/maintenanceMarks';
 import {
   currentWeekDates,
   computeCompletionsThisWeek,
@@ -159,15 +160,22 @@ export default function FocusScreen() {
 
   // ── Daily progress (for banner) ───────────────────────────────────────────
 
+  // Phase 3.2: maintenance habits stay full habits but carry no goal-pressure —
+  // they're excluded from the daily "all done today" celebration computations.
+  const pressureMarks = useMemo(
+    () => activeCounters.filter((m) => !m.maintenance_of),
+    [activeCounters],
+  );
+
   const completedMarksToday = useMemo(() => {
     let n = 0;
-    activeCounters.forEach((cnt) => {
+    pressureMarks.forEach((cnt) => {
       if ((todayCountsMap.get(cnt.id) ?? 0) >= resolveDailyTarget(cnt)) n++;
     });
     return n;
-  }, [activeCounters, todayCountsMap]);
+  }, [pressureMarks, todayCountsMap]);
 
-  const todayTotal = activeCounters.length;
+  const todayTotal = pressureMarks.length;
 
   // ── Grouped marks ─────────────────────────────────────────────────────────
 
@@ -176,20 +184,21 @@ export default function FocusScreen() {
     [activeCounters],
   );
 
-  const goallessMarks = useMemo(
-    () => activeCounters.filter((m) => !m.goal_id),
+  // loose = no goal and not a maintenance habit; maintenance graduates to its own section.
+  const { loose: goallessMarks, maintenance: maintenanceMarks } = useMemo(
+    () => partitionMarks(activeCounters),
     [activeCounters],
   );
 
   // True when nothing is still loggable today: every mark is doneForWeek OR already hit daily target
   const allDoneForDay = useMemo(() => {
-    if (activeCounters.length === 0) return false;
-    return activeCounters.every((m) => {
+    if (pressureMarks.length === 0) return false;
+    return pressureMarks.every((m) => {
       const weeklyCount = weeklyCountsMap.get(m.id) ?? 0;
       if (markWeeklyState(m, weeklyCount) === 'doneForWeek') return true;
       return (todayCountsMap.get(m.id) ?? 0) >= resolveDailyTarget(m);
     });
-  }, [activeCounters, weeklyCountsMap, todayCountsMap]);
+  }, [pressureMarks, weeklyCountsMap, todayCountsMap]);
 
   // ── Expander state (per-goal "X more" collapse) ───────────────────────────
 
@@ -281,10 +290,25 @@ export default function FocusScreen() {
     );
   }, [deleteCounter]);
 
+  // A maintenance habit is retired, not deleted — a gentle ending, not destruction.
+  const handleRetireMark = useCallback((markId: string, markName: string) => {
+    Alert.alert(
+      'Retire this habit?',
+      `You've kept "${markName}" going. Ready to let it rest?`,
+      [
+        { text: 'Keep going', style: 'cancel' },
+        {
+          text: 'Retire',
+          onPress: () => { deleteCounter(markId).catch(() => {}); },
+        },
+      ],
+    );
+  }, [deleteCounter]);
+
   // ── Mark row renderer (shared) ────────────────────────────────────────────
 
   const renderMarkRow = useCallback(
-    (mark: Counter, isLast: boolean, dimmed = false) => {
+    (mark: Counter, isLast: boolean, dimmed = false, maintenance = false) => {
       const weeklyCount = weeklyCountsMap.get(mark.id) ?? 0;
       const weeklyTarget = mark.weekly_target ?? 3;
       const isDoneForWeek = markWeeklyState(mark, weeklyCount) === 'doneForWeek';
@@ -304,11 +328,15 @@ export default function FocusScreen() {
           <Swipeable
             renderRightActions={() => (
               <TouchableOpacity
-                style={[styles.swipeDelete, { backgroundColor: c.danger }]}
-                onPress={() => handleDeleteMark(mark.id, mark.name)}
+                style={[styles.swipeDelete, { backgroundColor: maintenance ? c.inkMuted : c.danger }]}
+                onPress={() =>
+                  maintenance
+                    ? handleRetireMark(mark.id, mark.name)
+                    : handleDeleteMark(mark.id, mark.name)
+                }
                 activeOpacity={0.85}
               >
-                <Text style={styles.swipeDeleteText}>Delete</Text>
+                <Text style={styles.swipeDeleteText}>{maintenance ? 'Retire' : 'Delete'}</Text>
               </TouchableOpacity>
             )}
             rightThreshold={80}
@@ -346,7 +374,7 @@ export default function FocusScreen() {
         </View>
       );
     },
-    [weeklyCountsMap, c, handleDeleteMark, handleMarkLongPress, handleQuickIncrement, router],
+    [weeklyCountsMap, c, handleDeleteMark, handleRetireMark, handleMarkLongPress, handleQuickIncrement, router],
   );
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -521,6 +549,20 @@ export default function FocusScreen() {
                 )}
               </View>
             )}
+          </View>
+        )}
+
+        {/* ── Keeping it going (maintenance habits from completed goals) ── */}
+        {maintenanceMarks.length > 0 && (
+          <View style={styles.dailyHabitsSection}>
+            <View style={styles.dailyHabitsHeader}>
+              <SectionLabel style={styles.sectionLabel}>KEEPING IT GOING</SectionLabel>
+            </View>
+            <View style={[styles.marksList, { backgroundColor: c.surface }]}>
+              {maintenanceMarks.map((mark, idx) =>
+                renderMarkRow(mark, idx === maintenanceMarks.length - 1, false, true)
+              )}
+            </View>
           </View>
         )}
 

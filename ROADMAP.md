@@ -163,11 +163,19 @@ maintenance-marks build (3.2) is deliberately **last**, after everything else is
   rest" business model. The post-completion marks gap (3.2) is one known instance; the sweep
   surfaces the rest *before* any of them are built. Start with a brainstorm in a fresh session.
   Kickoff: `docs/superpowers/2026-06-22-business-coherence-audit-kickoff.md`.
-- [ ] **3.2 — Post-completion marks (maintenance mode) (LAST — after all other cleanup).** Marks
-  persist in `lc_counters` after `completeGoal` (`state/goalsSlice.ts`) but no surface shows a
-  mark once its goal is done (`app/(tabs)/focus.tsx` renders only `status === 'active'` goals).
-  Build a first-class way to keep a habit going after its goal completes, so the "habits persist"
-  positioning is real. Deferred to last; needs its own brainstorm.
+- [x] **3.2 — Post-completion marks (maintenance mode).** On `completeGoal` (`state/goalsSlice.ts`)
+  every attached mark auto-graduates to a maintenance habit via `convertMarksToMaintenance(goalId)`
+  (`state/countersSlice.ts`): `goal_id` nulled, `maintenance_of` stamped (new optional `Mark` field,
+  no migration). Nulling `goal_id` both re-surfaces the mark and naturally excludes it from the
+  per-goal Momentum engine and the goal-completion celebration (no goal-pressure). Focus
+  (`app/(tabs)/focus.tsx`) renders a quiet "Keeping it going" section with a warm "Retire" swipe
+  (soft-delete, not "Delete"); `pressureMarks` excludes maintenance from the daily "all done"
+  computations. Pure `lib/maintenanceMarks.ts` (`isMaintenanceMark` / `partitionMarks`) is the
+  single source of truth for classification. 12 new tests (`maintenanceMarks`, `maintenanceConversion`,
+  `maintenanceCompleteGoal`); full suite 1417/1417, type-check + lint clean on changed files.
+  Spec: `docs/superpowers/specs/2026-06-22-post-completion-maintenance-marks-design.md`.
+  **Known follow-up (out of scope):** expired goals (`status: 'expired'`) orphan their marks the
+  same way; that closure path is separately deferred and not handled here.
 
 ---
 

@@ -202,6 +202,11 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
       goals: s.goals.map(g => (g.id === completed.id ? completed : g)),
     }));
     useMomentumStore.getState().clearSnapshot(id);
+
+    // Phase 3.2: the goal is done, but its habits keep going as maintenance marks.
+    useMarksStore.getState().convertMarksToMaintenance(id).catch((err: unknown) =>
+      console.warn('[Maintenance] convertMarksToMaintenance failed:', err)
+    );
   },
 
   reorderGoals: async (orderedIds) => {

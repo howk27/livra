@@ -39,6 +39,8 @@ interface MarksState {
   loadMarks: (userId?: string) => Promise<void>;
   addMark: (mark: Omit<Mark, 'id' | 'created_at' | 'updated_at'>) => Promise<Mark>;
   updateMark: (id: string, updates: Partial<Mark>) => Promise<void>;
+  /** Phase 3.2: graduate a completed goal's marks to maintenance habits (null goal_id, set maintenance_of). */
+  convertMarksToMaintenance: (goalId: string) => Promise<void>;
   deleteMark: (id: string) => Promise<void>;
   incrementTotal: (id: string, amount: number) => Promise<void>;
   getMark: (id: string) => Mark | undefined;
@@ -258,6 +260,35 @@ export const useMarksStore = create<MarksState>((set, get) => ({
         get().loadMarks(userId).catch((err) => {
           logger.error('Error reloading marks after failed update:', err);
         });
+      }
+    }
+  },
+
+  // Phase 3.2: when a goal completes, its marks keep going as maintenance habits.
+  // Null goal_id (so they no longer feed the per-goal Momentum/celebration paths and
+  // render in the "Keeping it going" section) and stamp maintenance_of for provenance.
+  // All habit fields (streaks, targets, reminders) are preserved — they stay full habits.
+  convertMarksToMaintenance: async (goalId) => {
+    const now = new Date().toISOString();
+    const targets = get().marks.filter((m) => m.goal_id === goalId && !m.deleted_at);
+    if (targets.length === 0) return;
+
+    set((state) => ({
+      marks: state.marks.map((m) =>
+        m.goal_id === goalId && !m.deleted_at
+          ? { ...m, goal_id: null, maintenance_of: goalId, updated_at: now }
+          : m
+      ),
+    }));
+
+    for (const m of targets) {
+      try {
+        await execute(
+          'UPDATE lc_counters SET goal_id = ?, maintenance_of = ?, updated_at = ? WHERE id = ?',
+          [null, goalId, now, m.id]
+        );
+      } catch (error) {
+        logger.error('[MarksSlice] Failed to persist maintenance conversion:', error);
       }
     }
   },
