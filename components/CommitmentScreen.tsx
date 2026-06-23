@@ -266,7 +266,7 @@ export function CommitmentScreen({
           <View style={[styles.modalCard, { backgroundColor: c.surface, borderColor: c.borderLight }]}>
             <Text style={[styles.modalText, { color: c.inkDark }]}>
               {explanationVisible === 'tier'
-                ? "Life gets in the way. That's not failure — that's just Tuesday. Keep going anyway."
+                ? "Life gets in the way. That's not failure. That's just Tuesday. Pick it back up when you can."
                 : "Rest days aren't days off. They're when the work actually sticks."}
             </Text>
             <TouchableOpacity onPress={() => setExplanationVisible(null)}>

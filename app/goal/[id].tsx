@@ -132,7 +132,7 @@ export default function GoalDetailScreen() {
       [
         { text: 'Not yet', style: 'cancel' },
         {
-          text: "Done — it's mine",
+          text: "Done, it's mine",
           onPress: () => {
             completeGoal(id!).then(() => {
               router.back();

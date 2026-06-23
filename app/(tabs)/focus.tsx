@@ -360,7 +360,7 @@ export default function FocusScreen() {
           {showRestLine && (
             <View style={styles.restLineRow}>
               <Text style={[styles.restLineText, { color: c.inkMuted }]}>
-                {`You've hit your ${mark.weekly_target ?? 3} this week. Rest is part of it — but if you want one more, go for it.`}
+                {`You've hit your ${mark.weekly_target ?? 3} this week. Rest is part of it, but if you want one more, go for it.`}
               </Text>
               <TouchableOpacity
                 style={styles.bonusButton}
@@ -570,7 +570,7 @@ export default function FocusScreen() {
         {activeCounters.length === 0 && !loading && (
           <View style={[styles.emptyMarks, { backgroundColor: c.surface }]}>
             <Text style={[styles.emptyMarksText, { color: c.inkMuted }]}>
-              No marks yet — tap + to add your first one.
+              No marks yet. Tap + to add your first one.
             </Text>
           </View>
         )}

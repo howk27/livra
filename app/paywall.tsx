@@ -54,7 +54,7 @@ const PRO_FEATURES: { icon: Icon; title: string; description: string }[] = [
   { icon: Sparkle,      title: 'AI Goal Plans',        description: 'Describe a goal; Livra drafts the marks to get there.' },
   { icon: ShareNetwork, title: 'Custom Share Cards',    description: 'Restyle your finish. Themes, accent, and layout.' },
   { icon: Bell,         title: 'Custom Reminders',     description: 'Set a reminder time for any mark.' },
-  { icon: Heart,        title: 'Apple Health',         description: 'Sleep, Workout, Steps — synced automatically.' },
+  { icon: Heart,        title: 'Apple Health',         description: 'Sleep, Workout, Steps. Synced automatically.' },
   { icon: ChartBar,     title: 'CSV Export',           description: 'Your history is yours. Export anytime.' },
 ];
 
@@ -615,7 +615,7 @@ function PaywallScreenContent() {
           setOperationState('subscribed');
           setOperationMessage(null);
         } else if (verificationResult === 'still_locked') {
-          setRestoreMessage('Restored. Entitlements syncing—try again in a moment.');
+          setRestoreMessage('Restored. Entitlements syncing, try again in a moment.');
           setRestoreMessageType('info');
           setOperationState('info');
           setOperationMessage(verificationPendingMessage);

@@ -169,7 +169,7 @@ export default function GoalCompleteScreen() {
                 borderColor: c.borderLight,
               },
             ]}
-            placeholder="Write anything — or skip."
+            placeholder="Write anything, or skip."
             placeholderTextColor={c.inkMuted}
             value={reflection}
             onChangeText={setReflection}

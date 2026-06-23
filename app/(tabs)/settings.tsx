@@ -388,7 +388,7 @@ export default function SettingsScreen() {
     try {
       const { error } = await supabase.auth.resend({ type: 'signup', email: user.email });
       if (error) throw error;
-      showSuccess('Verification email sent — check your inbox.');
+      showSuccess('Verification email sent. Check your inbox.');
     } catch (e: any) {
       showError(e?.message || 'Could not send verification email.');
     } finally {

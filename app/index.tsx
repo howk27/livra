@@ -31,7 +31,7 @@ export default function Index() {
       }
 
       const { isOnboarded: onboardedAtTimeout } = useUIStore.getState();
-      logger.warn('[Index] Loading timeout — proceeding with fallback', {
+      logger.warn('[Index] Loading timeout, proceeding with fallback', {
         initialized,
         loading,
         uiStateLoaded,
