@@ -158,11 +158,19 @@ JSDoc, orphaned toggle styles) — fold into 1.2/1.3 when those files are touche
 **Build order:** the coherence audit (3.1) runs first and feeds the cleanup; the
 maintenance-marks build (3.2) is deliberately **last**, after everything else is cleaned up.
 
-- [ ] **3.1 — Business-coherence edge-case sweep (NEXT — brainstorm first).** Audit the app for
-  places where actual behavior contradicts the "designed to release its grip" / "finish and
-  rest" business model. The post-completion marks gap (3.2) is one known instance; the sweep
-  surfaces the rest *before* any of them are built. Start with a brainstorm in a fresh session.
-  Kickoff: `docs/superpowers/2026-06-22-business-coherence-audit-kickoff.md`.
+- [x] **3.1 — Business-coherence edge-case sweep.** Swept every surface (completion/closure,
+  goals tab, momentum, onboarding, paywall, history, repo-wide copy) against the "designed to
+  release its grip / finish and rest" model. Four findings: **F1** deleted dead streak-era copy
+  (`getDailyHeader`/`getWeekArc`/`getPostLogMessage`/`getWeekSentimentHeader` + their types and
+  the now-obsolete `tests/unit/copy.test.ts`), guarded by `copyDeadExportsRemoved.test.ts`;
+  **F2** extended dash-rule enforcement to inline screen copy via `inlineCopyDashRule.test.ts`
+  (prose em/en dash with word chars both sides, excluding placeholder cells, price separators,
+  and code comments) and cleaned 10 prose offenders across `app/`+`components/`; **F3** softened
+  `CommitmentScreen` "Keep going anyway" to "Pick it back up when you can." (owner walk decision);
+  **F4** spun out as 3.3 (expired-goal closure path). All other surfaces verified aligned, no
+  action. Type-check clean, lint clean on changed files, guard suites green; the only full-suite
+  failures were the obsolete `copy.test.ts` (removed). Findings:
+  `docs/superpowers/specs/2026-06-23-business-coherence-sweep-findings.md`.
 - [x] **3.2 — Post-completion marks (maintenance mode).** On `completeGoal` (`state/goalsSlice.ts`)
   every attached mark auto-graduates to a maintenance habit via `convertMarksToMaintenance(goalId)`
   (`state/countersSlice.ts`): `goal_id` nulled, `maintenance_of` stamped (new optional `Mark` field,
