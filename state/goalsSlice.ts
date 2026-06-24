@@ -305,6 +305,13 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
       set(s => ({
         goals: s.goals.map(g => (g.id === goalId ? expired : g)),
       }));
+      useMomentumStore.getState().clearSnapshot(goalId);
+
+      // Phase 3.3: a passed deadline ends the goal, but its habits keep going as
+      // maintenance marks (same as completion, without the celebration/XP/banking).
+      useMarksStore.getState().convertMarksToMaintenance(goalId).catch((err: unknown) =>
+        console.warn('[Maintenance] convertMarksToMaintenance failed on expiry:', err)
+      );
     }
   },
 
