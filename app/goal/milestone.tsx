@@ -10,9 +10,11 @@ import Animated, {
   withDelay,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import { themedColors, spacing, fontSize, fontWeight, borderRadius } from '../../theme/tokens';
+import { themedColors, spacing, fontSize, fontWeight, borderRadius, motion, springs } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
-import { MILESTONE_COPY } from '../../lib/goalMilestones';
+import { MILESTONE_COPY, milestoneArcRange } from '../../lib/goalMilestones';
+import { ProgressArc } from '../../components/ui/ProgressArc';
+import { applyOpacity } from '../../src/components/icons/color';
 
 export default function GoalMilestoneScreen() {
   const theme = useEffectiveTheme();
@@ -40,12 +42,13 @@ export default function GoalMilestoneScreen() {
     if (Platform.OS !== 'web') {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
-    scale.value = withSpring(1, { damping: 14, stiffness: 90 });
-    opacity.value = withTiming(1, { duration: 500 });
-    subtitleOpacity.value = withDelay(400, withTiming(1, { duration: 400 }));
+    scale.value = withSpring(1, springs.entrance);
+    opacity.value = withTiming(1, { duration: motion.moment });
+    subtitleOpacity.value = withDelay(400, withTiming(1, { duration: motion.gentle }));
   }, [scale, opacity, subtitleOpacity]);
 
   const copy = MILESTONE_COPY[milestoneKey ?? ''] ?? '';
+  const arc = milestoneArcRange(milestoneKey ?? '');
 
   const handleKeepGoing = () => {
     router.replace('/(tabs)/focus' as any);
@@ -93,6 +96,16 @@ export default function GoalMilestoneScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: c.linen }]}>
       <View style={styles.center}>
+        {arc && (
+          <Animated.View style={titleStyle}>
+            <ProgressArc
+              from={arc.from}
+              to={arc.to}
+              color={c.forest}
+              trackColor={applyOpacity(c.forest, 0.15)}
+            />
+          </Animated.View>
+        )}
         <Animated.View style={[styles.titleBlock, titleStyle]}>
           <Text style={[styles.goalName, { color: c.inkMuted }]}>
             {goalTitle}
