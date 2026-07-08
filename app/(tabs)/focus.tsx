@@ -17,6 +17,8 @@ import { fonts, fontSize, spacing, radius, borderRadius, shadow, themedColors } 
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { LivraHeader } from '../../components/ui/LivraHeader';
 import { MarkRow } from '../../components/ui/MarkRow';
+import { Breathing } from '../../components/ui/Breathing';
+import { Plus } from 'phosphor-react-native';
 import { SectionLabel } from '../../components/ui/SectionLabel';
 import { SpeedDialFAB } from '../../components/ui/SpeedDialFAB';
 
@@ -586,6 +588,9 @@ export default function FocusScreen() {
         {/* ── Empty state (no marks at all) ── */}
         {activeCounters.length === 0 && !loading && (
           <View style={[styles.emptyMarks, { backgroundColor: c.surface }]}>
+            <Breathing>
+              <Plus size={20} color={c.inkMuted} weight="duotone" />
+            </Breathing>
             <Text style={[styles.emptyMarksText, { color: c.inkMuted }]}>
               No marks yet. Tap + to add your first one.
             </Text>
@@ -758,6 +763,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     padding: spacing.lg,
     alignItems: 'center',
+    gap: spacing.sm,
     ...shadow.card,
   },
   emptyMarksText: {
