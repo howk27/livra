@@ -39,6 +39,7 @@ import { getAppDate } from '../../lib/appDate';
 import { formatDate } from '../../lib/date';
 import { resolveDailyTarget } from '../../lib/markDailyTarget';
 import { partitionMarks } from '../../lib/maintenanceMarks';
+import { dayJustCompleted } from '../../lib/motionTriggers';
 import {
   currentWeekDates,
   computeCompletionsThisWeek,
@@ -200,6 +201,20 @@ export default function FocusScreen() {
     });
   }, [pressureMarks, weeklyCountsMap, todayCountsMap]);
 
+  // Day-complete celebration: one-shot staggered row pulse + success haptic
+  // when everything loggable today transitions to done (spec Moment A).
+  const prevAllDoneRef = useRef(allDoneForDay);
+  const [celebrateStamp, setCelebrateStamp] = useState<number | null>(null);
+  useEffect(() => {
+    if (dayJustCompleted(prevAllDoneRef.current, allDoneForDay)) {
+      setCelebrateStamp(Date.now());
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      }
+    }
+    prevAllDoneRef.current = allDoneForDay;
+  }, [allDoneForDay]);
+
   // ── Expander state (per-goal "X more" collapse) ───────────────────────────
 
   const [expandedGoalIds, setExpandedGoalIds] = useState<Set<string>>(new Set());
@@ -308,7 +323,7 @@ export default function FocusScreen() {
   // ── Mark row renderer (shared) ────────────────────────────────────────────
 
   const renderMarkRow = useCallback(
-    (mark: Counter, isLast: boolean, dimmed = false, maintenance = false) => {
+    (mark: Counter, isLast: boolean, dimmed = false, maintenance = false, celebrateIndex?: number) => {
       const weeklyCount = weeklyCountsMap.get(mark.id) ?? 0;
       const weeklyTarget = mark.weekly_target ?? 3;
       const isDoneForWeek = markWeeklyState(mark, weeklyCount) === 'doneForWeek';
@@ -354,6 +369,8 @@ export default function FocusScreen() {
                 showWeeklyCount
                 weeklyCount={weeklyCount}
                 weeklyTarget={weeklyTarget}
+                celebrateStamp={!maintenance && celebrateStamp != null ? celebrateStamp : undefined}
+                celebrateIndex={celebrateIndex}
               />
             </View>
           </Swipeable>
@@ -374,7 +391,7 @@ export default function FocusScreen() {
         </View>
       );
     },
-    [weeklyCountsMap, c, handleDeleteMark, handleRetireMark, handleMarkLongPress, handleQuickIncrement, router],
+    [weeklyCountsMap, c, handleDeleteMark, handleRetireMark, handleMarkLongPress, handleQuickIncrement, router, celebrateStamp],
   );
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -497,7 +514,7 @@ export default function FocusScreen() {
 
                   {/* Due marks */}
                   {visibleDue.map((mark, idx) =>
-                    renderMarkRow(mark, idx === visibleDue.length - 1 && doneMarks.length === 0 && hiddenCount === 0)
+                    renderMarkRow(mark, idx === visibleDue.length - 1 && doneMarks.length === 0 && hiddenCount === 0, false, false, idx)
                   )}
 
                   {/* "X more" expander */}
@@ -518,7 +535,7 @@ export default function FocusScreen() {
                     <>
                       <View style={[styles.doneDivider, { backgroundColor: c.borderLight }]} />
                       {doneMarks.map((mark, idx) =>
-                        renderMarkRow(mark, idx === doneMarks.length - 1, true)
+                        renderMarkRow(mark, idx === doneMarks.length - 1, true, false, idx)
                       )}
                     </>
                   )}
@@ -545,7 +562,7 @@ export default function FocusScreen() {
             {dailyHabitsExpanded && (
               <View style={[styles.marksList, { backgroundColor: c.surface }]}>
                 {goallessMarks.map((mark, idx) =>
-                  renderMarkRow(mark, idx === goallessMarks.length - 1)
+                  renderMarkRow(mark, idx === goallessMarks.length - 1, false, false, idx)
                 )}
               </View>
             )}
