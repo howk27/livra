@@ -137,6 +137,7 @@ export function MarkRow({
             checked={loggedToday ?? false}
             onCheckin={handleLog}
             disabled={loggedToday || !onLog}
+            accent={accent}
           />
         )}
       </View>
