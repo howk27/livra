@@ -17,7 +17,6 @@ import Animated, {
 import { GestureDetector, Gesture, GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
 import * as Sharing from 'expo-sharing';
-import * as MediaLibrary from 'expo-media-library';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SvgLogo } from '../ui/SvgLogo';
@@ -125,6 +124,8 @@ export function GoalCompletionOverlay() {
 
   const handleSaveImage = useCallback(async () => {
     try {
+      // Lazy import: the native module doesn't exist on web and would crash at startup.
+      const MediaLibrary = await import('expo-media-library');
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== 'granted') {
         setSaveLabel('Failed, try again');

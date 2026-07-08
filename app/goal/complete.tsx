@@ -10,7 +10,6 @@ import Animated, {
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import * as Sharing from 'expo-sharing';
-import * as MediaLibrary from 'expo-media-library';
 import { themedColors, spacing, fontSize, fontWeight, borderRadius, fonts } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useXPStore } from '../../state/xpSlice';
@@ -145,6 +144,8 @@ export default function GoalCompleteScreen() {
 
   const handleSaveImage = useCallback(async () => {
     try {
+      // Lazy import: the native module doesn't exist on web and would crash at startup.
+      const MediaLibrary = await import('expo-media-library');
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== 'granted') { setSaveLabel('Failed, try again'); return; }
       const uri = await generateShareCard(shareCardRef);
