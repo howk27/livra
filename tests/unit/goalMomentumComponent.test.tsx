@@ -13,8 +13,12 @@ jest.mock('react-native-reanimated', () => {
     useSharedValue: (v: any) => ({ value: v }),
     useAnimatedStyle: (fn: any) => fn(),
     withTiming: (v: any) => v,
+    withSequence: (v: any) => v,
+    withSpring: (v: any) => v,
   };
 });
+
+jest.mock('../../hooks/useReducedMotion', () => ({ useReducedMotion: () => false }));
 
 import { GoalMomentum } from '../../components/ui/GoalMomentum';
 import type { MomentumSnapshot } from '../../lib/goalMomentum';
@@ -31,6 +35,10 @@ describe('GoalMomentum', () => {
   it('shows the day count when on track', () => {
     const { getByText } = render(<GoalMomentum snapshot={snap({ state: 'on_track', days: 12 })} />);
     expect(getByText('Momentum · 12 days')).toBeTruthy();
+  });
+  it('wraps the label in an animated container (growth pulse + fresh entrance)', () => {
+    const { getByTestId } = render(<GoalMomentum snapshot={snap({ state: 'on_track', days: 3 })} />);
+    expect(getByTestId('momentum-label-animated')).toBeTruthy();
   });
   it('renders the cushion gauge only when slipping', () => {
     const slipping = render(<GoalMomentum snapshot={snap({ state: 'slipping', days: 6, cushionRemaining: 0.5 })} />);

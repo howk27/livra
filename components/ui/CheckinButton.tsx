@@ -10,21 +10,30 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Check, Plus } from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
-import { themedColors } from '../../theme/tokens';
+import { motion, springs, themedColors } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
+import { useMotion } from '../../hooks/useMotion';
+import { applyOpacity } from '../../src/components/icons/color';
 
 interface CheckinButtonProps {
   checked: boolean;
   onCheckin: () => void;
   disabled?: boolean;
+  /** Goal-category accent for the completion pulse. Falls back to forest. */
+  accent?: string;
+  testID?: string;
 }
 
-export function CheckinButton({ checked, onCheckin, disabled }: CheckinButtonProps) {
+export function CheckinButton({ checked, onCheckin, disabled, accent, testID }: CheckinButtonProps) {
   const theme = useEffectiveTheme();
   const c = themedColors(theme);
+  const { reduced } = useMotion();
   const rotation = useSharedValue(0);
   const scale = useSharedValue(1);
   const iconOpacity = useSharedValue(1);
+  const pulseScale = useSharedValue(1);
+  const pulseOpacity = useSharedValue(0);
+  const pulseColor = accent ?? c.forest;
 
   const triggerHaptic = useCallback(() => {
     if (Platform.OS !== 'web') {
@@ -35,15 +44,21 @@ export function CheckinButton({ checked, onCheckin, disabled }: CheckinButtonPro
   const handlePress = useCallback(() => {
     if (checked || disabled) return;
     runOnJS(triggerHaptic)();
-    iconOpacity.value = withTiming(0, { duration: 100 });
-    rotation.value = withTiming(360, { duration: 300 }, (finished) => {
+    iconOpacity.value = withTiming(0, { duration: motion.quick });
+    rotation.value = withTiming(360, { duration: motion.relaxed }, (finished) => {
       if (finished) runOnJS(onCheckin)();
     });
     scale.value = withSequence(
-      withTiming(0.88, { duration: 120 }),
-      withSpring(1, { damping: 12, stiffness: 280 }),
+      withTiming(0.88, { duration: motion.quick }),
+      withSpring(1, springs.playful),
     );
-  }, [checked, disabled, onCheckin, rotation, scale, iconOpacity, triggerHaptic]);
+    if (!reduced) {
+      pulseOpacity.value = 0.35;
+      pulseScale.value = 1;
+      pulseScale.value = withTiming(1.9, { duration: motion.gentle });
+      pulseOpacity.value = withTiming(0, { duration: motion.gentle });
+    }
+  }, [checked, disabled, onCheckin, rotation, scale, iconOpacity, triggerHaptic, reduced, pulseOpacity, pulseScale]);
 
   const containerStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${rotation.value}deg` }, { scale: scale.value }],
@@ -51,6 +66,11 @@ export function CheckinButton({ checked, onCheckin, disabled }: CheckinButtonPro
 
   const iconStyle = useAnimatedStyle(() => ({
     opacity: iconOpacity.value,
+  }));
+
+  const pulseStyle = useAnimatedStyle(() => ({
+    opacity: pulseOpacity.value,
+    transform: [{ scale: pulseScale.value }],
   }));
 
   if (checked) {
@@ -68,10 +88,25 @@ export function CheckinButton({ checked, onCheckin, disabled }: CheckinButtonPro
 
   return (
     <TouchableOpacity
+      testID={testID}
       onPress={handlePress}
       disabled={disabled || checked}
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
     >
+      <Animated.View
+        testID="checkin-pulse-ring"
+        pointerEvents="none"
+        style={[
+          {
+            position: 'absolute',
+            width: 22,
+            height: 22,
+            borderRadius: 11,
+            backgroundColor: applyOpacity(pulseColor, 0.5),
+          },
+          pulseStyle,
+        ]}
+      />
       <Animated.View
         style={[
           { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: c.borderMid, alignItems: 'center', justifyContent: 'center' },

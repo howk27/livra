@@ -26,6 +26,7 @@ import { fonts, spacing, radius, themedColors, fontSize } from '../../theme/toke
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { LivraWordmark } from '../../components/ui/LivraWordmark';
 import { SvgLogo } from '../../components/ui/SvgLogo';
+import { Breathing } from '../../components/ui/Breathing';
 import { SectionLabel } from '../../components/ui/SectionLabel';
 import { HistoryRow } from '../../components/goals/HistoryRow';
 import { useGoalsStore } from '../../state/goalsSlice';
@@ -389,9 +390,11 @@ export default function GoalsScreen() {
         {/* Empty state */}
         {isEmpty && (
           <View style={styles.emptyState}>
-            <View style={{ opacity: 0.35 }}>
-              <SvgLogo color={c.inkMuted} width={32} height={16} />
-            </View>
+            <Breathing>
+              <View style={{ opacity: 0.35 }}>
+                <SvgLogo color={c.inkMuted} width={32} height={16} />
+              </View>
+            </Breathing>
             <Text style={[styles.emptyTitle, { color: c.inkDark }]}>
               {completedCount > 0 ? 'You finished everything.' : 'No goals yet.'}
             </Text>

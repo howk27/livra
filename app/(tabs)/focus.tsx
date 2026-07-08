@@ -17,6 +17,8 @@ import { fonts, fontSize, spacing, radius, borderRadius, shadow, themedColors } 
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { LivraHeader } from '../../components/ui/LivraHeader';
 import { MarkRow } from '../../components/ui/MarkRow';
+import { Breathing } from '../../components/ui/Breathing';
+import { Plus } from 'phosphor-react-native';
 import { SectionLabel } from '../../components/ui/SectionLabel';
 import { SpeedDialFAB } from '../../components/ui/SpeedDialFAB';
 
@@ -39,6 +41,7 @@ import { getAppDate } from '../../lib/appDate';
 import { formatDate } from '../../lib/date';
 import { resolveDailyTarget } from '../../lib/markDailyTarget';
 import { partitionMarks } from '../../lib/maintenanceMarks';
+import { dayJustCompleted } from '../../lib/motionTriggers';
 import {
   currentWeekDates,
   computeCompletionsThisWeek,
@@ -200,6 +203,20 @@ export default function FocusScreen() {
     });
   }, [pressureMarks, weeklyCountsMap, todayCountsMap]);
 
+  // Day-complete celebration: one-shot staggered row pulse + success haptic
+  // when everything loggable today transitions to done (spec Moment A).
+  const prevAllDoneRef = useRef(allDoneForDay);
+  const [celebrateStamp, setCelebrateStamp] = useState<number | null>(null);
+  useEffect(() => {
+    if (dayJustCompleted(prevAllDoneRef.current, allDoneForDay)) {
+      setCelebrateStamp(Date.now());
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      }
+    }
+    prevAllDoneRef.current = allDoneForDay;
+  }, [allDoneForDay]);
+
   // ── Expander state (per-goal "X more" collapse) ───────────────────────────
 
   const [expandedGoalIds, setExpandedGoalIds] = useState<Set<string>>(new Set());
@@ -308,7 +325,7 @@ export default function FocusScreen() {
   // ── Mark row renderer (shared) ────────────────────────────────────────────
 
   const renderMarkRow = useCallback(
-    (mark: Counter, isLast: boolean, dimmed = false, maintenance = false) => {
+    (mark: Counter, isLast: boolean, dimmed = false, maintenance = false, celebrateIndex?: number) => {
       const weeklyCount = weeklyCountsMap.get(mark.id) ?? 0;
       const weeklyTarget = mark.weekly_target ?? 3;
       const isDoneForWeek = markWeeklyState(mark, weeklyCount) === 'doneForWeek';
@@ -354,6 +371,8 @@ export default function FocusScreen() {
                 showWeeklyCount
                 weeklyCount={weeklyCount}
                 weeklyTarget={weeklyTarget}
+                celebrateStamp={!maintenance && celebrateStamp != null ? celebrateStamp : undefined}
+                celebrateIndex={celebrateIndex}
               />
             </View>
           </Swipeable>
@@ -374,7 +393,7 @@ export default function FocusScreen() {
         </View>
       );
     },
-    [weeklyCountsMap, c, handleDeleteMark, handleRetireMark, handleMarkLongPress, handleQuickIncrement, router],
+    [weeklyCountsMap, c, handleDeleteMark, handleRetireMark, handleMarkLongPress, handleQuickIncrement, router, celebrateStamp],
   );
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -497,7 +516,7 @@ export default function FocusScreen() {
 
                   {/* Due marks */}
                   {visibleDue.map((mark, idx) =>
-                    renderMarkRow(mark, idx === visibleDue.length - 1 && doneMarks.length === 0 && hiddenCount === 0)
+                    renderMarkRow(mark, idx === visibleDue.length - 1 && doneMarks.length === 0 && hiddenCount === 0, false, false, idx)
                   )}
 
                   {/* "X more" expander */}
@@ -518,7 +537,7 @@ export default function FocusScreen() {
                     <>
                       <View style={[styles.doneDivider, { backgroundColor: c.borderLight }]} />
                       {doneMarks.map((mark, idx) =>
-                        renderMarkRow(mark, idx === doneMarks.length - 1, true)
+                        renderMarkRow(mark, idx === doneMarks.length - 1, true, false, idx)
                       )}
                     </>
                   )}
@@ -545,7 +564,7 @@ export default function FocusScreen() {
             {dailyHabitsExpanded && (
               <View style={[styles.marksList, { backgroundColor: c.surface }]}>
                 {goallessMarks.map((mark, idx) =>
-                  renderMarkRow(mark, idx === goallessMarks.length - 1)
+                  renderMarkRow(mark, idx === goallessMarks.length - 1, false, false, idx)
                 )}
               </View>
             )}
@@ -569,6 +588,9 @@ export default function FocusScreen() {
         {/* ── Empty state (no marks at all) ── */}
         {activeCounters.length === 0 && !loading && (
           <View style={[styles.emptyMarks, { backgroundColor: c.surface }]}>
+            <Breathing>
+              <Plus size={20} color={c.inkMuted} weight="duotone" />
+            </Breathing>
             <Text style={[styles.emptyMarksText, { color: c.inkMuted }]}>
               No marks yet. Tap + to add your first one.
             </Text>
@@ -741,6 +763,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     padding: spacing.lg,
     alignItems: 'center',
+    gap: spacing.sm,
     ...shadow.card,
   },
   emptyMarksText: {

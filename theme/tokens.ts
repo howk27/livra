@@ -184,5 +184,12 @@ export const letterSpacing = {
   tight: -0.2, normal: 0, wide: 0.4,
 };
 export const motion = {
-  quick: 120, standard: 180, relaxed: 240,
+  quick: 120, standard: 180, relaxed: 240, gentle: 350, moment: 500,
 };
+// Spring presets harvested from the app's best existing animations.
+// playful: CheckinButton press. settle: overlay entrances. entrance: milestone reveal.
+export const springs = {
+  playful:  { damping: 12, stiffness: 280 },
+  settle:   { damping: 20, stiffness: 200 },
+  entrance: { damping: 14, stiffness: 90 },
+} as const;
