@@ -13,6 +13,16 @@ export const MILESTONE_COPY: Record<string, string> = {
 const DATED_KEYS = ['25', '50', '75'] as const;
 const DATELESS_KEYS = ['7', '30', '60'] as const;
 
+/** Arc sweep for a dated milestone: from the previous threshold, never from a
+ *  cold zero on re-render (goal-gradient: show accumulated progress). Null for
+ *  dateless day-count milestones. */
+export function milestoneArcRange(key: string): { from: number; to: number } | null {
+  const idx = (DATED_KEYS as readonly string[]).indexOf(key);
+  if (idx === -1) return null;
+  const prev = idx === 0 ? 0 : parseInt(DATED_KEYS[idx - 1], 10) / 100;
+  return { from: prev, to: parseInt(key, 10) / 100 };
+}
+
 export function getMilestonesToFire(goal: Goal, today: Date): string[] {
   if (goal.status !== 'active') return [];
 
