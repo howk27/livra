@@ -2,26 +2,71 @@
 // Per-goal Momentum display (spec §5 C+A hybrid): calm "Momentum · N days" with a
 // warm glow when on it, neutral when resting, a fresh-start line at zero, and an
 // amber cushion gauge ONLY when slipping. No flame, no countdown number.
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSequence,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 
-import { fonts, fontSize, spacing, themedColors } from '../../theme/tokens';
+import { fonts, fontSize, motion, spacing, springs, themedColors } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
+import { useMotion } from '../../hooks/useMotion';
 import { applyOpacity } from '../../src/components/icons/color';
 import { presentMomentum } from '../../lib/momentumPresenter';
+import { momentumDayIncreased } from '../../lib/motionTriggers';
 import type { MomentumSnapshot } from '../../lib/goalMomentum';
 
 export function GoalMomentum({ snapshot }: { snapshot: MomentumSnapshot | null }) {
   const theme = useEffectiveTheme();
   const c = themedColors(theme);
+  const { reduced } = useMotion();
   const d = presentMomentum(snapshot);
 
   const fill = useSharedValue(d.cushion ?? 0);
   useEffect(() => {
-    fill.value = withTiming(d.cushion ?? 0, { duration: 350 });
+    fill.value = withTiming(d.cushion ?? 0, { duration: motion.gentle });
   }, [d.cushion, fill]);
   const fillStyle = useAnimatedStyle(() => ({ width: `${Math.max(0, Math.min(1, fill.value)) * 100}%` }));
+
+  // Growth pulse (endowed progress): only when the day count visibly grows.
+  const labelScale = useSharedValue(1);
+  const labelOpacity = useSharedValue(d.visual === 'fresh' ? 0 : 1);
+  const prevDaysRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const days = snapshot?.days ?? null;
+    if (!reduced && momentumDayIncreased(prevDaysRef.current, days)) {
+      labelScale.value = withSequence(
+        withTiming(1.06, { duration: motion.quick }),
+        withSpring(1, springs.playful),
+      );
+    }
+    prevDaysRef.current = days;
+  }, [snapshot?.days, reduced, labelScale]);
+
+  // Fresh-start entrance (fresh-start effect): warm fade + settle, no shame.
+  useEffect(() => {
+    if (d.visual === 'fresh') {
+      if (reduced) {
+        labelOpacity.value = 1;
+        return;
+      }
+      labelOpacity.value = withTiming(1, { duration: motion.gentle });
+      labelScale.value = 0.96;
+      labelScale.value = withSpring(1, springs.entrance);
+    } else {
+      labelOpacity.value = 1;
+    }
+  }, [d.visual, reduced, labelOpacity, labelScale]);
+
+  const labelAnimStyle = useAnimatedStyle(() => ({
+    opacity: labelOpacity.value,
+    transform: [{ scale: labelScale.value }],
+  }));
 
   const labelColor =
     d.visual === 'glow' ? c.momentumAmber
@@ -30,14 +75,16 @@ export function GoalMomentum({ snapshot }: { snapshot: MomentumSnapshot | null }
 
   return (
     <View style={styles.wrap}>
-      <View
+      <Animated.View
+        testID="momentum-label-animated"
         style={[
           styles.labelRow,
           d.visual === 'glow' && { backgroundColor: applyOpacity(c.momentumAmber, theme === 'dark' ? 0.16 : 0.12) },
+          labelAnimStyle,
         ]}
       >
         <Text style={[styles.label, { color: labelColor }]}>{d.label}</Text>
-      </View>
+      </Animated.View>
 
       {d.visual === 'gauge' && (
         <View
