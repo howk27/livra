@@ -44,9 +44,11 @@ Extend the `motion` export:
   - `springs.playful` — damping 12, stiffness 280 (from CheckinButton)
   - `springs.settle` — damping 20, stiffness 200 (from GoalCompletionOverlay)
   - `springs.entrance` — damping 14, stiffness 90 (from milestone screen)
-- **`useMotion()` hook** wrapping Reanimated's `useReducedMotion()`: when iOS Reduce Motion
-  is enabled, springs/scales degrade to plain opacity fades; looping motion is disabled
-  entirely. Every new animation goes through this hook.
+- **`useMotion()` hook** built **on top of the existing `hooks/useReducedMotion.ts`**
+  (AccessibilityInfo-based — the single reduced-motion source in the app; do not introduce a
+  second Reanimated-based path). When iOS Reduce Motion is enabled, springs/scales degrade to
+  plain opacity fades; looping motion is disabled entirely (elements render static at rest:
+  scale 1, base opacity). Every new animation goes through this hook.
 
 Retrofit hardcoded values onto tokens **only in files touched by the hero moments**.
 
@@ -57,9 +59,10 @@ Core loop, highest frequency. CheckinButton's spin stays; add the payoff after t
 - Check settles with a soft radial pulse in the goal's **category accent color**
   (`categoryAccents` in tokens — personal, not generic).
 - The completed row gently tints and settles (no snap).
-- **Last mark of the day** gets a richer beat: success haptic + one-time calm shimmer across
-  the day's list. This is the variable-reward element — most checks are pleasant, the
-  day-complete one is delightful. No confetti, ever.
+- **Last mark of the day** gets a richer beat: success haptic + a one-time **staggered
+  per-row opacity/tint pulse** down the day's list (plain `useAnimatedStyle` transforms only —
+  no gradient sweep, no shimmer library). This is the reward-peak element — most checks are
+  pleasant, the day-complete one is delightful. No confetti, ever.
 
 ## 3. Moment B — Momentum growth & fresh start *(endowed progress + fresh-start effect)*
 
@@ -72,15 +75,22 @@ Core loop, highest frequency. CheckinButton's spin stays; add the payoff after t
 ## 4. Moment C — Goal milestones *(goal-gradient effect)*
 
 - Polish existing `app/goal/milestone.tsx` onto the vocabulary; add an **animated progress
-  arc sweeping from previous value to current %** — never from zero.
+  arc sweeping from previous value to current %** — never from zero. The arc is **net-new
+  scope**: a small `components/ui/ProgressArc.tsx` built on the already-present
+  `react-native-svg` + Reanimated animated props (no new dependency; no existing arc
+  component to reuse).
 - App-wide rule: every progress bar animates from last-known value on mount, never from zero.
 
 ## 5. Moment D — Empty & first-run states *(invitation, not void)*
 
-- Empty states in `app/(tabs)/goals.tsx` and `app/(tabs)/focus.tsx`: slow breathing loop on
-  the icon (scale 1.0→1.03, ~3s cycle) + staggered text entrance.
+- Empty states in `app/(tabs)/goals.tsx` and `app/(tabs)/focus.tsx`: slow breathing loop
+  (scale 1.0→1.02, ~3s cycle, **scale only** — no opacity/rotation change, to avoid reading
+  as a loading spinner) + staggered text entrance.
+- `focus.tsx`'s empty state is currently text-only: add a small muted phosphor icon as the
+  breathing element (new visual element, agreed in review). `goals.tsx` breathes its existing
+  `SvgLogo`; manual QA must confirm it doesn't read as a spinner.
 - The **only** place looping motion is allowed — an empty screen has nothing else competing
-  for attention.
+  for attention. Under Reduce Motion the loop is off and elements render static at rest.
 
 ## Guardrails
 
