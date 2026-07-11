@@ -245,10 +245,14 @@ export default function OnboardingScreen() {
     const level = commitment ?? 'steady';
 
     // 1. Mark onboarding complete
-    await completeOnboarding(userId, {
+    const remoteOk = await completeOnboarding(userId, {
       commitment: level,
       completedAt: new Date().toISOString(),
     });
+    if (!remoteOk) {
+      // Local completion applied; profile flag retries on next app load (uiSlice pending key).
+      logger.warn('[Onboarding] profile sync deferred, will retry on next launch');
+    }
 
     try {
       // 2. Create the goal

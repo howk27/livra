@@ -69,27 +69,47 @@ export const useUIStore = create<UIState>((set, get) => ({
     const isSupabaseConfigured = Boolean(supabaseUrl && !supabaseUrl.includes('placeholder'));
 
     let remoteOk = true;
+    let retryPending = false;
 
     if (userId && isSupabaseConfigured) {
       try {
         const profileUpdate: Record<string, unknown> = { onboarding_completed: true };
         if (meta?.commitment) profileUpdate.onboarding_focus_area = meta.commitment;
         if (meta?.completedAt) profileUpdate.onboarding_completed_at = meta.completedAt;
+        const hasMetadata = Object.keys(profileUpdate).length > 1;
 
         const { error } = await supabase
           .from('profiles')
           .update(profileUpdate)
           .eq('id', userId);
 
-        if (error) {
+        if (!error) {
+          await AsyncStorage.removeItem(ONBOARDING_REMOTE_PENDING_KEY);
+        } else if (hasMetadata) {
+          // Column-level grants can deny the metadata columns (42501) while
+          // onboarding_completed alone is allowed. The critical flag must land.
+          logger.warn(
+            '[UIState] full onboarding profile update denied, retrying critical flag only:',
+            error
+          );
+          const { error: flagError } = await supabase
+            .from('profiles')
+            .update({ onboarding_completed: true })
+            .eq('id', userId);
+          if (flagError) {
+            logger.error('[UIState] onboarding_completed flag update failed:', flagError);
+            remoteOk = false;
+          }
+          retryPending = true;
+        } else {
           logger.error('[UIState] profile onboarding_completed update failed:', error);
           remoteOk = false;
-        } else {
-          await AsyncStorage.removeItem(ONBOARDING_REMOTE_PENDING_KEY);
+          retryPending = true;
         }
       } catch (error) {
         logger.error('[UIState] profile onboarding_completed update threw:', error);
         remoteOk = false;
+        retryPending = true;
       }
     }
 
@@ -99,7 +119,7 @@ export const useUIStore = create<UIState>((set, get) => ({
     ]);
     set({ isOnboarded: true });
 
-    if (userId && isSupabaseConfigured && !remoteOk) {
+    if (retryPending) {
       await AsyncStorage.setItem(ONBOARDING_REMOTE_PENDING_KEY, '1');
     }
 
@@ -128,6 +148,23 @@ export const useUIStore = create<UIState>((set, get) => ({
           // Skip database query if Supabase not configured - use local storage only
           logger.log('[UIState] Supabase not configured, using local storage only');
         } else {
+          // A prior completeOnboarding could not sync the profile flag; retry it
+          // now so cross-device state self-heals without user action.
+          const pendingRetry = await AsyncStorage.getItem(ONBOARDING_REMOTE_PENDING_KEY);
+          if (pendingRetry === '1' && isOnboarded) {
+            try {
+              const { error: retryError } = await supabase
+                .from('profiles')
+                .update({ onboarding_completed: true })
+                .eq('id', userId);
+              if (!retryError) {
+                await AsyncStorage.removeItem(ONBOARDING_REMOTE_PENDING_KEY);
+              }
+            } catch (retryError) {
+              logger.warn('[UIState] pending onboarding flag retry threw:', retryError);
+            }
+          }
+
           // Add timeout to prevent hanging if Supabase is unavailable
           // Use a more robust timeout pattern that gracefully falls back
           try {

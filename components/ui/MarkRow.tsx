@@ -170,18 +170,17 @@ export function MarkRow({
         )}
       </View>
 
-      {/* Right: log circle or weekly count */}
+      {/* Right: one-tap check-in. Weekly progress lives in the bar under the
+          title, so the count needs no numeric duplicate here. Checked/disabled
+          follow loggedToday only — a met weekly target must not block today's log. */}
       <View style={styles.right}>
-        {showWeeklyCount ? (
-          <Text style={[styles.count, { color: c.inkDark }]}>{weeklyCount}</Text>
-        ) : (
-          <CheckinButton
-            checked={loggedToday ?? false}
-            onCheckin={handleLog}
-            disabled={loggedToday || !onLog}
-            accent={accent}
-          />
-        )}
+        <CheckinButton
+          checked={loggedToday ?? false}
+          onCheckin={handleLog}
+          disabled={loggedToday || !onLog}
+          accent={accent}
+          testID={testID ? `${testID}-checkin` : undefined}
+        />
       </View>
     </TouchableOpacity>
   );
@@ -228,10 +227,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   right: { alignItems: 'flex-end', justifyContent: 'center' },
-  count: {
-    fontFamily: fonts.sansSemibold,
-    fontSize: fontSize.lg,
-  },
   progressTrackWrap: { marginTop: spacing.xs },
   progressTrack: {
     height: 2,

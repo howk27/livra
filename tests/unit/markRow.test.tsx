@@ -1,6 +1,6 @@
 // tests/unit/markRow.test.tsx
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { render, fireEvent } from '@testing-library/react-native';
 
 jest.mock('react-native-reanimated', () => {
   const React = require('react');
@@ -15,7 +15,10 @@ jest.mock('react-native-reanimated', () => {
     ...Animated,
     useSharedValue: (v: any) => ({ value: v }),
     useAnimatedStyle: () => ({}),
-    withTiming: (v: any) => v,
+    withTiming: (v: any, _cfg?: any, cb?: (finished: boolean) => void) => {
+      cb?.(true);
+      return v;
+    },
     withSequence: (v: any) => v,
     withSpring: (v: any) => v,
     runOnJS: (fn: any) => fn,
@@ -70,5 +73,81 @@ describe('MarkRow done cue', () => {
     expect(flat.textDecorationLine).toBeUndefined();
     const row = getByTestId('mark-row');
     expect(row.props.accessibilityState?.checked).toBeUndefined();
+  });
+});
+
+/**
+ * Launch walk 2026-07-08, bug item 1: weekly rows must keep a one-tap
+ * check-in. `showWeeklyCount` gates only the progress bar; the right column
+ * always offers the CheckinButton, driven by `loggedToday` (did the user log
+ * TODAY), never by weekly-done state.
+ */
+describe('MarkRow weekly check-in affordance', () => {
+  it('renders a tappable check-in on a weekly row and logs in one tap', () => {
+    const onLog = jest.fn();
+    const { getByTestId } = render(
+      <MarkRow
+        title="Run"
+        category="custom"
+        showWeeklyCount
+        weeklyCount={1}
+        weeklyTarget={3}
+        onLog={onLog}
+        testID="mark-row"
+      />,
+    );
+    fireEvent.press(getByTestId('mark-row-checkin'));
+    expect(onLog).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the check-in tappable when the weekly target is met but nothing was logged today', () => {
+    const onLog = jest.fn();
+    const { getByTestId } = render(
+      <MarkRow
+        title="Run"
+        category="custom"
+        done
+        showWeeklyCount
+        weeklyCount={3}
+        weeklyTarget={3}
+        onLog={onLog}
+        testID="mark-row"
+      />,
+    );
+    fireEvent.press(getByTestId('mark-row-checkin'));
+    expect(onLog).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the checked state (no tappable button) once logged today', () => {
+    const onLog = jest.fn();
+    const { queryByTestId } = render(
+      <MarkRow
+        title="Run"
+        category="custom"
+        loggedToday
+        showWeeklyCount
+        weeklyCount={2}
+        weeklyTarget={3}
+        onLog={onLog}
+        testID="mark-row"
+      />,
+    );
+    // Checked CheckinButton renders a static filled circle, not a touchable.
+    expect(queryByTestId('mark-row-checkin')).toBeNull();
+  });
+
+  it('no longer renders the bare numeric weekly count (progress bar carries it)', () => {
+    const { queryByText } = render(
+      <MarkRow
+        title="Run"
+        category="custom"
+        showWeeklyCount
+        weeklyCount={2}
+        weeklyTarget={3}
+        onLog={jest.fn()}
+        testID="mark-row"
+      />,
+    );
+    expect(queryByText('2')).toBeNull();
   });
 });

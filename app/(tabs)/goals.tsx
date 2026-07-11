@@ -64,11 +64,8 @@ function ActiveGoalCard({ goal, progress, threshold, canComplete, onPress }: Act
       activeOpacity={0.85}
     >
       <View style={styles.activeTopRow}>
-        <View style={[styles.activeBadge, { backgroundColor: c.mint + '33' }]}>
-          <View style={[styles.activeDot, { backgroundColor: c.mint }]} />
-          <Text style={[styles.activeBadgeText, { color: c.inkInverseMuted }]}>ACTIVE</Text>
-        </View>
-        <CaretRight size={18} color={c.inkInverseMuted} weight="bold" />
+        <View style={[styles.activeDot, { backgroundColor: c.mint }]} />
+        {!canComplete && <CaretRight size={18} color={c.inkInverseMuted} weight="bold" />}
       </View>
 
       <Text style={[styles.activeTitle, { color: c.inkInverse }]} numberOfLines={2}>
@@ -479,23 +476,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing.sm,
   },
-  activeBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-    borderRadius: radius.full,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
-  },
   activeDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-  },
-  activeBadgeText: {
-    fontFamily: fonts.sansMedium,
-    fontSize: fontSize['2xs'],
-    letterSpacing: 0.8,
   },
   activeTitle: {
     fontFamily: fonts.serif,

@@ -362,7 +362,7 @@ export default function FocusScreen() {
               <MarkRow
                 title={mark.name}
                 category={category}
-                loggedToday={isDoneForWeek}
+                loggedToday={(todayCountsMap.get(mark.id) ?? 0) > 0}
                 done={isDoneForWeek}
                 onPress={() => router.push(`/mark/${mark.id}` as any)}
                 onLog={() => handleQuickIncrement(mark.id)}
@@ -393,7 +393,7 @@ export default function FocusScreen() {
         </View>
       );
     },
-    [weeklyCountsMap, c, handleDeleteMark, handleRetireMark, handleMarkLongPress, handleQuickIncrement, router, celebrateStamp],
+    [weeklyCountsMap, todayCountsMap, c, handleDeleteMark, handleRetireMark, handleMarkLongPress, handleQuickIncrement, router, celebrateStamp],
   );
 
   // ── Render ────────────────────────────────────────────────────────────────
