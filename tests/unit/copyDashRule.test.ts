@@ -1,7 +1,11 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-const COPY_MODULES = ['lib/copy.ts', 'lib/weeklyReflectionCopy.ts'];
+const COPY_MODULES = [
+  'lib/copy.ts',
+  'lib/weeklyReflectionCopy.ts',
+  'components/ui/GoalHeroStep.tsx',
+];
 
 // Matches single-quoted, double-quoted, and backtick string literals (no escaped
 // quote handling needed for our copy, which contains none).
