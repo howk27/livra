@@ -13,7 +13,7 @@ import { Swipeable } from 'react-native-gesture-handler';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 
-import { fonts, fontSize, spacing, radius, borderRadius, shadow, themedColors } from '../../theme/tokens';
+import { fonts, fontSize, spacing, radius, shadow, themedColors } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { LivraHeader } from '../../components/ui/LivraHeader';
 import { MarkRow } from '../../components/ui/MarkRow';
@@ -171,16 +171,6 @@ export default function FocusScreen() {
     () => activeCounters.filter((m) => !m.maintenance_of),
     [activeCounters],
   );
-
-  const completedMarksToday = useMemo(() => {
-    let n = 0;
-    pressureMarks.forEach((cnt) => {
-      if ((todayCountsMap.get(cnt.id) ?? 0) >= resolveDailyTarget(cnt)) n++;
-    });
-    return n;
-  }, [pressureMarks, todayCountsMap]);
-
-  const todayTotal = pressureMarks.length;
 
   // ── Grouped marks ─────────────────────────────────────────────────────────
 
@@ -428,38 +418,6 @@ export default function FocusScreen() {
           </View>
         )}
 
-        {/* ── Compact Progress Banner ── */}
-        <View style={[
-          styles.progressBanner,
-          {
-            backgroundColor: theme === 'dark'
-              ? applyOpacity(c.mint, 0.12)
-              : applyOpacity(c.forest, 0.1),
-            borderWidth: 0.5,
-            borderColor: theme === 'dark'
-              ? applyOpacity(c.mint, 0.15)
-              : applyOpacity(c.forest, 0.15),
-          },
-        ]}>
-          <View style={[
-            StyleSheet.absoluteFill,
-            {
-              borderRadius: borderRadius.card,
-              backgroundColor: theme === 'dark'
-                ? applyOpacity(c.mint, 0.08)
-                : applyOpacity(c.forest, 0.08),
-            },
-          ]} />
-          <View>
-            <Text style={[styles.bannerFraction, { color: theme === 'dark' ? c.inkInverse : c.forest }]}>
-              {completedMarksToday}/{todayTotal}
-            </Text>
-            <Text style={[styles.bannerFractionLabel, { color: theme === 'dark' ? c.inkInverseMuted : c.inkMuted }]}>
-              marks today
-            </Text>
-          </View>
-        </View>
-
         {/* ── Forgiveness line ── */}
         {consistencyResult && !consistencyResult.strong && consistencyResult.remaining > 0 && (
           <Text style={[styles.forgivenessLine, { color: c.inkMuted }]}>
@@ -637,27 +595,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
 
-  // Progress banner
-  progressBanner: {
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.lg,
-    borderRadius: borderRadius.card,
-    overflow: 'hidden',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    height: 56,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  bannerFraction: {
-    fontFamily: fonts.serif,
-    fontSize: fontSize.display,
-    lineHeight: 32,
-  },
-  bannerFractionLabel: {
-    fontFamily: fonts.sans,
-    fontSize: fontSize.sm,
-  },
   restLineRow: {
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
