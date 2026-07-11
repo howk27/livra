@@ -6,6 +6,7 @@ import { themedColors, spacing, borderRadius, fontSize, fontWeight } from '../..
 import { useEffectiveTheme } from '../../../state/uiSlice';
 import { useCounters } from '../../../hooks/useCounters';
 import { SchedulePicker } from '../../../components/SchedulePicker';
+import { MarkFrequencyPicker } from '../../../components/ui/MarkFrequencyPicker';
 import type { GoalPeriod, ScheduleType, DayOfWeek } from '../../../types';
 import { parseScheduleDays } from '../../../lib/features';
 import CounterIcon from '@/src/components/icons/CounterIcon';
@@ -78,7 +79,7 @@ export default function EditCounterScreen() {
   const params = useLocalSearchParams<{ id: string }>();
   const id = typeof params.id === 'string' ? params.id : params.id?.[0];
 
-  const { counters, updateCounter } = useCounters();
+  const { counters, updateCounter, updateMark } = useCounters();
   const counter = id ? counters.find((c) => c.id === id) : null;
 
   // Get current icon type from counter or resolve from emoji/name
@@ -238,6 +239,18 @@ export default function EditCounterScreen() {
         <View style={styles.section}>
           <DailyTargetStepper value={dailyTarget} onChange={setDailyTarget} />
         </View>
+
+        {/* Frequency (weekly target) — applies immediately, like the old detail card */}
+        {counter.frequency_min != null && counter.frequency_max != null && (
+          <View style={styles.section}>
+            <Text style={[styles.label, { color: themeColors.inkDark }]}>Frequency</Text>
+            <MarkFrequencyPicker
+              mark={counter}
+              onChange={(target) => updateMark(id, { weekly_target: target })}
+            />
+          </View>
+        )}
+
         {/* Schedule */}
         <View style={styles.section}>
           <Text style={[styles.label, { color: themeColors.inkDark }]}>Schedule</Text>

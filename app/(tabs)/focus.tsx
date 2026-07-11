@@ -260,7 +260,7 @@ export default function FocusScreen() {
       undefined,
       [
         { text: 'View details', onPress: () => router.push(`/mark/${markId}` as any) },
-        { text: 'Edit', onPress: () => router.push(`/mark/${markId}` as any) },
+        { text: 'Edit', onPress: () => router.push(`/mark/${markId}/edit` as any) },
         {
           text: 'Delete',
           style: 'destructive',
