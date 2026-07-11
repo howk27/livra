@@ -12,8 +12,6 @@ import * as Haptics from 'expo-haptics';
 import * as Sharing from 'expo-sharing';
 import { themedColors, spacing, fontSize, fontWeight, borderRadius, fonts } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
-import { useXPStore } from '../../state/xpSlice';
-import { getLevelForXP, LEVEL_TITLES } from '../../lib/xpEngine';
 import { useGoalsStore } from '../../state/goalsSlice';
 import { resolveCompletionState } from '../../lib/completionState';
 import { getAppDate } from '../../lib/appDate';
@@ -52,11 +50,6 @@ export default function GoalCompleteScreen() {
   useEffect(() => {
     loadShareCardStyle();
   }, [loadShareCardStyle]);
-
-  // Derive level title
-  const xp = useXPStore((s) => s.totalXP ?? 0);
-  const level = getLevelForXP(xp);
-  const levelTitle = LEVEL_TITLES[level - 1] ?? 'Livra';
 
   // Derive days taken and targetDateLabel
   const goals = useGoalsStore((s) => s.goals);
@@ -242,7 +235,6 @@ export default function GoalCompleteScreen() {
           forwardRef={shareCardRef}
           goalTitle={goalTitle ?? ''}
           completedDate={getAppDate().toISOString().slice(0, 10)}
-          levelTitle={levelTitle}
           daysTaken={daysTaken}
           targetDateLabel={targetDateLabel}
           bankedMomentumDays={completedGoal?.banked_momentum_days}
@@ -263,7 +255,6 @@ export default function GoalCompleteScreen() {
         cardProps={{
           goalTitle: goalTitle ?? '',
           completedDate: getAppDate().toISOString().slice(0, 10),
-          levelTitle,
           daysTaken,
           targetDateLabel,
           bankedMomentumDays: completedGoal?.banked_momentum_days,

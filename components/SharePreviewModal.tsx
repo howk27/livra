@@ -35,7 +35,8 @@ const PREVIEW_SCALE = PREVIEW_WIDTH / CARD_WIDTH;
 export interface SharePreviewModalCardProps {
   goalTitle: string;
   completedDate: string;
-  levelTitle: string;
+  /** XP level badge text. Omitted while XP surfaces are hidden for beta. */
+  levelTitle?: string;
   daysTaken: number;
   targetDateLabel?: string;
   bankedMomentumDays?: number | null;
@@ -204,12 +205,6 @@ export const SharePreviewModal: React.FC<SharePreviewModalProps> = ({
                 label="Momentum line"
                 value={style.showMomentum}
                 onToggle={() => onStyleChange({ showMomentum: !style.showMomentum })}
-                c={c}
-              />
-              <ToggleRow
-                label="Level badge"
-                value={style.showBadge}
-                onToggle={() => onStyleChange({ showBadge: !style.showBadge })}
                 c={c}
               />
               <ToggleRow

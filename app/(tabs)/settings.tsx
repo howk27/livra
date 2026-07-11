@@ -35,7 +35,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { LivraHeader } from '../../components/ui/LivraHeader';
 import { SectionLabel } from '../../components/ui/SectionLabel';
-import { LevelProgressBar } from '../../components/LevelProgressBar';
 import { fonts, spacing, radius, shadow, themedColors, fontSize } from '../../theme/tokens';
 import { useEffectiveTheme, useUIStore } from '../../state/uiSlice';
 import { ProfileEditSheet } from '../../components/sheets/ProfileEditSheet';
@@ -498,9 +497,6 @@ export default function SettingsScreen() {
             </View>
             <PencilSimple size={16} color={c.inkMuted} weight="regular" />
           </View>
-          <View style={styles.xpBarWrapper}>
-            <LevelProgressBar />
-          </View>
         </TouchableOpacity>
 
         {/* ── Email-not-verified nudge ── */}
@@ -710,10 +706,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-  },
-  xpBarWrapper: {
-    marginTop: spacing.sm,
-    paddingHorizontal: spacing.xs,
   },
   avatarCircle: {
     width: 64,

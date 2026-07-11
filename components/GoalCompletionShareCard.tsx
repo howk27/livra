@@ -21,7 +21,8 @@ function formatDate(dateStr: string): string {
 export interface GoalCompletionShareCardProps {
   goalTitle: string;
   completedDate: string; // 'YYYY-MM-DD'
-  levelTitle: string;
+  /** XP level badge text. Omitted while XP surfaces are hidden for beta. */
+  levelTitle?: string;
   daysTaken: number; // always provided — computed from created_at
   targetDateLabel?: string; // only when goal had a target_date
   bankedMomentumDays?: number | null; // Momentum banked at completion (Phase 1.4)
@@ -71,7 +72,7 @@ export function GoalCompletionShareCard({
           </View>
         ) : null}
 
-        {style.showBadge ? (
+        {style.showBadge && levelTitle ? (
           <View style={[styles.levelBadge, { borderColor: colors.accent }]}>
             <Text style={[styles.levelBadgeText, { color: colors.accent }]}>{levelTitle}</Text>
           </View>

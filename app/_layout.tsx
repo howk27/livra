@@ -55,8 +55,6 @@ import { getAppDate } from '../lib/appDate';
 import { checkProStatus } from '../lib/iap/iap';
 import { reVerifyProOnLaunch } from '../lib/iap/iapReVerify';
 import { useXPStore } from '../state/xpSlice';
-import { LevelUpModal } from '../components/LevelUpModal';
-import { LEVEL_TITLES } from '../lib/xpEngine';
 import { useGoalCompletionStore } from '../state/goalCompletionStore';
 import { GoalCompletionOverlay } from '../components/overlays/GoalCompletionOverlay';
 
@@ -564,8 +562,6 @@ export default function RootLayout() {
 
 function RootNavigator() {
   const theme = useEffectiveTheme();
-  const pendingLevelUp = useXPStore((s) => s.pendingLevelUp);
-  const clearPendingLevelUp = useXPStore((s) => s.clearPendingLevelUp);
   const goalCompletionShow = useGoalCompletionStore((s) => s.show);
 
   // Detect newly completed goals and trigger overlay
@@ -630,13 +626,8 @@ function RootNavigator() {
         />
       </Stack>
       <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
-      {pendingLevelUp !== null && (
-        <LevelUpModal
-          level={pendingLevelUp}
-          levelTitle={LEVEL_TITLES[pendingLevelUp - 1] ?? 'Livra'}
-          onDismiss={clearPendingLevelUp}
-        />
-      )}
+      {/* XP surfaces hidden for beta — accrual still runs (see decisions.md 2026-07-11).
+          Re-enable by restoring the LevelUpModal render on pendingLevelUp. */}
       {goalCompletionShow && <GoalCompletionOverlay />}
     </>
   );

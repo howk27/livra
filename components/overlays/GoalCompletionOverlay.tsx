@@ -27,8 +27,6 @@ import { fonts, spacing, themedColors, fontSize } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useGoalCompletionStore } from '../../state/goalCompletionStore';
 import { useShareCardStore } from '../../state/shareCardSlice';
-import { useXPStore } from '../../state/xpSlice';
-import { getLevelForXP, LEVEL_TITLES } from '../../lib/xpEngine';
 import { checkProStatus } from '../../lib/iap/iap';
 import { canCustomizeShareCard } from '../../lib/gating';
 import { generateShareCard } from '../../lib/sharing/generateShareCard';
@@ -74,8 +72,6 @@ export function GoalCompletionOverlay() {
   const style = useShareCardStore((s) => s.style);
   const updateStyle = useShareCardStore((s) => s.updateStyle);
   const loadShareCardStyle = useShareCardStore((s) => s.loadShareCardStyle);
-  const xp = useXPStore((s) => s.totalXP ?? 0);
-  const levelTitle = LEVEL_TITLES[getLevelForXP(xp) - 1] ?? 'Livra';
 
   useEffect(() => {
     loadShareCardStyle();
@@ -245,7 +241,6 @@ export function GoalCompletionOverlay() {
             forwardRef={shareCardRef}
             goalTitle={completedGoal.title}
             completedDate={completedDate}
-            levelTitle={levelTitle}
             daysTaken={daysTaken}
             targetDateLabel={targetDateLabel}
             bankedMomentumDays={completedGoal.banked_momentum_days}
@@ -270,7 +265,6 @@ export function GoalCompletionOverlay() {
         cardProps={{
           goalTitle: completedGoal?.title ?? '',
           completedDate,
-          levelTitle,
           daysTaken,
           targetDateLabel,
           bankedMomentumDays: completedGoal?.banked_momentum_days,
