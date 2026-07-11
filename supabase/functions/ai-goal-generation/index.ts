@@ -128,6 +128,8 @@ Rules:
 - timeframeWeeks: integer 1–52
 - confidence: "high" if you understand the goal clearly; "low" if it is unclear, unsafe, or contains multiple goals
 - marks: 2–3 items; frequency is times per week (integer 1–7); icon MUST be one of the listed values
+- Each mark must be a separate real-world effort. Never suggest two marks that one single activity would satisfy (a run must not appear as both a running mark and a steps mark)
+- Prefer 2 distinct marks over 3 overlapping ones
 - why: one concrete sentence per mark
 - For unclear/unsafe input: set confidence:"low" and still return a plausible package
 - If multiple goals are given: scope to one; use "low" confidence`;
