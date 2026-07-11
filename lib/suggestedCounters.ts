@@ -26,6 +26,8 @@ export type MarkDefinition = {
   frequency_recommended: number;
   frequency_max: number;
   frequencyKind: 'variable' | 'fixed' | 'abstinence';
+  /** Hero-step time gating (spec 2026-07-11). Absent = anytime. */
+  timeAffinity?: 'daytime' | 'evening';
 };
 
 export type MarkCategory = {
@@ -36,7 +38,7 @@ export type MarkCategory = {
 export const MARK_LIBRARY: MarkDefinition[] = [
   // RECOVERY
   {
-    id: 'sleep', name: 'Sleep', icon: MoonStarsIcon, emoji: '🌙',
+    id: 'sleep', name: 'Sleep', icon: MoonStarsIcon, emoji: '🌙', timeAffinity: 'evening',
     color: '#7B9EA6', unit: 'days', category: 'Recovery',
     tags: ['sleep', 'recovery', 'energy', 'marathon', 'performance', 'insomnia', 'rest', 'fatigue', 'tired', 'endurance', 'health', 'athlete'],
     healthKitType: 'sleep',
@@ -59,35 +61,35 @@ export const MARK_LIBRARY: MarkDefinition[] = [
 
   // FITNESS
   {
-    id: 'workout', name: 'Workout', icon: BarbellIcon, emoji: '🏋️',
+    id: 'workout', name: 'Workout', icon: BarbellIcon, emoji: '🏋️', timeAffinity: 'daytime',
     color: '#8A7E6B', unit: 'sessions', category: 'Fitness',
     tags: ['fitness', 'strength', 'muscle', 'gym', 'marathon', 'lose weight', 'bulk', 'tone', 'training', 'athlete', 'body', 'health', 'endurance', 'triathlon'],
     healthKitType: 'workout',
     frequency_min: 2, frequency_recommended: 3, frequency_max: 5, frequencyKind: 'variable',
   },
   {
-    id: 'steps', name: 'Steps', icon: FootprintsIcon, emoji: '👣',
+    id: 'steps', name: 'Steps', icon: FootprintsIcon, emoji: '👣', timeAffinity: 'daytime',
     color: '#8A7E6B', unit: 'items', category: 'Fitness',
     tags: ['steps', 'walk', 'marathon', '5k', '10k', 'half marathon', 'race', 'cardio', 'active', 'movement', 'walking', 'running', 'weight loss'],
     healthKitType: 'steps',
     frequency_min: 5, frequency_recommended: 7, frequency_max: 7, frequencyKind: 'variable',
   },
   {
-    id: 'run', name: 'Run', icon: PersonSimpleRunIcon, emoji: '🏃',
+    id: 'run', name: 'Run', icon: PersonSimpleRunIcon, emoji: '🏃', timeAffinity: 'daytime',
     color: '#8A7E6B', unit: 'sessions', category: 'Fitness',
     tags: ['running', 'marathon', '5k', '10k', 'half marathon', 'race', 'cardio', 'jogging', 'endurance', 'triathlon', 'speed', 'pace'],
     healthKitType: null,
     frequency_min: 2, frequency_recommended: 3, frequency_max: 5, frequencyKind: 'variable',
   },
   {
-    id: 'swim', name: 'Swim', icon: WavesIcon, emoji: '🏊',
+    id: 'swim', name: 'Swim', icon: WavesIcon, emoji: '🏊', timeAffinity: 'daytime',
     color: '#8A7E6B', unit: 'sessions', category: 'Fitness',
     tags: ['swimming', 'triathlon', 'endurance', 'cardio', 'marathon', 'weight loss', 'low impact', 'fitness', 'athlete', 'laps'],
     healthKitType: null,
     frequency_min: 2, frequency_recommended: 3, frequency_max: 5, frequencyKind: 'variable',
   },
   {
-    id: 'cycling', name: 'Cycling', icon: BicycleIcon, emoji: '🚴',
+    id: 'cycling', name: 'Cycling', icon: BicycleIcon, emoji: '🚴', timeAffinity: 'daytime',
     color: '#8A7E6B', unit: 'sessions', category: 'Fitness',
     tags: ['cycling', 'bike', 'triathlon', 'cardio', 'endurance', 'weight loss', 'commute', 'fitness', 'spin', 'race'],
     healthKitType: null,
@@ -140,21 +142,21 @@ export const MARK_LIBRARY: MarkDefinition[] = [
 
   // MINDSET
   {
-    id: 'meditation', name: 'Meditation', icon: BrainIcon, emoji: '🧠',
+    id: 'meditation', name: 'Meditation', icon: BrainIcon, emoji: '🧠', timeAffinity: 'evening',
     color: '#8A6B7B', unit: 'sessions', category: 'Mindset',
     tags: ['meditation', 'stress', 'anxiety', 'focus', 'mindfulness', 'mental health', 'calm', 'clarity', 'sleep', 'peace', 'breath'],
     healthKitType: null,
     frequency_min: 3, frequency_recommended: 5, frequency_max: 7, frequencyKind: 'variable',
   },
   {
-    id: 'journaling', name: 'Journaling', icon: NotePencilIcon, emoji: '📓',
+    id: 'journaling', name: 'Journaling', icon: NotePencilIcon, emoji: '📓', timeAffinity: 'evening',
     color: '#8A6B7B', unit: 'sessions', category: 'Mindset',
     tags: ['journaling', 'reflection', 'gratitude', 'clarity', 'mental health', 'anxiety', 'writing', 'self awareness', 'growth', 'therapy'],
     healthKitType: null,
     frequency_min: 3, frequency_recommended: 5, frequency_max: 7, frequencyKind: 'variable',
   },
   {
-    id: 'gratitude', name: 'Gratitude', icon: HandHeartIcon, emoji: '🙏',
+    id: 'gratitude', name: 'Gratitude', icon: HandHeartIcon, emoji: '🙏', timeAffinity: 'evening',
     color: '#8A6B7B', unit: 'sessions', category: 'Mindset',
     tags: ['gratitude', 'positivity', 'mindset', 'happiness', 'mental health', 'relationships', 'wellbeing', 'perspective'],
     healthKitType: null,
@@ -191,7 +193,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     frequency_min: 3, frequency_recommended: 5, frequency_max: 7, frequencyKind: 'variable',
   },
   {
-    id: 'reading', name: 'Reading', icon: BookOpenTextIcon, emoji: '📖',
+    id: 'reading', name: 'Reading', icon: BookOpenTextIcon, emoji: '📖', timeAffinity: 'evening',
     color: '#8A6B7B', unit: 'sessions', category: 'Deep Work',
     tags: ['reading', 'books', 'learning', 'knowledge', 'growth', 'education', 'career', 'skill', 'vocabulary', 'writing'],
     healthKitType: null,
