@@ -90,6 +90,20 @@ export const AI_ICON_TO_MARK_ID: Record<ValidIcon, string> = {
   journaling: 'journaling',
 };
 
+/**
+ * Effort-category collapse (spec 2026-07-11): two marks one single activity
+ * satisfies must not coexist. Conservative pairs only; icons not listed are
+ * always kept. Applied in validateAIGoalPackage — first mark per category wins.
+ */
+export const AI_ICON_EFFORT_CATEGORY: Partial<Record<ValidIcon, string>> = {
+  gym: 'movement',
+  steps: 'movement',
+  gratitude: 'reflection',
+  journaling: 'reflection',
+  focus: 'deep-work',
+  study: 'deep-work',
+};
+
 /** Resolves an AI icon string to the matching MARK_LIBRARY entry (emoji, color, id). */
 export function resolveMarkForAIIcon(icon: string): {
   markId: string;
@@ -137,7 +151,7 @@ export function validateAIGoalPackage(raw: unknown): AIGoalPackage | null {
 
   if (!Array.isArray(r.marks)) return null;
 
-  const validMarks: AIGoalMark[] = [];
+  const validMarks: (AIGoalMark & { __repaired?: boolean })[] = [];
   for (const m of r.marks as unknown[]) {
     if (!m || typeof m !== 'object') continue;
     const mark = m as Record<string, unknown>;
@@ -152,25 +166,39 @@ export function validateAIGoalPackage(raw: unknown): AIGoalPackage | null {
 
     // Icon: repair if not in valid set
     const rawIcon = typeof mark.icon === 'string' ? mark.icon : '';
-    const icon: string = (VALID_ICONS as readonly string[]).includes(rawIcon)
-      ? rawIcon
-      : FALLBACK_ICON;
+    const repaired = !(VALID_ICONS as readonly string[]).includes(rawIcon);
+    const icon: string = repaired ? FALLBACK_ICON : rawIcon;
 
     validMarks.push({
       name: String(mark.name).trim(),
       icon,
       frequency,
       why: String(mark.why).trim(),
+      ...(repaired ? { __repaired: true } : {}),
     });
   }
 
-  if (validMarks.length === 0) return null;
+  // Effort-category collapse: keep the first mark per category so one real-world
+  // activity never appears as two marks. Repaired icons are exempt — a junk icon
+  // repaired to the fallback must not knock out a genuine mark in that category.
+  const seenCategories = new Set<string>();
+  const distinctMarks: AIGoalMark[] = validMarks
+    .filter((m) => {
+      const category = m.__repaired ? undefined : AI_ICON_EFFORT_CATEGORY[m.icon as ValidIcon];
+      if (!category) return true;
+      if (seenCategories.has(category)) return false;
+      seenCategories.add(category);
+      return true;
+    })
+    .map(({ __repaired: _repaired, ...m }) => m);
+
+  if (distinctMarks.length === 0) return null;
 
   return {
     goalTitle: String(r.goalTitle).trim(),
     timeframeWeeks,
     confidence: r.confidence as 'high' | 'low',
-    marks: validMarks.slice(0, 3),
+    marks: distinctMarks.slice(0, 3),
   };
 }
 
