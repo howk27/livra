@@ -30,6 +30,8 @@ import { useAppDateStore } from '../../state/appDateSlice';
 import { useGoalsStore } from '../../state/goalsSlice';
 import { useMomentumStore } from '../../state/momentumSlice';
 import { GoalMomentum } from '../../components/ui/GoalMomentum';
+import { GoalHeroStep } from '../../components/ui/GoalHeroStep';
+import { selectNextStep, resolveTimeAffinity } from '../../lib/nextStep';
 import { MomentumBanner } from '../../components/ui/MomentumBanner';
 import { shouldShowMomentumBanner } from '../../lib/momentumPresenter';
 import {
@@ -484,8 +486,23 @@ export default function FocusScreen() {
               const marks = marksForGoal(goal.id);
               if (marks.length === 0) return null;
 
+              const heroResult = selectNextStep(
+                marks.map((m) => ({
+                  markId: m.id,
+                  name: m.name,
+                  weeklyCount: weeklyCountsMap.get(m.id) ?? 0,
+                  weeklyTarget: m.weekly_target ?? 3,
+                  loggedToday: (todayCountsMap.get(m.id) ?? 0) > 0,
+                  timeAffinity: resolveTimeAffinity(m.emoji),
+                })),
+                getAppDate(),
+              );
+              const heroMarkId = heroResult.kind === 'step' ? heroResult.candidate.markId : null;
+
               const dueMarks = marks.filter(
-                (m) => markWeeklyState(m, weeklyCountsMap.get(m.id) ?? 0) === 'due',
+                (m) =>
+                  m.id !== heroMarkId &&
+                  markWeeklyState(m, weeklyCountsMap.get(m.id) ?? 0) === 'due',
               );
               const doneMarks = marks.filter(
                 (m) => markWeeklyState(m, weeklyCountsMap.get(m.id) ?? 0) === 'doneForWeek',
@@ -509,6 +526,8 @@ export default function FocusScreen() {
                       {marks.length} mark{marks.length !== 1 ? 's' : ''}
                     </Text>
                   </TouchableOpacity>
+
+                  <GoalHeroStep result={heroResult} onLog={handleQuickIncrement} />
 
                   <View style={styles.momentumRow}>
                     <GoalMomentum snapshot={momentumSnapshots[goal.id] ?? null} />
