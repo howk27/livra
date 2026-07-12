@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -21,7 +21,8 @@ import { themedColors, fonts, spacing, radius, fontSize } from '../../theme/toke
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useAuth } from '../../hooks/useAuth';
 import { getSupabaseClient } from '../../lib/supabase';
-import { uploadAvatar } from '../../lib/storage/avatarStorage';
+import { uploadAvatar, getAvatarUrl } from '../../lib/storage/avatarStorage';
+import { resolveInitialDisplayName } from '../../lib/profile/displayName';
 import { logger } from '../../lib/utils/logger';
 
 export default function ProfileScreen() {
@@ -34,6 +35,61 @@ export default function ProfileScreen() {
   const [displayName, setDisplayName] = useState('');
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+
+  // --- Pre-fill display name from the saved profile (same read pattern as
+  // app/(tabs)/settings.tsx). Field stays disabled while loading so there is
+  // no flash of an editable-empty input; a fetch error falls back to the
+  // signup auth metadata and, failing that, an editable empty field.
+  useEffect(() => {
+    if (!user?.id) {
+      setLoadingProfile(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      let savedName: string | null = null;
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('display_name')
+          .eq('id', user.id)
+          .maybeSingle();
+        if (error) throw error;
+        savedName = data?.display_name ?? null;
+      } catch (err) {
+        // Non-blocking: metadata fallback below still applies; save still works.
+        logger.warn('[Profile] could not load saved profile:', err);
+      }
+      if (cancelled) return;
+      const initialName = resolveInitialDisplayName(savedName, user.user_metadata);
+      if (initialName) {
+        setDisplayName(prev => (prev ? prev : initialName));
+      }
+      setLoadingProfile(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, user?.user_metadata, supabase]);
+
+  // --- Pre-load the existing avatar (same source as settings.tsx).
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const url = await getAvatarUrl(user.id, 3600);
+        if (cancelled || !url) return;
+        setAvatarUri(prev => prev ?? url);
+      } catch {
+        // Non-blocking: placeholder avatar remains.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   const pickImage = useCallback(async () => {
     if (!user?.id) return;
@@ -103,12 +159,13 @@ export default function ProfileScreen() {
           <View style={styles.fieldBlock}>
             <SectionLabel>DISPLAY NAME</SectionLabel>
             <TextInput
-              style={styles.input}
+              style={[styles.input, loadingProfile && styles.inputDisabled]}
               value={displayName}
               onChangeText={setDisplayName}
-              placeholder="How you appear in the app"
+              placeholder={loadingProfile ? 'Loading…' : 'How you appear in the app'}
               placeholderTextColor={c.inkMuted}
               autoCapitalize="words"
+              editable={!loadingProfile}
             />
           </View>
 
