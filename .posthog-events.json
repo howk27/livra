@@ -1,0 +1,12 @@
+[
+  {
+    "event_name": "user_signed_in",
+    "event_description": "Fires when a user successfully signs in via email or Apple Sign-In.",
+    "file": "app/auth/signin.tsx"
+  },
+  {
+    "event_name": "user_signed_up",
+    "event_description": "Fires when a user successfully creates a new account via email or Apple Sign-In.",
+    "file": "app/auth/signin.tsx"
+  }
+]

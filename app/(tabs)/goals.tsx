@@ -30,6 +30,9 @@ import { Breathing } from '../../components/ui/Breathing';
 import { SectionLabel } from '../../components/ui/SectionLabel';
 import { HistoryRow } from '../../components/goals/HistoryRow';
 import { useGoalsStore } from '../../state/goalsSlice';
+import { useMarksStore } from '../../state/countersSlice';
+import { useEventsStore } from '../../state/eventsSlice';
+import { currentWeekDates, computeCompletionsThisWeek } from '../../lib/features';
 import { applyOpacity } from '../../src/components/icons/color';
 import type { Goal } from '../../types/goal';
 
@@ -49,10 +52,14 @@ interface ActiveGoalCardProps {
   progress: number;
   threshold: number;
   canComplete: boolean;
+  /** Check-ins completed this week across the goal's marks. */
+  weeklyDone?: number;
+  /** Sum of this week's targets across the goal's marks. */
+  weeklyTarget?: number;
   onPress: () => void;
 }
 
-function ActiveGoalCard({ goal, progress, threshold, canComplete, onPress }: ActiveGoalCardProps) {
+function ActiveGoalCard({ goal, progress, threshold, canComplete, weeklyDone = 0, weeklyTarget = 0, onPress }: ActiveGoalCardProps) {
   const theme = useEffectiveTheme();
   const c = themedColors(theme);
   const pct = threshold > 0 ? Math.min(100, (progress / threshold) * 100) : 0;
@@ -96,6 +103,15 @@ function ActiveGoalCard({ goal, progress, threshold, canComplete, onPress }: Act
         </View>
       )}
 
+      {/* This week — the working-toward-it line (QC 2026-07-12) */}
+      {weeklyTarget > 0 && (
+        <Text style={[styles.weeklyLine, { color: c.mint }]}>
+          {weeklyDone >= weeklyTarget
+            ? 'This week: all done'
+            : `This week: ${weeklyDone} of ${weeklyTarget} check-ins`}
+        </Text>
+      )}
+
       {/* Deadline */}
       {deadlineStr ? (
         <Text style={[styles.activeDeadline, { color: c.inkInverseMuted }]}>
@@ -125,6 +141,7 @@ interface DraggableRowProps {
   slotHeight: SharedValue<number>;
   positions: SharedValue<Record<string, number>>;
   activeId: SharedValue<string | null>;
+  weekly?: { done: number; target: number };
   onMeasure: (height: number) => void;
   onPress: () => void;
   onReorder: () => void;
@@ -137,6 +154,7 @@ function DraggableRow({
   slotHeight,
   positions,
   activeId,
+  weekly,
   onMeasure,
   onPress,
   onReorder,
@@ -243,6 +261,8 @@ function DraggableRow({
         progress={progress.progress}
         threshold={progress.threshold}
         canComplete={progress.canComplete}
+        weeklyDone={weekly?.done}
+        weeklyTarget={weekly?.target}
         onPress={onPress}
       />
       {count > 1 && (
@@ -260,10 +280,11 @@ function DraggableRow({
 
 interface DraggableGoalListProps {
   goals: Goal[];
+  weeklyByGoal: Map<string, { done: number; target: number }>;
   onPressGoal: (goalId: string) => void;
 }
 
-function DraggableGoalList({ goals, onPressGoal }: DraggableGoalListProps) {
+function DraggableGoalList({ goals, weeklyByGoal, onPressGoal }: DraggableGoalListProps) {
   const reorderGoals = useGoalsStore((s) => s.reorderGoals);
 
   const slotHeight = useSharedValue(0);
@@ -303,6 +324,7 @@ function DraggableGoalList({ goals, onPressGoal }: DraggableGoalListProps) {
           slotHeight={slotHeight}
           positions={positions}
           activeId={activeId}
+          weekly={weeklyByGoal.get(goal.id)}
           onMeasure={handleMeasure}
           onPress={() => onPressGoal(goal.id)}
           onReorder={handleReorder}
@@ -328,6 +350,28 @@ export default function GoalsScreen() {
 
   const active = useMemo(() => getActiveGoals(), [getActiveGoals, goals]);
   const completedCount = useMemo(() => getCompletedGoals().length, [getCompletedGoals, goals]);
+
+  // Per-goal "this week" aggregate — same computation Focus uses per mark,
+  // summed across each goal's linked marks.
+  const marks = useMarksStore((s) => s.marks);
+  const allEvents = useEventsStore((s) => s.events || []);
+  const weeklyByGoal = useMemo(() => {
+    const weekDates = currentWeekDates();
+    const map = new Map<string, { done: number; target: number }>();
+    for (const goal of active) {
+      let done = 0;
+      let target = 0;
+      for (const mark of marks) {
+        if (mark.goal_id !== goal.id || mark.deleted_at) continue;
+        const markTarget = mark.weekly_target ?? (mark.frequency_kind === 'variable' ? 3 : 7);
+        const markEvents = allEvents.filter((e) => e.mark_id === mark.id && !e.deleted_at);
+        done += Math.min(computeCompletionsThisWeek(mark, markEvents, weekDates), markTarget);
+        target += markTarget;
+      }
+      map.set(goal.id, { done, target });
+    }
+    return map;
+  }, [active, marks, allEvents]);
 
   const isEmpty = !isLoading && active.length === 0;
 
@@ -417,12 +461,14 @@ export default function GoalsScreen() {
             <SectionLabel style={styles.sectionLabel}>ACTIVE</SectionLabel>
             <DraggableGoalList
               goals={active}
+              weeklyByGoal={weeklyByGoal}
               onPressGoal={handleOpenGoal}
             />
           </>
         )}
 
-        {/* History — always reachable; free per PRODUCT.md:436 */}
+        {/* History — always reachable (free per PRODUCT.md:436), but out of the
+            drag list's gravity: a quiet text button anchored bottom right. */}
         <HistoryRow completedCount={completedCount} onPress={handleViewCompleted} />
 
         <View style={styles.bottomSpacer} />
@@ -465,9 +511,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
   },
 
-  // Active card
+  // Active card. No own horizontal margin — the draggableRow wrapper carries the
+  // screen gutter (doubling it made goal cards narrower than sibling blocks).
   activeCard: {
-    marginHorizontal: spacing.lg,
     borderRadius: radius.xl,
     padding: spacing.lg,
   },
@@ -508,6 +554,11 @@ const styles = StyleSheet.create({
   progressLabel: {
     fontFamily: fonts.sans,
     fontSize: fontSize.sm,
+  },
+  weeklyLine: {
+    fontFamily: fonts.sansMedium,
+    fontSize: fontSize.sm,
+    marginTop: spacing.sm,
   },
   activeDeadline: {
     fontFamily: fonts.sans,

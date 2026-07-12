@@ -18,7 +18,7 @@ import { useEffectiveTheme } from '../../state/uiSlice';
 import { LivraHeader } from '../../components/ui/LivraHeader';
 import { MarkRow } from '../../components/ui/MarkRow';
 import { Breathing } from '../../components/ui/Breathing';
-import { Plus } from 'phosphor-react-native';
+import { Plus, CaretRight } from 'phosphor-react-native';
 import { SectionLabel } from '../../components/ui/SectionLabel';
 import { SpeedDialFAB } from '../../components/ui/SpeedDialFAB';
 
@@ -319,7 +319,6 @@ export default function FocusScreen() {
   const renderMarkRow = useCallback(
     (mark: Counter, isLast: boolean, dimmed = false, maintenance = false, celebrateIndex?: number) => {
       const weeklyCount = weeklyCountsMap.get(mark.id) ?? 0;
-      const weeklyTarget = mark.weekly_target ?? 3;
       const isDoneForWeek = markWeeklyState(mark, weeklyCount) === 'doneForWeek';
       const libMark = MARK_LIBRARY.find((m) => m.emoji === mark.emoji);
       const category =
@@ -360,9 +359,6 @@ export default function FocusScreen() {
                 onLog={() => handleQuickIncrement(mark.id)}
                 onLongPress={() => handleMarkLongPress(mark.id, mark.name)}
                 isLast={isLast}
-                showWeeklyCount
-                weeklyCount={weeklyCount}
-                weeklyTarget={weeklyTarget}
                 celebrateStamp={!maintenance && celebrateStamp != null ? celebrateStamp : undefined}
                 celebrateIndex={celebrateIndex}
               />
@@ -371,7 +367,7 @@ export default function FocusScreen() {
           {showRestLine && (
             <View style={styles.restLineRow}>
               <Text style={[styles.restLineText, { color: c.inkMuted }]}>
-                {`You've hit your ${mark.weekly_target ?? 3} this week. Rest is part of it, but if you want one more, go for it.`}
+                Done for the week.
               </Text>
               <TouchableOpacity
                 style={styles.bonusButton}
@@ -480,9 +476,7 @@ export default function FocusScreen() {
                     <Text style={[styles.goalCardTitle, { color: c.inkDark }]} numberOfLines={1}>
                       {goal.title}
                     </Text>
-                    <Text style={[styles.goalCardMeta, { color: c.inkMuted }]}>
-                      {marks.length} mark{marks.length !== 1 ? 's' : ''}
-                    </Text>
+                    <CaretRight size={14} color={c.inkMuted} weight="bold" />
                   </TouchableOpacity>
 
                   <GoalHeroStep result={heroResult} onLog={handleQuickIncrement} />
@@ -524,8 +518,10 @@ export default function FocusScreen() {
           </View>
         )}
 
-        {/* ── Daily habits (goal-less marks, collapsible) ── */}
-        {goallessMarks.length > 0 && (
+        {/* ── Daily habits (goal-less marks + maintenance habits from completed
+            goals, one section per QC 2026-07-12). Maintenance rows keep their
+            Retire swipe and goal-pressure exclusion; only the grouping merged. ── */}
+        {(goallessMarks.length > 0 || maintenanceMarks.length > 0) && (
           <View style={styles.dailyHabitsSection}>
             <TouchableOpacity
               style={styles.dailyHabitsHeader}
@@ -534,31 +530,20 @@ export default function FocusScreen() {
             >
               <SectionLabel style={styles.sectionLabel}>DAILY HABITS</SectionLabel>
               <Text style={[styles.dailyHabitsToggle, { color: c.accent }]}>
-                {dailyHabitsExpanded ? 'Hide' : `Show ${goallessMarks.length}`}
+                {dailyHabitsExpanded ? 'Hide' : `Show ${goallessMarks.length + maintenanceMarks.length}`}
               </Text>
             </TouchableOpacity>
 
             {dailyHabitsExpanded && (
               <View style={[styles.marksList, { backgroundColor: c.surface }]}>
                 {goallessMarks.map((mark, idx) =>
-                  renderMarkRow(mark, idx === goallessMarks.length - 1, false, false, idx)
+                  renderMarkRow(mark, maintenanceMarks.length === 0 && idx === goallessMarks.length - 1, false, false, idx)
+                )}
+                {maintenanceMarks.map((mark, idx) =>
+                  renderMarkRow(mark, idx === maintenanceMarks.length - 1, false, true)
                 )}
               </View>
             )}
-          </View>
-        )}
-
-        {/* ── Keeping it going (maintenance habits from completed goals) ── */}
-        {maintenanceMarks.length > 0 && (
-          <View style={styles.dailyHabitsSection}>
-            <View style={styles.dailyHabitsHeader}>
-              <SectionLabel style={styles.sectionLabel}>KEEPING IT GOING</SectionLabel>
-            </View>
-            <View style={[styles.marksList, { backgroundColor: c.surface }]}>
-              {maintenanceMarks.map((mark, idx) =>
-                renderMarkRow(mark, idx === maintenanceMarks.length - 1, false, true)
-              )}
-            </View>
           </View>
         )}
 

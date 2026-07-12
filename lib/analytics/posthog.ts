@@ -62,6 +62,24 @@ export function resetAnalytics(): void {
   }
 }
 
+export function screenTrack(screenName: string, properties?: PostHogEventProperties): void {
+  if (!client) return;
+  try {
+    client.screen(screenName, properties);
+  } catch (e) {
+    logger.warn('[Analytics] screen failed:', screenName, e);
+  }
+}
+
+export function captureException(error: unknown, properties?: PostHogEventProperties): void {
+  if (!client) return;
+  try {
+    client.captureException(error instanceof Error ? error : new Error(String(error)), properties);
+  } catch (e) {
+    logger.warn('[Analytics] captureException failed:', e);
+  }
+}
+
 export function getAnalyticsClient(): PostHog | null {
   return client;
 }

@@ -60,4 +60,18 @@ describe('CheckinButton accent pulse', () => {
     // withTiming's completion callback runs synchronously in the mock above.
     expect(onCheckin).toHaveBeenCalled();
   });
+
+  it('is pressable again after log then undo (checked true back to false)', () => {
+    // QC 2026-07-12: the press animation hid the + and the button stayed blank
+    // after an undo. The unchecked branch must fully restore on checked=false.
+    const onCheckin = jest.fn();
+    const { getByTestId, rerender } = render(
+      <CheckinButton checked={false} onCheckin={onCheckin} accent="#5B8C5A" testID="btn" />,
+    );
+    fireEvent.press(getByTestId('btn'));
+    rerender(<CheckinButton checked={true} onCheckin={onCheckin} accent="#5B8C5A" testID="btn" />);
+    rerender(<CheckinButton checked={false} onCheckin={onCheckin} accent="#5B8C5A" testID="btn" />);
+    fireEvent.press(getByTestId('btn'));
+    expect(onCheckin).toHaveBeenCalledTimes(2);
+  });
 });

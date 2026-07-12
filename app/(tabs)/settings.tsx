@@ -14,7 +14,6 @@ import { useRouter } from 'expo-router';
 import {
   User,
   Bell,
-  ShieldCheck,
   LinkSimple,
   Star,
   Sun,
@@ -38,7 +37,6 @@ import { LivraHeader } from '../../components/ui/LivraHeader';
 import { SectionLabel } from '../../components/ui/SectionLabel';
 import { fonts, spacing, radius, shadow, themedColors, fontSize } from '../../theme/tokens';
 import { useEffectiveTheme, useUIStore } from '../../state/uiSlice';
-import { ProfileEditSheet } from '../../components/sheets/ProfileEditSheet';
 
 import { useAuth } from '../../hooks/useAuth';
 import { useSync } from '../../hooks/useSync';
@@ -164,7 +162,6 @@ export default function SettingsScreen() {
   const [profileDisplayName, setProfileDisplayName] = useState<string | null>(null);
   const [persistedSyncDiag, setPersistedSyncDiag] = useState<SyncDiagSnapshotV1 | null>(null);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
-  const [editSheetVisible, setEditSheetVisible] = useState(false);
   const [resendingVerification, setResendingVerification] = useState(false);
   const [pace, setPaceState] = useState<PaceLevel>('steady');
 
@@ -502,10 +499,10 @@ export default function SettingsScreen() {
 
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: scrollContentBottomPad }]}>
 
-        {/* ── Profile Mini-Card ── */}
+        {/* ── Profile Mini-Card — the single entry point to profile editing ── */}
         <TouchableOpacity
           style={[styles.profileCard, { backgroundColor: c.surface }]}
-          onPress={() => setEditSheetVisible(true)}
+          onPress={() => router.push('/settings/profile' as any)}
           activeOpacity={0.8}
         >
           <View style={styles.profileCardRow}>
@@ -548,19 +545,9 @@ export default function SettingsScreen() {
         <SectionLabel style={styles.sectionLabel}>ACCOUNT</SectionLabel>
         <SettingsCard>
           <SettingsRow
-            icon={User}
-            label="Edit Profile"
-            onPress={() => router.push('/settings/profile' as any)}
-          />
-          <SettingsRow
             icon={Bell}
             label="Notifications"
             onPress={() => router.push('/settings/notifications' as any)}
-          />
-          <SettingsRow
-            icon={ShieldCheck}
-            label="Privacy & Security"
-            onPress={() => router.push('/settings/privacy' as any)}
           />
           <SettingsRow
             icon={LinkSimple}
@@ -734,13 +721,6 @@ export default function SettingsScreen() {
           </Text>
         </View>
       </ScrollView>
-
-      <ProfileEditSheet
-        visible={editSheetVisible}
-        onClose={() => setEditSheetVisible(false)}
-        initialEmail={user?.email ?? ''}
-        initialName={(user?.user_metadata as Record<string, unknown> | undefined)?.['full_name'] as string ?? ''}
-      />
     </View>
   );
 }

@@ -2,11 +2,13 @@
 // Always-visible entry to the free history surface (app/goal/history.tsx).
 // Renders even with zero completions so "history & stats are free" is
 // reachable in-app for new accounts (PRODUCT.md:436). No streaks, no Pro gate.
+// QC 2026-07-12: a quiet text button anchored bottom right, out of the goal
+// list's drag gravity — not a card competing with the goals above it.
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { CaretRight } from 'phosphor-react-native';
 
-import { fonts, fontSize, spacing, radius, themedColors } from '../../theme/tokens';
+import { fonts, fontSize, spacing, themedColors } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 
 export function HistoryRow({
@@ -18,34 +20,30 @@ export function HistoryRow({
 }) {
   const theme = useEffectiveTheme();
   const c = themedColors(theme);
-  const hint = completedCount > 0 ? `${completedCount} finished` : 'Nothing finished yet';
+  const label = completedCount > 0 ? `History · ${completedCount} finished` : 'History';
   return (
     <TouchableOpacity
       testID="history-row"
-      style={[styles.row, { backgroundColor: c.surface }]}
+      style={styles.button}
       onPress={onPress}
-      activeOpacity={0.8}
+      activeOpacity={0.7}
+      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
     >
-      <View style={styles.textWrap}>
-        <Text style={[styles.label, { color: c.inkMid }]}>History</Text>
-        <Text style={[styles.hint, { color: c.inkMuted }]}>{hint}</Text>
-      </View>
-      <CaretRight size={16} color={c.inkMuted} weight="regular" />
+      <Text style={[styles.label, { color: c.inkMuted }]}>{label}</Text>
+      <CaretRight size={13} color={c.inkMuted} weight="bold" />
     </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
-  row: {
-    marginHorizontal: spacing.lg,
-    borderRadius: radius.lg,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+  button: {
+    alignSelf: 'flex-end',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: spacing.xs,
+    marginTop: spacing.xl,
+    marginRight: spacing.lg,
+    paddingVertical: spacing.sm,
   },
-  textWrap: { gap: 2 },
-  label: { fontFamily: fonts.sans, fontSize: fontSize.base },
-  hint: { fontFamily: fonts.sans, fontSize: fontSize.sm },
+  label: { fontFamily: fonts.sansMedium, fontSize: fontSize.sm },
 });

@@ -48,9 +48,6 @@ export function GoalHeroStep({ result, onLog }: GoalHeroStepProps) {
         <Text style={[styles.markName, { color: c.inkDark }]} numberOfLines={1}>
           {candidate.name}
         </Text>
-        <Text style={[styles.weekly, { color: c.inkMuted }]}>
-          {`${candidate.weeklyCount} of ${candidate.weeklyTarget} this week`}
-        </Text>
       </View>
       <CheckinButton
         checked={false}
@@ -83,11 +80,6 @@ const styles = StyleSheet.create({
   markName: {
     fontFamily: fonts.serifSemibold,
     fontSize: fontSize.lg,
-    marginTop: 1,
-  },
-  weekly: {
-    fontFamily: fonts.sans,
-    fontSize: fontSize.sm,
     marginTop: 1,
   },
   quietWrap: {

@@ -26,6 +26,10 @@ import { themedColors, spacing, fontSize, fontWeight, borderRadius, fonts } from
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useGoalsStore } from '../../state/goalsSlice';
 import { useMarksStore } from '../../state/countersSlice';
+import { CATEGORY_MAP } from '../../components/ui/MarkRow';
+import { MARK_LIBRARY } from '../../lib/suggestedCounters';
+import { resolveCounterIconType } from '../../src/components/icons/IconResolver';
+import { applyOpacity } from '../../src/components/icons/color';
 
 const RING_SIZE = 120;
 const STROKE = 10;
@@ -231,17 +235,29 @@ export default function GoalDetailScreen() {
               </TouchableOpacity>
             </View>
           ) : (
-            linkedMarks.map(mark => (
-              <TouchableOpacity
-                key={mark.id}
-                style={[styles.markRow, { backgroundColor: c.surface, borderColor: c.borderLight }]}
-                onPress={() => router.push(`/mark/${mark.id}` as any)}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.markEmoji, { fontSize: fontSize.xl }]}>{mark.emoji || '📌'}</Text>
-                <Text style={[styles.markName, { color: c.inkDark }]}>{mark.name}</Text>
-              </TouchableOpacity>
-            ))
+            linkedMarks.map(mark => {
+              // Same icon treatment as MarkRow on Focus — the app's own icons,
+              // not raw emoji (QC 2026-07-12).
+              const catKey =
+                MARK_LIBRARY.find((m) => m.emoji === mark.emoji)?.category ??
+                resolveCounterIconType({ name: mark.name, emoji: mark.emoji ?? '' }) ??
+                'custom';
+              const catData = CATEGORY_MAP[catKey] ?? CATEGORY_MAP.custom;
+              const MarkIcon = catData.Icon;
+              return (
+                <TouchableOpacity
+                  key={mark.id}
+                  style={[styles.markRow, { backgroundColor: c.surface, borderColor: c.borderLight }]}
+                  onPress={() => router.push(`/mark/${mark.id}` as any)}
+                  activeOpacity={0.8}
+                >
+                  <View style={[styles.markIconTile, { backgroundColor: applyOpacity(catData.accent, 0.12) }]}>
+                    <MarkIcon size={18} color={catData.accent} weight="duotone" />
+                  </View>
+                  <Text style={[styles.markName, { color: c.inkDark }]}>{mark.name}</Text>
+                </TouchableOpacity>
+              );
+            })
           )}
         </View>
 
@@ -386,7 +402,13 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.md,
     padding: spacing.sm,
   },
-  markEmoji: {},
+  markIconTile: {
+    width: 36,
+    height: 36,
+    borderRadius: borderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   markName: { fontSize: fontSize.md, fontFamily: fonts.sansMedium },
   completeBtn: {
     marginTop: spacing.lg,

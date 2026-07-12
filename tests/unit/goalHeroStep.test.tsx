@@ -58,11 +58,11 @@ const step = {
 };
 
 describe('GoalHeroStep', () => {
-  it('renders the directive step with weekly position', () => {
-    const { getByText } = render(<GoalHeroStep result={step} onLog={jest.fn()} />);
+  it('renders the directive step without a weekly fraction (QC 2026-07-12: one progress voice per card)', () => {
+    const { getByText, queryByText } = render(<GoalHeroStep result={step} onLog={jest.fn()} />);
     getByText('Today');
     getByText('Run');
-    getByText('2 of 3 this week');
+    expect(queryByText('2 of 3 this week')).toBeNull();
   });
 
   it('fires onLog with the mark id', () => {

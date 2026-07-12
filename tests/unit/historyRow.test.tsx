@@ -6,18 +6,17 @@ import { HistoryRow } from '../../components/goals/HistoryRow';
 jest.mock('../../state/uiSlice', () => ({ useEffectiveTheme: () => 'light' }));
 
 describe('HistoryRow', () => {
-  it('renders the History label and empty hint with zero completed goals', () => {
+  it('renders a plain History label with zero completed goals', () => {
     const { getByText } = render(<HistoryRow completedCount={0} onPress={() => {}} />);
     expect(getByText('History')).toBeTruthy();
-    expect(getByText('Nothing finished yet')).toBeTruthy();
   });
 
   it('shows the finished count when there are completed goals', () => {
     const { getByText } = render(<HistoryRow completedCount={3} onPress={() => {}} />);
-    expect(getByText('3 finished')).toBeTruthy();
+    expect(getByText('History · 3 finished')).toBeTruthy();
   });
 
-  it('calls onPress when the row is tapped', () => {
+  it('calls onPress when the button is tapped', () => {
     const onPress = jest.fn();
     const { getByTestId } = render(<HistoryRow completedCount={0} onPress={onPress} />);
     fireEvent.press(getByTestId('history-row'));

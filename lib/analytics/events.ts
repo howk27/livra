@@ -11,6 +11,9 @@ export const ANALYTICS_EVENTS = {
   /** Free -> Livra+ at a real limit. */
   PAYWALL_VIEWED: 'paywall_viewed',
   SUBSCRIPTION_STARTED: 'subscription_started',
+  /** Auth funnel — distinguishes returning vs new users. */
+  USER_SIGNED_IN: 'user_signed_in',
+  USER_SIGNED_UP: 'user_signed_up',
 } as const;
 
 export type AnalyticsEvent = (typeof ANALYTICS_EVENTS)[keyof typeof ANALYTICS_EVENTS];

@@ -40,6 +40,8 @@ import { logger } from '../../lib/utils/logger';
 import * as Notifications from 'expo-notifications';
 import { getAuthStorageWriteFailed } from '../../lib/auth/authStorageHealth';
 import { Logo } from '../../components/Logo';
+import { capture, identify } from '../../lib/analytics/posthog';
+import { ANALYTICS_EVENTS } from '../../lib/analytics/events';
 
 type AuthMode = 'login' | 'signup';
 
@@ -173,6 +175,8 @@ export default function SignInScreen() {
           // let straight in and nudged to verify via the banner in Settings.
           // (Requires Supabase "Confirm email" enforcement to be off so that a
           // session is issued for unconfirmed accounts.)
+          identify(data.user.id, { $set: { auth_provider: 'email' } });
+          capture(ANALYTICS_EVENTS.USER_SIGNED_IN, { method: 'email' });
           await ensureProfile(supabase, data.user.id, data.user);
           return;
         } else {
@@ -209,6 +213,8 @@ export default function SignInScreen() {
           if (data.session) {
             // Session issued → onAuthStateChange + the redirect effect take the
             // user into onboarding. No email verification gate.
+            identify(data.user.id, { $set: { auth_provider: 'email' } });
+            capture(ANALYTICS_EVENTS.USER_SIGNED_UP, { method: 'email' });
             return;
           }
           // No session means the server still requires email confirmation before
@@ -277,6 +283,8 @@ export default function SignInScreen() {
           ? `${credential.fullName.givenName || ''} ${credential.fullName.familyName || ''}`.trim()
           : data.user.user_metadata?.full_name || '';
         await ensureProfile(supabase, data.user.id, data.user, appleFullName);
+        identify(data.user.id, { $set: { auth_provider: 'apple' } });
+        capture(ANALYTICS_EVENTS.USER_SIGNED_IN, { method: 'apple' });
         try { await sync(); } catch { /* non-blocking */ }
       }
     } catch (err: unknown) {

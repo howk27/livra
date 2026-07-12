@@ -13,13 +13,11 @@ import {
   DMSans_600SemiBold,
   DMSans_700Bold,
 } from '@expo-google-fonts/dm-sans';
-import * as LocalAuthentication from 'expo-local-authentication';
 import * as SplashScreen from 'expo-splash-screen';
 import { AppState, AppStateStatus, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { BIOMETRIC_LOCK_KEY } from './settings/privacy';
 import * as Notifications from 'expo-notifications';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useRouter, usePathname, useGlobalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -57,7 +55,7 @@ import { reVerifyProOnLaunch } from '../lib/iap/iapReVerify';
 import { useXPStore } from '../state/xpSlice';
 import { useGoalCompletionStore } from '../state/goalCompletionStore';
 import { GoalCompletionOverlay } from '../components/overlays/GoalCompletionOverlay';
-import { initAnalytics, identify, resetAnalytics } from '../lib/analytics/posthog';
+import { initAnalytics, identify, resetAnalytics, screenTrack } from '../lib/analytics/posthog';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -142,41 +140,20 @@ export default function RootLayout() {
     }
   }, [fontsLoaded]);
 
-  // Biometric lock gate — must authenticate before the navigator renders
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-
+  // Biometric lock retired with the Privacy & Security screen (QC 2026-07-12).
+  // Clear any stored flag so a re-added lock never inherits stale state.
   useEffect(() => {
-    const checkBiometricLock = async () => {
-      const stored = await AsyncStorage.getItem(BIOMETRIC_LOCK_KEY);
-      if (stored !== 'true') {
-        // Biometric lock not enabled — allow through immediately
-        setIsAuthenticated(true);
-        return;
-      }
-
-      // Biometric lock is enabled — require successful auth; retry on failure
-      while (true) {
-        const result = await LocalAuthentication.authenticateAsync({
-          promptMessage: 'Unlock Livra',
-        });
-        if (result.success) {
-          setIsAuthenticated(true);
-          break;
-        }
-        // No bypass — prompt again
-      }
-    };
-    checkBiometricLock().catch(() => {
-      // If anything throws (e.g., hardware error), fail open so app isn't bricked
-      setIsAuthenticated(true);
-    });
+    AsyncStorage.removeItem('biometric_lock_enabled').catch(() => {});
   }, []);
 
   const loadUIState = useUIStore((state) => state.loadUIState);
   const { user, initialized } = useAuth();
   const { sync } = useSync();
   const router = useRouter();
+  const pathname = usePathname();
+  const params = useGlobalSearchParams();
   const appStateRef = useRef(AppState.currentState);
+  const previousPathnameRef = useRef<string | undefined>(undefined);
 
   const markCount = useMarksStore((s) => s.marks.length);
   const activeGoalTitle = useGoalsStore((s) => s.getActiveGoal()?.title);
@@ -260,6 +237,14 @@ export default function RootLayout() {
   useEffect(() => {
     initAnalytics();
   }, []);
+
+  // Manual screen tracking for Expo Router
+  useEffect(() => {
+    if (previousPathnameRef.current !== pathname) {
+      screenTrack(pathname, { previous_screen: previousPathnameRef.current ?? null, ...params });
+      previousPathnameRef.current = pathname;
+    }
+  }, [pathname, params]);
 
   // Identify on sign-in, reset on sign-out. Runs once here (not inside useAuth,
   // which is called from multiple screens and would fire this redundantly).
@@ -556,10 +541,6 @@ export default function RootLayout() {
     }
   }, [user, initialized, sync]);
 
-  if (!isAuthenticated) {
-    return null;
-  }
-
   return (
     <ErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>
@@ -632,7 +613,6 @@ function RootNavigator() {
         />
         <Stack.Screen name="goal/history" options={{ headerShown: false }} />
         <Stack.Screen name="settings/notifications" options={{ headerShown: false }} />
-        <Stack.Screen name="settings/privacy" options={{ headerShown: false }} />
         <Stack.Screen name="settings/profile" options={{ headerShown: false }} />
         <Stack.Screen name="settings/about" options={{ headerShown: false }} />
         <Stack.Screen name="signin" options={{ headerShown: false }} />

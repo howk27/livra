@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { Platform, TouchableOpacity } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -40,6 +40,19 @@ export function CheckinButton({ checked, onCheckin, disabled, accent, testID }: 
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
   }, []);
+
+  // The press animation fades the + out and spins the circle before onCheckin
+  // flips `checked`. Those shared values survive an undo/reset (checked back to
+  // false), which left the + invisible — restore them whenever we show unchecked.
+  useEffect(() => {
+    if (!checked) {
+      iconOpacity.value = 1;
+      rotation.value = 0;
+      scale.value = 1;
+      pulseOpacity.value = 0;
+      pulseScale.value = 1;
+    }
+  }, [checked, iconOpacity, rotation, scale, pulseOpacity, pulseScale]);
 
   const handlePress = useCallback(() => {
     if (checked || disabled) return;
