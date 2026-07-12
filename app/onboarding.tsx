@@ -14,6 +14,16 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Check } from 'phosphor-react-native';
 import { useRouter } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withRepeat,
+  withSequence,
+  withTiming,
+  Easing,
+} from 'react-native-reanimated';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 import { SvgLogo } from '../components/ui/SvgLogo';
 import { LivraWordmark } from '../components/ui/LivraWordmark';
 import { PillButton } from '../components/ui/PillButton';
@@ -34,6 +44,11 @@ import {
   writeGoalPackageCache,
   type AIGoalMark,
 } from '../lib/ai/goalGeneration';
+
+/** Sole deliberate departure from the forest palette — the AI "magic" CTA earns its
+ * own treatment (spec: rainbow, glowing, inviting), but dialed down to sit next to
+ * Livra's calm tone: dusty, desaturated stops rather than saturated candy hues. */
+const AI_HATCH_GRADIENT = ['#DDA3B4', '#DDBB98', '#DDD298', '#A8C4AC', '#9FBACE', '#B3A7CE'] as const;
 
 // ─── Step dots ───────────────────────────────────────────────────────────────
 
@@ -123,6 +138,26 @@ export default function OnboardingScreen() {
   const [reviewMarkSelected, setReviewMarkSelected] = useState<Set<number>>(new Set());
   const [reviewDescription, setReviewDescription] = useState('');
   const reviewDescriptionRef = React.useRef('');
+
+  // AI hatch glow — a slow, quiet breathing pulse so the CTA feels inviting without
+  // shouting; kept subtle to match Livra's calm tone.
+  const reducedMotion = useReducedMotion();
+  const aiHatchGlow = useSharedValue(0.3);
+  React.useEffect(() => {
+    if (reducedMotion) {
+      aiHatchGlow.value = 0.35;
+      return;
+    }
+    aiHatchGlow.value = withRepeat(
+      withSequence(
+        withTiming(0.5, { duration: 2200, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0.25, { duration: 2200, easing: Easing.inOut(Easing.ease) }),
+      ),
+      -1,
+      true,
+    );
+  }, [reducedMotion, aiHatchGlow]);
+  const aiHatchGlowStyle = useAnimatedStyle(() => ({ shadowOpacity: aiHatchGlow.value }));
 
   const handleReviewDescriptionChange = useCallback((text: string) => {
     reviewDescriptionRef.current = text;
@@ -490,21 +525,32 @@ export default function OnboardingScreen() {
         <Text style={[styles.aiDisclosure, { color: c.inkMuted }]}>
           This is your one free AI draft. You can edit everything before you save it, and presets are always free.
         </Text>
-        <TouchableOpacity
+        <Animated.View
           style={[
-            styles.aiHatch,
+            styles.aiHatchGlowWrap,
+            aiHatchGlowStyle,
             (aiLoading || store.goalTitle.trim().length < MIN_GOAL_LENGTH) && { opacity: 0.4 },
           ]}
-          onPress={() => handleAIGenerate()}
-          disabled={aiLoading || store.goalTitle.trim().length < MIN_GOAL_LENGTH}
-          activeOpacity={0.75}
         >
-          {aiLoading ? (
-            <ActivityIndicator size="small" color={c.accent} />
-          ) : (
-            <Text style={styles.aiHatchText}>✦ Let Livra suggest a plan</Text>
-          )}
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.aiHatch}
+            onPress={() => handleAIGenerate()}
+            disabled={aiLoading || store.goalTitle.trim().length < MIN_GOAL_LENGTH}
+            activeOpacity={0.8}
+          >
+            <LinearGradient
+              colors={AI_HATCH_GRADIENT}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+            {aiLoading ? (
+              <ActivityIndicator size="small" color={c.inkDark} />
+            ) : (
+              <Text style={styles.aiHatchText}>✦ Let Livra suggest a plan</Text>
+            )}
+          </TouchableOpacity>
+        </Animated.View>
         {aiError ? (
           <Text style={styles.aiError}>{aiError}</Text>
         ) : (
@@ -842,15 +888,20 @@ function createStyles(c: ReturnType<typeof themedColors>) {
       paddingHorizontal: spacing.sm,
     },
 
-    // AI hatch
-    aiHatch: {
+    // AI hatch — the one deliberately non-forest CTA (see AI_HATCH_GRADIENT comment).
+    aiHatchGlowWrap: {
       marginTop: spacing.lg,
+      borderRadius: radius.md,
+      shadowColor: '#B3A7CE',
+      shadowOffset: { width: 0, height: 0 },
+      shadowRadius: 10,
+      elevation: 4,
+    },
+    aiHatch: {
       paddingVertical: spacing.sm,
       paddingHorizontal: spacing.md,
       borderRadius: radius.md,
-      borderWidth: 1,
-      borderColor: c.accent,
-      borderStyle: 'dashed' as const,
+      overflow: 'hidden' as const,
       alignItems: 'center' as const,
       justifyContent: 'center' as const,
       minHeight: 44,
@@ -858,7 +909,10 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     aiHatchText: {
       fontFamily: fonts.sansMedium,
       fontSize: fontSize.base,
-      color: c.accent,
+      color: c.inkDark,
+      textShadowColor: 'rgba(255,255,255,0.35)',
+      textShadowOffset: { width: 0, height: 1 },
+      textShadowRadius: 2,
     },
     aiHatchSub: {
       fontFamily: fonts.sans,
