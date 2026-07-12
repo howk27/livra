@@ -32,4 +32,6 @@ export const env = {
   allowMockData: isDev,
   executionEnvironment: Constants.executionEnvironment || 'unknown',
   appOwnership: Constants.appOwnership || 'unknown',
+  posthogApiKey: process.env.EXPO_PUBLIC_POSTHOG_KEY || null,
+  posthogHost: process.env.EXPO_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com',
 };

@@ -3,7 +3,9 @@ import { InteractionManager, AppState } from 'react-native';
 import { useMarksStore } from '../state/countersSlice';
 import { useEventsStore } from '../state/eventsSlice';
 import { Mark } from '../types';
-import { formatDate } from '../lib/date';
+import { formatDate, daysBetween } from '../lib/date';
+import { capture } from '../lib/analytics/posthog';
+import { ANALYTICS_EVENTS } from '../lib/analytics/events';
 import { computeStreak, updateStreakInDB } from './useStreaks';
 import { useAuth } from './useAuth';
 import { useSync } from './useSync';
@@ -276,6 +278,10 @@ export const useMarks = () => {
           occurred_local_date: today,
         });
         logger.log('[INCREMENT] ✅ Counter and event persisted:', { markId, newTotal });
+        capture(ANALYTICS_EVENTS.MARK_LOGGED, {
+          mark_id: markId,
+          gap_days: mark.last_activity_date ? daysBetween(mark.last_activity_date, today) : null,
+        });
       } catch (error) {
         logger.error('[INCREMENT] ❌ Persist failed — reverting counter row to pre-increment state', {
           markId,

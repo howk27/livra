@@ -13,6 +13,8 @@ import {
   getLinksForMark,
 } from '../lib/db/goalsDb';
 import { canAddGoal } from '../lib/gating';
+import { capture } from '../lib/analytics/posthog';
+import { ANALYTICS_EVENTS } from '../lib/analytics/events';
 import { evaluateGoalMomentum } from '../lib/goalMomentumStore';
 import type { MomentumSnapshot } from '../lib/goalMomentum';
 import { useMomentumStore } from './momentumSlice';
@@ -130,6 +132,12 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
     }
 
     set(s => ({ goals: [...s.goals, goal] }));
+    capture(ANALYTICS_EVENTS.GOAL_CREATED, {
+      goal_id: goal.id,
+      mark_count: goal.linked_mark_ids?.length ?? 0,
+      tier: goal.tier ?? null,
+      frequency: goal.frequency ?? null,
+    });
     return goal;
   },
 
@@ -201,6 +209,11 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
     set(s => ({
       goals: s.goals.map(g => (g.id === completed.id ? completed : g)),
     }));
+    capture(ANALYTICS_EVENTS.GOAL_COMPLETED, {
+      goal_id: completed.id,
+      banked_momentum_days: bankedDays,
+      goal_age_days: Math.round(goalAgeDays),
+    });
     useMomentumStore.getState().clearSnapshot(id);
 
     // Phase 3.2: the goal is done, but its habits keep going as maintenance marks.

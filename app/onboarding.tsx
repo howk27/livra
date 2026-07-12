@@ -27,6 +27,8 @@ import { MARK_LIBRARY } from '../lib/suggestedCounters';
 import { getMarksForCommitment, CommitmentMarkSelection } from '../lib/onboarding/commitmentEngine';
 import { frequencyLabel } from '../components/ui/MarkFrequencyPicker';
 import { logger } from '../lib/utils/logger';
+import { capture } from '../lib/analytics/posthog';
+import { ANALYTICS_EVENTS } from '../lib/analytics/events';
 import {
   generateGoalPackage, MIN_GOAL_LENGTH, resolveMarkForAIIcon,
   writeGoalPackageCache,
@@ -314,6 +316,11 @@ export default function OnboardingScreen() {
     }
 
     // 5. Reset draft + navigate to Focus
+    capture(ANALYTICS_EVENTS.ONBOARDING_COMPLETED, {
+      commitment: level,
+      mark_count: selectedMarkIds.length,
+      is_ai_path: isAIPath,
+    });
     useOnboardingStore.getState().reset();
     router.replace('/(tabs)/focus' as any);
   };

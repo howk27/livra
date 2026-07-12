@@ -57,6 +57,7 @@ import { reVerifyProOnLaunch } from '../lib/iap/iapReVerify';
 import { useXPStore } from '../state/xpSlice';
 import { useGoalCompletionStore } from '../state/goalCompletionStore';
 import { GoalCompletionOverlay } from '../components/overlays/GoalCompletionOverlay';
+import { initAnalytics, identify, resetAnalytics } from '../lib/analytics/posthog';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -254,6 +255,25 @@ export default function RootLayout() {
       responseSub.remove();
       appSub.remove();
     };
+  }, [initialized, user?.id]);
+
+  useEffect(() => {
+    initAnalytics();
+  }, []);
+
+  // Identify on sign-in, reset on sign-out. Runs once here (not inside useAuth,
+  // which is called from multiple screens and would fire this redundantly).
+  const prevUserIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!initialized) return;
+    const nextId = user?.id ?? null;
+    if (nextId === prevUserIdRef.current) return;
+    if (nextId) {
+      identify(nextId);
+    } else if (prevUserIdRef.current) {
+      resetAnalytics();
+    }
+    prevUserIdRef.current = nextId;
   }, [initialized, user?.id]);
 
   useEffect(() => {

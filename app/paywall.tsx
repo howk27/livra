@@ -40,6 +40,8 @@ import {
 } from '../lib/iap/iap';
 import { env } from '../lib/env';
 import { applyOpacity } from '@/src/components/icons/color';
+import { capture } from '../lib/analytics/posthog';
+import { ANALYTICS_EVENTS } from '../lib/analytics/events';
 import { AppText } from '../components/Typography';
 import { Card, PrimaryButton } from '../components/ui';
 import { SvgLogo } from '../components/ui/SvgLogo';
@@ -115,6 +117,10 @@ function PaywallScreenContent() {
   /** Hidden gesture (7 taps on title): support bundle export when `enableSupportBundle` + support diagnostics flag. */
   const titleTapCount = useRef(0);
   const titleTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    capture(ANALYTICS_EVENTS.PAYWALL_VIEWED);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -510,6 +516,9 @@ function PaywallScreenContent() {
         if (verificationResult === 'unlocked') {
           setOperationState('subscribed');
           setOperationMessage(null);
+          // Client-side signal only — best-effort, not the revenue source of truth
+          // (App Store/Play server receipts are). See analytics decisions log.
+          capture(ANALYTICS_EVENTS.SUBSCRIPTION_STARTED, { plan: selectedPlan, product_id: productId });
         } else if (verificationResult === 'still_locked') {
           setOperationState('info');
           setOperationMessage(verificationPendingMessage);
