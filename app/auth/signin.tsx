@@ -26,12 +26,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import type { SupabaseClient, AuthUser as User } from '@supabase/supabase-js';
 import { spacing, borderRadius, fontWeight, fonts, fontSize, themedColors } from '../../theme/tokens';
-import {
-  useEffectiveTheme,
-  useUIStore,
-  ONBOARDING_COMPLETED_STORAGE_KEY,
-  ONBOARDING_COMPLETED_LEGACY_KEY,
-} from '../../state/uiSlice';
+import { useEffectiveTheme, useUIStore } from '../../state/uiSlice';
 import { getSupabaseClient } from '../../lib/supabase';
 import { useSync } from '../../hooks/useSync';
 import { useAuth } from '../../hooks/useAuth';
@@ -609,18 +604,16 @@ async function ensureProfile(
     // stale local onboarding flags left by a previous user on this device so
     // loadUIState (local-first) does not skip onboarding for the new account.
     // profile.onboarding_completed defaults to false → routes to onboarding.
+    //
+    // Routed through resetOnboardingState (not a raw AsyncStorage.multiRemove +
+    // setState) because _layout.tsx fires its own loadUIState the instant
+    // `user?.id` changes on sign-up — that call races this one, reads AsyncStorage
+    // independently, and (being the slower, network-bound call) can finish LAST
+    // and silently stomp the reset back to a stale `true`. resetOnboardingState
+    // bumps a generation token loadUIState checks before applying its result, so
+    // a stale concurrent load can never win regardless of completion order.
     if (createdNew) {
-      await AsyncStorage.multiRemove([
-        ONBOARDING_COMPLETED_STORAGE_KEY,
-        ONBOARDING_COMPLETED_LEGACY_KEY,
-      ]);
-      // Also reset the in-memory flag synchronously. The post-signup redirect to
-      // "/" fires before _layout's async loadUIState re-runs, so without this a
-      // stale isOnboarded=true (e.g. a prior account onboarded on this device in
-      // the same session) could send a brand-new account to Focus and skip
-      // onboarding. ensureProfile only reaches here for genuinely new inserts;
-      // returning users hit the early `return` above and are unaffected.
-      useUIStore.setState({ isOnboarded: false });
+      await useUIStore.getState().resetOnboardingState();
     }
   } catch (e) {
     logger.error('[Auth] ensureProfile error:', e);

@@ -11,6 +11,17 @@ export const ONBOARDING_COMPLETED_LEGACY_KEY = 'is_onboarded';
 /** Set when local completion succeeded but profile.onboarding_completed could not be updated (cross-device may lag). */
 export const ONBOARDING_REMOTE_PENDING_KEY = 'onboarding_remote_pending';
 
+/**
+ * Bumped by `resetOnboardingState` (sign-out, or a brand-new account created on a device
+ * that has stale onboarding flags from a previous account). `loadUIState` can run
+ * concurrently — e.g. `_layout.tsx` re-triggers it the instant `user?.id` changes on
+ * sign-up, racing the same reset — and its own AsyncStorage reads may have already
+ * captured the stale "true" before the reset's `multiRemove` lands. Without this guard,
+ * whichever call's `set()` lands last wins, and `loadUIState` is the slower one (it does
+ * a network round-trip), so it would silently stomp the reset back to stale data.
+ */
+let onboardingResetToken = 0;
+
 interface UIState {
   themeMode: ThemeMode;
   accentColor: AccentColor;
@@ -31,6 +42,8 @@ interface UIState {
     meta?: { commitment?: string; completedAt?: string }
   ) => Promise<boolean>;
   loadUIState: (userId?: string) => Promise<void>;
+  /** Clears local onboarding completion so the next signed-in account (possibly a different one on this device) is re-evaluated from scratch. */
+  resetOnboardingState: () => Promise<void>;
   getEffectiveTheme: () => 'light' | 'dark';
 }
 
@@ -126,7 +139,18 @@ export const useUIStore = create<UIState>((set, get) => ({
     return remoteOk;
   },
 
+  resetOnboardingState: async () => {
+    onboardingResetToken += 1;
+    await AsyncStorage.multiRemove([
+      ONBOARDING_COMPLETED_STORAGE_KEY,
+      ONBOARDING_COMPLETED_LEGACY_KEY,
+      ONBOARDING_REMOTE_PENDING_KEY,
+    ]);
+    set({ isOnboarded: false, uiStateLoaded: false });
+  },
+
   loadUIState: async (userId?: string) => {
+    const tokenAtStart = onboardingResetToken;
     const supabase = getSupabaseClient();
     const [themeMode, accentColor, completedModern, completedLegacy] = await Promise.all([
       AsyncStorage.getItem('theme_mode'),
@@ -214,6 +238,18 @@ export const useUIStore = create<UIState>((set, get) => ({
         }
         // Fall back to local storage value - don't block app initialization
       }
+    }
+
+    if (onboardingResetToken !== tokenAtStart) {
+      // A reset (sign-out, or a new-account flag purge) landed while this call was
+      // in flight. That reset is authoritative — apply everything except the
+      // onboarding fields, which stay whatever the reset set them to.
+      set({
+        themeMode: (themeMode as ThemeMode) || 'system',
+        accentColor: (accentColor as AccentColor) || 'blue',
+        uiStateLoaded: true,
+      });
+      return;
     }
 
     set({

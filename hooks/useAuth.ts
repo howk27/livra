@@ -10,6 +10,7 @@ import {
   getAuthStorageRemoveFailed,
   clearAuthStorageRemoveFailed,
 } from '../lib/auth/authStorageHealth';
+import { useUIStore } from '../state/uiSlice';
 
 interface AuthState {
   user: User | null;
@@ -332,6 +333,14 @@ export const useAuth = () => {
       await disableLivraLocalNotificationsNow();
     } catch {
       /* ignore */
+    }
+    try {
+      // Onboarding completion is stored device-wide, not per-account. Without this,
+      // whatever account last finished onboarding on this device leaves a flag that
+      // makes the NEXT signed-in account (a fresh signup included) skip onboarding.
+      await useUIStore.getState().resetOnboardingState();
+    } catch (e) {
+      logger.error('[Auth] resetOnboardingState after signOut failed:', e);
     }
   }, [supabase]);
 
