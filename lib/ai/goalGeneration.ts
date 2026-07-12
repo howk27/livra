@@ -64,7 +64,9 @@ export type GenerationFailReason =
 export const VALID_ICONS = [
   'gym', 'sleep', 'reading', 'meditation', 'water', 'study',
   'focus', 'tasks', 'planning', 'language', 'rest', 'steps',
-  'calories', 'gratitude', 'journaling',
+  'calories', 'gratitude', 'journaling', 'run', 'stretch', 'nutrition',
+  'meal-prep', 'breathwork', 'wake-early', 'no-alcohol', 'screen-time',
+  'finance', 'saving', 'socialize', 'family', 'creative', 'writing',
 ] as const;
 
 export type ValidIcon = typeof VALID_ICONS[number];
@@ -88,6 +90,20 @@ export const AI_ICON_TO_MARK_ID: Record<ValidIcon, string> = {
   calories:   'calories',
   gratitude:  'gratitude',
   journaling: 'journaling',
+  run:           'run',
+  stretch:       'stretch',
+  nutrition:     'nutrition',
+  'meal-prep':   'meal-prep',
+  breathwork:    'breathwork',
+  'wake-early':  'wake-early',
+  'no-alcohol':  'no-alcohol',
+  'screen-time': 'screen-time',
+  finance:       'finance',
+  saving:        'saving',
+  socialize:     'socialize',
+  family:        'family',
+  creative:      'creative',
+  writing:       'writing',
 };
 
 /**

@@ -8,12 +8,17 @@
  *   3. resolveMarkForAIIcon: known icon → correct markId; unknown icon → fallback.
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
+
 import {
   validateAIGoalPackage,
   normalizeGoalText,
   resolveMarkForAIIcon,
   VALID_ICONS,
+  AI_ICON_TO_MARK_ID,
 } from '../../../lib/ai/goalGeneration';
+import { MARK_LIBRARY } from '../../../lib/suggestedCounters';
 
 // ─── validateAIGoalPackage ────────────────────────────────────────────────────
 
@@ -258,5 +263,52 @@ describe('resolveMarkForAIIcon', () => {
       expect(result.markId).not.toBe('');
       expect(result.emoji).not.toBe('');
     }
+  });
+
+  test('every VALID_ICON maps to a real MARK_LIBRARY entry (no fallback hits)', () => {
+    for (const icon of VALID_ICONS) {
+      // The mapping table must cover the icon explicitly — a miss here would
+      // silently reroute to FALLBACK_ICON inside resolveMarkForAIIcon.
+      expect(AI_ICON_TO_MARK_ID[icon]).toBeDefined();
+
+      const mark = MARK_LIBRARY.find((m) => m.id === AI_ICON_TO_MARK_ID[icon]);
+      expect(mark).toBeDefined();
+
+      // resolveMarkForAIIcon must return the real library entry, not the
+      // '🎯' / '#4A6A8C' "mark not found" defaults.
+      const result = resolveMarkForAIIcon(icon);
+      expect(result.markId).toBe(AI_ICON_TO_MARK_ID[icon]);
+      expect(result.emoji).toBe(mark!.emoji);
+      expect(result.color).toBe(mark!.color);
+    }
+  });
+});
+
+// ─── Client/server VALID_ICONS drift guard (FU-2) ─────────────────────────────
+
+describe('VALID_ICONS client/server drift guard', () => {
+  /**
+   * The Edge Function keeps its own copy of VALID_ICONS (it cannot import from
+   * lib/ due to the Deno/Metro boundary). This test parses that copy straight
+   * out of the function source so any edit to either list that is not mirrored
+   * in the other fails CI.
+   */
+  function readServerValidIcons(): string[] {
+    const source = fs.readFileSync(
+      path.join(__dirname, '../../../supabase/functions/ai-goal-generation/index.ts'),
+      'utf8',
+    );
+    const match = source.match(/const VALID_ICONS = \[([\s\S]*?)\] as const;/);
+    if (!match) throw new Error('Could not locate VALID_ICONS in edge function source');
+    return [...match[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+  }
+
+  test('edge-function VALID_ICONS is byte-identical to the client list', () => {
+    expect(readServerValidIcons()).toEqual([...VALID_ICONS]);
+  });
+
+  test('client list contains exactly 29 icons with no duplicates', () => {
+    expect(VALID_ICONS).toHaveLength(29);
+    expect(new Set(VALID_ICONS).size).toBe(29);
   });
 });

@@ -26,7 +26,9 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const VALID_ICONS = [
   'gym', 'sleep', 'reading', 'meditation', 'water', 'study',
   'focus', 'tasks', 'planning', 'language', 'rest', 'steps',
-  'calories', 'gratitude', 'journaling',
+  'calories', 'gratitude', 'journaling', 'run', 'stretch', 'nutrition',
+  'meal-prep', 'breathwork', 'wake-early', 'no-alcohol', 'screen-time',
+  'finance', 'saving', 'socialize', 'family', 'creative', 'writing',
 ] as const;
 const FALLBACK_ICON = 'focus';
 
