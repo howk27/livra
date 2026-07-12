@@ -14,7 +14,6 @@ import {
   Switch,
   Linking,
 } from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -24,15 +23,7 @@ import Animated, {
   withSequence,
   runOnJS,
 } from 'react-native-reanimated';
-import {
-  getMarkReminderTime,
-  setMarkReminderTime,
-  scheduleMarkReminder,
-  cancelMarkReminder,
-  clearMarkReminderTime,
-} from '../../../lib/notifications/markReminder';
 import { checkProStatus } from '../../../lib/iap/iap';
-import { canUseCustomReminders } from '../../../lib/gating';
 import { requestPermissions } from '../../../lib/health/healthPermissions';
 import { suggestStepGoal, suggestWakeTime } from '../../../lib/health/healthLearner';
 import type { HealthKitType } from '../../../lib/health/healthTypes';
@@ -52,8 +43,6 @@ import {
   Check,
   CheckCircle,
   Flag,
-  Bell,
-  BellSlash,
   Trash,
 } from 'phosphor-react-native';
 import { themedColors, spacing, borderRadius, fontSize, fontWeight, shadow, fonts } from '../../../theme/tokens';
@@ -84,6 +73,8 @@ function toLocalDateStr(d: Date): string {
 }
 
 const NOTE_MAX_LEN = 500;
+const HISTORY_COLLAPSED_DAYS = 3;
+const HISTORY_MAX_DAYS = 14;
 
 function hexToRgba(hex: string, alpha: number): string {
   const h = hex.replace('#', '');
@@ -127,6 +118,7 @@ function MarkDetailContent() {
   const libraryMark = counter ? MARK_LIBRARY.find(m => m.emoji === counter.emoji) : undefined;
 
   const [expandedActivityDate, setExpandedActivityDate] = useState<string | null>(null);
+  const [historyExpanded, setHistoryExpanded] = useState(false);
   const [draftNote, setDraftNote] = useState('');
   const [savingNote, setSavingNote] = useState(false);
   const [deletingNote, setDeletingNote] = useState(false);
@@ -143,15 +135,6 @@ function MarkDetailContent() {
   const [healthStepGoal, setHealthStepGoal] = useState<string>('');
   const [healthPendingType, setHealthPendingType] = useState<HealthKitType | null>(null);
   const [healthConnecting, setHealthConnecting] = useState(false);
-
-  const [reminderEnabled, setReminderEnabled] = useState(false);
-  const [reminderTime, setReminderTime] = useState<Date>(() => {
-    const d = new Date();
-    d.setHours(8, 0, 0, 0);
-    return d;
-  });
-  const [showTimePicker, setShowTimePicker] = useState(false);
-  const [reminderLoading, setReminderLoading] = useState(true);
 
   // Banner for "all done today"
   const [showAllDoneBanner, setShowAllDoneBanner] = useState(false);
@@ -225,9 +208,14 @@ function MarkDetailContent() {
     return Array.from(dayTotals.entries())
       .filter(([, total]) => total > 0)
       .sort(([a], [b]) => (a < b ? 1 : a > b ? -1 : 0)) // newest date first
-      .slice(0, 6)
+      .slice(0, HISTORY_MAX_DAYS)
       .map(([date]) => date);
   }, [events]);
+
+  const visibleActivity = historyExpanded
+    ? recentActivity
+    : recentActivity.slice(0, HISTORY_COLLAPSED_DAYS);
+  const hiddenHistoryCount = recentActivity.length - HISTORY_COLLAPSED_DAYS;
 
   const dailyLogsForMark = useDailyTrackingStore(
     (s) => (id ? s.getDailyLogsForMark(id, 60) : []),
@@ -264,44 +252,6 @@ function MarkDetailContent() {
   );
 
   const noteUserId = user?.id ?? 'local';
-
-  const handleReminderToggle = useCallback(async (value: boolean) => {
-    if (!id || !counter) return;
-    if (value) {
-      // Custom per-mark reminder times are a Livra+ feature. Gate softly on enable.
-      const status = await checkProStatus();
-      if (!canUseCustomReminders(status.effectiveUnlocked)) {
-        setReminderEnabled(false);
-        Alert.alert(
-          'Reminders are a Livra+ perk',
-          'Livra+ lets you set a custom reminder time for any mark, so the nudge lands when it helps most.',
-          [
-            { text: 'Not now', style: 'cancel' },
-            { text: 'See Livra+', onPress: () => router.push('/paywall') },
-          ]
-        );
-        return;
-      }
-      setReminderEnabled(true);
-      setShowTimePicker(true);
-      const hhmm = `${reminderTime.getHours()}:${String(reminderTime.getMinutes()).padStart(2, '0')}`;
-      await setMarkReminderTime(id, hhmm);
-      await scheduleMarkReminder(id, counter.name, hhmm);
-    } else {
-      setReminderEnabled(false);
-      setShowTimePicker(false);
-      await cancelMarkReminder(id);
-      await clearMarkReminderTime(id);
-    }
-  }, [id, counter, reminderTime, router]);
-
-  const handleReminderTimeChange = useCallback(async (_: any, selected?: Date) => {
-    if (!selected || !id || !counter) return;
-    setReminderTime(selected);
-    const hhmm = `${selected.getHours()}:${String(selected.getMinutes()).padStart(2, '0')}`;
-    await setMarkReminderTime(id, hhmm);
-    await scheduleMarkReminder(id, counter.name, hhmm);
-  }, [id, counter]);
 
   // Goals linked to this mark
   const goals = useGoalsStore(s => s.goals);
@@ -344,24 +294,6 @@ function MarkDetailContent() {
       setDraftNote(todayDailyLog.text);
     }
   }, [todayDailyLog?.text]);
-
-  useEffect(() => {
-    if (!id) return;
-    let cancelled = false;
-    (async () => {
-      const stored = await getMarkReminderTime(id);
-      if (cancelled) return;
-      if (stored) {
-        const [h = '8', m = '0'] = stored.split(':');
-        const d = new Date();
-        d.setHours(parseInt(h, 10), parseInt(m, 10), 0, 0);
-        setReminderTime(d);
-        setReminderEnabled(true);
-      }
-      setReminderLoading(false);
-    })();
-    return () => { cancelled = true; };
-  }, [id]);
 
   // Log button animation
   const logBtnScale = useSharedValue(1);
@@ -702,7 +634,7 @@ function MarkDetailContent() {
             >
               {completedToday ? (
                 <>
-                  <Check size={18} color="#C47E8A" weight="duotone" />
+                  <Check size={18} color={c.accent} weight="bold" />
                   <Text style={styles.logBtnTextDone}>Logged today</Text>
                 </>
               ) : (
@@ -772,7 +704,7 @@ function MarkDetailContent() {
           <View style={styles.section}>
             <SectionLabel style={styles.sectionLabelPad}>HISTORY</SectionLabel>
             {recentActivity.length > 0 ? (
-              recentActivity.map((date) => {
+              visibleActivity.map((date) => {
                 // date is a 'yyyy-MM-dd' string — parse as local midnight to avoid UTC shift
                 const [y, m, d] = date.split('-').map(Number);
                 const dt = new Date(y, m - 1, d);
@@ -791,12 +723,23 @@ function MarkDetailContent() {
                     <Text style={styles.historyDate}>
                       {dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                     </Text>
-                    <Check size={14} color={c.accent} weight="duotone" />
+                    <Check size={14} color={c.accent} weight="bold" />
                   </TouchableOpacity>
                 );
               })
             ) : (
               <Text style={styles.noHistoryText}>No history yet.</Text>
+            )}
+            {hiddenHistoryCount > 0 && (
+              <TouchableOpacity
+                style={styles.historyExpanderRow}
+                onPress={() => setHistoryExpanded((v) => !v)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.historyExpanderText, { color: c.accent }]}>
+                  {historyExpanded ? 'Show less' : `Show ${hiddenHistoryCount} more`}
+                </Text>
+              </TouchableOpacity>
             )}
           </View>
 
@@ -877,45 +820,6 @@ function MarkDetailContent() {
                   </View>
                 );
               })}
-            </View>
-          )}
-
-          {/* ── Daily reminder ────────────────────────────────────────────── */}
-          {!reminderLoading && (
-            <View style={styles.settingCard}>
-              <View style={styles.settingRow}>
-                <View style={[styles.settingIcon, { backgroundColor: hexToRgba(accent, 0.15) }]}>
-                  {reminderEnabled
-                    ? <Bell size={18} color={accent} weight="duotone" />
-                    : <BellSlash size={18} color={accent} weight="duotone" />
-                  }
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.settingLabel}>Daily reminder</Text>
-                  {reminderEnabled && (
-                    <TouchableOpacity onPress={() => setShowTimePicker(v => !v)}>
-                      <Text style={styles.settingMeta}>
-                        {reminderTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-                <Switch
-                  value={reminderEnabled}
-                  onValueChange={handleReminderToggle}
-                  trackColor={{ false: c.borderMid, true: c.accent }}
-                  thumbColor={c.inkInverse}
-                />
-              </View>
-              {reminderEnabled && showTimePicker && (
-                <DateTimePicker
-                  value={reminderTime}
-                  mode="time"
-                  display="spinner"
-                  onChange={handleReminderTimeChange}
-                  style={{ marginTop: spacing.sm }}
-                />
-              )}
             </View>
           )}
 
@@ -1217,6 +1121,13 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     fontFamily: fonts.sans,
     fontSize: fontSize.base,
     color: c.inkMuted,
+  },
+  historyExpanderRow: {
+    paddingVertical: spacing.sm,
+  },
+  historyExpanderText: {
+    fontFamily: fonts.sansMedium,
+    fontSize: fontSize.sm,
   },
 
   // Note

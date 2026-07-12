@@ -30,6 +30,7 @@ import { Breathing } from '../../components/ui/Breathing';
 import { SectionLabel } from '../../components/ui/SectionLabel';
 import { HistoryRow } from '../../components/goals/HistoryRow';
 import { useGoalsStore } from '../../state/goalsSlice';
+import { applyOpacity } from '../../src/components/icons/color';
 import type { Goal } from '../../types/goal';
 
 // ── Drag-to-reorder constants ─────────────────────────────────────────────────
@@ -81,7 +82,7 @@ function ActiveGoalCard({ goal, progress, threshold, canComplete, onPress }: Act
       {/* Progress bar */}
       {threshold > 0 && (
         <View style={styles.progressSection}>
-          <View style={[styles.progressTrack, { backgroundColor: c.inkInverse + '22' }]}>
+          <View style={[styles.progressTrack, { backgroundColor: applyOpacity(c.inkInverse, 0.13) }]}>
             <View
               style={[
                 styles.progressFill,
@@ -104,7 +105,7 @@ function ActiveGoalCard({ goal, progress, threshold, canComplete, onPress }: Act
 
       {/* Ready to complete */}
       {canComplete && (
-        <View style={[styles.completeCta, { backgroundColor: c.inkInverse + '15' }]}>
+        <View style={[styles.completeCta, { backgroundColor: applyOpacity(c.inkInverse, 0.08) }]}>
           <Text style={[styles.completeCtaText, { color: c.inkInverse }]}>
             Ready to complete
           </Text>
@@ -372,7 +373,7 @@ export default function GoalsScreen() {
 
         {/* Error banner */}
         {error ? (
-          <View style={[styles.errorBanner, { backgroundColor: c.danger + '22' }]}>
+          <View style={[styles.errorBanner, { backgroundColor: applyOpacity(c.danger, 0.13) }]}>
             <Text style={[styles.errorText, { color: c.danger }]}>{error}</Text>
           </View>
         ) : null}

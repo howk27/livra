@@ -77,11 +77,11 @@ export function CheckinButton({ checked, onCheckin, disabled, accent, testID }: 
     return (
       <Animated.View
         style={[
-          { width: 22, height: 22, borderRadius: 11, backgroundColor: c.forest, alignItems: 'center', justifyContent: 'center' },
+          { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: c.accent, alignItems: 'center', justifyContent: 'center' },
           containerStyle,
         ]}
       >
-        <Check size={11} color={c.inkInverse} weight="duotone" />
+        <Check size={12} color={c.accent} weight="bold" />
       </Animated.View>
     );
   }

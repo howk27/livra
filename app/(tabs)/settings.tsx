@@ -24,6 +24,7 @@ import {
   Trash,
   Question,
   ChatText,
+  Gauge,
   Info,
   CaretRight,
   PencilSimple,
@@ -58,6 +59,7 @@ import { useNotification } from '../../contexts/NotificationContext';
 import { useFocusEffect } from 'expo-router';
 import { readSyncDiagSnapshot, type SyncDiagSnapshotV1 } from '../../lib/sync/syncDiagSnapshot';
 import { getAvatarUrl, refreshAvatarUrl } from '../../lib/storage/avatarStorage';
+import { getPace, setPace, paceWeeklyTarget, PACE_LABELS, type PaceLevel } from '../../lib/paceSetting';
 import Constants from 'expo-constants';
 import { Linking } from 'react-native';
 
@@ -164,6 +166,34 @@ export default function SettingsScreen() {
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [editSheetVisible, setEditSheetVisible] = useState(false);
   const [resendingVerification, setResendingVerification] = useState(false);
+  const [pace, setPaceState] = useState<PaceLevel>('steady');
+
+  useEffect(() => {
+    let active = true;
+    getPace().then((p) => { if (active) setPaceState(p); });
+    return () => { active = false; };
+  }, []);
+
+  const handlePaceChange = useCallback(async (next: PaceLevel) => {
+    const prior = pace;
+    setPaceState(next); // optimistic
+    try {
+      await setPace(next);
+      const marks = useMarksStore.getState().marks;
+      for (const mark of marks) {
+        if (mark.deleted_at) continue;
+        const target = paceWeeklyTarget(mark, next);
+        if (target != null && target !== mark.weekly_target) {
+          await useMarksStore.getState().updateMark(mark.id, { weekly_target: target });
+        }
+      }
+      showSuccess('Pace updated across your marks.');
+    } catch (e: any) {
+      logger.error('[Settings] pace change failed:', e);
+      setPaceState(prior);
+      showError('Could not update your pace. Please try again.');
+    }
+  }, [pace, showSuccess, showError]);
 
   const emailVerified = !!user?.email_confirmed_at;
 
@@ -579,6 +609,35 @@ export default function SettingsScreen() {
                         ]}
                       >
                         {t === 'light' ? 'Light' : 'Dark'}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            }
+          />
+          <SettingsRow
+            icon={Gauge}
+            label="Pace"
+            hideChevron
+            rightElement={
+              <View style={[styles.themeToggle, { backgroundColor: c.surfaceAlt }]}>
+                {(['easing', 'steady', 'push'] as const).map((p) => {
+                  const active = pace === p;
+                  return (
+                    <TouchableOpacity
+                      key={p}
+                      style={[styles.themeTogglePill, active && { backgroundColor: c.forest }]}
+                      onPress={() => { void handlePaceChange(p); }}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        style={[
+                          styles.themeToggleText,
+                          { color: active ? c.inkInverse : c.inkMid },
+                        ]}
+                      >
+                        {PACE_LABELS[p]}
                       </Text>
                     </TouchableOpacity>
                   );

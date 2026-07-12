@@ -45,11 +45,6 @@ export function countUnlinkedMarks(
 // ── Livra+ feature gates ────────────────────────────────────────────────────
 // History, stats, presets and charts are intentionally NOT gated — they belong to the user.
 
-/** Custom per-mark reminder times are a Livra+ feature. */
-export function canUseCustomReminders(isPro: boolean): boolean {
-  return isPro;
-}
-
 /** Data export (CSV) is a Livra+ feature. */
 export function canExportData(isPro: boolean): boolean {
   return isPro;

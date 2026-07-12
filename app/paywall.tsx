@@ -16,7 +16,6 @@ import {
   InfinityIcon,
   Sparkle,
   ShareNetwork,
-  Bell,
   Heart,
   ChartBar,
   type Icon,
@@ -53,7 +52,6 @@ const PRO_FEATURES: { icon: Icon; title: string; description: string }[] = [
   { icon: InfinityIcon, title: 'Unlimited Marks',      description: 'Add as many marks per goal as you need.' },
   { icon: Sparkle,      title: 'AI Goal Plans',        description: 'Describe a goal; Livra drafts the marks to get there.' },
   { icon: ShareNetwork, title: 'Custom Share Cards',    description: 'Restyle your finish. Themes, accent, and layout.' },
-  { icon: Bell,         title: 'Custom Reminders',     description: 'Set a reminder time for any mark.' },
   { icon: Heart,        title: 'Apple Health',         description: 'Sleep, Workout, Steps. Synced automatically.' },
   { icon: ChartBar,     title: 'CSV Export',           description: 'Your history is yours. Export anytime.' },
 ];
@@ -63,7 +61,6 @@ const SHIPPED_PREMIUM_FEATURE_TITLES = [
   'Unlimited Marks',
   'AI Goal Plans',
   'Custom Share Cards',
-  'Custom Reminders',
   'Apple Health',
   'CSV Export',
 ];

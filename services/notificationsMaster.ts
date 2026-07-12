@@ -3,6 +3,7 @@
 // reconcile every notification category so the OS schedule matches the new state.
 import { setLivraRemindersEnabled } from '../lib/notifications/livraReminderPrefs';
 import { reconcileMarkReminders, type ReconcileMark } from '../lib/notifications/markReminder';
+import { reconcileDailyReminder } from '../lib/notifications/dailyReminder';
 import { updateNotifications } from './notificationService';
 import { reconcileMomentumWarnings } from './momentumWarningNotifications';
 
@@ -16,4 +17,5 @@ export async function applyNotificationsMaster(
   await updateNotifications(userId);
   await reconcileMomentumWarnings(userId);
   await reconcileMarkReminders(marks);
+  await reconcileDailyReminder();
 }

@@ -5,7 +5,6 @@ import {
   canAddHabitMark,
   countMarksInGoal,
   countUnlinkedMarks,
-  canUseCustomReminders,
   canExportData,
   canCustomizeShareCard,
   FREE_GOAL_LIMIT,
@@ -107,10 +106,6 @@ describe('countUnlinkedMarks (daily-habit bucket)', () => {
 });
 
 describe('Livra+ feature gates', () => {
-  test('custom reminders: free blocked, pro allowed', () => {
-    expect(canUseCustomReminders(false)).toBe(false);
-    expect(canUseCustomReminders(true)).toBe(true);
-  });
   test('data export (CSV): free blocked, pro allowed', () => {
     expect(canExportData(false)).toBe(false);
     expect(canExportData(true)).toBe(true);
