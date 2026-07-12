@@ -4,20 +4,28 @@ const base = { goalTitle: 'Get fit', timeframeWeeks: 12, confidence: 'high' as c
 const mark = (name: string, icon: string) => ({ name, icon, frequency: 3, why: 'because' });
 
 describe('validateAIGoalPackage overlap collapse', () => {
-  it('collapses gym+steps to the first movement mark', () => {
+  it('keeps gym+steps uncollapsed (distinct efforts, spec 2026-07-12)', () => {
     const pkg = validateAIGoalPackage({
       ...base,
       marks: [mark('Run', 'gym'), mark('Steps', 'steps'), mark('Sleep', 'sleep')],
     });
-    expect(pkg?.marks.map((m) => m.name)).toEqual(['Run', 'Sleep']);
+    expect(pkg?.marks.map((m) => m.name)).toEqual(['Run', 'Steps', 'Sleep']);
   });
 
-  it('collapses gratitude+journaling and focus+study', () => {
+  it('collapses gratitude+journaling to the first reflection mark', () => {
     const pkg = validateAIGoalPackage({
       ...base,
-      marks: [mark('Gratitude', 'gratitude'), mark('Journal', 'journaling'), mark('Study', 'study')],
+      marks: [mark('Gratitude', 'gratitude'), mark('Journal', 'journaling'), mark('Sleep', 'sleep')],
     });
-    expect(pkg?.marks.map((m) => m.name)).toEqual(['Gratitude', 'Study']);
+    expect(pkg?.marks.map((m) => m.name)).toEqual(['Gratitude', 'Sleep']);
+  });
+
+  it('collapses focus+study to the first deep-work mark', () => {
+    const pkg = validateAIGoalPackage({
+      ...base,
+      marks: [mark('Deep work', 'focus'), mark('Study', 'study'), mark('Sleep', 'sleep')],
+    });
+    expect(pkg?.marks.map((m) => m.name)).toEqual(['Deep work', 'Sleep']);
   });
 
   it('leaves distinct efforts untouched', () => {
@@ -31,9 +39,9 @@ describe('validateAIGoalPackage overlap collapse', () => {
   it('never collapses a package below 1 mark', () => {
     const pkg = validateAIGoalPackage({
       ...base,
-      marks: [mark('Run', 'gym'), mark('Steps', 'steps')],
+      marks: [mark('Gratitude', 'gratitude'), mark('Journal', 'journaling')],
     });
-    expect(pkg?.marks.map((m) => m.name)).toEqual(['Run']);
+    expect(pkg?.marks.map((m) => m.name)).toEqual(['Gratitude']);
   });
 
   it('does not collapse marks whose icon was repaired to the fallback', () => {

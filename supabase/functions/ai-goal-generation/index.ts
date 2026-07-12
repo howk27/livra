@@ -126,12 +126,17 @@ Respond with valid JSON matching this exact schema. No markdown. No explanation.
 Rules:
 - goalTitle: specific and achievable, max 80 characters
 - timeframeWeeks: integer 1–52
-- confidence: "high" if you understand the goal clearly; "low" if it is unclear, unsafe, or contains multiple goals
+- confidence: default to "high". Use "high" for any goal a coach could plan 2 or 3 weekly marks for, even if phrased loosely. Use "low" ONLY when the input is genuinely ambiguous (no plannable goal at all), unsafe, or contains multiple goals
+- Confidence anchors:
+  - "I want to get stronger" → high
+  - "run a 10k" → high
+  - "sleep better" → high
+  - "be better" → low (no plannable goal)
 - marks: 2–3 items; frequency is times per week (integer 1–7); icon MUST be one of the listed values
 - Each mark must be a separate real-world effort. Never suggest two marks that one single activity would satisfy (a run must not appear as both a running mark and a steps mark)
 - Prefer 2 distinct marks over 3 overlapping ones
 - why: one concrete sentence per mark
-- For unclear/unsafe input: set confidence:"low" and still return a plausible package
+- For genuinely ambiguous or unsafe input: set confidence:"low" and still return a plausible package
 - If multiple goals are given: scope to one; use "low" confidence`;
 }
 

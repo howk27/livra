@@ -164,6 +164,17 @@ describe('validateAIGoalPackage', () => {
     expect(result!.confidence).toBe('low');
   });
 
+  test('gym and steps coexist uncollapsed (distinct efforts, spec 2026-07-12)', () => {
+    const result = validateAIGoalPackage({
+      ...validPackage,
+      marks: [
+        { name: 'Lift', icon: 'gym', frequency: 3, why: 'Builds strength' },
+        { name: 'Walk 8k steps', icon: 'steps', frequency: 7, why: 'Daily movement base' },
+      ],
+    });
+    expect(result!.marks.map((m) => m.icon)).toEqual(['gym', 'steps']);
+  });
+
   test('all VALID_ICONS pass through without repair', () => {
     for (const icon of VALID_ICONS) {
       const result = validateAIGoalPackage({

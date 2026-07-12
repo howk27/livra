@@ -91,13 +91,14 @@ export const AI_ICON_TO_MARK_ID: Record<ValidIcon, string> = {
 };
 
 /**
- * Effort-category collapse (spec 2026-07-11): two marks one single activity
- * satisfies must not coexist. Conservative pairs only; icons not listed are
- * always kept. Applied in validateAIGoalPackage — first mark per category wins.
+ * Effort-category collapse (spec 2026-07-11, narrowed 2026-07-12): two marks
+ * one single activity satisfies must not coexist. Confirmed-overlap pairs only;
+ * icons not listed are always kept (gym + steps are distinct efforts and may
+ * coexist — run/steps-style overlaps are handled by the system prompt's prose
+ * distinctness rule instead). Applied in validateAIGoalPackage — first mark
+ * per category wins.
  */
 export const AI_ICON_EFFORT_CATEGORY: Partial<Record<ValidIcon, string>> = {
-  gym: 'movement',
-  steps: 'movement',
   gratitude: 'reflection',
   journaling: 'reflection',
   focus: 'deep-work',
