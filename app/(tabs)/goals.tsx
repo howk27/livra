@@ -64,23 +64,30 @@ function ActiveGoalCard({ goal, progress, threshold, canComplete, weeklyDone = 0
   const pct = threshold > 0 ? Math.min(100, (progress / threshold) * 100) : 0;
   const deadlineStr = goal.deadline_date ?? goal.target_date ?? null;
 
+  // Hollow card: hairline accent border + translucent forest wash over the
+  // linen ground (FU-5). `c.accent` is forest on light / mint on dark, so the
+  // same expressions resolve to a contrast-safe accent in both modes. The
+  // dark wash runs slightly denser because the dark ground swallows low alphas.
+  const cardWash = applyOpacity(c.forest, theme === 'dark' ? 0.1 : 0.07);
+  const cardBorder = applyOpacity(c.accent, 0.55);
+
   return (
     <TouchableOpacity
-      style={[styles.activeCard, { backgroundColor: c.forest }]}
+      style={[styles.activeCard, { backgroundColor: cardWash, borderColor: cardBorder }]}
       onPress={onPress}
       activeOpacity={0.85}
     >
       <View style={styles.activeTopRow}>
-        <View style={[styles.activeDot, { backgroundColor: c.mint }]} />
-        {!canComplete && <CaretRight size={18} color={c.inkInverseMuted} weight="bold" />}
+        <View style={[styles.activeDot, { backgroundColor: c.accent }]} />
+        {!canComplete && <CaretRight size={18} color={c.inkMid} weight="bold" />}
       </View>
 
-      <Text style={[styles.activeTitle, { color: c.inkInverse }]} numberOfLines={2}>
+      <Text style={[styles.activeTitle, { color: c.inkDark }]} numberOfLines={2}>
         {goal.title}
       </Text>
 
       {goal.description ? (
-        <Text style={[styles.activeDescription, { color: c.inkInverseMuted }]} numberOfLines={2}>
+        <Text style={[styles.activeDescription, { color: c.inkMid }]} numberOfLines={2}>
           {goal.description}
         </Text>
       ) : null}
@@ -88,15 +95,15 @@ function ActiveGoalCard({ goal, progress, threshold, canComplete, weeklyDone = 0
       {/* Progress bar */}
       {threshold > 0 && (
         <View style={styles.progressSection}>
-          <View style={[styles.progressTrack, { backgroundColor: applyOpacity(c.inkInverse, 0.13) }]}>
+          <View style={[styles.progressTrack, { backgroundColor: applyOpacity(c.accent, 0.16) }]}>
             <View
               style={[
                 styles.progressFill,
-                { backgroundColor: c.mint, width: `${pct}%` as any },
+                { backgroundColor: c.accent, width: `${pct}%` as any },
               ]}
             />
           </View>
-          <Text style={[styles.progressLabel, { color: c.inkInverseMuted }]}>
+          <Text style={[styles.progressLabel, { color: c.inkMid }]}>
             {progress} / {threshold} check-ins
           </Text>
         </View>
@@ -104,7 +111,7 @@ function ActiveGoalCard({ goal, progress, threshold, canComplete, weeklyDone = 0
 
       {/* This week — the working-toward-it line (QC 2026-07-12) */}
       {weeklyTarget > 0 && (
-        <Text style={[styles.weeklyLine, { color: c.mint }]}>
+        <Text style={[styles.weeklyLine, { color: c.accent }]}>
           {weeklyDone >= weeklyTarget
             ? 'This week: all done'
             : `This week: ${weeklyDone} of ${weeklyTarget} check-ins`}
@@ -113,18 +120,18 @@ function ActiveGoalCard({ goal, progress, threshold, canComplete, weeklyDone = 0
 
       {/* Deadline */}
       {deadlineStr ? (
-        <Text style={[styles.activeDeadline, { color: c.inkInverseMuted }]}>
+        <Text style={[styles.activeDeadline, { color: c.inkMid }]}>
           Due {format(parseISO(deadlineStr), 'MMM d, yyyy')}
         </Text>
       ) : null}
 
       {/* Ready to complete */}
       {canComplete && (
-        <View style={[styles.completeCta, { backgroundColor: applyOpacity(c.inkInverse, 0.08) }]}>
-          <Text style={[styles.completeCtaText, { color: c.inkInverse }]}>
+        <View style={[styles.completeCta, { backgroundColor: applyOpacity(c.accent, 0.12) }]}>
+          <Text style={[styles.completeCtaText, { color: c.accent }]}>
             Ready to complete
           </Text>
-          <CaretRight size={14} color={c.inkInverse} weight="bold" />
+          <CaretRight size={14} color={c.accent} weight="bold" />
         </View>
       )}
     </TouchableOpacity>
@@ -514,6 +521,7 @@ const styles = StyleSheet.create({
   // screen gutter (doubling it made goal cards narrower than sibling blocks).
   activeCard: {
     borderRadius: radius.xl,
+    borderWidth: 1,
     padding: spacing.lg,
   },
   activeTopRow: {
