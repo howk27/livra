@@ -30,9 +30,6 @@ import { useAppDateStore } from '../../state/appDateSlice';
 import { useGoalsStore } from '../../state/goalsSlice';
 import { useMomentumStore } from '../../state/momentumSlice';
 import { GoalMomentum } from '../../components/ui/GoalMomentum';
-import { GoalHeroStep } from '../../components/ui/GoalHeroStep';
-import { CATEGORY_MAP } from '../../components/ui/MarkRow';
-import { selectNextStep, resolveTimeAffinity } from '../../lib/nextStep';
 import { MomentumBanner } from '../../components/ui/MomentumBanner';
 import { shouldShowMomentumBanner } from '../../lib/momentumPresenter';
 import {
@@ -446,25 +443,8 @@ export default function FocusScreen() {
               const marks = marksForGoal(goal.id);
               if (marks.length === 0) return null;
 
-              const heroResult = selectNextStep(
-                marks.map((m) => ({
-                  markId: m.id,
-                  name: m.name,
-                  weeklyCount: weeklyCountsMap.get(m.id) ?? 0,
-                  weeklyTarget: m.weekly_target ?? 3,
-                  loggedToday: (todayCountsMap.get(m.id) ?? 0) > 0,
-                  timeAffinity: resolveTimeAffinity(m.emoji),
-                })),
-                getAppDate(),
-              );
-              const heroMarkId = heroResult.kind === 'step' ? heroResult.candidate.markId : null;
-              const heroMark = heroMarkId ? marks.find((m) => m.id === heroMarkId) : undefined;
-              const heroCategory = heroMark ? resolveMarkCategory(heroMark) : undefined;
-
               const dueMarks = marks.filter(
-                (m) =>
-                  m.id !== heroMarkId &&
-                  markWeeklyState(m, weeklyCountsMap.get(m.id) ?? 0) === 'due',
+                (m) => markWeeklyState(m, weeklyCountsMap.get(m.id) ?? 0) === 'due',
               );
               const doneMarks = marks.filter(
                 (m) => markWeeklyState(m, weeklyCountsMap.get(m.id) ?? 0) === 'doneForWeek',
@@ -481,13 +461,15 @@ export default function FocusScreen() {
                     activeOpacity={0.7}
                     style={styles.goalCardHeader}
                   >
-                    <Text style={[styles.goalCardTitle, { color: c.inkDark }]} numberOfLines={1}>
+                    <Text style={[styles.goalCardTitle, { color: c.inkDark }]} numberOfLines={2}>
                       {goal.title}
                     </Text>
-                    <CaretRight size={14} color={c.inkMuted} weight="bold" />
+                    <CaretRight size={16} color={c.inkMuted} weight="bold" />
                   </TouchableOpacity>
 
-                  <GoalHeroStep result={heroResult} category={heroCategory} onLog={handleQuickIncrement} />
+                  <Text style={[styles.goalPlanLine, { color: c.inkMuted }]}>
+                    {`Plan: ${marks.length} mark${marks.length !== 1 ? 's' : ''}`}
+                  </Text>
 
                   <View style={styles.momentumRow}>
                     <GoalMomentum snapshot={momentumSnapshots[goal.id] ?? null} />
@@ -652,17 +634,28 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingTop: spacing.md + spacing.xs,
+    paddingBottom: spacing.sm,
   },
+  // The goal is the reason this card exists — it anchors the card, above the
+  // greeting (xl) and well clear of body text, not one more white-text row.
   goalCardTitle: {
     fontFamily: fonts.serifSemibold,
-    fontSize: fontSize.lg,
+    fontSize: fontSize[22],
+    lineHeight: 28,
+    letterSpacing: -0.3,
     flex: 1,
     marginRight: spacing.sm,
   },
   goalCardMeta: {
     fontFamily: fonts.sans,
     fontSize: fontSize.sm,
+  },
+  goalPlanLine: {
+    fontFamily: fonts.sans,
+    fontSize: fontSize.sm,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
   },
   momentumRow: {
     paddingHorizontal: spacing.lg,
