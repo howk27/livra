@@ -17,7 +17,6 @@ import {
   LinkSimple,
   Star,
   Sun,
-  Calendar,
   ArrowsClockwise,
   DownloadSimple,
   Trash,
@@ -630,14 +629,6 @@ export default function SettingsScreen() {
                   );
                 })}
               </View>
-            }
-          />
-          <SettingsRow
-            icon={Calendar}
-            label="Week Start Day"
-            hideChevron
-            rightElement={
-              <Text style={[styles.inlineHint, { color: c.inkMuted }]}>Monday</Text>
             }
           />
           <SettingsRow
