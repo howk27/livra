@@ -3,11 +3,9 @@ import { View, TouchableOpacity, StyleSheet, Text } from 'react-native';
 import { ArrowLeft, type Icon as PhosphorIcon } from 'phosphor-react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Circle } from 'react-native-svg';
 import { SvgLogo } from './SvgLogo';
 import { fonts, spacing, themedColors, fontSize } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
-import { useXP } from '../../hooks/useXP';
 
 // DrawerContext kept for backward compat — no longer wired to any drawer.
 export const DrawerContext = React.createContext<{ open: () => void; close: () => void }>({
@@ -40,7 +38,6 @@ export function LivraHeader({
   const insets = useSafeAreaInsets();
   const theme = useEffectiveTheme();
   const colors = themedColors(theme);
-  const { progressRatio } = useXP();
 
   const left = showBack ? (
     <TouchableOpacity
@@ -70,22 +67,6 @@ export function LivraHeader({
         activeOpacity={0.7}
       >
         <View style={styles.avatarRingWrapper}>
-          <Svg width={36} height={36} style={{ position: 'absolute', top: 0, left: 0 }}>
-            <Circle cx={18} cy={18} r={16} stroke={colors.borderLight} strokeWidth={2} fill="none" />
-            <Circle
-              cx={18}
-              cy={18}
-              r={16}
-              stroke={colors.mint}
-              strokeWidth={2}
-              fill="none"
-              strokeDasharray={`${2 * Math.PI * 16}`}
-              strokeDashoffset={`${2 * Math.PI * 16 * (1 - progressRatio)}`}
-              strokeLinecap="round"
-              rotation="-90"
-              origin="18,18"
-            />
-          </Svg>
           <View style={[styles.avatarCircle, { backgroundColor: colors.surfaceAlt, borderColor: colors.forest }]} />
         </View>
       </TouchableOpacity>

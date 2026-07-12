@@ -6,6 +6,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { CheckinButton } from './CheckinButton';
+import { CATEGORY_MAP } from './MarkRow';
 import { fonts, fontSize, spacing, radius, themedColors } from '../../theme/tokens';
 import { applyOpacity } from '@/src/components/icons/color';
 import { useEffectiveTheme } from '../../state/uiSlice';
@@ -13,10 +14,11 @@ import type { NextStepResult } from '../../lib/nextStep';
 
 interface GoalHeroStepProps {
   result: NextStepResult;
+  category?: string;
   onLog: (markId: string) => void;
 }
 
-export function GoalHeroStep({ result, onLog }: GoalHeroStepProps) {
+export function GoalHeroStep({ result, category, onLog }: GoalHeroStepProps) {
   const theme = useEffectiveTheme();
   const c = themedColors(theme);
 
@@ -41,8 +43,13 @@ export function GoalHeroStep({ result, onLog }: GoalHeroStepProps) {
   }
 
   const { candidate } = result;
+  const catData = CATEGORY_MAP[category ?? 'custom'] ?? CATEGORY_MAP.custom;
+  const CatIcon = catData.Icon;
   return (
     <View style={[styles.stepWrap, { backgroundColor: applyOpacity(c.forest, 0.08) }]}>
+      <View style={[styles.iconTile, { backgroundColor: applyOpacity(catData.accent, 0.12) }]}>
+        <CatIcon size={18} color={catData.accent} weight="duotone" />
+      </View>
       <View style={styles.stepText}>
         <Text style={[styles.eyebrow, { color: c.inkMuted }]}>Today</Text>
         <Text style={[styles.markName, { color: c.inkDark }]} numberOfLines={1}>
@@ -69,6 +76,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     gap: spacing.md,
+  },
+  iconTile: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   stepText: { flex: 1 },
   eyebrow: {

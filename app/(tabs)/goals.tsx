@@ -17,7 +17,6 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  withSpring,
   withTiming,
   runOnJS,
   type SharedValue,
@@ -208,7 +207,7 @@ function DraggableRow({
     })
     .onEnd(() => {
       const finalSlot = positions.value[goal.id] ?? index;
-      translateY.value = withSpring(0, { damping: 20, stiffness: 200 });
+      translateY.value = withTiming(0, { duration: 220 });
       isActive.value = false;
       activeId.value = null;
       if (finalSlot !== startSlot.value) {
@@ -217,7 +216,7 @@ function DraggableRow({
     })
     .onFinalize(() => {
       if (isActive.value) {
-        translateY.value = withSpring(0, { damping: 20, stiffness: 200 });
+        translateY.value = withTiming(0, { duration: 220 });
         isActive.value = false;
         if (activeId.value === goal.id) activeId.value = null;
       }
@@ -229,7 +228,7 @@ function DraggableRow({
     const restingOffset = (slot - index) * slotHeight.value;
     const y = dragging
       ? translateY.value
-      : withSpring(restingOffset, { damping: 22, stiffness: 220 });
+      : withTiming(restingOffset, { duration: 220 });
     return {
       transform: [
         { translateY: y },

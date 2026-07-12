@@ -31,6 +31,7 @@ import { useGoalsStore } from '../../state/goalsSlice';
 import { useMomentumStore } from '../../state/momentumSlice';
 import { GoalMomentum } from '../../components/ui/GoalMomentum';
 import { GoalHeroStep } from '../../components/ui/GoalHeroStep';
+import { CATEGORY_MAP } from '../../components/ui/MarkRow';
 import { selectNextStep, resolveTimeAffinity } from '../../lib/nextStep';
 import { MomentumBanner } from '../../components/ui/MomentumBanner';
 import { shouldShowMomentumBanner } from '../../lib/momentumPresenter';
@@ -59,6 +60,15 @@ import { applyOpacity } from '../../src/components/icons/color';
 import type { Counter } from '../../types';
 
 const MAX_MARKS_PER_CARD = 4;
+
+function resolveMarkCategory(mark: Pick<Counter, 'name' | 'emoji'>): string {
+  const libMark = MARK_LIBRARY.find((m) => m.emoji === mark.emoji);
+  return (
+    libMark?.category ??
+    resolveCounterIconType({ name: mark.name, emoji: mark.emoji ?? '' }) ??
+    'custom'
+  );
+}
 
 export default function FocusScreen() {
   const theme = useEffectiveTheme();
@@ -320,11 +330,7 @@ export default function FocusScreen() {
     (mark: Counter, isLast: boolean, dimmed = false, maintenance = false, celebrateIndex?: number) => {
       const weeklyCount = weeklyCountsMap.get(mark.id) ?? 0;
       const isDoneForWeek = markWeeklyState(mark, weeklyCount) === 'doneForWeek';
-      const libMark = MARK_LIBRARY.find((m) => m.emoji === mark.emoji);
-      const category =
-        libMark?.category ??
-        resolveCounterIconType({ name: mark.name, emoji: mark.emoji ?? '' }) ??
-        'custom';
+      const category = resolveMarkCategory(mark);
 
       const showRestLine =
         isDoneForWeek &&
@@ -452,6 +458,8 @@ export default function FocusScreen() {
                 getAppDate(),
               );
               const heroMarkId = heroResult.kind === 'step' ? heroResult.candidate.markId : null;
+              const heroMark = heroMarkId ? marks.find((m) => m.id === heroMarkId) : undefined;
+              const heroCategory = heroMark ? resolveMarkCategory(heroMark) : undefined;
 
               const dueMarks = marks.filter(
                 (m) =>
@@ -479,7 +487,7 @@ export default function FocusScreen() {
                     <CaretRight size={14} color={c.inkMuted} weight="bold" />
                   </TouchableOpacity>
 
-                  <GoalHeroStep result={heroResult} onLog={handleQuickIncrement} />
+                  <GoalHeroStep result={heroResult} category={heroCategory} onLog={handleQuickIncrement} />
 
                   <View style={styles.momentumRow}>
                     <GoalMomentum snapshot={momentumSnapshots[goal.id] ?? null} />

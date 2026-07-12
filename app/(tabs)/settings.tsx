@@ -495,7 +495,7 @@ export default function SettingsScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: c.linen }]}>
-      <LivraHeader title="Settings" showAvatar />
+      <LivraHeader title="Settings" />
 
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: scrollContentBottomPad }]}>
 
