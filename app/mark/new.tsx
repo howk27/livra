@@ -28,6 +28,13 @@ import CounterIcon from '@/src/components/icons/CounterIcon';
 import { applyOpacity, foregroundForHexBackground } from '@/src/components/icons/color';
 import type { MarkType } from '@/src/types/counters';
 import { getCategoryColor, getCategoryForIcon, getCategoryForSuggestedCounter } from '../../lib/markCategory';
+import {
+  FrequencyPreset,
+  DEFAULT_FREQUENCY_PRESET,
+  FREQUENCY_PRESET_LABELS,
+  weeklyTargetForPreset,
+  scheduleForPreset,
+} from '../../lib/markFrequencyPreset';
 
 // Mapping of icon types to emojis for storage compatibility
 const ICON_TYPE_TO_EMOJI: Record<Exclude<MarkType, 'custom'>, string> = {
@@ -122,6 +129,7 @@ export default function NewCounterScreen() {
   const [goalPeriod, setGoalPeriod] = useState<GoalPeriod>('day');
   const [scheduleType, setScheduleType] = useState<ScheduleType>('daily');
   const [scheduleDays, setScheduleDays] = useState<DayOfWeek[]>([]);
+  const [frequencyPreset, setFrequencyPreset] = useState<FrequencyPreset>(DEFAULT_FREQUENCY_PRESET);
   const [loading, setLoading] = useState(false);
   const [dailyTarget, setDailyTarget] = useState(1);
   const [linkToGoal, setLinkToGoal] = useState(!!targetGoalId);
@@ -235,6 +243,12 @@ export default function NewCounterScreen() {
     try {
       setLoading(true);
       const emoji = ICON_TYPE_TO_EMOJI[selectedIconType] || ICON_TYPE_TO_EMOJI.gym;
+      // Cadence comes from the frequency preset (Every day / 3x a week / Custom days).
+      // Custom marks are always variable; weekly_target carries the cadence into the
+      // consistency engine, schedule_* is planning metadata only.
+      const cadenceDays = scheduleDaysForDisplay as DayOfWeek[];
+      const weeklyTarget = weeklyTargetForPreset(frequencyPreset, 'variable', cadenceDays.length);
+      const schedule = scheduleForPreset(frequencyPreset, cadenceDays);
       const savedMark = await createCounter({
         name: name.trim(),
         emoji,
@@ -245,8 +259,10 @@ export default function NewCounterScreen() {
         dailyTarget,
         goal_value: goalValue,
         goal_period: goalPeriod,
-        schedule_type: scheduleType,
-        schedule_days: scheduleType === 'custom' ? JSON.stringify(scheduleDays) : undefined,
+        schedule_type: schedule.schedule_type,
+        schedule_days: schedule.schedule_days,
+        weekly_target: weeklyTarget,
+        frequency_kind: 'variable',
         ...(linkToGoal && targetGoalId ? { goal_id: targetGoalId } : {}),
       } as any);
 
@@ -546,38 +562,75 @@ export default function NewCounterScreen() {
                 },
               ]}
             >
-              <Text style={[styles.sectionTitle, { color: themeColors.inkDark, marginBottom: spacing.md }]}>Frequency</Text>
-              <View style={styles.frequencyRow}>
-                {WEEKDAY_CHIPS.map(({ value, label }) => {
-                  const active = scheduleDaysForDisplay.includes(value);
+              <Text style={[styles.sectionTitle, { color: themeColors.inkDark, marginBottom: spacing.md }]}>Cadence</Text>
+              <View style={styles.presetRow}>
+                {(Object.keys(FREQUENCY_PRESET_LABELS) as FrequencyPreset[]).map((preset) => {
+                  const active = preset === frequencyPreset;
                   return (
                     <TouchableOpacity
-                      key={`${label}-${value}`}
+                      key={preset}
                       style={[
-                        styles.dayChip,
+                        styles.presetChip,
                         {
-                          backgroundColor: active ? color : themeColors.linen,
+                          backgroundColor: active ? applyOpacity(color, 0.14) : themeColors.linen,
                           borderColor: active ? color : themeColors.borderMid,
                         },
                       ]}
-                      onPress={() => toggleScheduleDay(value)}
-                      activeOpacity={0.8}
+                      onPress={() => setFrequencyPreset(preset)}
+                      activeOpacity={0.85}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
                     >
                       <Text
                         style={[
-                          styles.dayChipText,
-                          {
-                          color: active ? foregroundForHexBackground(color, theme === 'dark') : themeColors.inkMid,
-                          opacity: active ? 1 : 0.72,
-                          },
+                          styles.presetChipText,
+                          { color: active ? color : themeColors.inkMid },
                         ]}
                       >
-                        {label}
+                        {FREQUENCY_PRESET_LABELS[preset]}
                       </Text>
                     </TouchableOpacity>
                   );
                 })}
               </View>
+
+              {frequencyPreset === 'custom' ? (
+                <View style={styles.frequencyRow}>
+                  {WEEKDAY_CHIPS.map(({ value, label }) => {
+                    const active = scheduleDaysForDisplay.includes(value);
+                    return (
+                      <TouchableOpacity
+                        key={`${label}-${value}`}
+                        style={[
+                          styles.dayChip,
+                          {
+                            backgroundColor: active ? color : themeColors.linen,
+                            borderColor: active ? color : themeColors.borderMid,
+                          },
+                        ]}
+                        onPress={() => toggleScheduleDay(value)}
+                        activeOpacity={0.8}
+                      >
+                        <Text
+                          style={[
+                            styles.dayChipText,
+                            {
+                              color: active ? foregroundForHexBackground(color, theme === 'dark') : themeColors.inkMid,
+                              opacity: active ? 1 : 0.72,
+                            },
+                          ]}
+                        >
+                          {label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              ) : null}
+
+              <Text style={[styles.cadenceHint, { color: themeColors.inkMuted }]}>
+                Log as many as you want · a met target never blocks today.
+              </Text>
             </View>
 
             {targetGoalId && targetGoalTitle ? (
@@ -787,10 +840,34 @@ const styles = StyleSheet.create({
     height: 50,
     borderRadius: borderRadius.full,
   },
+  presetRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  presetChip: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.xs,
+    borderRadius: borderRadius.md,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  presetChipText: {
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.semibold,
+    textAlign: 'center',
+  },
+  cadenceHint: {
+    fontSize: fontSize.xs,
+    lineHeight: fontSize.xs * 1.4,
+    marginTop: spacing.md,
+  },
   frequencyRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: spacing.xs,
+    marginTop: spacing.md,
   },
   dayChip: {
     width: 38,

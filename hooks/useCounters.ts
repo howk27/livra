@@ -89,6 +89,10 @@ export const useMarks = () => {
       goal_period?: string | null;
       goal_id?: string | null; // Goal this mark feeds — drives the per-goal free cap
       frequency_kind?: 'variable' | 'fixed' | 'abstinence' | null;
+      weekly_target?: number | null;
+      frequency_min?: number | null;
+      frequency_recommended?: number | null;
+      frequency_max?: number | null;
       skipSync?: boolean; // Optional flag to skip sync (useful for batch operations)
     }) => {
       // Free-tier caps: two independent buckets, both bypassed by Pro and by batch
@@ -132,6 +136,13 @@ export const useMarks = () => {
         goal_period: data.goal_period as any,
         goal_id: data.goal_id ?? null,
         frequency_kind: data.frequency_kind ?? 'variable',
+        // Cadence: forward the chosen weekly_target (and any library range) so the
+        // preset control on the custom flow and the suggested-mark defaults persist
+        // instead of silently falling back to the store's default of 3.
+        weekly_target: data.weekly_target ?? undefined,
+        frequency_min: data.frequency_min ?? undefined,
+        frequency_recommended: data.frequency_recommended ?? undefined,
+        frequency_max: data.frequency_max ?? undefined,
       });
 
       // Sync to Supabase after creating mark
