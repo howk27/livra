@@ -94,7 +94,7 @@ export const TERMS = {
 
 // ─── Recurring shared lines ──────────────────────────────────────────────────
 
-/** Shown when a free user hits the 2-goal cap (goal/new + AddGoalSheet). */
+/** Shown when a free user hits the 2-goal cap (goal/new + the suggest-a-plan flow). */
 export const GOAL_LIMIT_MESSAGE =
   'Free keeps you to 2 goals at once so you can actually finish them. Livra+ opens unlimited goals.';
 

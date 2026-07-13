@@ -1,7 +1,7 @@
 /**
  * GoalPathSheet — the "+ Goal" chooser (FU-6).
  *
- * A content-hugging two-row bottom sheet on AddGoalSheet's exact motion grammar
+ * A content-hugging two-row bottom sheet on AddMarkSheet's exact motion grammar
  * (300ms withTiming translateY + 0.5 overlay fade, handle bar, surface ground):
  * a quiet outlined "Build it myself" row into /goal/new, and the AI hatch row
  * into /goal/suggest. One glance, one tap; the sheet never talks pricing.

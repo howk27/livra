@@ -21,7 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { spacing, radius, shadow, themedColors, fontSize, fonts } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { AddMarkSheet } from '../sheets/AddMarkSheet';
-import { AddGoalSheet } from '../sheets/AddGoalSheet';
+import { GoalPathSheet } from '../sheets/GoalPathSheet';
 
 const FAB_HINT_KEY = 'fab_hint_shown';
 const SPRING = { damping: 18, stiffness: 260, mass: 0.9 };
@@ -191,7 +191,7 @@ export function SpeedDialFAB() {
       </View>
 
       <AddMarkSheet visible={markSheetVisible} onClose={() => setMarkSheetVisible(false)} />
-      <AddGoalSheet visible={goalSheetVisible} onClose={() => setGoalSheetVisible(false)} />
+      <GoalPathSheet visible={goalSheetVisible} onClose={() => setGoalSheetVisible(false)} />
     </>
   );
 }

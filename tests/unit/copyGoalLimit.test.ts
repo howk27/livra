@@ -11,7 +11,7 @@ describe('GOAL_LIMIT_MESSAGE centralization', () => {
   });
 
   it('is not re-typed as an inline literal in the call sites', () => {
-    const sites = ['app/goal/new.tsx', 'components/sheets/AddGoalSheet.tsx'];
+    const sites = ['app/goal/new.tsx', 'hooks/useSuggestGoalFlow.ts'];
     for (const rel of sites) {
       const src = readFileSync(join(__dirname, '../../', rel), 'utf8');
       expect(src).not.toContain(
