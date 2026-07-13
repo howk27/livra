@@ -43,7 +43,7 @@ export interface GoalsState {
   error: string | null;
 
   fetchGoals: (userId: string) => Promise<void>;
-  createGoal: (data: Partial<Goal> & { userId: string; isPro: boolean; tier?: TierId; frequency?: FrequencyId }) => Promise<Goal>;
+  createGoal: (data: Partial<Goal> & { userId: string; isPro: boolean; tier?: TierId; frequency?: FrequencyId; method?: 'manual' | 'ai' }) => Promise<Goal>;
   updateGoal: (id: string, data: Partial<Goal>) => Promise<void>;
   deleteGoal: (id: string) => Promise<void>;
   completeGoal: (id: string) => Promise<void>;
@@ -91,7 +91,7 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
     }
   },
 
-  createGoal: async ({ userId, isPro, tier, frequency, ...data }) => {
+  createGoal: async ({ userId, isPro, tier, frequency, method, ...data }) => {
     const current = get().goals.filter(g => g.user_id === userId);
     const nonCompleted = current.filter(g => g.status !== 'completed' && g.status !== 'expired');
     if (!canAddGoal(isPro, nonCompleted.length)) throw new GoalLimitError();
@@ -137,6 +137,7 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
       mark_count: goal.linked_mark_ids?.length ?? 0,
       tier: goal.tier ?? null,
       frequency: goal.frequency ?? null,
+      method: method ?? 'manual',
     });
     return goal;
   },

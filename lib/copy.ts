@@ -97,3 +97,25 @@ export const TERMS = {
 /** Shown when a free user hits the 2-goal cap (goal/new + AddGoalSheet). */
 export const GOAL_LIMIT_MESSAGE =
   'Free keeps you to 2 goals at once so you can actually finish them. Livra+ opens unlimited goals.';
+
+// ─── AI generation failure copy (onboarding + /goal/suggest share one source) ─
+// Keys mirror GenerationFailReason in lib/ai/goalGeneration.ts. Kept here (not
+// in goalGeneration) so screens that mock the AI module still resolve real copy.
+// goal_too_short is empty: both callers gate the button on MIN_GOAL_LENGTH.
+
+export const GENERATION_ERROR_COPY: Record<string, string> = {
+  low_confidence: 'Couldn’t make sense of that. Try describing your goal in one sentence.',
+  free_use_exhausted:
+    'You’ve used your free AI plan. Livra+ unlocks unlimited AI goal plans. Or continue manually below.',
+  invalid_output: 'Something went wrong. Continue manually below.',
+  network_error: 'Couldn’t reach Livra AI. Check your connection or continue manually.',
+  goal_too_short: '',
+} as const;
+
+/** Inline exhausted panel on /goal/suggest. Honest, never a wall: manual stays free. */
+export const AI_EXHAUSTED_COPY = {
+  title: 'You’ve used your free AI plan.',
+  body: 'Livra+ includes unlimited AI goal plans.',
+  upsell: 'See Livra+',
+  manual: 'Build it myself · always free',
+} as const;

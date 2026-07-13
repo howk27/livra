@@ -9,24 +9,15 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
-  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Check } from 'phosphor-react-native';
 import { useRouter } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withRepeat,
-  withSequence,
-  withTiming,
-  Easing,
-} from 'react-native-reanimated';
-import { useReducedMotion } from '../hooks/useReducedMotion';
 import { SvgLogo } from '../components/ui/SvgLogo';
 import { LivraWordmark } from '../components/ui/LivraWordmark';
 import { PillButton } from '../components/ui/PillButton';
+import { AIHatchButton } from '../components/ui/AIHatchButton';
+import { GoalPackageReview, GoalPackageReviewSelection } from '../components/ai/GoalPackageReview';
 import { themedColors, fonts, spacing, radius, fontSize } from '../theme/tokens';
 import { useEffectiveTheme, useUIStore } from '../state/uiSlice';
 import { useOnboardingStore, CommitmentLevel } from '../state/onboardingSlice';
@@ -39,16 +30,11 @@ import { frequencyLabel } from '../components/ui/MarkFrequencyPicker';
 import { logger } from '../lib/utils/logger';
 import { capture } from '../lib/analytics/posthog';
 import { ANALYTICS_EVENTS } from '../lib/analytics/events';
+import { GENERATION_ERROR_COPY } from '../lib/copy';
 import {
   generateGoalPackage, MIN_GOAL_LENGTH, resolveMarkForAIIcon,
   writeGoalPackageCache,
-  type AIGoalMark,
 } from '../lib/ai/goalGeneration';
-
-/** Sole deliberate departure from the forest palette — the AI "magic" CTA earns its
- * own treatment (spec: rainbow, glowing, inviting), but dialed down to sit next to
- * Livra's calm tone: dusty, desaturated stops rather than saturated candy hues. */
-const AI_HATCH_GRADIENT = ['#DDA3B4', '#DDBB98', '#DDD298', '#A8C4AC', '#9FBACE', '#B3A7CE'] as const;
 
 // ─── Step dots ───────────────────────────────────────────────────────────────
 
@@ -132,37 +118,9 @@ export default function OnboardingScreen() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiReviewActive, setAiReviewActive] = useState(false);
-  const [reviewTitle, setReviewTitle] = useState('');
-  const [reviewWeeks, setReviewWeeks] = useState(12);
-  const [reviewMarks, setReviewMarks] = useState<AIGoalMark[]>([]);
-  const [reviewMarkSelected, setReviewMarkSelected] = useState<Set<number>>(new Set());
-  const [reviewDescription, setReviewDescription] = useState('');
+  // Description is owned by GoalPackageReview; captured here on confirm for the
+  // persist step (createGoal only runs after the marks screen, step 3, later).
   const reviewDescriptionRef = React.useRef('');
-
-  // AI hatch glow — a slow, quiet breathing pulse so the CTA feels inviting without
-  // shouting; kept subtle to match Livra's calm tone.
-  const reducedMotion = useReducedMotion();
-  const aiHatchGlow = useSharedValue(0.3);
-  React.useEffect(() => {
-    if (reducedMotion) {
-      aiHatchGlow.value = 0.35;
-      return;
-    }
-    aiHatchGlow.value = withRepeat(
-      withSequence(
-        withTiming(0.5, { duration: 2200, easing: Easing.inOut(Easing.ease) }),
-        withTiming(0.25, { duration: 2200, easing: Easing.inOut(Easing.ease) }),
-      ),
-      -1,
-      true,
-    );
-  }, [reducedMotion, aiHatchGlow]);
-  const aiHatchGlowStyle = useAnimatedStyle(() => ({ shadowOpacity: aiHatchGlow.value }));
-
-  const handleReviewDescriptionChange = useCallback((text: string) => {
-    reviewDescriptionRef.current = text;
-    setReviewDescription(text);
-  }, []);
 
   const advance = useCallback(() => setStep((s) => s + 1), []);
 
@@ -177,35 +135,22 @@ export default function OnboardingScreen() {
     setAiLoading(false);
 
     if (result.ok) {
-      const pkg = result.package;
-      store.setAiPackageDraft(pkg);
-      setReviewTitle(pkg.goalTitle);
-      setReviewWeeks(pkg.timeframeWeeks);
-      setReviewMarks(pkg.marks);
-      setReviewMarkSelected(new Set(pkg.marks.map((_, i) => i)));
-      setReviewDescription('');
+      store.setAiPackageDraft(result.package);
       reviewDescriptionRef.current = '';
       setAiReviewActive(true);
     } else {
-      const msgs: Record<string, string> = {
-        low_confidence: "Couldn’t make sense of that. Try describing your goal in one sentence.",
-        free_use_exhausted: "You’ve used your free AI plan. Livra+ unlocks unlimited AI goal plans. Or continue manually below.",
-        invalid_output: "Something went wrong. Continue manually below.",
-        network_error: "Couldn’t reach Livra AI. Check your connection or continue manually.",
-        goal_too_short: '',
-      };
-      setAiError(msgs[result.reason] ?? 'Something went wrong.');
+      setAiError(GENERATION_ERROR_COPY[result.reason] || 'Something went wrong.');
     }
   }, [store]);
 
-  const handleAIReviewConfirm = useCallback(() => {
-    const selectedAIMarks = reviewMarks.filter((_, i) => reviewMarkSelected.has(i));
-    if (selectedAIMarks.length === 0) return;
+  const handleAIReviewConfirm = useCallback((selection: GoalPackageReviewSelection) => {
+    if (selection.marks.length === 0) return;
 
-    const finalTitle = reviewTitle.trim() || store.goalTitle;
+    const finalTitle = selection.title || store.goalTitle;
     store.setGoalTitle(finalTitle);
+    reviewDescriptionRef.current = selection.description ?? '';
 
-    const aiMarkSelections: CommitmentMarkSelection[] = selectedAIMarks.flatMap((m) => {
+    const aiMarkSelections: CommitmentMarkSelection[] = selection.marks.flatMap((m) => {
       const resolved = resolveMarkForAIIcon(m.icon);
       const libraryMark = MARK_LIBRARY.find((l) => l.id === resolved.markId);
       if (!libraryMark) return [];
@@ -217,7 +162,7 @@ export default function OnboardingScreen() {
     setMarksSelected(new Set(aiMarkSelections.map((r) => r.mark.id)));
     setAiReviewActive(false);
     setStep(3); // Skip pace step
-  }, [reviewMarks, reviewMarkSelected, reviewTitle, store]);
+  }, [store]);
 
   const handleAIReviewDismiss = useCallback(() => {
     setAiReviewActive(false);
@@ -299,6 +244,7 @@ export default function OnboardingScreen() {
         description: descriptionDraft,
         userId,
         isPro: false,
+        method: isAIPath ? 'ai' : 'manual',
       });
 
       // 3. Create each selected mark
@@ -361,118 +307,17 @@ export default function OnboardingScreen() {
   };
 
   // ─── AI Review render ─────────────────────────────────────────────────────
+  // Shared with /goal/suggest (FU-6) — single implementation, no fork.
 
   const renderAIReview = () => {
+    if (!store.aiPackageDraft) return null;
     return (
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView
-          contentContainerStyle={styles.stepContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <Text style={styles.stepTitle}>{"Here's what Livra suggests."}</Text>
-          <Text style={styles.stepSubtitle}>Edit anything before you commit.</Text>
-
-          {/* Editable goal title */}
-          <View style={styles.fieldBlock}>
-            <Text style={styles.reviewLabel}>GOAL</Text>
-            <TextInput
-              style={styles.input}
-              value={reviewTitle}
-              onChangeText={setReviewTitle}
-              maxLength={80}
-              placeholder="Goal title"
-              placeholderTextColor={c.inkMuted}
-            />
-          </View>
-
-          {/* Timeframe (display only) */}
-          <View style={{ marginTop: spacing.md }}>
-            <Text style={styles.reviewLabel}>TIMEFRAME</Text>
-            <Text style={styles.reviewTimeframe}>{reviewWeeks} weeks</Text>
-          </View>
-
-          {/* Editable description */}
-          <View style={styles.fieldBlock}>
-            <Text style={styles.reviewLabel}>NOTES (OPTIONAL)</Text>
-            <TextInput
-              style={styles.reviewDescriptionInput}
-              value={reviewDescription}
-              onChangeText={handleReviewDescriptionChange}
-              placeholder="Add a note about this goal (optional)."
-              placeholderTextColor={c.inkMuted}
-              multiline
-              maxLength={280}
-            />
-          </View>
-
-          {/* Marks with why */}
-          <View style={{ marginTop: spacing.xl }}>
-            <Text style={styles.reviewLabel}>SUGGESTED MARKS</Text>
-            <View style={styles.marksList}>
-              {reviewMarks.map((m, i) => {
-                const selected = reviewMarkSelected.has(i);
-                const resolved = resolveMarkForAIIcon(m.icon);
-                return (
-                  <TouchableOpacity
-                    key={i}
-                    style={[styles.reviewMarkRow, !selected && styles.markRowDeselected]}
-                    activeOpacity={0.75}
-                    accessibilityRole="checkbox"
-                    accessibilityState={{ checked: selected }}
-                    onPress={() => {
-                      setReviewMarkSelected((prev) => {
-                        const next = new Set(prev);
-                        if (next.has(i)) {
-                          if (next.size > 1) next.delete(i);
-                        } else {
-                          next.add(i);
-                        }
-                        return next;
-                      });
-                    }}
-                  >
-                    <Text style={styles.markEmoji}>{resolved.emoji}</Text>
-                    <View style={styles.markInfo}>
-                      <Text style={[styles.markName, !selected && { color: c.inkMuted }]}>
-                        {m.name} · {m.frequency}×/wk
-                      </Text>
-                      <Text style={styles.reviewMarkWhy}>{m.why}</Text>
-                    </View>
-                    <View
-                      style={[
-                        styles.markCheck,
-                        selected
-                          ? { backgroundColor: c.forest, borderColor: c.forest }
-                          : { borderColor: c.borderMid },
-                      ]}
-                    >
-                      {selected && <Check size={12} weight="bold" color={c.inkInverse} />}
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
-
-          <PillButton
-            label="Looks good →"
-            onPress={handleAIReviewConfirm}
-            disabled={reviewMarkSelected.size === 0}
-            style={{ ...styles.primaryBtn, opacity: reviewMarkSelected.size === 0 ? 0.4 : 1 }}
-          />
-
-          <TouchableOpacity
-            style={{ alignItems: 'center', marginTop: spacing.sm }}
-            onPress={handleAIReviewDismiss}
-          >
-            <Text style={styles.secondaryLink}>Set it up myself</Text>
-          </TouchableOpacity>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      <GoalPackageReview
+        pkg={store.aiPackageDraft}
+        onConfirm={handleAIReviewConfirm}
+        onDismiss={handleAIReviewDismiss}
+        dismissLabel="Set it up myself"
+      />
     );
   };
 
@@ -525,32 +370,13 @@ export default function OnboardingScreen() {
         <Text style={[styles.aiDisclosure, { color: c.inkMuted }]}>
           This is your one free AI draft. You can edit everything before you save it, and presets are always free.
         </Text>
-        <Animated.View
-          style={[
-            styles.aiHatchGlowWrap,
-            aiHatchGlowStyle,
-            (aiLoading || store.goalTitle.trim().length < MIN_GOAL_LENGTH) && { opacity: 0.4 },
-          ]}
-        >
-          <TouchableOpacity
-            style={styles.aiHatch}
-            onPress={() => handleAIGenerate()}
-            disabled={aiLoading || store.goalTitle.trim().length < MIN_GOAL_LENGTH}
-            activeOpacity={0.8}
-          >
-            <LinearGradient
-              colors={AI_HATCH_GRADIENT}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFill}
-            />
-            {aiLoading ? (
-              <ActivityIndicator size="small" color={c.inkDark} />
-            ) : (
-              <Text style={styles.aiHatchText}>✦ Let Livra suggest a plan</Text>
-            )}
-          </TouchableOpacity>
-        </Animated.View>
+        <AIHatchButton
+          label="✦ Let Livra suggest a plan"
+          onPress={() => handleAIGenerate()}
+          disabled={store.goalTitle.trim().length < MIN_GOAL_LENGTH}
+          loading={aiLoading}
+          style={styles.aiHatchWrap}
+        />
         {aiError ? (
           <Text style={styles.aiError}>{aiError}</Text>
         ) : (
@@ -888,31 +714,10 @@ function createStyles(c: ReturnType<typeof themedColors>) {
       paddingHorizontal: spacing.sm,
     },
 
-    // AI hatch — the one deliberately non-forest CTA (see AI_HATCH_GRADIENT comment).
-    aiHatchGlowWrap: {
+    // AI hatch — extracted into components/ui/AIHatchButton.tsx (owns its own
+    // gradient/glow styles). This wrap only sets the margin at this call site.
+    aiHatchWrap: {
       marginTop: spacing.lg,
-      borderRadius: radius.md,
-      shadowColor: '#B3A7CE',
-      shadowOffset: { width: 0, height: 0 },
-      shadowRadius: 10,
-      elevation: 4,
-    },
-    aiHatch: {
-      paddingVertical: spacing.sm,
-      paddingHorizontal: spacing.md,
-      borderRadius: radius.md,
-      overflow: 'hidden' as const,
-      alignItems: 'center' as const,
-      justifyContent: 'center' as const,
-      minHeight: 44,
-    },
-    aiHatchText: {
-      fontFamily: fonts.sansMedium,
-      fontSize: fontSize.base,
-      color: c.inkDark,
-      textShadowColor: 'rgba(255,255,255,0.35)',
-      textShadowOffset: { width: 0, height: 1 },
-      textShadowRadius: 2,
     },
     aiHatchSub: {
       fontFamily: fonts.sans,
@@ -931,52 +736,5 @@ function createStyles(c: ReturnType<typeof themedColors>) {
       lineHeight: 18,
     },
 
-    // Editable description in AI review
-    reviewDescriptionInput: {
-      minHeight: 72,
-      backgroundColor: c.surfaceAlt,
-      borderRadius: radius.md,
-      paddingHorizontal: spacing.md,
-      paddingVertical: spacing.sm,
-      fontFamily: fonts.sans,
-      fontSize: fontSize.md,
-      color: c.inkDark,
-      borderWidth: 1,
-      borderColor: c.borderLight,
-      textAlignVertical: 'top' as const,
-    },
-
-    // AI review
-    reviewLabel: {
-      fontFamily: fonts.sansMedium,
-      fontSize: fontSize.xs,
-      color: c.inkMuted,
-      letterSpacing: 0.8,
-      marginBottom: spacing.xs,
-    },
-    reviewTimeframe: {
-      fontFamily: fonts.sans,
-      fontSize: fontSize.md,
-      color: c.inkDark,
-      paddingVertical: spacing.xs,
-    },
-    reviewMarkRow: {
-      flexDirection: 'row' as const,
-      alignItems: 'flex-start' as const,
-      gap: spacing.md,
-      paddingVertical: spacing.md,
-      paddingHorizontal: spacing.md,
-      backgroundColor: c.surface,
-      borderRadius: radius.md,
-      borderWidth: 1,
-      borderColor: c.borderLight,
-    },
-    reviewMarkWhy: {
-      fontFamily: fonts.sans,
-      fontSize: fontSize.sm,
-      color: c.inkMuted,
-      marginTop: 2,
-      lineHeight: 17,
-    },
   });
 }

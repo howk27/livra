@@ -28,6 +28,7 @@ import { SvgLogo } from '../../components/ui/SvgLogo';
 import { Breathing } from '../../components/ui/Breathing';
 import { SectionLabel } from '../../components/ui/SectionLabel';
 import { HistoryRow } from '../../components/goals/HistoryRow';
+import { GoalPathSheet } from '../../components/sheets/GoalPathSheet';
 import { useGoalsStore } from '../../state/goalsSlice';
 import { useMarksStore } from '../../state/countersSlice';
 import { useEventsStore } from '../../state/eventsSlice';
@@ -381,10 +382,12 @@ export default function GoalsScreen() {
 
   const isEmpty = !isLoading && active.length === 0;
 
+  const [pathSheetVisible, setPathSheetVisible] = React.useState(false);
+
   const handleAddGoal = useCallback(() => {
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.push('/goal/new');
-  }, [router]);
+    setPathSheetVisible(true);
+  }, []);
 
   const handleOpenGoal = useCallback(
     (goalId: string) => {
@@ -479,6 +482,8 @@ export default function GoalsScreen() {
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      <GoalPathSheet visible={pathSheetVisible} onClose={() => setPathSheetVisible(false)} />
     </View>
   );
 }

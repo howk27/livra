@@ -10,7 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { themedColors, spacing, fontSize, fontWeight, borderRadius } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useGoalsStore, GoalLimitError } from '../../state/goalsSlice';
@@ -28,13 +28,14 @@ export default function NewGoalScreen() {
   const theme = useEffectiveTheme();
   const c = themedColors(theme);
   const router = useRouter();
+  const params = useLocalSearchParams<{ title?: string }>();
   const { user } = useAuth();
   const createGoal = useGoalsStore(s => s.createGoal);
   const addMark = useMarksStore(s => s.addMark);
   const marks = useMarksStore(s => s.marks);
 
   const [step, setStep] = useState<Step>('title');
-  const [title, setTitle] = useState('');
+  const [title, setTitle] = useState(typeof params.title === 'string' ? params.title : '');
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
   const [suggestedMarks, setSuggestedMarks] = useState<MarkDefinition[]>([]);
@@ -62,6 +63,7 @@ export default function NewGoalScreen() {
         target_mark_count: selection.unlockThreshold > 0 ? selection.unlockThreshold : null,
         tier: selection.tier,
         frequency: selection.frequency,
+        method: 'manual',
       });
 
       // Create new marks with goal_id set
@@ -178,6 +180,25 @@ export default function NewGoalScreen() {
             multiline
             numberOfLines={3}
           />
+
+          <TouchableOpacity
+            style={styles.aiFallbackLink}
+            onPress={() => {
+              const trimmed = title.trim();
+              router.replace({
+                pathname: '/goal/suggest' as any,
+                params: trimmed
+                  ? { goalText: trimmed, source: 'goal_create_fallback' }
+                  : { source: 'goal_create_fallback' },
+              });
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Or let Livra suggest a plan"
+          >
+            <Text style={[styles.aiFallbackLinkText, { color: c.inkMuted }]}>
+              ✦ Or let Livra suggest a plan
+            </Text>
+          </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -207,4 +228,12 @@ const styles = StyleSheet.create({
     fontSize: fontSize.md,
   },
   descInput: { height: 80, textAlignVertical: 'top' },
+  aiFallbackLink: {
+    marginTop: spacing.md,
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  aiFallbackLinkText: {
+    fontSize: fontSize.sm,
+  },
 });

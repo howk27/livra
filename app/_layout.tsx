@@ -602,6 +602,7 @@ function RootNavigator() {
         />
         <Stack.Screen name="iap-dashboard" options={{ presentation: 'modal' }} />
         <Stack.Screen name="goal/new" options={{ presentation: 'modal', title: 'New Goal', headerShown: false }} />
+        <Stack.Screen name="goal/suggest" options={{ presentation: 'modal', title: 'Suggest a plan', headerShown: false }} />
         <Stack.Screen name="goal/[id]" options={{ presentation: 'modal', headerShown: false }} />
         <Stack.Screen
           name="goal/complete"
