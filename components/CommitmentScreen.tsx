@@ -19,6 +19,7 @@ import {
   commitmentSummary,
 } from '../lib/goalMarkSuggestions';
 import { MARK_LIBRARY_BY_ID, MarkDefinition } from '../lib/suggestedCounters';
+import { canCreateGoalFromCommitment } from '../lib/goals/commitmentGate';
 import type { Mark } from '../types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -114,6 +115,7 @@ export function CommitmentScreen({
   }).length;
 
   const summary = totalSelected > 0 ? commitmentSummary(tier, frequency, totalSelected) : '';
+  const canProceed = canCreateGoalFromCommitment({ isOnboarding, selectedMarkCount: totalSelected });
 
   return (
     <ScrollView
@@ -239,12 +241,16 @@ export function CommitmentScreen({
 
       {summary ? (
         <Text style={[styles.summary, { color: c.inkMuted }]}>{summary}</Text>
+      ) : !isOnboarding ? (
+        <Text style={[styles.summary, { color: c.inkMuted }]}>
+          Add marks now or later · your goal is ready either way
+        </Text>
       ) : null}
 
       <TouchableOpacity
-        style={[styles.cta, { backgroundColor: c.forest, opacity: totalSelected === 0 ? 0.4 : 1 }]}
+        style={[styles.cta, { backgroundColor: c.forest, opacity: canProceed ? 1 : 0.4 }]}
         onPress={handleConfirm}
-        disabled={totalSelected === 0}
+        disabled={!canProceed}
       >
         <Text style={styles.ctaText}>
           {isOnboarding ? "Let's go" : 'Create goal'}
