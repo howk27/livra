@@ -27,6 +27,7 @@ import { useEffectiveTheme } from '../../state/uiSlice';
 import { useGoalsStore } from '../../state/goalsSlice';
 import { useMarksStore } from '../../state/countersSlice';
 import { CATEGORY_MAP } from '../../components/ui/MarkRow';
+import { GoalTitle } from '../../components/ui/GoalTitle';
 import { MARK_LIBRARY } from '../../lib/suggestedCounters';
 import { resolveCounterIconType } from '../../src/components/icons/IconResolver';
 import { applyOpacity } from '../../src/components/icons/color';
@@ -200,7 +201,7 @@ export default function GoalDetailScreen() {
             </TouchableOpacity>
           </View>
         ) : (
-          <Text style={[styles.title, { color: c.inkDark }]}>{goal.title}</Text>
+          <GoalTitle title={goal.title} size="detail" color={c.inkDark} style={styles.title} />
         )}
 
         {/* Progress ring */}
@@ -344,7 +345,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   content: { paddingHorizontal: spacing.md, paddingBottom: spacing.xl * 2 },
-  title: { fontSize: fontSize['2xl'], fontFamily: fonts.serif, marginTop: spacing.sm },
+  // Type lives in <GoalTitle>; layout spacing only.
+  title: { marginTop: spacing.sm },
   titleEditRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm },
   titleInput: {
     flex: 1,

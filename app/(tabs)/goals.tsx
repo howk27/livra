@@ -27,6 +27,7 @@ import { LivraWordmark } from '../../components/ui/LivraWordmark';
 import { SvgLogo } from '../../components/ui/SvgLogo';
 import { Breathing } from '../../components/ui/Breathing';
 import { SectionLabel } from '../../components/ui/SectionLabel';
+import { GoalTitle } from '../../components/ui/GoalTitle';
 import { HistoryRow } from '../../components/goals/HistoryRow';
 import { GoalPathSheet } from '../../components/sheets/GoalPathSheet';
 import { useGoalsStore } from '../../state/goalsSlice';
@@ -83,9 +84,7 @@ function ActiveGoalCard({ goal, progress, threshold, canComplete, weeklyDone = 0
         {!canComplete && <CaretRight size={18} color={c.inkMid} weight="bold" />}
       </View>
 
-      <Text style={[styles.activeTitle, { color: c.inkDark }]} numberOfLines={2}>
-        {goal.title}
-      </Text>
+      <GoalTitle title={goal.title} size="card" color={c.inkDark} />
 
       {goal.description ? (
         <Text style={[styles.activeDescription, { color: c.inkMid }]} numberOfLines={2}>
@@ -539,11 +538,6 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-  },
-  activeTitle: {
-    fontFamily: fonts.serif,
-    fontSize: fontSize['2xl'],
-    lineHeight: 34,
   },
   activeDescription: {
     fontFamily: fonts.sans,

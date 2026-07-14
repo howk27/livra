@@ -20,6 +20,7 @@ import { MarkRow } from '../../components/ui/MarkRow';
 import { Breathing } from '../../components/ui/Breathing';
 import { Plus, CaretRight } from 'phosphor-react-native';
 import { SectionLabel } from '../../components/ui/SectionLabel';
+import { GoalTitle } from '../../components/ui/GoalTitle';
 import { SpeedDialFAB } from '../../components/ui/SpeedDialFAB';
 
 import { useCounters } from '../../hooks/useCounters';
@@ -461,9 +462,7 @@ export default function FocusScreen() {
                     activeOpacity={0.7}
                     style={styles.goalCardHeader}
                   >
-                    <Text style={[styles.goalCardTitle, { color: c.inkDark }]} numberOfLines={2}>
-                      {goal.title}
-                    </Text>
+                    <GoalTitle title={goal.title} size="card" color={c.inkDark} style={styles.goalCardTitle} />
                     <CaretRight size={16} color={c.inkMuted} weight="bold" />
                   </TouchableOpacity>
 
@@ -639,11 +638,8 @@ const styles = StyleSheet.create({
   },
   // The goal is the reason this card exists — it anchors the card, above the
   // greeting (xl) and well clear of body text, not one more white-text row.
+  // Type lives in <GoalTitle>; this is layout-only (row flex + chevron gap).
   goalCardTitle: {
-    fontFamily: fonts.serifSemibold,
-    fontSize: fontSize[22],
-    lineHeight: 28,
-    letterSpacing: -0.3,
     flex: 1,
     marginRight: spacing.sm,
   },
