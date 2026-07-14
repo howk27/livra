@@ -48,7 +48,7 @@ function SuggestHeader({ c, onCancel }: SuggestHeaderProps) {
   );
 }
 
-// ─── Exhausted panel — FU-5 hollow forest-tinted card language ──────────────
+// ─── Exhausted panel — hollow ember-tinted card language (VD-5) ─────────────
 // Settled, no motion: an honest one-liner, the upsell, and an equal-weight
 // always-free manual link. Never an Alert, never a hard wall.
 

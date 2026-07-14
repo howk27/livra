@@ -203,8 +203,11 @@ export default function NewGoalScreen() {
             accessibilityRole="button"
             accessibilityLabel="Or let Livra suggest a plan"
           >
-            <Text style={[styles.aiFallbackLinkText, { color: c.inkMuted }]}>
-              ✦ Or let Livra suggest a plan
+            {/* VD-5: ember ✦ marks the AI voice; the link text stays inkMid
+                because ember fails contrast at this small size (VD-1 rule). */}
+            <Text style={[styles.aiFallbackLinkText, { color: c.inkMid }]}>
+              <Text style={{ color: c.ember }}>{'✦ '}</Text>
+              Or let Livra suggest a plan
             </Text>
           </TouchableOpacity>
         </View>

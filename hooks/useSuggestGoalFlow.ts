@@ -56,12 +56,14 @@ export function useSuggestGoalFlow() {
     }
   }, [initialized, user, router]);
 
-  // FU-5 hollow card language for the exhausted panel.
+  // VD-5 ember hatch: the AI voice speaks in ember, so the exhausted panel's
+  // hollow-card wash + border derive from `ember` (same alphas as the FU-5
+  // forest treatment). Structure elements on the screen stay ink/forest.
   const panelWash = useMemo(
-    () => applyOpacity(c.forest, theme === 'dark' ? 0.1 : 0.07),
-    [c.forest, theme],
+    () => applyOpacity(c.ember, theme === 'dark' ? 0.1 : 0.07),
+    [c.ember, theme],
   );
-  const panelBorder = useMemo(() => applyOpacity(c.accent, 0.55), [c.accent, theme]); // eslint-disable-line react-hooks/exhaustive-deps
+  const panelBorder = useMemo(() => applyOpacity(c.ember, 0.55), [c.ember]);
 
   const tooShort = goalText.trim().length < MIN_GOAL_LENGTH;
 

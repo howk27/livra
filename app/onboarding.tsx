@@ -715,7 +715,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     },
 
     // AI hatch — extracted into components/ui/AIHatchButton.tsx (owns its own
-    // gradient/glow styles). This wrap only sets the margin at this call site.
+    // ember border/wash/breathe styles). This wrap only sets the margin here.
     aiHatchWrap: {
       marginTop: spacing.lg,
     },

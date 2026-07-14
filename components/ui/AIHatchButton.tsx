@@ -1,15 +1,20 @@
 /**
  * AIHatchButton — the AI entry CTA, extracted from app/onboarding.tsx (FU-6).
  *
- * Single source for Livra's sole deliberate palette departure: the dusty
- * six-stop gradient + breathing shadow glow that marks "Livra drafts this for
- * you" moments. Consumed by onboarding step 1, GoalPathSheet, and /goal/suggest.
- * Reduced motion: the glow holds at a static 0.35 instead of breathing.
+ * VD-5 "Ember hatch": the AI voice speaks in ember (theme/tokens `ember`),
+ * the semantic spark accent — hollow, never a fill. 1px ember border over a
+ * low-alpha ember wash, ember ✦ + label. A slow breathe (3.6s cycle)
+ * oscillates the border/wash opacity 0.6 → 1.0 so the CTA feels alive
+ * without shouting. Consumed by onboarding step 1, GoalPathSheet, /goal/suggest.
+ * Reduced motion (hooks/useReducedMotion, the app's single source): static at
+ * rest, full opacity. Disabled/loading: lower alpha, no breathe.
+ * Contrast note: ember on light linen is 2.37:1 — the label is therefore
+ * locked at ≥16px medium weight per the design-memory restriction.
  */
 import React from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, ViewStyle, StyleProp } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
+  cancelAnimation,
   useSharedValue,
   useAnimatedStyle,
   withRepeat,
@@ -18,13 +23,11 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import { useReducedMotion } from '../../hooks/useReducedMotion';
+import { applyOpacity } from '../../src/components/icons/color';
 import { fonts, radius, spacing, themedColors, fontSize } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 
-/** Sole deliberate departure from the forest palette — the AI "magic" CTA earns
- * its own treatment (spec: rainbow, glowing, inviting), dialed down to sit next
- * to Livra's calm tone: dusty, desaturated stops rather than saturated candy hues. */
-export const AI_HATCH_GRADIENT = ['#DDA3B4', '#DDBB98', '#DDD298', '#A8C4AC', '#9FBACE', '#B3A7CE'] as const;
+const HALF_CYCLE_MS = 1800;
 
 interface AIHatchButtonProps {
   label: string;
@@ -37,76 +40,80 @@ interface AIHatchButtonProps {
 export function AIHatchButton({ label, onPress, disabled, loading, style }: AIHatchButtonProps) {
   const c = themedColors(useEffectiveTheme());
   const reducedMotion = useReducedMotion();
-
-  // Breathing glow — slow, quiet pulse so the CTA feels inviting without shouting.
-  const glow = useSharedValue(0.3);
-  React.useEffect(() => {
-    if (reducedMotion) {
-      glow.value = 0.35;
-      return;
-    }
-    glow.value = withRepeat(
-      withSequence(
-        withTiming(0.5, { duration: 2200, easing: Easing.inOut(Easing.ease) }),
-        withTiming(0.25, { duration: 2200, easing: Easing.inOut(Easing.ease) }),
-      ),
-      -1,
-      true,
-    );
-  }, [reducedMotion, glow]);
-  const glowStyle = useAnimatedStyle(() => ({ shadowOpacity: glow.value }));
-
   const inactive = disabled || loading;
 
+  // Breathe — slow border/wash opacity oscillation. Static at rest (full
+  // opacity) under Reduce Motion, and while disabled or loading.
+  const breathe = useSharedValue(1);
+  React.useEffect(() => {
+    if (reducedMotion || inactive) {
+      cancelAnimation(breathe);
+      breathe.value = 1;
+      return;
+    }
+    breathe.value = withRepeat(
+      withSequence(
+        withTiming(0.6, { duration: HALF_CYCLE_MS, easing: Easing.inOut(Easing.sin) }),
+        withTiming(1, { duration: HALF_CYCLE_MS, easing: Easing.inOut(Easing.sin) }),
+      ),
+      -1,
+    );
+    return () => cancelAnimation(breathe);
+  }, [reducedMotion, inactive, breathe]);
+  const frameStyle = useAnimatedStyle(() => ({ opacity: breathe.value }));
+
   return (
-    <Animated.View style={[styles.glowWrap, glowStyle, inactive && { opacity: 0.4 }, style]}>
-      <TouchableOpacity
-        style={styles.hatch}
-        onPress={onPress}
-        disabled={inactive}
-        activeOpacity={0.8}
-        accessibilityRole="button"
-        accessibilityLabel={label}
-        accessibilityState={{ disabled: !!inactive, busy: !!loading }}
-      >
-        <LinearGradient
-          colors={AI_HATCH_GRADIENT}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-        {loading ? (
-          <ActivityIndicator size="small" color={c.inkDark} />
-        ) : (
-          <Text style={[styles.label, { color: c.inkDark }]}>{label}</Text>
-        )}
-      </TouchableOpacity>
-    </Animated.View>
+    <TouchableOpacity
+      style={[styles.hatch, inactive && styles.inactive, style]}
+      onPress={onPress}
+      disabled={inactive}
+      activeOpacity={0.8}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: !!inactive, busy: !!loading }}
+    >
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.frame,
+          { borderColor: c.ember, backgroundColor: applyOpacity(c.ember, 0.1) },
+          frameStyle,
+        ]}
+      />
+      {loading ? (
+        <ActivityIndicator size="small" color={c.ember} />
+      ) : (
+        <Text style={[styles.label, { color: c.ember }]}>{label}</Text>
+      )}
+    </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
-  glowWrap: {
-    borderRadius: radius.md,
-    shadowColor: '#B3A7CE',
-    shadowOffset: { width: 0, height: 0 },
-    shadowRadius: 10,
-    elevation: 4,
-  },
   hatch: {
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
     borderRadius: radius.md,
-    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 44,
   },
+  // Border + wash live on their own layer so the breathe never dims the label.
+  frame: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderWidth: 1,
+    borderRadius: radius.md,
+  },
+  inactive: {
+    opacity: 0.4,
+  },
   label: {
     fontFamily: fonts.sansMedium,
-    fontSize: fontSize.base,
-    textShadowColor: 'rgba(255,255,255,0.35)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    // Contrast floor: ember text on light bg must be >=16px medium+ (VD-1).
+    fontSize: fontSize.lg,
   },
 });
