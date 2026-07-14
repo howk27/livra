@@ -89,6 +89,23 @@ export function computeCompletionsThisWeek(
   return count;
 }
 
+/**
+ * Per-mark completions-this-week map (markId → count). Shared by Focus and
+ * goal detail so the weekly-state machinery stays single-sourced (VD-4 retry #1).
+ */
+export function buildWeeklyCountsMap(
+  marks: Pick<Mark, 'id' | 'dailyTarget'>[],
+  events: MarkEvent[],
+  weekDates: string[],
+): Map<string, number> {
+  const map = new Map<string, number>();
+  for (const mark of marks) {
+    const markEvents = events.filter((e) => e.mark_id === mark.id && !e.deleted_at);
+    map.set(mark.id, computeCompletionsThisWeek(mark, markEvents, weekDates));
+  }
+  return map;
+}
+
 // ── Feature 1: Goal Progress ──────────────────────────────
 
 export function getPeriodTotal(events: MarkEvent[], markId: string, period: GoalPeriod): number {

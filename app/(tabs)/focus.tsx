@@ -44,28 +44,18 @@ import { partitionMarks } from '../../lib/maintenanceMarks';
 import { dayJustCompleted } from '../../lib/motionTriggers';
 import {
   currentWeekDates,
-  computeCompletionsThisWeek,
+  buildWeeklyCountsMap,
   markWeeklyState,
 } from '../../lib/features';
+import { resolveMarkCategory } from '../../lib/markCategoryResolve';
 import { computeWeek } from '../../lib/consistency';
 import { logger } from '../../lib/utils/logger';
 import { useNotification } from '../../contexts/NotificationContext';
-import { MARK_LIBRARY } from '../../lib/suggestedCounters';
-import { resolveCounterIconType } from '../../src/components/icons/IconResolver';
 import { applyOpacity } from '../../src/components/icons/color';
 
 import type { Counter } from '../../types';
 
 const MAX_MARKS_PER_CARD = 4;
-
-function resolveMarkCategory(mark: Pick<Counter, 'name' | 'emoji'>): string {
-  const libMark = MARK_LIBRARY.find((m) => m.emoji === mark.emoji);
-  return (
-    libMark?.category ??
-    resolveCounterIconType({ name: mark.name, emoji: mark.emoji ?? '' }) ??
-    'custom'
-  );
-}
 
 export default function FocusScreen() {
   const theme = useEffectiveTheme();
@@ -151,14 +141,10 @@ export default function FocusScreen() {
 
   const weekDates = useMemo(() => currentWeekDates(), [appDateKey]);
 
-  const weeklyCountsMap = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const mark of activeCounters) {
-      const markEvents = allEvents.filter((e) => e.mark_id === mark.id && !e.deleted_at);
-      map.set(mark.id, computeCompletionsThisWeek(mark, markEvents, weekDates));
-    }
-    return map;
-  }, [activeCounters, allEvents, weekDates]);
+  const weeklyCountsMap = useMemo(
+    () => buildWeeklyCountsMap(activeCounters, allEvents, weekDates),
+    [activeCounters, allEvents, weekDates],
+  );
 
   const consistencyResult = useMemo(() => {
     if (activeCounters.length === 0) return null;
