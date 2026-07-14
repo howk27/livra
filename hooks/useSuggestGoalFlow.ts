@@ -8,7 +8,7 @@
  * identical to what previously lived inline in the screen component.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert } from 'react-native';
+import { Alert, Keyboard } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { themedColors } from '../theme/tokens';
@@ -90,6 +90,9 @@ export function useSuggestGoalFlow() {
   }, [user?.id, goalText, source]);
 
   const handleManualInstead = useCallback(() => {
+    // VD-6: never present the next pageSheet while the keyboard is up —
+    // the incoming modal gets measured against the keyboard-shrunk area.
+    Keyboard.dismiss();
     const trimmed = goalText.trim();
     router.replace(
       trimmed

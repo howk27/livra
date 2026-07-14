@@ -25,6 +25,7 @@ import { PillButton } from '../../components/ui/PillButton';
 import { fonts, spacing, radius, themedColors, fontSize } from '../../theme/tokens';
 import { AI_EXHAUSTED_COPY } from '../../lib/copy';
 import { useSuggestGoalFlow } from '../../hooks/useSuggestGoalFlow';
+import { useDeferredAutoFocus } from '../../hooks/useDeferredAutoFocus';
 
 // ─── Header — shared between describe and review phases ────────────────────
 // Split out (with SuggestDescribePhase/SuggestExhaustedPanel below) so the
@@ -110,6 +111,9 @@ function SuggestDescribePhase({
   onUpgrade,
   onManualInstead,
 }: SuggestDescribePhaseProps) {
+  // VD-6: focus after the pageSheet transition settles — autoFocus racing the
+  // modal presentation left KeyboardAvoidingView with a stale half-screen padding.
+  const inputRef = useDeferredAutoFocus();
   return (
     <ScrollView
       contentContainerStyle={styles.content}
@@ -128,11 +132,11 @@ function SuggestDescribePhase({
           styles.input,
           { backgroundColor: c.surfaceAlt, color: c.inkDark, borderColor: c.borderLight },
         ]}
+        ref={inputRef}
         value={goalText}
         onChangeText={setGoalText}
         placeholder="Run a marathon, save $10k, learn Spanish…"
         placeholderTextColor={c.inkMuted}
-        autoFocus
         maxLength={80}
         returnKeyType="go"
         onSubmitEditing={onSubmitEditing}

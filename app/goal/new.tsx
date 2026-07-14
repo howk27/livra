@@ -8,6 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -21,6 +22,7 @@ import { GOAL_LIMIT_MESSAGE } from '@/lib/copy';
 import { getMarksForGoal } from '../../lib/goalMarkSuggestions';
 import { CommitmentScreen, CommitmentSelection } from '../../components/CommitmentScreen';
 import { MarkDefinition } from '../../lib/suggestedCounters';
+import { useDeferredAutoFocus } from '../../hooks/useDeferredAutoFocus';
 
 type Step = 'title' | 'commitment';
 
@@ -39,6 +41,9 @@ export default function NewGoalScreen() {
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
   const [suggestedMarks, setSuggestedMarks] = useState<MarkDefinition[]>([]);
+  // VD-6: focus after the pageSheet transition settles — autoFocus racing the
+  // modal presentation left KeyboardAvoidingView with a stale half-screen padding.
+  const titleInputRef = useDeferredAutoFocus(step === 'title');
 
   const handleNext = () => {
     const trimmed = title.trim();
@@ -155,10 +160,10 @@ export default function NewGoalScreen() {
             ]}
             placeholder="e.g. Run a marathon"
             placeholderTextColor={c.inkMuted}
+            ref={titleInputRef}
             value={title}
             onChangeText={setTitle}
             maxLength={80}
-            autoFocus
             returnKeyType="next"
             onSubmitEditing={handleNext}
           />
@@ -184,6 +189,9 @@ export default function NewGoalScreen() {
           <TouchableOpacity
             style={styles.aiFallbackLink}
             onPress={() => {
+              // VD-6: never present the next pageSheet while the keyboard is up —
+              // the incoming modal gets measured against the keyboard-shrunk area.
+              Keyboard.dismiss();
               const trimmed = title.trim();
               router.replace({
                 pathname: '/goal/suggest' as any,

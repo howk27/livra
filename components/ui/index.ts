@@ -7,6 +7,8 @@ export type { SvgLogoProps } from './SvgLogo';
 export { LivraWordmark } from './LivraWordmark';
 export type { LivraWordmarkProps } from './LivraWordmark';
 export { SectionLabel } from './SectionLabel';
+export { GoalTitle } from './GoalTitle';
+export type { GoalTitleProps, GoalTitleSize } from './GoalTitle';
 export { PillButton } from './PillButton';
 export { FAB } from './FAB';
 export { SpeedDialFAB } from './SpeedDialFAB';
