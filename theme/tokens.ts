@@ -19,6 +19,12 @@ export const colors = {
   danger: '#C0392B',
   // Momentum cushion gauge + on-it glow. Warm amber, deliberately NOT danger/alarm-red.
   momentumAmber: '#C8913F',
+  // Semantic secondary accent. Forest/mint = structure (chrome, buttons,
+  // progress, navigation); ember = the spark (AI voice, celebration ticks,
+  // goal-title flourish, warm status lines). Ember is never a button fill,
+  // never chrome. Alphas only via applyOpacity(). `momentumAmber` stays as an
+  // alias role for the cushion gauge — same value, do not repoint call sites.
+  ember: '#C8913F',
   dangerLight: '#FDECEA',
   success: '#2D6A4F',
   borderLight: '#E0DBD4',
@@ -60,6 +66,10 @@ const colorsDark: typeof colors = {
   danger: '#E07A6D',
   // Momentum cushion gauge + on-it glow. Warm amber, deliberately NOT danger/alarm-red.
   momentumAmber: '#D8A658',
+  // Semantic secondary accent — the spark (AI voice, celebration ticks,
+  // goal-title flourish, warm status lines); never a button fill, never
+  // chrome. See `ember` in `colors`. Alphas only via applyOpacity().
+  ember: '#D8A658',
   dangerLight: '#3A2422',
   success: '#5FA585',
   borderLight: '#2A3A35',
