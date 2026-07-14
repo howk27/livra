@@ -103,23 +103,34 @@ export function evaluatePostLogVoice(inputs: PostLogVoiceInputs): Moment | null 
 }
 
 /**
- * The increment path's single voice call (PL-4 retry #1): wraps store glue
- * (state/voiceSlice) and error handling so hooks/useCounters gains exactly one
- * awaited call and zero branches. Never throws — voice is decoration; a
- * failure here must never block logging or the mark_logged capture.
- * The voiceSlice load is a lazy inline require so this module stays store-free
- * at load time (its pure exports above are tested without any store in scope).
+ * The store-glue contract for the increment path: state/voiceSlice's
+ * `evaluatePostLog` action satisfies it. Declared here so this module never
+ * imports the slice (spec §2: lib/moments stays pure — callers pass data in).
  */
-export async function maybeShowPostLogVoice(
+export type PostLogVoiceEvaluator = (
   markId: string,
   todayStr: string,
   firstName?: string | null,
   rng?: () => number,
-): Promise<boolean> {
+) => boolean;
+
+/**
+ * The increment path's single voice call (PL-4 retry #1/#2): wraps error
+ * handling around an INJECTED evaluator (hooks/useCounters passes voiceSlice's
+ * action in at the call site) so incrementMark gains exactly one call and zero
+ * branches, and this module stays store-free — no lib/moments ↔ state cycle.
+ * Never throws — voice is decoration; a failure here must never block logging
+ * or the mark_logged capture.
+ */
+export function maybeShowPostLogVoice(
+  markId: string,
+  todayStr: string,
+  firstName: string | null | undefined,
+  evaluate: PostLogVoiceEvaluator,
+  rng?: () => number,
+): boolean {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { useVoiceStore } = require('../../state/voiceSlice') as typeof import('../../state/voiceSlice');
-    return useVoiceStore.getState().evaluatePostLog(markId, todayStr, firstName, rng);
+    return evaluate(markId, todayStr, firstName, rng);
   } catch (error) {
     logger.error('[moments] Post-log voice evaluation failed:', error);
     return false;

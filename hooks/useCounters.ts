@@ -22,6 +22,7 @@ import {
 } from '../lib/gating';
 import { maybeShowPostLogVoice } from '../lib/moments/postLogVoice';
 import { resolveFirstName } from '../lib/profile/displayName';
+import { useVoiceStore } from '../state/voiceSlice';
 
 // Helper function to validate UUID
 const isValidUUID = (str: string): boolean => {
@@ -293,11 +294,13 @@ export const useMarks = () => {
         logger.log('[INCREMENT] ✅ Counter and event persisted:', { markId, newTotal });
         // PL-4 (M5): post-log micro-feedback. Consulted ONLY after a successful
         // persist — a failed increment never speaks. maybeShowPostLogVoice never
-        // throws (voice is decoration) and returns whether a line was shown.
-        const voiceLineShown = await maybeShowPostLogVoice(
+        // throws (voice is decoration); the voiceSlice action is injected so
+        // lib/moments stays store-free (retry #2, no module cycle).
+        const voiceLineShown = maybeShowPostLogVoice(
           markId,
           today,
           resolveFirstName(user?.user_metadata, user?.email),
+          useVoiceStore.getState().evaluatePostLog,
         );
         capture(ANALYTICS_EVENTS.MARK_LOGGED, {
           mark_id: markId,

@@ -1,7 +1,7 @@
 // PL-4: voice slice — surface gating (analytics truth) + engine wiring from live stores.
 import { formatDate } from '../../lib/date';
 import { getAppDate } from '../../lib/appDate';
-import { maybeShowPostLogVoice } from '../../lib/moments/postLogVoice';
+import { maybeShowPostLogVoice, type PostLogVoiceEvaluator } from '../../lib/moments/postLogVoice';
 import { useVoiceStore } from '../../state/voiceSlice';
 import { useMarksStore } from '../../state/countersSlice';
 import { useEventsStore } from '../../state/eventsSlice';
@@ -98,24 +98,27 @@ describe('voiceSlice.evaluatePostLog', () => {
 });
 
 describe('maybeShowPostLogVoice (the increment path seam — analytics both ways)', () => {
-  it('resolves true and shows the line when the engine speaks', async () => {
+  // The evaluator is injected at the call site (useCounters passes the slice
+  // action) so lib/moments stays store-free; tests inject the same action.
+  const evaluate: PostLogVoiceEvaluator = (id, day, name, rng) =>
+    useVoiceStore.getState().evaluatePostLog(id, day, name, rng);
+
+  it('returns true and shows the line when the engine speaks', () => {
     useVoiceStore.getState().registerSurface();
-    await expect(maybeShowPostLogVoice('m1', todayStr, 'Dei', speak)).resolves.toBe(true);
+    expect(maybeShowPostLogVoice('m1', todayStr, 'Dei', evaluate, speak)).toBe(true);
     expect(useVoiceStore.getState().line).not.toBeNull();
   });
 
-  it('resolves false when the gate stays closed', async () => {
+  it('returns false when the gate stays closed', () => {
     useVoiceStore.getState().registerSurface();
-    await expect(maybeShowPostLogVoice('m1', todayStr, 'Dei', silent)).resolves.toBe(false);
+    expect(maybeShowPostLogVoice('m1', todayStr, 'Dei', evaluate, silent)).toBe(false);
     expect(useVoiceStore.getState().line).toBeNull();
   });
 
-  it('never throws: an evaluation failure resolves false so mark_logged still fires', async () => {
-    useVoiceStore.setState({
-      evaluatePostLog: () => {
-        throw new Error('boom');
-      },
-    });
-    await expect(maybeShowPostLogVoice('m1', todayStr, 'Dei', speak)).resolves.toBe(false);
+  it('never throws: an evaluation failure returns false so mark_logged still fires', () => {
+    const throwing = () => {
+      throw new Error('boom');
+    };
+    expect(maybeShowPostLogVoice('m1', todayStr, 'Dei', throwing, speak)).toBe(false);
   });
 });
