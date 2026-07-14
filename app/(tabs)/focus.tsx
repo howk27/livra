@@ -33,6 +33,7 @@ import { useGoalsStore } from '../../state/goalsSlice';
 import { effectivePersonalBest, useMomentumStore } from '../../state/momentumSlice';
 import { buildMomentContext } from '../../lib/moments/context';
 import { dayHashRng, previousDayGreetingDefaultId, selectMoment } from '../../lib/moments/select';
+import { deriveFocusEmptyVariant, getEmptyStateCopy } from '../../lib/moments/emptyState';
 import { MomentumBanner } from '../../components/ui/MomentumBanner';
 import { shouldShowMomentumBanner } from '../../lib/momentumPresenter';
 import {
@@ -289,6 +290,15 @@ export default function FocusScreen() {
     // the registry were emptied (Jest walks it, so it cannot ship empty).
     return moment?.text ?? '';
   }, [momentCtx, todayStr]);
+
+  // M4 (PL-5): the empty invitation distinguishes a brand-new user (no marks
+  // ever, no logs ever) from one who cleared everything out. uniqueCounters
+  // keeps soft-deleted marks; allEvents keeps soft-deleted logs — both are the
+  // historical trace the derivation reads.
+  const emptyMarksLine = useMemo(
+    () => getEmptyStateCopy('focus', deriveFocusEmptyVariant(uniqueCounters, allEvents)).body,
+    [uniqueCounters, allEvents],
+  );
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -580,8 +590,8 @@ export default function FocusScreen() {
             <Breathing>
               <Plus size={20} color={c.inkMuted} weight="duotone" />
             </Breathing>
-            <Text style={[styles.emptyMarksText, { color: c.inkMuted }]}>
-              No marks yet. Tap + to add your first one.
+            <Text style={[styles.emptyMarksText, { color: c.inkMid }]}>
+              {emptyMarksLine}
             </Text>
           </View>
         )}
@@ -736,9 +746,12 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     ...shadow.card,
   },
+  // Mentor voice line (PL-5): serifItalic like the greeting; inkMid, not
+  // inkMuted — serif italics need the extra contrast step on light linen.
   emptyMarksText: {
-    fontFamily: fonts.sans,
-    fontSize: fontSize.base,
+    fontFamily: fonts.serifItalic,
+    fontSize: fontSize.lg,
+    lineHeight: 22,
     textAlign: 'center',
   },
 

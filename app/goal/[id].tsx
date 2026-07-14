@@ -40,6 +40,7 @@ import { useEventsStore } from '../../state/eventsSlice';
 import { useAppDateStore } from '../../state/appDateSlice';
 import { effectivePersonalBest, useMomentumStore } from '../../state/momentumSlice';
 import { deriveIsNewBest, goalAgeDays } from '../../lib/moments/context';
+import { deriveGoalDetailEmptyVariant, getEmptyStateCopy } from '../../lib/moments/emptyState';
 import { getAppDate } from '../../lib/appDate';
 import { formatDate } from '../../lib/date';
 import { useCounters } from '../../hooks/useCounters';
@@ -155,6 +156,13 @@ export default function GoalDetailScreen() {
   const linkedMarks = useMemo(
     () => marks.filter(m => m.goal_id === id && !m.deleted_at),
     [marks, id],
+  );
+
+  // M4 (PL-5): a goal that never had a mark gets day-one copy; a goal whose
+  // marks were all deleted (or that has logged history) gets the return copy.
+  const emptyMarksLine = useMemo(
+    () => getEmptyStateCopy('goalDetail', deriveGoalDetailEmptyVariant(id ?? '', marks, allEvents)).body,
+    [id, marks, allEvents],
   );
 
   // ── Weekly state (same machinery Focus uses) ──────────────────────────────
@@ -340,8 +348,8 @@ export default function GoalDetailScreen() {
           <Text style={[styles.sectionLabel, { color: c.inkMuted }]}>YOUR MARKS</Text>
           {linkedMarks.length === 0 ? (
             <View style={[styles.emptyMarks, { backgroundColor: c.surface, borderColor: c.borderLight }]}>
-              <Text style={[styles.emptyMarksText, { color: c.inkMuted }]}>
-                No marks linked to this goal yet.
+              <Text style={[styles.emptyMarksText, { color: c.inkMid }]}>
+                {emptyMarksLine}
               </Text>
               <TouchableOpacity
                 style={[styles.addMarkBtn, { backgroundColor: c.forest }]}
@@ -596,7 +604,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
-  emptyMarksText: { fontSize: fontSize.sm, fontFamily: fonts.sans, textAlign: 'center' },
+  // Mentor voice line (PL-5): serifItalic + inkMid, matching the other empty invitations.
+  emptyMarksText: { fontSize: fontSize.md, lineHeight: 20, fontFamily: fonts.serifItalic, textAlign: 'center' },
   addMarkBtn: {
     flexDirection: 'row',
     alignItems: 'center',

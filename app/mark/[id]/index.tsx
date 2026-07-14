@@ -59,6 +59,7 @@ import { logger } from '../../../lib/utils/logger';
 import { useDailyTrackingStore } from '../../../state/dailyTrackingSlice';
 import { MARK_LIBRARY } from '@/lib/suggestedCounters';
 import { resolveDailyTarget } from '../../../lib/markDailyTarget';
+import { getEmptyStateCopy } from '../../../lib/moments/emptyState';
 import { currentWeekDates, markWeeklyState, computeCompletionsThisWeek } from '../../../lib/features';
 import { getAppDate } from '../../../lib/appDate';
 import { formatDate } from '../../../lib/date';
@@ -75,6 +76,10 @@ function toLocalDateStr(d: Date): string {
 const NOTE_MAX_LEN = 500;
 const HISTORY_COLLAPSED_DAYS = 3;
 const HISTORY_MAX_DAYS = 14;
+
+// M4 (PL-5): inherently firstRun — a mark with no logs has no past to return
+// from, so the zero-history line carries a single variant.
+const EMPTY_HISTORY_LINE = getEmptyStateCopy('markDetail').body;
 
 function hexToRgba(hex: string, alpha: number): string {
   const h = hex.replace('#', '');
@@ -728,7 +733,7 @@ function MarkDetailContent() {
                 );
               })
             ) : (
-              <Text style={styles.noHistoryText}>No history yet.</Text>
+              <Text style={styles.noHistoryText}>{EMPTY_HISTORY_LINE}</Text>
             )}
             {hiddenHistoryCount > 0 && (
               <TouchableOpacity
@@ -1117,10 +1122,12 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     fontSize: fontSize.base,
     color: c.inkMid,
   },
+  // Mentor voice line (PL-5): serifItalic + inkMid, matching the other empty invitations.
   noHistoryText: {
-    fontFamily: fonts.sans,
-    fontSize: fontSize.base,
-    color: c.inkMuted,
+    fontFamily: fonts.serifItalic,
+    fontSize: fontSize.lg,
+    lineHeight: 22,
+    color: c.inkMid,
   },
   historyExpanderRow: {
     paddingVertical: spacing.sm,

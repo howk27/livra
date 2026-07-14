@@ -26,10 +26,32 @@ export const MOMENT_CONTENT: Record<MomentType, Record<string, readonly string[]
   whyResurface: {
     direct: ["You wrote: '{why}'. One check-in keeps it alive."],
   },
-  // interim copy, replaced in PL-6
+  // M4 (PL-5): final copy, keyed `${surface}.${variant}` (plus `.title`/`.body`
+  // where the surface renders two lines). One static line per key: emptiness
+  // does not rotate. firstRun = brand-new user; returnedEmpty = cleared it out.
+  // history and markDetail are inherently firstRun (a completed goal cannot
+  // un-complete; a mark with no logs has no past), so they carry one variant.
   emptyInvitation: {
-    firstRun: ['Nothing here yet. That is what day one looks like.'],
-    returnedEmpty: ['A clean slate. Start smaller this time if you like.'],
+    'focus.firstRun': ['Quiet in here. Tap + and give day one its first mark.'],
+    'focus.returnedEmpty': [
+      'Everything cleared. When you are ready, tap + and start with one small mark.',
+    ],
+    'goals.firstRun.title': ['Room for one goal.'],
+    'goals.firstRun.body': ['Name the thing you keep meaning to do. One is plenty.'],
+    'goals.returnedEmpty.title': ['A clear field.'],
+    'goals.returnedEmpty.body': ['The old goals are gone. The next one gets a clean start.'],
+    'goals.completedAll.title': ['You finished everything.'],
+    'goals.completedAll.body': [
+      'Take the win. The next goal can wait until it matters enough to name.',
+    ],
+    'goalDetail.firstRun': ['A goal without marks is a wish. Add the first one and make it a practice.'],
+    'goalDetail.returnedEmpty': [
+      'No marks on this goal right now. Give it one way forward and it moves again.',
+    ],
+    'history.firstRun': [
+      'Empty, for now. Finish a goal and it will be sitting here, done, with the date to prove it.',
+    ],
+    'markDetail.firstRun': ['No history yet. The first log starts the record.'],
   },
   // interim copy, replaced in PL-6
   postLog: {

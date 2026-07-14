@@ -4,10 +4,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { CaretLeft } from 'phosphor-react-native';
 import { format, parseISO } from 'date-fns';
-import { themedColors, spacing, fontSize, fontWeight, borderRadius } from '../../theme/tokens';
+import { themedColors, spacing, fontSize, fontWeight, fonts, borderRadius } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useGoalsStore } from '../../state/goalsSlice';
 import { formatDuration, formatTargetDelta } from '../../lib/goalHistory';
+import { getEmptyStateCopy } from '../../lib/moments/emptyState';
+
+// M4 (PL-5): inherently firstRun — a completed goal cannot un-complete, so an
+// empty history always means "never finished one yet". Single variant.
+const EMPTY_HISTORY_LINE = getEmptyStateCopy('history').body;
 
 export default function GoalHistoryScreen() {
   const theme = useEffectiveTheme();
@@ -45,8 +50,8 @@ export default function GoalHistoryScreen() {
 
       {count === 0 ? (
         <View style={styles.emptyState}>
-          <Text style={[styles.emptyText, { color: c.inkMuted }]}>
-            Nothing here yet. Your first completed goal will show up the moment you finish one.
+          <Text style={[styles.emptyText, { color: c.inkMid }]}>
+            {EMPTY_HISTORY_LINE}
           </Text>
         </View>
       ) : (
@@ -99,7 +104,8 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: fontSize['2xl'], fontWeight: fontWeight.bold, lineHeight: 32 },
   headerSubtitle: { fontSize: fontSize.sm, marginTop: spacing.xxs },
   emptyState: { flex: 1, justifyContent: 'center', paddingHorizontal: spacing.xl },
-  emptyText: { fontSize: fontSize.md, textAlign: 'center', lineHeight: 22 },
+  // Mentor voice line (PL-5): serifItalic + inkMid, matching the other empty invitations.
+  emptyText: { fontFamily: fonts.serifItalic, fontSize: fontSize.lg, textAlign: 'center', lineHeight: 22 },
   list: {
     paddingHorizontal: spacing.md,
     paddingTop: spacing.md,

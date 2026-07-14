@@ -30,6 +30,9 @@ export type Moment = {
 /** M4 distinguishes a brand-new user from one who deleted everything. */
 export type EmptyVariant = 'firstRun' | 'returnedEmpty';
 
+/** The five empty surfaces M4 speaks on (PL-5). Registry keys are `${surface}.${variant}`. */
+export type EmptySurface = 'focus' | 'goals' | 'goalDetail' | 'history' | 'markDetail';
+
 /** Per-goal derived facts. All derivations happen in buildMomentContext. */
 export type GoalMomentContext = {
   goalId: string;

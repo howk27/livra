@@ -34,6 +34,7 @@ import { useGoalsStore } from '../../state/goalsSlice';
 import { useMarksStore } from '../../state/countersSlice';
 import { useEventsStore } from '../../state/eventsSlice';
 import { currentWeekDates, computeCompletionsThisWeek } from '../../lib/features';
+import { deriveGoalsEmptyKind, getEmptyStateCopy } from '../../lib/moments/emptyState';
 import { applyOpacity } from '../../src/components/icons/color';
 import type { Goal } from '../../types/goal';
 
@@ -381,6 +382,14 @@ export default function GoalsScreen() {
 
   const isEmpty = !isLoading && active.length === 0;
 
+  // M4 (PL-5): brand-new user vs cleared-everything vs finished-everything.
+  // Deleted goals leave the store, so soft-deleted marks that kept a goal_id
+  // are the trace; completed goals outrank the generic returnedEmpty line.
+  const emptyCopy = useMemo(
+    () => getEmptyStateCopy('goals', deriveGoalsEmptyKind(goals, marks)),
+    [goals, marks],
+  );
+
   const [pathSheetVisible, setPathSheetVisible] = React.useState(false);
 
   const handleAddGoal = useCallback(() => {
@@ -446,12 +455,10 @@ export default function GoalsScreen() {
               </View>
             </Breathing>
             <Text style={[styles.emptyTitle, { color: c.inkDark }]}>
-              {completedCount > 0 ? 'You finished everything.' : 'No goals yet.'}
+              {emptyCopy.title}
             </Text>
-            <Text style={[styles.emptySubtitle, { color: c.inkMuted }]}>
-              {completedCount > 0
-                ? 'Start your next goal when you are ready.'
-                : 'Add your first goal to begin.'}
+            <Text style={[styles.emptySubtitle, { color: c.inkMid }]}>
+              {emptyCopy.body}
             </Text>
             <TouchableOpacity
               style={[styles.emptyAddBtn, { backgroundColor: c.forest }]}
@@ -634,9 +641,12 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: spacing.md,
   },
+  // Mentor voice line (PL-5): serifItalic; inkMid for the contrast step serif
+  // italics need on light linen (FU-5 precedent).
   emptySubtitle: {
-    fontFamily: fonts.sans,
-    fontSize: fontSize.base,
+    fontFamily: fonts.serifItalic,
+    fontSize: fontSize.lg,
+    lineHeight: 22,
     textAlign: 'center',
     marginTop: spacing.sm,
   },

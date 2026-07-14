@@ -4,6 +4,7 @@
 import { addDays, parseISO, yyyyMmDd } from '../date';
 import { fillTemplate, pickTemplate, type TemplateSlots } from './content';
 import type {
+  EmptySurface,
   EmptyVariant,
   GoalMomentContext,
   Moment,
@@ -55,6 +56,8 @@ export type SelectOptions = {
   goalId?: string;
   /** M4: brand-new user vs deleted-everything. Defaults to firstRun. */
   emptyVariant?: EmptyVariant;
+  /** M4 (PL-5): which empty surface is speaking. Defaults to focus. */
+  emptySurface?: EmptySurface;
   /** M5 (PL-4): this log completed the mark's weekly target. Computed by the
    *  caller (evaluatePostLogVoice) — the ctx carries counts, not per-mark targets. */
   closesWeekForMark?: boolean;
@@ -209,10 +212,19 @@ function selectPostLog(ctx: MomentContext, opts: SelectOptions): Moment | null {
   return makeMoment('postLog', pick.type ?? 'postLog', pick.variant, slots, opts);
 }
 
-/** Empty states (M4): static invitations; emptiness itself is the true thing to speak about. */
+/** Empty states (M4, PL-5): static invitations keyed per surface; emptiness itself
+ *  is the true thing to speak about. Two-line surfaces (goals) resolve to their
+ *  `.body` line here — screens that need the title use getEmptyStateCopy. */
 function selectEmptyState(ctx: MomentContext, opts: SelectOptions): Moment | null {
+  const surface: EmptySurface = opts.emptySurface ?? 'focus';
   const variant: EmptyVariant = opts.emptyVariant ?? 'firstRun';
-  return makeMoment('emptyState', 'emptyInvitation', variant, { name: ctx.firstName }, opts);
+  const slots = { name: ctx.firstName };
+  return (
+    makeMoment('emptyState', 'emptyInvitation', `${surface}.${variant}`, slots, opts) ??
+    makeMoment('emptyState', 'emptyInvitation', `${surface}.${variant}.body`, slots, opts) ??
+    // Inherently-firstRun surfaces (history, markDetail) answer any variant.
+    makeMoment('emptyState', 'emptyInvitation', `${surface}.firstRun`, slots, opts)
+  );
 }
 
 /**
