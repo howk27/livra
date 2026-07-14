@@ -6,6 +6,7 @@ import {
   deriveFirstName,
   deriveIsNewBest,
   deriveIsSlipping,
+  deriveLifetimeLogCount,
   deriveLogsToday,
   deriveRunDays,
   deriveWhy,
@@ -150,6 +151,14 @@ describe('named derivation helpers (direct)', () => {
     expect(deriveAllDoneForDay([], { m1: 1 })).toBe(false);
   });
 
+  it('deriveLifetimeLogCount (PL-3): clamps negatives, null when unknown', () => {
+    expect(deriveLifetimeLogCount(3)).toBe(3);
+    expect(deriveLifetimeLogCount(0)).toBe(0);
+    expect(deriveLifetimeLogCount(-2)).toBe(0);
+    expect(deriveLifetimeLogCount(null)).toBeNull();
+    expect(deriveLifetimeLogCount(undefined)).toBeNull();
+  });
+
   it('deriveFirstName: trims; null for blank or absent', () => {
     expect(deriveFirstName(' Dei ')).toBe('Dei');
     expect(deriveFirstName('  ')).toBeNull();
@@ -231,6 +240,16 @@ describe('buildMomentContext', () => {
       buildMomentContext(inputs({ todayCounts: { m1: 1 }, dueMarkIds: ['m1', 'm2'] })).allDoneForDay,
     ).toBe(false);
     expect(buildMomentContext(inputs({ dueMarkIds: [] })).allDoneForDay).toBe(false);
+  });
+
+  it('carries goalLifetimeLogCounts per goal; null when the caller supplied nothing (PL-3)', () => {
+    expect(
+      buildMomentContext(inputs({ goalLifetimeLogCounts: { g1: 4 } })).goals[0]!.lifetimeLogCount,
+    ).toBe(4);
+    expect(buildMomentContext(inputs()).goals[0]!.lifetimeLogCount).toBeNull();
+    expect(
+      buildMomentContext(inputs({ goalLifetimeLogCounts: { other: 2 } })).goals[0]!.lifetimeLogCount,
+    ).toBeNull();
   });
 
   it('normalizes a blank first name to null', () => {

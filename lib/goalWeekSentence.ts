@@ -12,7 +12,17 @@ export type GoalWeekSentenceInput = {
   dueCount: number;
   /** M2 celebration (PL-2): the run just passed the personal best, today only. */
   isNewBest?: boolean;
+  /** M1 (PL-3): whole days since goal creation; null/undefined when unknown.
+   *  0–7 is week one (same window as lib/moments isFirstWeek). */
+  goalAgeDays?: number | null;
 };
+
+/** Interim copy, refined in PL-6. Week-one lead clause when no run speaks yet:
+ *  day count starts at 1, never 0 (goal gradient — credit from the first day). */
+function firstWeekClause(ageDays: number): string {
+  if (ageDays >= 7) return 'week one nearly done';
+  return `day ${ageDays + 1} of week one`;
+}
 
 /**
  * Builds the week sentence for a goal's study screen.
@@ -20,6 +30,8 @@ export type GoalWeekSentenceInput = {
  * - On a personal-best day the momentum clause reads "{N} days · your longest yet"
  *   (calm count stays the representation; one enriched line, no chrome).
  * - Zero due reads "nothing due this week" (calm, never a bare 0).
+ * - Week-one goals with no run yet lead with "day {n} of week one" (M1, PL-3);
+ *   a live momentum run always outranks the scaffolding clause.
  * - Returns '' when the goal has no marks (the screen shows the empty card instead).
  */
 export function buildGoalWeekSentence({
@@ -27,6 +39,7 @@ export function buildGoalWeekSentence({
   markCount,
   dueCount,
   isNewBest = false,
+  goalAgeDays = null,
 }: GoalWeekSentenceInput): string {
   if (markCount <= 0) return '';
 
@@ -34,6 +47,8 @@ export function buildGoalWeekSentence({
   if (momentumDays != null && momentumDays > 0) {
     const days = `${momentumDays} day${momentumDays === 1 ? '' : 's'}`;
     parts.push(isNewBest ? `${days} · your longest yet` : `${days} of momentum`);
+  } else if (goalAgeDays != null && goalAgeDays >= 0 && goalAgeDays <= 7) {
+    parts.push(firstWeekClause(goalAgeDays));
   }
   parts.push(`${markCount} mark${markCount === 1 ? '' : 's'}`);
   parts.push(dueCount === 0 ? 'nothing due this week' : `${dueCount} due this week`);

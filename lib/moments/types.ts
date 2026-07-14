@@ -54,6 +54,10 @@ export type GoalMomentContext = {
   isNewBest: boolean;
   /** 7 | 14 | 30 when the run reached that threshold today, else null (spec M2). */
   celebrationThreshold: 7 | 14 | 30 | null;
+  /** Lifetime log events across the goal's marks (PL-3, M1). Counted AFTER the
+   *  current log lands, so 1 means the first-ever log. null = caller did not
+   *  supply lifetime counts; first-log/orientation predicates fall back. */
+  lifetimeLogCount: number | null;
 };
 
 /** Everything the selector needs, built once per render by buildMomentContext. */

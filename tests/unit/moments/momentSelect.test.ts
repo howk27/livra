@@ -1,4 +1,10 @@
-import { POSTLOG_SPEAK_RATE, selectMoment } from '../../../lib/moments/select';
+import { buildMomentContext } from '../../../lib/moments/context';
+import {
+  dayHashRng,
+  POSTLOG_SPEAK_RATE,
+  previousDayGreetingDefaultId,
+  selectMoment,
+} from '../../../lib/moments/select';
 import type { GoalMomentContext, MomentContext } from '../../../lib/moments/types';
 
 const speak = () => 0; // rng below the gate → postLog speaks; deterministic rotation
@@ -18,6 +24,7 @@ function makeGoal(overrides: Partial<GoalMomentContext> = {}): GoalMomentContext
     personalBestRun: null,
     isNewBest: false,
     celebrationThreshold: null,
+    lifetimeLogCount: null,
     ...overrides,
   };
 }
@@ -227,6 +234,176 @@ describe('emptyState (M4 invitations)', () => {
   it('returnedEmpty gets its own copy', () => {
     const m = selectMoment('emptyState', emptyCtx, { rng: speak, emptyVariant: 'returnedEmpty' });
     expect(m!.id).toContain('returnedEmpty');
+  });
+});
+
+describe('M1 first-week day boundaries (PL-3, real derivations end to end)', () => {
+  const TODAY = '2026-07-14';
+
+  // created_at → age, run days, lifetime logs, expected greeting story
+  type Row = [
+    name: string,
+    createdAt: string,
+    runDays: number,
+    lifetimeLogs: number,
+    expectedType: string,
+    expectedVariant: string | null,
+  ];
+  const rows: Row[] = [
+    ['day 0, never logged → orientation', '2026-07-14', 0, 0, 'firstWeek', 'orientation'],
+    ['day 1, never logged → orientation', '2026-07-13', 0, 0, 'firstWeek', 'orientation'],
+    ['day 1, already logged → no orientation, default', '2026-07-13', 0, 1, 'greetingDefault', null],
+    ['day 5 with a run → pull', '2026-07-09', 2, 3, 'firstWeek', 'pull'],
+    ['day 7 with a run → pull (window closes at 7 inclusive)', '2026-07-07', 3, 4, 'firstWeek', 'pull'],
+    ['day 8 → out of week one, default', '2026-07-06', 3, 5, 'greetingDefault', null],
+    ['day 5 with no log yet → days 2-4 style silence, default', '2026-07-09', 0, 0, 'greetingDefault', null],
+  ];
+
+  it.each(rows)('%s', (_name, createdAt, runDays, lifetimeLogs, expectedType, expectedVariant) => {
+    const ctx = buildMomentContext({
+      goals: [{ id: 'g1', title: 'Read daily', description: null, created_at: createdAt, status: 'active' }],
+      snapshots: runDays > 0 ? { g1: { state: 'on_track', days: runDays, cushionRemaining: null, slippingMarkId: null } } : {},
+      weeklyCounts: {},
+      todayCounts: {},
+      dueMarkIds: [],
+      todayStr: TODAY,
+      firstName: 'Dei',
+      goalLifetimeLogCounts: { g1: lifetimeLogs },
+    });
+    const m = selectMoment('greeting', ctx, { rng: speak })!;
+    expect(m.type).toBe(expectedType);
+    if (expectedVariant) expect(m.id).toContain(expectedVariant);
+  });
+
+  it('orientation falls back to the run-days proxy when lifetime counts are not supplied', () => {
+    const g = makeGoal({ goalAgeDays: 1, firstWeek: true, momentumRunDays: 0, lifetimeLogCount: null });
+    const m = selectMoment('greeting', makeCtx({ goals: [g] }), { rng: speak })!;
+    expect(m.type).toBe('firstWeek');
+    expect(m.id).toContain('orientation');
+  });
+});
+
+describe('M1 first-ever log through the postLog surface (PL-3)', () => {
+  const firstLogCtx = (over: Partial<GoalMomentContext> = {}) =>
+    makeCtx({
+      logsToday: 1,
+      goals: [makeGoal({ goalAgeDays: 0, firstWeek: true, momentumRunDays: 1, lifetimeLogCount: 1, ...over })],
+    });
+
+  it('acknowledges the first-ever log on a goal', () => {
+    const m = selectMoment('postLog', firstLogCtx(), { rng: speak, goalId: 'g1' })!;
+    expect(m.type).toBe('firstWeek');
+    expect(m.id).toContain('firstLog');
+    expect(m.surface).toBe('postLog');
+  });
+
+  it('bypasses the variable-ratio gate — a once-ever moment never gambles away', () => {
+    const m = selectMoment('postLog', firstLogCtx(), { rng: silent, goalId: 'g1' });
+    expect(m).not.toBeNull();
+    expect(m!.id).toContain('firstLog');
+  });
+
+  it('fires on lifetime count exactly 1; the second log falls through to M5 picks', () => {
+    const second = selectMoment('postLog', firstLogCtx({ lifetimeLogCount: 2 }), { rng: speak, goalId: 'g1' })!;
+    expect(second.type).toBe('postLog');
+    expect(second.id).not.toContain('firstLog');
+  });
+
+  it('outranks the slipping-gentle pick (first-ever is rarer)', () => {
+    const m = selectMoment('postLog', firstLogCtx({ isSlipping: true, cushionRemaining: 0.5 }), {
+      rng: speak,
+      goalId: 'g1',
+    })!;
+    expect(m.id).toContain('firstLog');
+  });
+
+  it('needs a goal scope; a goalless log keeps the plain M5 path', () => {
+    const ctx = makeCtx({ logsToday: 1, goals: [makeGoal({ lifetimeLogCount: 1 })] });
+    const m = selectMoment('postLog', ctx, { rng: speak })!; // no goalId
+    expect(m.id).not.toContain('firstLog');
+  });
+});
+
+describe('M6 default greeting rotation (PL-3)', () => {
+  it('fills {name} when present', () => {
+    const m = selectMoment('greeting', makeCtx({ firstName: 'Dei' }), { rng: () => 0 })!;
+    expect(m.type).toBe('greetingDefault');
+    expect(m.text).toContain('Dei');
+    expect(m.text).not.toContain('{name}');
+  });
+
+  it('reads naturally with no name: slot dropped, first letter re-capitalized', () => {
+    const m = selectMoment('greeting', makeCtx({ firstName: null }), { rng: () => 0 })!;
+    expect(m.text).not.toContain('{name}');
+    expect(m.text).not.toMatch(/^\s*,/);
+    expect(m.text.charAt(0)).toBe(m.text.charAt(0).toUpperCase());
+  });
+
+  it('rotates through more than one default line across picks', () => {
+    const seen = new Set<string>();
+    let last: string | undefined;
+    for (let i = 0; i < 30; i++) {
+      const m = selectMoment('greeting', makeCtx(), {
+        rng: Math.random,
+        lastMomentIds: last ? { greetingDefault: last } : undefined,
+      })!;
+      seen.add(m.id);
+      last = m.id;
+    }
+    expect(seen.size).toBeGreaterThan(1);
+  });
+});
+
+describe('dayHashRng (PL-3, day-stable greeting)', () => {
+  it('is deterministic for the same seed', () => {
+    const a = dayHashRng('2026-07-14');
+    const b = dayHashRng('2026-07-14');
+    const seqA = [a(), a(), a()];
+    const seqB = [b(), b(), b()];
+    expect(seqA).toEqual(seqB);
+  });
+
+  it('varies across seeds (days)', () => {
+    expect(dayHashRng('2026-07-14')()).not.toBe(dayHashRng('2026-07-15')());
+  });
+
+  it('stays in [0, 1)', () => {
+    const rng = dayHashRng('seed');
+    for (let i = 0; i < 100; i++) {
+      const v = rng();
+      expect(v).toBeGreaterThanOrEqual(0);
+      expect(v).toBeLessThan(1);
+    }
+  });
+});
+
+describe('stateless daily greeting rotation (PL-3, the Focus wiring contract)', () => {
+  // The exact call focus.tsx makes for a given day.
+  const shownOn = (day: string) => {
+    const lastId = previousDayGreetingDefaultId(day);
+    return selectMoment('greeting', makeCtx(), {
+      rng: dayHashRng(day),
+      lastMomentIds: lastId ? { greetingDefault: lastId } : undefined,
+    })!;
+  };
+
+  it('is stable across re-renders within the same day', () => {
+    expect(shownOn('2026-07-14').id).toBe(shownOn('2026-07-14').id);
+    expect(shownOn('2026-07-14').text).toBe(shownOn('2026-07-14').text);
+  });
+
+  it("never repeats the previous day's base pick, across a month of days", () => {
+    for (let d = 2; d <= 28; d++) {
+      const day = `2026-07-${String(d).padStart(2, '0')}`;
+      const yesterdayBase = previousDayGreetingDefaultId(day);
+      expect(yesterdayBase).toBeDefined();
+      expect(shownOn(day).id).not.toBe(yesterdayBase);
+    }
+  });
+
+  it("previousDayGreetingDefaultId is yesterday's unexcluded day-seeded pick", () => {
+    const base = selectMoment('greeting', makeCtx(), { rng: dayHashRng('2026-07-14') })!;
+    expect(previousDayGreetingDefaultId('2026-07-15')).toBe(base.id);
   });
 });
 

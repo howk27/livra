@@ -31,7 +31,7 @@ import { useAppDateStore } from '../../state/appDateSlice';
 import { useGoalsStore } from '../../state/goalsSlice';
 import { effectivePersonalBest, useMomentumStore } from '../../state/momentumSlice';
 import { buildMomentContext } from '../../lib/moments/context';
-import { selectMoment } from '../../lib/moments/select';
+import { dayHashRng, previousDayGreetingDefaultId, selectMoment } from '../../lib/moments/select';
 import { MomentumBanner } from '../../components/ui/MomentumBanner';
 import { shouldShowMomentumBanner } from '../../lib/momentumPresenter';
 import {
@@ -46,6 +46,7 @@ import { partitionMarks } from '../../lib/maintenanceMarks';
 import { dayJustCompleted } from '../../lib/motionTriggers';
 import {
   currentWeekDates,
+  buildGoalLifetimeLogCounts,
   buildWeeklyCountsMap,
   markWeeklyState,
 } from '../../lib/features';
@@ -224,7 +225,20 @@ export default function FocusScreen() {
     return full.split(' ')[0] ?? '';
   }, [user]);
 
-  // ── Moment engine context (PL-2: M2 celebration + M3 why-at-slipping) ─────
+  // ── Moment engine context (PL-2: M2 + M3 · PL-3: M1 first week + M6 greeting) ─
+
+  // M1: lifetime log events per active goal (counted across the goal's marks,
+  // same events source todayCounts uses). 0 = never logged; 1 = first-ever log.
+  // Pure derivation lives in lib/features (buildWeeklyCountsMap pattern).
+  const goalLifetimeLogCounts = useMemo(
+    () =>
+      buildGoalLifetimeLogCounts(
+        activeCounters,
+        activeGoals.map((g) => g.id),
+        allEvents,
+      ),
+    [activeCounters, activeGoals, allEvents],
+  );
 
   const momentCtx = useMemo(
     () =>
@@ -241,8 +255,9 @@ export default function FocusScreen() {
         personalBestRuns: Object.fromEntries(
           activeGoals.map((g) => [g.id, effectivePersonalBest(longestRuns[g.id], todayStr)]),
         ),
+        goalLifetimeLogCounts,
       }),
-    [activeGoals, momentumSnapshots, weeklyCountsMap, todayCountsMap, pressureMarks, todayStr, firstName, longestRuns],
+    [activeGoals, momentumSnapshots, weeklyCountsMap, todayCountsMap, pressureMarks, todayStr, firstName, longestRuns, goalLifetimeLogCounts],
   );
 
   // M3: when a slipping goal has a stored why, the engine speaks the direct line;
@@ -258,14 +273,22 @@ export default function FocusScreen() {
     return copy.text;
   }, [bannerVisible, momentCtx, todayStr]);
 
-  // M2: a celebration line takes the greeting for that day only; the static
-  // default stays the fallback (full default-pool migration is PL-3's job).
+  // M6 (PL-3): the greeting is a single engine call. Priority lives in the
+  // selector (slipping-direct > first-week > celebration > default rotation);
+  // the default pool replaced the old static line, so a brand-new user with no
+  // goals still gets a greeting. rng is seeded by the day (stable across
+  // re-renders, rotates tomorrow) and excludes yesterday's day-seeded pick, so
+  // the default rotation is anti-repeating with no persisted state.
   const greetingText = useMemo(() => {
-    const moment = selectMoment('greeting', momentCtx);
-    if (moment?.type === 'celebration') return moment.text;
-    if (firstName) return `${firstName}, one step is enough.`;
-    return 'One step is enough.';
-  }, [momentCtx, firstName]);
+    const lastGreetingId = previousDayGreetingDefaultId(todayStr);
+    const moment = selectMoment('greeting', momentCtx, {
+      rng: dayHashRng(todayStr),
+      lastMomentIds: lastGreetingId ? { greetingDefault: lastGreetingId } : undefined,
+    });
+    // The greeting surface always resolves from the default pool; '' only if
+    // the registry were emptied (Jest walks it, so it cannot ship empty).
+    return moment?.text ?? '';
+  }, [momentCtx, todayStr]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 

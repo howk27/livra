@@ -106,6 +106,43 @@ export function buildWeeklyCountsMap(
   return map;
 }
 
+/** An increment event that still counts (not soft-deleted). */
+function isCountedIncrement(e: MarkEvent): boolean {
+  return e.event_type === 'increment' && !e.deleted_at;
+}
+
+/** markId → goalId for the marks that belong to a goal. */
+function buildMarkToGoalMap(marks: Pick<Mark, 'id' | 'goal_id'>[]): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const m of marks) {
+    if (m.goal_id) map.set(m.id, m.goal_id);
+  }
+  return map;
+}
+
+/**
+ * Lifetime log EVENTS per goal (goalId → count), attributed through each
+ * mark's goal_id (PL-3 M1; extracted from Focus, fallow retry #1).
+ * Counted after a log lands, so 0 = never logged and 1 = the first-ever log.
+ * Only the requested goalIds appear as keys; events on other goals' marks
+ * (or goalless marks) are ignored.
+ */
+export function buildGoalLifetimeLogCounts(
+  marks: Pick<Mark, 'id' | 'goal_id'>[],
+  goalIds: string[],
+  events: MarkEvent[],
+): Record<string, number> {
+  const markToGoal = buildMarkToGoalMap(marks);
+  const counts: Record<string, number> = {};
+  for (const id of goalIds) counts[id] = 0;
+  for (const e of events) {
+    if (!isCountedIncrement(e)) continue;
+    const goalId = markToGoal.get(e.mark_id);
+    if (goalId !== undefined && counts[goalId] !== undefined) counts[goalId] += 1;
+  }
+  return counts;
+}
+
 // ── Feature 1: Goal Progress ──────────────────────────────
 
 export function getPeriodTotal(events: MarkEvent[], markId: string, period: GoalPeriod): number {

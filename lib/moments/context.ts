@@ -29,6 +29,9 @@ export type BuildMomentContextInputs = {
   firstName?: string | null;
   /** goalId → longest historical run. Forward tracking is PL-2's job. */
   personalBestRuns?: Record<string, number | null>;
+  /** goalId → lifetime log events across the goal's marks (PL-3, M1).
+   *  Omit when the caller cannot count cheaply; predicates fall back. */
+  goalLifetimeLogCounts?: Record<string, number | null>;
 };
 
 export const CELEBRATION_THRESHOLDS = [7, 14, 30] as const;
@@ -109,12 +112,18 @@ export function deriveFirstName(firstName: string | null | undefined): string | 
   return firstName?.trim() || null;
 }
 
+/** Lifetime log count, clamped >= 0; null when unknown (caller supplied nothing). */
+export function deriveLifetimeLogCount(count: number | null | undefined): number | null {
+  return count == null ? null : Math.max(0, count);
+}
+
 /** Per-goal derivation: one goal + its snapshot + its recorded best → GoalMomentContext. */
 export function deriveGoalContext(
   g: MomentGoalInput,
   snap: MomentumSnapshot | null,
   personalBest: number | null,
   todayStr: string,
+  lifetimeLogCount: number | null = null,
 ): GoalMomentContext {
   const age = goalAgeDays(g.created_at, todayStr);
   const runDays = deriveRunDays(snap);
@@ -132,6 +141,7 @@ export function deriveGoalContext(
     personalBestRun: personalBest,
     isNewBest: deriveIsNewBest(runDays, personalBest),
     celebrationThreshold: celebrationThresholdFor(runDays),
+    lifetimeLogCount: deriveLifetimeLogCount(lifetimeLogCount),
   };
 }
 
@@ -146,6 +156,7 @@ export function buildMomentContext(inputs: BuildMomentContextInputs): MomentCont
         inputs.snapshots[g.id] ?? null,
         inputs.personalBestRuns?.[g.id] ?? null,
         inputs.todayStr,
+        inputs.goalLifetimeLogCounts?.[g.id] ?? null,
       ),
     );
 

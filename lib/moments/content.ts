@@ -11,6 +11,11 @@ export const MOMENT_CONTENT: Record<MomentType, Record<string, readonly string[]
   firstWeek: {
     orientation: ['Day one of {goalTitle}. One mark is a start.'],
     pull: ['Almost through week one of {goalTitle}. It counts double, psychologically.'],
+    // M1 first-ever log acknowledgment; renders on the postLog surface (PL-4).
+    firstLog: [
+      'First mark on {goalTitle}. It is real now.',
+      'That is the first one on {goalTitle}. Noted.',
+    ],
   },
   // interim copy, replaced in PL-6
   celebration: {
@@ -33,9 +38,14 @@ export const MOMENT_CONTENT: Record<MomentType, Record<string, readonly string[]
     slippingGentle: ['Good. That one mattered.'],
     plain: ['Logged. Small and real.', 'Noted. It adds up quietly.'],
   },
-  // interim copy, replaced in PL-6
+  // interim copy, replaced in PL-6. M6: the former static Focus greeting pool,
+  // now the default rotation for the greeting surface ({name} slot, anti-repeat).
   greetingDefault: {
-    default: ['{name}, one step is enough.', '{name}, small steps still count.'],
+    default: [
+      '{name}, one step is enough.',
+      '{name}, small steps still count.',
+      '{name}, today asks for one mark, not a plan.',
+    ],
   },
 };
 

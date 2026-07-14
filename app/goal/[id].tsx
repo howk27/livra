@@ -39,7 +39,7 @@ import { useMarksStore } from '../../state/countersSlice';
 import { useEventsStore } from '../../state/eventsSlice';
 import { useAppDateStore } from '../../state/appDateSlice';
 import { effectivePersonalBest, useMomentumStore } from '../../state/momentumSlice';
-import { deriveIsNewBest } from '../../lib/moments/context';
+import { deriveIsNewBest, goalAgeDays } from '../../lib/moments/context';
 import { getAppDate } from '../../lib/appDate';
 import { formatDate } from '../../lib/date';
 import { useCounters } from '../../hooks/useCounters';
@@ -190,8 +190,10 @@ export default function GoalDetailScreen() {
         markCount: linkedMarks.length,
         dueCount,
         isNewBest,
+        // M1 (PL-3): a week-one goal with no run yet leads with its day count.
+        goalAgeDays: goal ? goalAgeDays(goal.created_at, todayStr) : null,
       }),
-    [runDays, isNewBest, linkedMarks.length, dueCount],
+    [runDays, isNewBest, linkedMarks.length, dueCount, goal, todayStr],
   );
 
   // ── Hero category (majority of linked marks) ──────────────────────────────
