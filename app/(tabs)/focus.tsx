@@ -30,7 +30,6 @@ import { useEventsStore } from '../../state/eventsSlice';
 import { useAppDateStore } from '../../state/appDateSlice';
 import { useGoalsStore } from '../../state/goalsSlice';
 import { useMomentumStore } from '../../state/momentumSlice';
-import { GoalMomentum } from '../../components/ui/GoalMomentum';
 import { MomentumBanner } from '../../components/ui/MomentumBanner';
 import { shouldShowMomentumBanner } from '../../lib/momentumPresenter';
 import {
@@ -466,14 +465,6 @@ export default function FocusScreen() {
                     <CaretRight size={16} color={c.inkMuted} weight="bold" />
                   </TouchableOpacity>
 
-                  <Text style={[styles.goalPlanLine, { color: c.inkMuted }]}>
-                    {`Plan: ${marks.length} mark${marks.length !== 1 ? 's' : ''}`}
-                  </Text>
-
-                  <View style={styles.momentumRow}>
-                    <GoalMomentum snapshot={momentumSnapshots[goal.id] ?? null} />
-                  </View>
-
                   {/* Due marks */}
                   {visibleDue.map((mark, idx) =>
                     renderMarkRow(mark, idx === visibleDue.length - 1 && doneMarks.length === 0 && hiddenCount === 0, false, false, idx)
@@ -646,16 +637,6 @@ const styles = StyleSheet.create({
   goalCardMeta: {
     fontFamily: fonts.sans,
     fontSize: fontSize.sm,
-  },
-  goalPlanLine: {
-    fontFamily: fonts.sans,
-    fontSize: fontSize.sm,
-    paddingHorizontal: spacing.lg,
-    marginBottom: spacing.sm,
-  },
-  momentumRow: {
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.sm,
   },
   expanderRow: {
     paddingHorizontal: spacing.lg,
