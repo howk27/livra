@@ -16,6 +16,7 @@ const ROOT = join(__dirname, '../../');
 
 const CREATION_SURFACES = [
   'app/mark/new.tsx',
+  'app/mark/[id]/edit.tsx',
   'app/goal/new.tsx',
   'components/CommitmentScreen.tsx',
 ];

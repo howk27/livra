@@ -10,13 +10,13 @@ import type { GoalPeriod, ScheduleType, DayOfWeek } from '../../../types';
 import { parseScheduleDays } from '../../../lib/features';
 import CounterIcon from '@/src/components/icons/CounterIcon';
 import { resolveCounterIconType } from '@/src/components/icons/IconResolver';
+import { applyOpacity } from '@/src/components/icons/color';
 import type { MarkType } from '@/src/types/counters';
 import { logger } from '../../../lib/utils/logger';
 import { DailyTargetStepper } from '../../../components/DailyTargetStepper';
 import { resolveDailyTarget } from '../../../lib/markDailyTarget';
+import { getCategoryColor, getCategoryForIcon } from '../../../lib/markCategory';
 import { ICON_TYPE_TO_EMOJI, MARK_ICON_OPTIONS } from '../../../lib/markIcons';
-
-const COLOR_OPTIONS = ['#3B82F6', '#10B981', '#A855F7', '#F97316', '#EF4444', '#EC4899'];
 
 // VD-7 retry #1: the icon emoji map + selectable list live in lib/markIcons.ts,
 // shared with mark/new.tsx so the two grids can never diverge.
@@ -53,7 +53,15 @@ export default function EditCounterScreen() {
       }
     }
   }, [counter]);
-  const [color, setColor] = useState(counter?.color || COLOR_OPTIONS[0]);
+  // VD-7 (polish sweep): the manual color ("Vibe") grid is gone — color is
+  // category-derived from the selected icon, same as mark/new.tsx. A stored
+  // custom color is preserved untouched unless the user changes the icon;
+  // changing the icon re-derives the color from its category.
+  const selectedCategory = useMemo(() => getCategoryForIcon(selectedIconType), [selectedIconType]);
+  const color =
+    selectedIconType !== currentIconType
+      ? getCategoryColor(selectedCategory)
+      : counter?.color || getCategoryColor(selectedCategory);
   const [unit, setUnit] = useState<'sessions' | 'days' | 'items'>(
     (counter?.unit as 'sessions' | 'days' | 'items') || 'sessions'
   );
@@ -137,7 +145,10 @@ export default function EditCounterScreen() {
 
         {/* Icon Picker */}
         <View style={styles.section}>
-          <Text style={[styles.label, { color: themeColors.inkDark }]}>Icon</Text>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={[styles.label, styles.labelInRow, { color: themeColors.inkDark }]}>Icon</Text>
+            <Text style={[styles.sectionKickerRight, { color: themeColors.inkMuted }]}>{selectedCategory}</Text>
+          </View>
           <View style={styles.iconGrid}>
             {ALL_ICON_TYPES.map((iconType) => {
               const isSelected = iconType === selectedIconType;
@@ -147,7 +158,7 @@ export default function EditCounterScreen() {
                   style={[
                     styles.iconButton,
                     {
-                      backgroundColor: isSelected ? color + '30' : themeColors.surface,
+                      backgroundColor: isSelected ? applyOpacity(color, 0.14) : themeColors.surface,
                       borderColor: isSelected ? color : themeColors.borderMid,
                     },
                   ]}
@@ -162,27 +173,6 @@ export default function EditCounterScreen() {
                 </TouchableOpacity>
               );
             })}
-          </View>
-        </View>
-
-        {/* Color Picker */}
-        <View style={styles.section}>
-          <Text style={[styles.label, { color: themeColors.inkDark }]}>Color</Text>
-          <View style={styles.colorGrid}>
-            {COLOR_OPTIONS.map((c) => (
-              <TouchableOpacity
-                key={c}
-                style={[
-                  styles.colorButton,
-                  {
-                    backgroundColor: c,
-                    borderWidth: c === color ? 3 : 0,
-                    borderColor: themeColors.linen,
-                  },
-                ]}
-                onPress={() => setColor(c)}
-              />
-            ))}
           </View>
         </View>
 
@@ -245,6 +235,21 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.medium,
     marginBottom: spacing.md,
   },
+  labelInRow: {
+    marginBottom: 0,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.md,
+  },
+  sectionKickerRight: {
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.bold,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
   input: {
     padding: spacing.md,
     borderRadius: borderRadius.md,
@@ -263,16 +268,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-  },
-  colorGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  colorButton: {
-    width: 50,
-    height: 50,
-    borderRadius: borderRadius.full,
   },
   unitButtons: {
     flexDirection: 'row',
