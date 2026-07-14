@@ -1,30 +1,86 @@
-// The registry: every line Livra can say, keyed by moment type + variant (PL-1 skeleton).
+// The registry: every line Livra can say, keyed by moment type + variant.
 // Copy is data: adding a future moment means adding entries, not logic.
 // Rotation follows lib/copy.ts getMomentumBannerCopy: the CALLER holds the last id;
-// the engine stays pure. Copy rules: no dash-as-dash, middle dot separator,
-// no exclamation marks, no guilt or loss language (Jest walks this registry).
+// the engine stays pure.
+//
+// ─── Who is speaking (PL-6 character sheet) ─────────────────────────────────
+// (Comment hygiene: no em/en dashes and no apostrophes anywhere in this file;
+// the copyDashRule suite scans the raw source, comments included.)
+//
+// Livra is a QUIET MENTOR: a close friend who wants you to reach your goal and
+// says so rarely, plainly, and only when there is something true to say.
+// Silence is the default register; every line below had to argue its way in.
+//
+// Three registers, never mixed in one line:
+//   1. Mentor (default): calm, concrete, unhurried. States what is true and,
+//      at most, names one small next action.
+//   2. Direct (slipping ONLY, M3): one plain sentence, the why of this user
+//      said back, plus the smallest next action. No hedges, no softening,
+//      and absolutely no guilt. This is the only moment allowed to push.
+//   3. Playful-dry (good moments ONLY: celebrations, post-log, empty states,
+//      the odd greeting): understated, deadpan, never zany. The number or
+//      the fact does the talking; the line just stands next to it.
+//
+// Forbidden moves (Jest walks this registry and enforces the mechanical ones):
+//   guilt or shame framing · loss language (you will lose, countdowns) ·
+//   streak vocabulary (Momentum is the owned noun; it bends, never breaks) ·
+//   exclamation marks · sycophancy (amazing, you got this, cheerleading) ·
+//   em/en dashes or hyphen-as-dash (middle dot · is the separator) ·
+//   generic filler that could ship in any habit app.
+//
+// The one test every line must pass: could this line only have been written
+// about THIS user right now (their why, their run, their week, their day)?
+// Where a line is necessarily generic (default greetings, plain post-log),
+// it must at least be honest and never PRETEND to be personal.
+//
+// Vocabulary contract: Goal, Mark, Momentum are the owned nouns (lib/copy.ts
+// TERMS). Check-in is sanctioned for the act of logging. Never streak, never
+// habit-tracker vocabulary, never competitor names.
 import type { MomentType } from './types';
 
 /** Named sub-variants per moment type. Selection logic picks the variant; this file owns the words. */
 export const MOMENT_CONTENT: Record<MomentType, Record<string, readonly string[]>> = {
-  // interim copy, replaced in PL-6
+  // M1, first week (goal gradient: the early days count double; warm, not cheering).
   firstWeek: {
-    orientation: ['Day one of {goalTitle}. One mark is a start.'],
-    pull: ['Almost through week one of {goalTitle}. It counts double, psychologically.'],
-    // M1 first-ever log acknowledgment; renders on the postLog surface (PL-4).
+    orientation: [
+      'Day one of {goalTitle}. One mark is a start.',
+      '{goalTitle} starts today. It asks for one mark, not a promise.',
+    ],
+    pull: [
+      'Almost through week one of {goalTitle}. It counts double, psychologically.',
+      'Week one of {goalTitle} is nearly done. The first week is the steep part.',
+      'A few more days and {goalTitle} has its first full week.',
+    ],
+    // M1 first-ever log acknowledgment; renders on the postLog pill (keep short).
     firstLog: [
       'First mark on {goalTitle}. It is real now.',
       'That is the first one on {goalTitle}. Noted.',
+      '{goalTitle}, day one, done.',
     ],
   },
-  // interim copy, replaced in PL-6
+  // M2, celebration (dry pride; the number does the talking; one line, then quiet).
   celebration: {
-    threshold: ['{runDays} days on {goalTitle}. Quietly impressive.'],
-    newBest: ['{runDays} days on {goalTitle}. Your longest yet.'],
+    threshold: [
+      '{runDays} days on {goalTitle} · that is a habit forming.',
+      '{runDays} days of {goalTitle}. Quiet, steady, yours.',
+      '{runDays} days on {goalTitle}. That was not an accident.',
+    ],
+    // Index 0 is the canonical record line from the spec; keep it first.
+    newBest: [
+      '{runDays} days on {goalTitle}. Your longest yet.',
+      'A new longest run on {goalTitle}: {runDays} days.',
+      '{runDays} days. {goalTitle} has a new record.',
+    ],
   },
-  // interim copy, replaced in PL-6
+  // M3, the ONE direct sentence: the why of this user, said back plainly, plus
+  // the smallest next action. No hedges, no guilt, no countdowns. Every variant
+  // quotes the why in single quotes (fillTemplate truncates it to 80 chars).
   whyResurface: {
-    direct: ["You wrote: '{why}'. One check-in keeps it alive."],
+    direct: [
+      "You wrote: '{why}'. One check-in keeps it alive.",
+      "Your reason was '{why}'. It still is. One mark today.",
+      "You said it yourself: '{why}'. One check-in today holds it.",
+    ],
   },
   // M4 (PL-5): final copy, keyed `${surface}.${variant}` (plus `.title`/`.body`
   // where the surface renders two lines). One static line per key: emptiness
@@ -53,24 +109,49 @@ export const MOMENT_CONTENT: Record<MomentType, Record<string, readonly string[]
     ],
     'markDetail.firstRun': ['No history yet. The first log starts the record.'],
   },
-  // interim copy, replaced in PL-6
+  // M5, post-log micro-feedback. Renders in the VoiceLine pill (~8 words, keep
+  // every template ≤ 60 chars). Most logs get silence; when Livra speaks it is
+  // one short true thing. `plain` may be playful-dry; `slippingGentle` is NOT.
   postLog: {
-    firstOfDay: ['First mark of the day. The rest comes easier.'],
-    closesDay: ['That is everything for today. Well held.'],
+    firstOfDay: [
+      'First mark of the day. The rest comes easier.',
+      'One in. The day has started properly.',
+      'Day opened. That was the hard one.',
+    ],
+    closesDay: [
+      'That is everything for today. Well held.',
+      'Today is settled. All of it.',
+      'The whole day, done. Enjoy the quiet.',
+    ],
     closesWeek: [
       'That one is settled for the week. Extras still count.',
       'Week complete on that one. More is welcome, not required.',
+      'Target met for the week. The ceiling is yours to ignore.',
     ],
-    slippingGentle: ['Good. That one mattered.'],
-    plain: ['Logged. Small and real.', 'Noted. It adds up quietly.'],
+    slippingGentle: [
+      'Good. That one mattered.',
+      'That mark did more than most.',
+      'Momentum bends, it does not break. That helped.',
+    ],
+    plain: [
+      'Logged. Small and real.',
+      'Noted. It adds up quietly.',
+      'Another one. Momentum likes routine.',
+      'Counted. Carry on.',
+      'One more. The unglamorous kind of progress.',
+      'Marked. The day noticed.',
+      'In the book. Same time tomorrow.',
+    ],
   },
-  // interim copy, replaced in PL-6. M6: the former static Focus greeting pool,
-  // now the default rotation for the greeting surface ({name} slot, anti-repeat).
+  // M6, default greeting rotation: calm, {name} aware, no goal reference.
+  // Honest about being general; it never pretends to be personal.
   greetingDefault: {
     default: [
       '{name}, one step is enough.',
-      '{name}, small steps still count.',
-      '{name}, today asks for one mark, not a plan.',
+      '{name}, nothing dramatic today. One mark will do.',
+      '{name}, quiet days count too.',
+      '{name}, pick one thing. That is the whole plan.',
+      '{name}, start small. It tends to hold.',
     ],
   },
 };

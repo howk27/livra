@@ -1,3 +1,5 @@
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
 import {
   MOMENT_CONTENT,
   WHY_MAX_CHARS,
@@ -55,6 +57,71 @@ describe('registry copy rules (walked, same discipline as copyDashRule)', () => 
       expect(text).not.toMatch(/\b(lose|lost|losing|streak|guilt|guilty|fail|failed|failure|behind|wasted)\b/i);
     },
   );
+
+  it.each(allEntries.map((e) => [e.address, e.text] as const))(
+    '%s has no sycophancy or generic habit-app filler',
+    (_address, text) => {
+      expect(text).not.toMatch(
+        /\b(amazing|awesome|incredible|crushing|killing it|you got this|great job|keep it up|proud of you|superstar|unstoppable)\b/i,
+      );
+      expect(text).not.toMatch(/\b(habitica|streaks|duolingo|fabulous|habitify)\b/i);
+    },
+  );
+
+  it.each(allEntries.map((e) => [e.address, e.text] as const))(
+    '%s is nonempty and at most 120 chars',
+    (_address, text) => {
+      expect(text.trim().length).toBeGreaterThan(0);
+      expect(text.length).toBeLessThanOrEqual(120);
+    },
+  );
+
+  // The VoiceLine pill holds roughly 8 words: everything that renders there
+  // (all M5 variants + M1's firstLog) must keep its TEMPLATE at or under 60 chars.
+  const pillEntries = allEntries.filter(
+    (e) => e.address.startsWith('postLog.') || e.address.startsWith('firstWeek.firstLog.'),
+  );
+  it.each(pillEntries.map((e) => [e.address, e.text] as const))(
+    '%s fits the post-log pill (≤ 60 chars)',
+    (_address, text) => {
+      expect(text.length).toBeLessThanOrEqual(60);
+    },
+  );
+
+  it('carries no interim copy markers anywhere in the registry source (PL-6 gate)', () => {
+    // Grep-style: future interim copy cannot ship silently.
+    const source = readFileSync(resolve(__dirname, '../../../lib/moments/content.ts'), 'utf8');
+    expect(source).not.toMatch(/interim copy/i);
+    expect(source).not.toMatch(/\bTODO\b|\bFIXME\b|placeholder/i);
+  });
+
+  it('variant pools are deep enough that a daily user does not memorize them (PL-6 discipline)', () => {
+    // postLog plain carries the daily personality: 6+.
+    expect(MOMENT_CONTENT.postLog.plain!.length).toBeGreaterThanOrEqual(6);
+    // Greeting default rotation: 3–5 per the spec.
+    expect(MOMENT_CONTENT.greetingDefault.default!.length).toBeGreaterThanOrEqual(3);
+    expect(MOMENT_CONTENT.greetingDefault.default!.length).toBeLessThanOrEqual(5);
+    // Everything else that rotates: 2–4 strong variants (empty states are static by design).
+    for (const [type, variants] of Object.entries(MOMENT_CONTENT)) {
+      if (type === 'emptyInvitation' || type === 'greetingDefault') continue;
+      for (const [variant, pool] of Object.entries(variants)) {
+        if (type === 'postLog' && variant === 'plain') continue;
+        expect(pool.length).toBeGreaterThanOrEqual(2);
+        expect(pool.length).toBeLessThanOrEqual(4);
+      }
+    }
+  });
+
+  it('every M3 direct line quotes the why back and names one small action', () => {
+    for (const line of MOMENT_CONTENT.whyResurface.direct!) {
+      expect(line).toMatch(/'\{why\}'/); // the why, said back, quoted
+      expect(line).toMatch(/\b[Oo]ne (check-in|mark)\b/); // the smallest next action
+      // No countdowns, no cushion-loss language beyond what Momentum already shows.
+      expect(line).not.toMatch(/lose|gone|reset|last chance|only \d|left|hurry|before it/i);
+      // No softening hedges: the direct sentence does not apologize for itself.
+      expect(line).not.toMatch(/\b(maybe|perhaps|just a thought|no pressure|if you want)\b/i);
+    }
+  });
 });
 
 describe('truncateWhy', () => {
@@ -118,8 +185,10 @@ describe('pickTemplate rotation (caller-held anti-repeat)', () => {
   });
 
   it('repeats when the pool has a single entry (nothing else to say)', () => {
-    const a = pickTemplate('whyResurface', 'direct', 'whyResurface.direct.0', () => 0)!;
-    expect(a.id).toBe('whyResurface.direct.0');
+    // Empty-state invitations are static single-line pools by design.
+    const key = 'focus.firstRun';
+    const a = pickTemplate('emptyInvitation', key, `emptyInvitation.${key}.0`, () => 0)!;
+    expect(a.id).toBe(`emptyInvitation.${key}.0`);
   });
 
   it('returns null for an unknown variant', () => {

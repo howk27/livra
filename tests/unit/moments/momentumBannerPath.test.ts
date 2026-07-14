@@ -35,7 +35,9 @@ describe('banner path selection (PL-2 M3)', () => {
     const m = selectMoment('momentumBanner', ctxWith('I want to feel strong at 40'));
     expect(m).not.toBeNull();
     expect(m!.type).toBe('whyResurface');
-    expect(m!.text).toBe("You wrote: 'I want to feel strong at 40'. One check-in keeps it alive.");
+    // Any direct variant: the why is said back, quoted, plus one small action.
+    expect(m!.text).toContain("'I want to feel strong at 40'");
+    expect(m!.text).toMatch(/\b[Oo]ne (check-in|mark)\b/);
   });
 
   it('no why stored → engine returns null; the existing generic copy carries the banner', () => {
