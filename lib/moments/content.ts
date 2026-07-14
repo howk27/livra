@@ -35,6 +35,10 @@ export const MOMENT_CONTENT: Record<MomentType, Record<string, readonly string[]
   postLog: {
     firstOfDay: ['First mark of the day. The rest comes easier.'],
     closesDay: ['That is everything for today. Well held.'],
+    closesWeek: [
+      'That one is settled for the week. Extras still count.',
+      'Week complete on that one. More is welcome, not required.',
+    ],
     slippingGentle: ['Good. That one mattered.'],
     plain: ['Logged. Small and real.', 'Noted. It adds up quietly.'],
   },

@@ -47,6 +47,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useNotification } from '../../contexts/NotificationContext';
 import { CATEGORY_MAP } from '../../components/ui/MarkRow';
 import { GoalTitle } from '../../components/ui/GoalTitle';
+import { VoiceLine } from '../../components/ui/VoiceLine';
 import {
   currentWeekDates,
   buildWeeklyCountsMap,
@@ -489,6 +490,10 @@ export default function GoalDetailScreen() {
           }}
         />
       )}
+
+      {/* PL-4 (M5): post-log voice line — the quick-log rows here share
+          Focus's increment path, so the line renders here too. */}
+      <VoiceLine />
     </SafeAreaView>
   );
 }

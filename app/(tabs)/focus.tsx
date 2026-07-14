@@ -22,6 +22,7 @@ import { Plus, CaretRight } from 'phosphor-react-native';
 import { SectionLabel } from '../../components/ui/SectionLabel';
 import { GoalTitle } from '../../components/ui/GoalTitle';
 import { SpeedDialFAB } from '../../components/ui/SpeedDialFAB';
+import { VoiceLine } from '../../components/ui/VoiceLine';
 
 import { useCounters } from '../../hooks/useCounters';
 import { useAuth } from '../../hooks/useAuth';
@@ -51,6 +52,7 @@ import {
   markWeeklyState,
 } from '../../lib/features';
 import { resolveMarkCategory } from '../../lib/markCategoryResolve';
+import { resolveFirstName } from '../../lib/profile/displayName';
 import { computeWeek } from '../../lib/consistency';
 import { logger } from '../../lib/utils/logger';
 import { useNotification } from '../../contexts/NotificationContext';
@@ -219,11 +221,9 @@ export default function FocusScreen() {
 
   // ── User info ─────────────────────────────────────────────────────────────
 
-  const firstName = useMemo(() => {
-    const full: string =
-      (user?.user_metadata?.full_name as string | undefined) ?? user?.email?.split('@')[0] ?? '';
-    return full.split(' ')[0] ?? '';
-  }, [user]);
+  // Shared derivation (lib/profile/displayName): the engine's deriveFirstName
+  // normalizes null the same way it did the old '' fallback.
+  const firstName = useMemo(() => resolveFirstName(user?.user_metadata, user?.email), [user]);
 
   // ── Moment engine context (PL-2: M2 + M3 · PL-3: M1 first week + M6 greeting) ─
 
@@ -590,6 +590,10 @@ export default function FocusScreen() {
       </ScrollView>
 
       <SpeedDialFAB />
+
+      {/* PL-4 (M5): post-log voice line — overlay, never shifts rows.
+          Offset clears the SpeedDialFAB's zone at the screen bottom. */}
+      <VoiceLine bottomOffset={spacing.xxl + spacing.xl} />
     </View>
   );
 }

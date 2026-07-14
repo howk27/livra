@@ -55,6 +55,9 @@ export type SelectOptions = {
   goalId?: string;
   /** M4: brand-new user vs deleted-everything. Defaults to firstRun. */
   emptyVariant?: EmptyVariant;
+  /** M5 (PL-4): this log completed the mark's weekly target. Computed by the
+   *  caller (evaluatePostLogVoice) — the ctx carries counts, not per-mark targets. */
+  closesWeekForMark?: boolean;
 };
 
 function makeMoment(
@@ -164,7 +167,7 @@ type PostLogPick = {
   type?: MomentType;
   /** Skips the variable-ratio gate — once-ever moments never gamble away. */
   bypassGate?: boolean;
-  when: (ctx: MomentContext, g: GoalMomentContext | undefined) => boolean;
+  when: (ctx: MomentContext, g: GoalMomentContext | undefined, opts: SelectOptions) => boolean;
 };
 
 const POSTLOG_PICKS: readonly PostLogPick[] = [
@@ -179,6 +182,8 @@ const POSTLOG_PICKS: readonly PostLogPick[] = [
   },
   { variant: 'slippingGentle', when: (_ctx, g) => g?.isSlipping === true },
   { variant: 'closesDay', when: (ctx) => ctx.allDoneForDay },
+  // PL-4: the log that completes the mark's weekly target (caller-computed flag).
+  { variant: 'closesWeek', when: (_ctx, _g, opts) => opts.closesWeekForMark === true },
   { variant: 'firstOfDay', when: (ctx) => ctx.logsToday === 1 },
   { variant: 'plain', when: () => true },
 ];
@@ -193,7 +198,7 @@ function selectPostLog(ctx: MomentContext, opts: SelectOptions): Moment | null {
   if (ctx.logsToday <= 0) return null; // nothing was logged; nothing true to say
 
   const g = opts.goalId ? ctx.goals.find((x) => x.goalId === opts.goalId) : undefined;
-  const pick = POSTLOG_PICKS.find((p) => p.when(ctx, g))!;
+  const pick = POSTLOG_PICKS.find((p) => p.when(ctx, g, opts))!;
 
   if (!pick.bypassGate) {
     const rng = opts.rng ?? Math.random;

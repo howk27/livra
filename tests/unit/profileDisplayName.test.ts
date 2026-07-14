@@ -1,4 +1,4 @@
-import { resolveInitialDisplayName } from '../../lib/profile/displayName';
+import { resolveFirstName, resolveInitialDisplayName } from '../../lib/profile/displayName';
 
 describe('resolveInitialDisplayName (FU-4 profile pre-fill)', () => {
   it('prefers the saved profiles.display_name', () => {
@@ -34,5 +34,22 @@ describe('resolveInitialDisplayName (FU-4 profile pre-fill)', () => {
   it('returns empty string when no name exists anywhere', () => {
     expect(resolveInitialDisplayName(null, null)).toBe('');
     expect(resolveInitialDisplayName(undefined, {})).toBe('');
+  });
+});
+
+describe('resolveFirstName (PL-4 voice/greeting {name} slot)', () => {
+  it('takes the first word of the resolved metadata name', () => {
+    expect(resolveFirstName({ full_name: 'Dei Sierra' })).toBe('Dei');
+    expect(resolveFirstName({ display_name: 'Deivi S', full_name: 'Other' })).toBe('Deivi');
+  });
+
+  it('falls back to the email prefix when no metadata name exists', () => {
+    expect(resolveFirstName(null, 'deivi@example.com')).toBe('deivi');
+    expect(resolveFirstName({}, 'deivi@example.com')).toBe('deivi');
+  });
+
+  it('returns null when no name exists anywhere', () => {
+    expect(resolveFirstName(null, null)).toBeNull();
+    expect(resolveFirstName({}, undefined)).toBeNull();
   });
 });

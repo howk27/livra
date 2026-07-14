@@ -20,6 +20,8 @@ import {
   canAddHabitMark,
   countUnlinkedMarks,
 } from '../lib/gating';
+import { maybeShowPostLogVoice } from '../lib/moments/postLogVoice';
+import { resolveFirstName } from '../lib/profile/displayName';
 
 // Helper function to validate UUID
 const isValidUUID = (str: string): boolean => {
@@ -289,9 +291,18 @@ export const useMarks = () => {
           occurred_local_date: today,
         });
         logger.log('[INCREMENT] ✅ Counter and event persisted:', { markId, newTotal });
+        // PL-4 (M5): post-log micro-feedback. Consulted ONLY after a successful
+        // persist — a failed increment never speaks. maybeShowPostLogVoice never
+        // throws (voice is decoration) and returns whether a line was shown.
+        const voiceLineShown = await maybeShowPostLogVoice(
+          markId,
+          today,
+          resolveFirstName(user?.user_metadata, user?.email),
+        );
         capture(ANALYTICS_EVENTS.MARK_LOGGED, {
           mark_id: markId,
           gap_days: mark.last_activity_date ? daysBetween(mark.last_activity_date, today) : null,
+          voice_line_shown: voiceLineShown,
         });
       } catch (error) {
         logger.error('[INCREMENT] ❌ Persist failed — reverting counter row to pre-increment state', {
@@ -396,7 +407,7 @@ export const useMarks = () => {
         });
       });
     },
-    [getMark, addEvent, updateMarkAction, getEventsByMark, loadMarks, evaluateMarkBadges]
+    [getMark, addEvent, updateMarkAction, getEventsByMark, loadMarks, evaluateMarkBadges, user]
   );
 
   const decrementMark = useCallback(

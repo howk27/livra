@@ -12,7 +12,9 @@ export const ANALYTICS_EVENTS = {
   GOAL_COMPLETED: 'goal_completed',
   /** Property `method: 'manual' | 'ai'` distinguishes creation path (PRD §8). */
   GOAL_CREATED: 'goal_created',
-  /** Core-loop usage signal. Property `gap_days` feeds "return after a missed day". */
+  /** Core-loop usage signal. Properties: `gap_days` feeds "return after a
+   *  missed day" · `voice_line_shown: boolean` (PL-4) marks logs where the
+   *  moment engine rendered a post-log voice line. */
   MARK_LOGGED: 'mark_logged',
   ONBOARDING_COMPLETED: 'onboarding_completed',
   /** Free -> Livra+ at a real limit. */
