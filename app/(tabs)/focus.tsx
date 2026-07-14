@@ -29,7 +29,9 @@ import { useSync } from '../../hooks/useSync';
 import { useEventsStore } from '../../state/eventsSlice';
 import { useAppDateStore } from '../../state/appDateSlice';
 import { useGoalsStore } from '../../state/goalsSlice';
-import { useMomentumStore } from '../../state/momentumSlice';
+import { effectivePersonalBest, useMomentumStore } from '../../state/momentumSlice';
+import { buildMomentContext } from '../../lib/moments/context';
+import { selectMoment } from '../../lib/moments/select';
 import { MomentumBanner } from '../../components/ui/MomentumBanner';
 import { shouldShowMomentumBanner } from '../../lib/momentumPresenter';
 import {
@@ -103,6 +105,12 @@ export default function FocusScreen() {
   );
 
   const momentumSnapshots = useMomentumStore((s) => s.snapshots);
+  const longestRuns = useMomentumStore((s) => s.longestRuns);
+
+  // PL-2: load the persisted per-goal longest runs once (idempotent).
+  useEffect(() => {
+    void useMomentumStore.getState().hydrateLongestRuns();
+  }, []);
 
   const [bannerDismissedDate, setBannerDismissedDate] = useState<string | null>(null);
   useEffect(() => {
@@ -113,14 +121,6 @@ export default function FocusScreen() {
     () => shouldShowMomentumBanner(momentumSnapshots, bannerDismissedDate, todayStr),
     [momentumSnapshots, bannerDismissedDate, todayStr],
   );
-
-  const bannerLastTemplateRef = useRef<string | undefined>(undefined);
-  const bannerText = useMemo(() => {
-    if (!bannerVisible) return '';
-    const c = getMomentumBannerCopy(bannerLastTemplateRef.current);
-    bannerLastTemplateRef.current = c.template;
-    return c.text;
-  }, [bannerVisible, todayStr]);
 
   const handleDismissBanner = useCallback(() => {
     setBannerDismissedDate(todayStr);
@@ -224,10 +224,48 @@ export default function FocusScreen() {
     return full.split(' ')[0] ?? '';
   }, [user]);
 
+  // ── Moment engine context (PL-2: M2 celebration + M3 why-at-slipping) ─────
+
+  const momentCtx = useMemo(
+    () =>
+      buildMomentContext({
+        goals: activeGoals,
+        snapshots: momentumSnapshots,
+        weeklyCounts: Object.fromEntries(weeklyCountsMap),
+        todayCounts: Object.fromEntries(todayCountsMap),
+        dueMarkIds: pressureMarks
+          .filter((m) => markWeeklyState(m, weeklyCountsMap.get(m.id) ?? 0) === 'due')
+          .map((m) => m.id),
+        todayStr,
+        firstName,
+        personalBestRuns: Object.fromEntries(
+          activeGoals.map((g) => [g.id, effectivePersonalBest(longestRuns[g.id], todayStr)]),
+        ),
+      }),
+    [activeGoals, momentumSnapshots, weeklyCountsMap, todayCountsMap, pressureMarks, todayStr, firstName, longestRuns],
+  );
+
+  // M3: when a slipping goal has a stored why, the engine speaks the direct line;
+  // otherwise the existing generic banner copy stays. Once/day/goal frequency
+  // rides the existing dismissal machinery (bannerVisible), nothing new.
+  const bannerLastTemplateRef = useRef<string | undefined>(undefined);
+  const bannerText = useMemo(() => {
+    if (!bannerVisible) return '';
+    const direct = selectMoment('momentumBanner', momentCtx);
+    if (direct) return direct.text;
+    const copy = getMomentumBannerCopy(bannerLastTemplateRef.current);
+    bannerLastTemplateRef.current = copy.template;
+    return copy.text;
+  }, [bannerVisible, momentCtx, todayStr]);
+
+  // M2: a celebration line takes the greeting for that day only; the static
+  // default stays the fallback (full default-pool migration is PL-3's job).
   const greetingText = useMemo(() => {
+    const moment = selectMoment('greeting', momentCtx);
+    if (moment?.type === 'celebration') return moment.text;
     if (firstName) return `${firstName}, one step is enough.`;
     return 'One step is enough.';
-  }, [firstName]);
+  }, [momentCtx, firstName]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 

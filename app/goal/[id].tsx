@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -38,7 +38,10 @@ import { useGoalsStore } from '../../state/goalsSlice';
 import { useMarksStore } from '../../state/countersSlice';
 import { useEventsStore } from '../../state/eventsSlice';
 import { useAppDateStore } from '../../state/appDateSlice';
-import { useMomentumStore } from '../../state/momentumSlice';
+import { effectivePersonalBest, useMomentumStore } from '../../state/momentumSlice';
+import { deriveIsNewBest } from '../../lib/moments/context';
+import { getAppDate } from '../../lib/appDate';
+import { formatDate } from '../../lib/date';
 import { useCounters } from '../../hooks/useCounters';
 import { useAuth } from '../../hooks/useAuth';
 import { useNotification } from '../../contexts/NotificationContext';
@@ -125,6 +128,16 @@ export default function GoalDetailScreen() {
   const allEvents = useEventsStore((s) => s.events);
   const appDateKey = useAppDateStore((s) => s.debugDateOverride ?? '');
   const momentumSnapshot = useMomentumStore((s) => (id ? s.snapshots[id] : undefined));
+  const longestRunEntry = useMomentumStore((s) => (id ? s.longestRuns[id] : undefined));
+
+  // PL-2: load the persisted per-goal longest runs once (idempotent).
+  useEffect(() => {
+    void useMomentumStore.getState().hydrateLongestRuns();
+  }, []);
+
+  // appDateKey is an intentional dep: recompute when the debug date moves.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const todayStr = useMemo(() => formatDate(getAppDate()), [appDateKey]);
 
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(goal?.title ?? '');
@@ -162,15 +175,23 @@ export default function GoalDetailScreen() {
     [linkedMarks, weeklyCountsMap],
   );
 
+  // M2 (PL-2): on the day the run passes the personal best, the momentum clause
+  // reads "{N} days · your longest yet". Every other day, the plain sentence.
+  const runDays =
+    momentumSnapshot && momentumSnapshot.state !== 'broken'
+      ? Math.max(0, momentumSnapshot.days)
+      : 0;
+  const isNewBest = deriveIsNewBest(runDays, effectivePersonalBest(longestRunEntry, todayStr));
+
   const weekSentence = useMemo(
     () =>
       buildGoalWeekSentence({
-        momentumDays:
-          momentumSnapshot && momentumSnapshot.days > 0 ? momentumSnapshot.days : null,
+        momentumDays: runDays > 0 ? runDays : null,
         markCount: linkedMarks.length,
         dueCount,
+        isNewBest,
       }),
-    [momentumSnapshot, linkedMarks.length, dueCount],
+    [runDays, isNewBest, linkedMarks.length, dueCount],
   );
 
   // ── Hero category (majority of linked marks) ──────────────────────────────

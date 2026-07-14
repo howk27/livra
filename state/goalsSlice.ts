@@ -295,7 +295,7 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
           .filter((m) => !m.deleted_at && ids.has(m.id))
           .map((m) => ({ id: m.id, weekly_target: m.weekly_target, last_activity_date: m.last_activity_date }));
         const snap = await evaluateGoalMomentum(g.id, goalMarks, today);
-        useMomentumStore.getState().setSnapshot(g.id, snap);
+        useMomentumStore.getState().setSnapshot(g.id, snap, today);
       }),
     );
 
@@ -389,7 +389,7 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
           .map((m) => ({ id: m.id, weekly_target: m.weekly_target, last_activity_date: m.last_activity_date }));
         const snap = await evaluateGoalMomentum(g.id, goalMarks, today);
         result.set(g.id, snap);
-        useMomentumStore.getState().setSnapshot(g.id, snap);
+        useMomentumStore.getState().setSnapshot(g.id, snap, today);
       } catch (err) {
         console.warn(`[Momentum] evaluation failed for goal ${g.id}:`, err);
       }

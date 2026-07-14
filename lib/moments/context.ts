@@ -33,6 +33,10 @@ export type BuildMomentContextInputs = {
 
 export const CELEBRATION_THRESHOLDS = [7, 14, 30] as const;
 
+/** A "record" needs a real best behind it: bests under 7 days ride the
+ *  threshold celebrations instead, so day-2 "records" never fire in week one (PL-2). */
+export const PERSONAL_BEST_FLOOR = 7;
+
 /** Whole days since creation, clamped >= 0 (created "today" = 0). */
 export function goalAgeDays(createdAt: string, todayStr: string): number {
   return Math.max(0, daysBetween(todayStr, createdAt));
@@ -81,9 +85,10 @@ export function deriveWhy(description: string | null | undefined): string | null
   return description?.trim() || null;
 }
 
-/** Spec M2: run exceeds a recorded personal best. No recorded best → false (PL-2 wires tracking). */
+/** Spec M2: run exceeds a recorded personal best of at least PERSONAL_BEST_FLOOR days.
+ *  No recorded best (or one under the floor) → false. */
 export function deriveIsNewBest(runDays: number, personalBest: number | null): boolean {
-  return personalBest !== null && personalBest > 0 && runDays > personalBest;
+  return personalBest !== null && personalBest >= PERSONAL_BEST_FLOOR && runDays > personalBest;
 }
 
 /** Total logs recorded today across marks. */

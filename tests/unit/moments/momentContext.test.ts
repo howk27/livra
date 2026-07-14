@@ -125,11 +125,18 @@ describe('named derivation helpers (direct)', () => {
     expect(deriveWhy(undefined)).toBeNull();
   });
 
-  it('deriveIsNewBest: only when the run strictly exceeds a positive recorded best', () => {
+  it('deriveIsNewBest: only when the run strictly exceeds a recorded best of at least the floor', () => {
     expect(deriveIsNewBest(10, 9)).toBe(true);
     expect(deriveIsNewBest(10, 10)).toBe(false);
     expect(deriveIsNewBest(10, null)).toBe(false);
     expect(deriveIsNewBest(10, 0)).toBe(false);
+  });
+
+  it('deriveIsNewBest floor (PL-2): bests under 7 days never fire a record', () => {
+    expect(deriveIsNewBest(2, 1)).toBe(false); // day-2 "record" in week one
+    expect(deriveIsNewBest(6, 5)).toBe(false);
+    expect(deriveIsNewBest(8, 6)).toBe(false); // best below floor even if run is past it
+    expect(deriveIsNewBest(8, 7)).toBe(true); // floor exactly met
   });
 
   it('deriveLogsToday: sums counts, ignoring negatives', () => {
