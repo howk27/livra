@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -35,60 +35,12 @@ import {
   weeklyTargetForPreset,
   scheduleForPreset,
 } from '../../lib/markFrequencyPreset';
+import { ICON_TYPE_TO_EMOJI, MARK_ICON_OPTIONS } from '../../lib/markIcons';
 
-// Mapping of icon types to emojis for storage compatibility
-const ICON_TYPE_TO_EMOJI: Record<Exclude<MarkType, 'custom'>, string> = {
-  email: '📧',
-  planning: '🗓️',
-  focus: '🎯',
-  tasks: '✅',
-  language: '🗣️',
-  study: '📚',
-  reading: '📖',
-  calories: '🔥',
-  soda_free: '🥤',
-  rest: '🛌',
-  meditation: '🧘',
-  sleep: '🌙',
-  gym: '🏋️',
-  steps: '👣',
-  water: '💧',
-  no_sugar: '🚫',
-  no_beer: '🍺',
-  no_spending: '💰',
-  mood: '😊',
-  no_smoking: '🚭',
-  screen_free: '📱',
-  gratitude: '🙏',
-  journaling: '📝',
-};
+// VD-7 retry #1: the icon emoji map + selectable list live in lib/markIcons.ts,
+// shared with mark/[id]/edit.tsx so the two grids can never diverge.
+const ICON_OPTIONS = MARK_ICON_OPTIONS;
 
-// Icon types available for selection (excluding 'custom')
-const ICON_OPTIONS: Exclude<MarkType, 'custom'>[] = [
-  'gym',
-  'sleep',
-  'reading',
-  'meditation',
-  'water',
-  'study',
-  'focus',
-  'email',
-  'tasks',
-  'planning',
-  'language',
-  'rest',
-  'steps',
-  'calories',
-];
-
-const PRESET_MARKS: Array<{ name: string; iconType: Exclude<MarkType, 'custom'>; color: string }> = [
-  { name: 'Sleep',    iconType: 'sleep',    color: '#7B9EA6' },
-  { name: 'Workout',  iconType: 'gym',      color: '#8A7E6B' },
-  { name: 'Water',    iconType: 'water',    color: '#6B9E8A' },
-  { name: 'Planning', iconType: 'planning', color: '#9E8A6B' },
-];
-
-const COLOR_OPTIONS = ['#3B82F6', '#10B981', '#A855F7', '#F97316', '#EF4444', '#EC4899'];
 const ALL_SCHEDULE_DAYS: DayOfWeek[] = [0, 1, 2, 3, 4, 5, 6];
 const WEEKDAY_CHIPS: Array<{ value: DayOfWeek; label: string }> = [
   { value: 1, label: 'M' },
@@ -122,8 +74,6 @@ export default function NewCounterScreen() {
   const [mode, setMode] = useState<'suggested' | 'custom'>('suggested');
   const [name, setName] = useState('');
   const [selectedIconType, setSelectedIconType] = useState<Exclude<MarkType, 'custom'>>(ICON_OPTIONS[0]);
-  const [color, setColor] = useState(() => getCategoryColor(getCategoryForIcon(ICON_OPTIONS[0])));
-  const [hasManualColorOverride, setHasManualColorOverride] = useState(false);
   const unit: 'sessions' | 'days' | 'items' = 'sessions';
   const [goalValue, setGoalValue] = useState<number | null>(null);
   const [goalPeriod, setGoalPeriod] = useState<GoalPeriod>('day');
@@ -146,12 +96,9 @@ export default function NewCounterScreen() {
     return (rowInner - gap * (ICON_GRID_COLUMNS - 1)) / ICON_GRID_COLUMNS;
   }, []);
   const selectedCategory = useMemo(() => getCategoryForIcon(selectedIconType), [selectedIconType]);
-
-  useEffect(() => {
-    if (!hasManualColorOverride) {
-      setColor(getCategoryColor(selectedCategory));
-    }
-  }, [selectedCategory, hasManualColorOverride]);
+  // VD-7: color is always the category-derived color — the manual hex palette
+  // ("Vibe" grid) is gone; the category label on the icon card is the identity feedback.
+  const color = getCategoryColor(selectedCategory);
 
   const scheduleDaysForDisplay =
     scheduleType === 'daily' ? ALL_SCHEDULE_DAYS : scheduleDays.length > 0 ? scheduleDays : [1, 2, 3, 4, 5];
@@ -179,6 +126,37 @@ export default function NewCounterScreen() {
     setPendingSuggestedCounter(counter); // show the confirmation footer
   };
 
+  // VD-7 retry #1: single failure handler for both create paths (suggested +
+  // custom) — the duplicate/PRO_STATUS_UNKNOWN/FREE_COUNTER_LIMIT_REACHED
+  // branching was copied verbatim in each catch block.
+  const handleCreateMarkError = (error: unknown) => {
+    if (error instanceof DuplicateCounterError || error instanceof DuplicateMarkError) {
+      const errorName = (error as any).markName || (error as any).counterName || 'Unknown';
+      logger.warn(`[Counter] Duplicate counter detected: "${errorName}"`);
+
+      const existingCounter = counters.find(
+        (c) => c.name.toLowerCase() === errorName.toLowerCase() && !c.deleted_at,
+      );
+
+      setDuplicateCounterName(errorName);
+      setExistingCounterId(existingCounter?.id ?? null);
+      setShowDuplicateModal(true);
+    } else if (error instanceof Error && error.message.includes('PRO_STATUS_UNKNOWN')) {
+      logger.warn('[Counter] Subscription status unknown');
+      showError('Unable to verify your subscription. Please check your connection and try again.');
+    } else if (error instanceof Error && error.message.includes('FREE_COUNTER_LIMIT_REACHED')) {
+      logger.warn('[Counter] Per-goal mark limit reached for free user');
+      showError('That’s 3 marks on this goal. Livra+ lets you add more.');
+      setTimeout(() => {
+        router.replace('/paywall');
+      }, 2000);
+    } else {
+      logger.error('Error creating counter:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Could not create the mark. Check your connection and try again.';
+      showError(errorMessage);
+    }
+  };
+
   const handleConfirmSuggestedCounter = async () => {
     if (!pendingSuggestedCounter) return;
 
@@ -196,39 +174,14 @@ export default function NewCounterScreen() {
         frequency_kind: pendingSuggestedCounter.frequencyKind,
         weekly_target: pendingSuggestedCounter.frequency_recommended ?? 3,
       } as any);
-      showSuccess('Counter created successfully');
+      showSuccess('Mark added');
       setPendingSuggestedCounter(null);
       setTimeout(() => {
         router.back();
       }, 300);
     } catch (error) {
       setLoading(false);
-
-      if (error instanceof DuplicateCounterError || error instanceof DuplicateMarkError) {
-        const errorName = (error as any).markName || (error as any).counterName || 'Unknown';
-        logger.warn(`[Counter] Duplicate counter detected: "${errorName}"`);
-
-        const existingCounter = counters.find(
-          (c) => c.name.toLowerCase() === errorName.toLowerCase() && !c.deleted_at
-        );
-
-        setDuplicateCounterName(errorName);
-        setExistingCounterId(existingCounter?.id || null);
-        setShowDuplicateModal(true);
-      } else if (error instanceof Error && error.message.includes('PRO_STATUS_UNKNOWN')) {
-        logger.warn('[Counter] Subscription status unknown');
-        showError('Unable to verify your subscription. Please check your connection and try again.');
-      } else if (error instanceof Error && error.message.includes('FREE_COUNTER_LIMIT_REACHED')) {
-        logger.warn('[Counter] Per-goal mark limit reached for free user');
-        showError('That’s 3 marks on this goal. Livra+ lets you add more.');
-        setTimeout(() => {
-          router.replace('/paywall');
-        }, 2000);
-      } else {
-        logger.error('Error creating counter:', error);
-        const errorMessage = error instanceof Error ? error.message : 'Failed to create counter. Please try again.';
-        showError(errorMessage);
-      }
+      handleCreateMarkError(error);
     } finally {
       setLoading(false);
     }
@@ -269,38 +222,13 @@ export default function NewCounterScreen() {
       if (linkToGoal && targetGoalId && savedMark?.id) {
         linkMarkToGoal(targetGoalId, savedMark.id).catch(() => {});
       }
-      showSuccess('Counter created successfully');
+      showSuccess('Mark created');
       setTimeout(() => {
         router.back();
       }, 300);
     } catch (error) {
       setLoading(false);
-
-      if (error instanceof DuplicateCounterError || error instanceof DuplicateMarkError) {
-        const errorName = (error as any).markName || (error as any).counterName || 'Unknown';
-        logger.warn(`[Counter] Duplicate counter detected: "${errorName}"`);
-
-        const existingCounter = counters.find(
-          (c) => c.name.toLowerCase() === errorName.toLowerCase() && !c.deleted_at,
-        );
-
-        setDuplicateCounterName(errorName);
-        setExistingCounterId(existingCounter?.id ?? null);
-        setShowDuplicateModal(true);
-      } else if (error instanceof Error && error.message.includes('PRO_STATUS_UNKNOWN')) {
-        logger.warn('[Counter] Subscription status unknown');
-        showError('Unable to verify your subscription. Please check your connection and try again.');
-      } else if (error instanceof Error && error.message.includes('FREE_COUNTER_LIMIT_REACHED')) {
-        logger.warn('[Counter] Per-goal mark limit reached for free user');
-        showError('That’s 3 marks on this goal. Livra+ lets you add more.');
-        setTimeout(() => {
-          router.replace('/paywall');
-        }, 2000);
-      } else {
-        logger.error('Error creating counter:', error);
-        const errorMessage = error instanceof Error ? error.message : 'Failed to create counter. Please try again.';
-        showError(errorMessage);
-      }
+      handleCreateMarkError(error);
     } finally {
       setLoading(false);
     }
@@ -311,7 +239,7 @@ export default function NewCounterScreen() {
       <SafeAreaView style={[styles.container, { backgroundColor: themeColors.linen }]}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={themeColors.forest} />
-          <Text style={[styles.loadingText, { color: themeColors.inkDark }]}>Creating counter...</Text>
+          <Text style={[styles.loadingText, { color: themeColors.inkDark }]}>Setting up your mark…</Text>
         </View>
       </SafeAreaView>
     );
@@ -321,7 +249,7 @@ export default function NewCounterScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: themeColors.linen }]}>
-      <View style={[styles.header, { borderBottomColor: theme === 'dark' ? 'rgba(255,255,255,0.08)' : themeColors.borderMid }]}>
+      <View style={[styles.header, { borderBottomColor: theme === 'dark' ? applyOpacity(themeColors.inkInverse, 0.08) : themeColors.borderMid }]}>
         <View style={{ width: headerSideWidth }}>
           <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Text style={[styles.cancelButton, { color: themeColors.inkMid }]}>Cancel</Text>
@@ -391,7 +319,7 @@ export default function NewCounterScreen() {
               ]}
             >
               <Text style={[styles.sectionKicker, { color: themeColors.inkMuted, marginBottom: spacing.xs }]}>
-                Selected mark
+                Your pick
               </Text>
               <Text style={[styles.suggestedSelectionTitle, { color: themeColors.inkDark }]}>
                 {pendingSuggestedCounter.name}
@@ -442,7 +370,7 @@ export default function NewCounterScreen() {
                 },
               ]}
             >
-              <Text style={[styles.sectionKicker, { color: themeColors.inkMuted }]}>The habit</Text>
+              <Text style={[styles.sectionKicker, { color: themeColors.inkMuted }]}>What you’ll do</Text>
               <TextInput
                 style={[
                   styles.inputInCard,
@@ -454,7 +382,7 @@ export default function NewCounterScreen() {
                 ]}
                 value={name}
                 onChangeText={setName}
-                placeholder="What will you track?"
+                placeholder="e.g. Morning run"
                 placeholderTextColor={themeColors.inkMuted}
               />
             </View>
@@ -469,8 +397,8 @@ export default function NewCounterScreen() {
               ]}
             >
               <View style={styles.sectionHeaderRow}>
-                <Text style={[styles.sectionTitle, { color: themeColors.inkDark }]}>Identity</Text>
-                <Text style={[styles.sectionKickerRight, { color: themeColors.inkMuted }]}>Choose icon</Text>
+                <Text style={[styles.sectionTitle, { color: themeColors.inkDark }]}>Give it a face</Text>
+                <Text style={[styles.sectionKickerRight, { color: themeColors.inkMuted }]}>{selectedCategory}</Text>
               </View>
               <View style={styles.iconGrid}>
                 {ICON_OPTIONS.map((iconType) => {
@@ -483,7 +411,7 @@ export default function NewCounterScreen() {
                         {
                           width: iconCellSize,
                           height: iconCellSize,
-                          backgroundColor: isSelected ? color + '30' : themeColors.linen,
+                          backgroundColor: isSelected ? applyOpacity(color, 0.14) : themeColors.linen,
                           borderColor: isSelected ? color : themeColors.borderMid,
                         },
                       ]}
@@ -510,45 +438,11 @@ export default function NewCounterScreen() {
                 },
               ]}
             >
-              <View style={styles.sectionHeaderRow}>
-                <Text style={[styles.sectionTitle, { color: themeColors.inkDark }]}>Vibe</Text>
-                <Text style={[styles.sectionKickerRight, { color: themeColors.inkMuted }]}>{selectedCategory}</Text>
-              </View>
-              <View style={styles.colorGrid}>
-                {COLOR_OPTIONS.map((c) => (
-                  <TouchableOpacity
-                    key={c}
-                    style={[
-                      styles.colorButton,
-                      {
-                        backgroundColor: c,
-                        borderWidth: c === color ? 3 : 0,
-                        borderColor: themeColors.linen,
-                      },
-                    ]}
-                    onPress={() => {
-                      setHasManualColorOverride(true);
-                      setColor(c);
-                    }}
-                  />
-                ))}
-              </View>
-            </View>
-
-            <View
-              style={[
-                styles.card,
-                {
-                  backgroundColor: themeColors.surface,
-                  borderColor: themeColors.borderMid,
-                },
-              ]}
-            >
               <Text style={[styles.sectionTitle, { color: themeColors.inkDark, textAlign: 'center', marginBottom: spacing.xs }]}>
-                Daily goal
+                Enough for today
               </Text>
               <Text style={[styles.cardHint, { color: themeColors.inkMid, textAlign: 'center', marginBottom: spacing.md }]}>
-                How many completions count for this mark today?
+                How many times makes today count.
               </Text>
               <DailyTargetStepper value={dailyTarget} onChange={setDailyTarget} label={null} helperText="TIMES" />
             </View>
@@ -562,7 +456,7 @@ export default function NewCounterScreen() {
                 },
               ]}
             >
-              <Text style={[styles.sectionTitle, { color: themeColors.inkDark, marginBottom: spacing.md }]}>Cadence</Text>
+              <Text style={[styles.sectionTitle, { color: themeColors.inkDark, marginBottom: spacing.md }]}>How often</Text>
               <View style={styles.presetRow}>
                 {(Object.keys(FREQUENCY_PRESET_LABELS) as FrequencyPreset[]).map((preset) => {
                   const active = preset === frequencyPreset;
@@ -829,16 +723,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-  },
-  colorGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-  },
-  colorButton: {
-    width: 50,
-    height: 50,
-    borderRadius: borderRadius.full,
   },
   presetRow: {
     flexDirection: 'row',

@@ -8,7 +8,9 @@ import {
   Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { themedColors, spacing, fontSize, fontWeight, borderRadius } from '../theme/tokens';
+import { themedColors, spacing, fontSize, fontWeight, borderRadius, fonts } from '../theme/tokens';
+import { applyOpacity } from '../src/components/icons/color';
+import { GoalTitle } from './ui/GoalTitle';
 import { useEffectiveTheme } from '../state/uiSlice';
 import {
   TierId,
@@ -127,17 +129,26 @@ export function CommitmentScreen({
         <Text style={[styles.backText, { color: c.inkMuted }]}>← Back</Text>
       </TouchableOpacity>
 
-      <Text style={[styles.heading, { color: c.inkDark }]}>
-        {isOnboarding ? 'What does this take?' : 'Your commitment'}
-      </Text>
-      {isOnboarding && (
-        <Text style={[styles.subheading, { color: c.inkMuted }]}>
-          These are the daily actions that build toward your goal. You can adjust anytime.
-        </Text>
+      {isOnboarding ? (
+        <>
+          <Text style={[styles.heading, { color: c.inkDark }]}>What does this take?</Text>
+          <Text style={[styles.subheading, { color: c.inkMuted }]}>
+            These are the daily actions that build toward your goal. You can adjust anytime.
+          </Text>
+        </>
+      ) : (
+        /* VD-7: reflect the user's title back once, in the Signature serif —
+           the goal is already theirs before a single option is picked. */
+        <View style={styles.echoWrap}>
+          <GoalTitle title={goalTitle} size="card" flourish />
+          <Text style={[styles.echoLine, { color: c.inkMid }]}>
+            Yours now · here’s what it takes.
+          </Text>
+        </View>
       )}
 
       {/* ── Marks ── */}
-      <Text style={[styles.sectionLabel, { color: c.inkMuted }]}>MARKS</Text>
+      <Text style={[styles.sectionLabel, { color: c.inkMuted }]}>THE WORK</Text>
       <View style={styles.chipRow}>
         {suggestedMarks.map(s => {
           const owned = findOwnedMark(s, userMarks);
@@ -150,7 +161,7 @@ export function CommitmentScreen({
                 styles.markChip,
                 {
                   borderColor: isSelected ? c.accent : c.borderLight,
-                  backgroundColor: isSelected ? c.forest + '18' : c.surface,
+                  backgroundColor: isSelected ? applyOpacity(c.forest, 0.09) : c.surface,
                 },
               ]}
             >
@@ -168,7 +179,7 @@ export function CommitmentScreen({
 
       {/* ── Tier ── */}
       <View style={styles.sectionRow}>
-        <Text style={[styles.sectionLabel, { color: c.inkMuted }]}>COMMITMENT LEVEL</Text>
+        <Text style={[styles.sectionLabel, { color: c.inkMuted }]}>HOW MUCH</Text>
         <TouchableOpacity
           onPress={() => setExplanationVisible('tier')}
           style={[styles.explainBtn, { borderColor: c.borderMid }]}
@@ -185,7 +196,7 @@ export function CommitmentScreen({
               styles.tierBtn,
               {
                 borderColor: tier === t ? c.accent : c.borderLight,
-                backgroundColor: tier === t ? c.forest + '15' : c.surface,
+                backgroundColor: tier === t ? applyOpacity(c.forest, 0.08) : c.surface,
               },
             ]}
           >
@@ -203,7 +214,7 @@ export function CommitmentScreen({
 
       {/* ── Frequency ── */}
       <View style={styles.sectionRow}>
-        <Text style={[styles.sectionLabel, { color: c.inkMuted }]}>FREQUENCY</Text>
+        <Text style={[styles.sectionLabel, { color: c.inkMuted }]}>HOW OFTEN</Text>
         <TouchableOpacity
           onPress={() => setExplanationVisible('frequency')}
           style={[styles.explainBtn, { borderColor: c.borderMid }]}
@@ -224,7 +235,7 @@ export function CommitmentScreen({
                 styles.freqBtn,
                 {
                   borderColor: selected ? c.accent : c.borderLight,
-                  backgroundColor: selected ? c.forest + '15' : c.surface,
+                  backgroundColor: selected ? applyOpacity(c.forest, 0.08) : c.surface,
                   opacity: allowed ? 1 : 0.35,
                 },
               ]}
@@ -252,7 +263,7 @@ export function CommitmentScreen({
         onPress={handleConfirm}
         disabled={!canProceed}
       >
-        <Text style={styles.ctaText}>
+        <Text style={[styles.ctaText, { color: c.inkInverse }]}>
           {isOnboarding ? "Let's go" : 'Create goal'}
         </Text>
       </TouchableOpacity>
@@ -298,6 +309,13 @@ const styles = StyleSheet.create({
   backText: { fontSize: fontSize.sm },
   heading: { fontSize: fontSize.xl, fontWeight: fontWeight.bold, marginBottom: spacing.xs },
   subheading: { fontSize: fontSize.sm, marginBottom: spacing.md, lineHeight: 20 },
+  echoWrap: { marginBottom: spacing.xs },
+  echoLine: {
+    fontFamily: fonts.serifItalic,
+    fontSize: fontSize.lg,
+    lineHeight: 22,
+    marginTop: spacing.sm,
+  },
   sectionLabel: {
     fontSize: fontSize.xs,
     fontWeight: fontWeight.semibold,
@@ -353,7 +371,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     alignItems: 'center',
   },
-  ctaText: { color: '#FFFFFF', fontWeight: fontWeight.bold, fontSize: fontSize.md },
+  ctaText: { fontWeight: fontWeight.bold, fontSize: fontSize.md },
   explainBtn: {
     width: 20,
     height: 20,

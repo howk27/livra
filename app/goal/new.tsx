@@ -143,7 +143,7 @@ export default function NewGoalScreen() {
           <TouchableOpacity onPress={() => router.back()}>
             <Text style={[styles.cancel, { color: c.inkMuted }]}>Cancel</Text>
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: c.inkDark }]}>New Goal</Text>
+          <Text style={[styles.headerTitle, { color: c.inkDark }]}>New goal</Text>
           <TouchableOpacity onPress={handleNext} disabled={!title.trim() || saving}>
             <Text style={[styles.save, { color: title.trim() && !saving ? c.accent : c.inkMuted }]}>
               Next
@@ -152,7 +152,7 @@ export default function NewGoalScreen() {
         </View>
 
         <View style={styles.form}>
-          <Text style={[styles.label, { color: c.inkMuted }]}>Goal</Text>
+          <Text style={[styles.label, { color: c.inkMuted }]}>Name the goal · that’s all it takes</Text>
           <TextInput
             style={[
               styles.input,
@@ -169,7 +169,7 @@ export default function NewGoalScreen() {
           />
 
           <Text style={[styles.label, { color: c.inkMuted }]}>
-            Why this goal? (optional)
+            Why it matters · optional
           </Text>
           <TextInput
             style={[

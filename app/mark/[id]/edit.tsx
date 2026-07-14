@@ -14,62 +14,13 @@ import type { MarkType } from '@/src/types/counters';
 import { logger } from '../../../lib/utils/logger';
 import { DailyTargetStepper } from '../../../components/DailyTargetStepper';
 import { resolveDailyTarget } from '../../../lib/markDailyTarget';
+import { ICON_TYPE_TO_EMOJI, MARK_ICON_OPTIONS } from '../../../lib/markIcons';
 
 const COLOR_OPTIONS = ['#3B82F6', '#10B981', '#A855F7', '#F97316', '#EF4444', '#EC4899'];
 
-// Mapping of icon types to emojis for storage compatibility
-const ICON_TYPE_TO_EMOJI: Record<Exclude<MarkType, 'custom'>, string> = {
-  email: '📧',
-  planning: '🗓️',
-  focus: '🎯',
-  tasks: '✅',
-  language: '🗣️',
-  study: '📚',
-  reading: '📖',
-  calories: '🔥',
-  soda_free: '🥤',
-  rest: '🛌',
-  meditation: '🧘',
-  sleep: '🌙',
-  gym: '🏋️',
-  steps: '👣',
-  water: '💧',
-  no_sugar: '🚫',
-  no_beer: '🍺',
-  no_spending: '💰',
-  mood: '😊',
-  no_smoking: '🚭',
-  screen_free: '📱',
-  gratitude: '🙏',
-  journaling: '📝',
-};
-
-// All available icon types (excluding 'custom' as it has no icon)
-const ALL_ICON_TYPES: Exclude<MarkType, 'custom'>[] = [
-  'email',
-  'planning',
-  'focus',
-  'tasks',
-  'language',
-  'study',
-  'reading',
-  'calories',
-  'soda_free',
-  'rest',
-  'meditation',
-  'sleep',
-  'gym',
-  'steps',
-  'water',
-  'no_sugar',
-  'no_beer',
-  'no_spending',
-  'mood',
-  'no_smoking',
-  'screen_free',
-  'gratitude',
-  'journaling',
-];
+// VD-7 retry #1: the icon emoji map + selectable list live in lib/markIcons.ts,
+// shared with mark/new.tsx so the two grids can never diverge.
+const ALL_ICON_TYPES = MARK_ICON_OPTIONS;
 
 export default function EditCounterScreen() {
   const theme = useEffectiveTheme();
