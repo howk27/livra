@@ -162,6 +162,15 @@ export const MOMENT_CONTENT: Record<MomentType, Record<string, readonly string[]
       'A bonus one. Rest would count just the same.',
     ],
   },
+  // QC2-H, spoken ONCE through the voice pill when the user commits a goal:
+  // an earned moment, never ambient chrome on the commitment screen itself.
+  goalCommitted: {
+    confirmed: [
+      'Yours now · one mark at a time.',
+      '{goalTitle} is on the board. Start small.',
+      'Committed. The first mark makes it real.',
+    ],
+  },
   // M6, default greeting rotation: calm, {name} aware, no goal reference.
   // Honest about being general; it never pretends to be personal.
   greetingDefault: {

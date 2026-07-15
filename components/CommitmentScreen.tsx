@@ -23,6 +23,8 @@ import {
 } from '../lib/goalMarkSuggestions';
 import { MARK_LIBRARY_BY_ID, MarkDefinition } from '../lib/suggestedCounters';
 import { canCreateGoalFromCommitment } from '../lib/goals/commitmentGate';
+import { fillTemplate, pickTemplate } from '../lib/moments/content';
+import { useVoiceStore } from '../state/voiceSlice';
 import type { Mark } from '../types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -98,6 +100,20 @@ export function CommitmentScreen({
   };
 
   const handleConfirm = () => {
+    // QC2-H QA fix: the committed line is an earned moment — spoken once
+    // through the voice pill on the surface the user lands on, not ambient
+    // chrome on this screen.
+    if (!isOnboarding) {
+      const picked = pickTemplate('goalCommitted', 'confirmed');
+      if (picked) {
+        useVoiceStore.getState().speak({
+          id: picked.id,
+          surface: 'postLog',
+          type: 'goalCommitted',
+          text: fillTemplate(picked.template, { goalTitle }),
+        });
+      }
+    }
     const alreadyOwnedMarkIds = suggestedMarks
       .map(s => findOwnedMark(s, userMarks))
       .filter(Boolean)
@@ -161,9 +177,6 @@ export function CommitmentScreen({
             marks={selectedForCard}
             planMeta={planMeta}
           />
-          <Text style={[styles.echoLine, { color: c.inkMid }]}>
-            Yours now · here’s what it takes.
-          </Text>
         </View>
       )}
 
@@ -332,12 +345,6 @@ const styles = StyleSheet.create({
   heading: { fontSize: fontSize.xl, fontWeight: fontWeight.bold, marginBottom: spacing.xs },
   subheading: { fontSize: fontSize.sm, marginBottom: spacing.md, lineHeight: 20 },
   echoWrap: { marginBottom: spacing.xs },
-  echoLine: {
-    fontFamily: fonts.serifItalic,
-    fontSize: fontSize.lg,
-    lineHeight: 22,
-    marginTop: spacing.sm,
-  },
   // QC2-H: the mentor's quiet labels — sentence case, centered, no tracked
   // uppercase (design-system kicker ban). One plain line per decision.
   sectionLabel: {

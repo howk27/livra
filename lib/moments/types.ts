@@ -19,7 +19,8 @@ export type MomentType =
   | 'emptyInvitation' // M4 — empty states as invitations
   | 'postLog' // M5 — post-log micro-feedback
   | 'greetingDefault' // M6 — default greeting rotation
-  | 'rest'; // QC2-F — rest register: done-for-week line + bonus-log acknowledgment
+  | 'rest' // QC2-F — rest register: done-for-week line + bonus-log acknowledgment
+  | 'goalCommitted'; // QC2-H — the earned line after committing to a goal (voice pill, once)
 
 /** A single line Livra says. `id` is stable per template (type.variant.index) and
  *  doubles as the caller-held anti-repeat token. */
