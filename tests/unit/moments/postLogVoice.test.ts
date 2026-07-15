@@ -125,6 +125,43 @@ describe('evaluatePostLogVoice — contextual variants', () => {
     expect(m!.id.startsWith('postLog.slippingGentle.')).toBe(true);
   });
 
+  it('picks the rest bonusLog when the week was already closed before this log (QC2-F)', () => {
+    // weekly_target 1, met on Monday; today (Tuesday) logs again → count 2 > 1.
+    const m = evaluatePostLogVoice(
+      makeInputs({
+        marks: [makeMark({ weekly_target: 1 })],
+        events: [
+          makeEvent(),
+          makeEvent({
+            id: 'e0',
+            occurred_local_date: '2026-07-13',
+            occurred_at: '2026-07-13T10:00:00Z',
+          }),
+        ],
+      }),
+    );
+    expect(m).not.toBeNull();
+    expect(m!.id.startsWith('rest.bonusLog.')).toBe(true);
+  });
+
+  it('the bonus acknowledgment rides the gate — silence stays the majority case (QC2-F)', () => {
+    const m = evaluatePostLogVoice(
+      makeInputs({
+        marks: [makeMark({ weekly_target: 1 })],
+        events: [
+          makeEvent(),
+          makeEvent({
+            id: 'e0',
+            occurred_local_date: '2026-07-13',
+            occurred_at: '2026-07-13T10:00:00Z',
+          }),
+        ],
+        rng: silent,
+      }),
+    );
+    expect(m).toBeNull();
+  });
+
   it('the first-ever log on a goal bypasses the gate (M1 firstLog)', () => {
     const m = evaluatePostLogVoice(
       makeInputs({ events: [makeEvent()], rng: silent }),

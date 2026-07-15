@@ -7,16 +7,19 @@ export type Surface =
   | 'momentumBanner'
   | 'goalDetail'
   | 'postLog'
-  | 'emptyState';
+  | 'emptyState'
+  | 'restLine';
 
-/** The six spec moments (M1–M6, docs/superpowers/specs/2026-07-14-psychology-layer-design.md §3). */
+/** The six spec moments (M1–M6, docs/superpowers/specs/2026-07-14-psychology-layer-design.md §3)
+ *  plus the rest register (QC2-F, founder device note #6). */
 export type MomentType =
   | 'firstWeek' // M1 — first-week scaffolding
   | 'celebration' // M2 — momentum celebration
   | 'whyResurface' // M3 — why-resurfacing at slipping (the one direct sentence)
   | 'emptyInvitation' // M4 — empty states as invitations
   | 'postLog' // M5 — post-log micro-feedback
-  | 'greetingDefault'; // M6 — default greeting rotation
+  | 'greetingDefault' // M6 — default greeting rotation
+  | 'rest'; // QC2-F — rest register: done-for-week line + bonus-log acknowledgment
 
 /** A single line Livra says. `id` is stable per template (type.variant.index) and
  *  doubles as the caller-held anti-repeat token. */

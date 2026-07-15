@@ -26,6 +26,7 @@ describe('registry copy rules (walked, same discipline as copyDashRule)', () => 
       'emptyInvitation',
       'postLog',
       'greetingDefault',
+      'rest',
     ];
     for (const t of types) {
       const variants = MOMENT_CONTENT[t];
@@ -77,9 +78,13 @@ describe('registry copy rules (walked, same discipline as copyDashRule)', () => 
   );
 
   // The VoiceLine pill holds roughly 8 words: everything that renders there
-  // (all M5 variants + M1's firstLog) must keep its TEMPLATE at or under 60 chars.
+  // (all M5 variants + M1's firstLog + QC2-F's bonus-log rest acknowledgment)
+  // must keep its TEMPLATE at or under 60 chars.
   const pillEntries = allEntries.filter(
-    (e) => e.address.startsWith('postLog.') || e.address.startsWith('firstWeek.firstLog.'),
+    (e) =>
+      e.address.startsWith('postLog.') ||
+      e.address.startsWith('firstWeek.firstLog.') ||
+      e.address.startsWith('rest.bonusLog.'),
   );
   it.each(pillEntries.map((e) => [e.address, e.text] as const))(
     '%s fits the post-log pill (≤ 60 chars)',
@@ -109,6 +114,16 @@ describe('registry copy rules (walked, same discipline as copyDashRule)', () => 
         expect(pool.length).toBeGreaterThanOrEqual(2);
         expect(pool.length).toBeLessThanOrEqual(4);
       }
+    }
+  });
+
+  it('every rest line frames rest as part of the plan, never as scolding (QC2-F)', () => {
+    const restLines = [...MOMENT_CONTENT.rest.doneForWeek!, ...MOMENT_CONTENT.rest.bonusLog!];
+    for (const line of restLines) {
+      // Rest is named, positively: part of the training, not absence of it.
+      expect(line).toMatch(/\b(rest|recovery)\b/i);
+      // Never scolds the bonus log and never dangles the target as a cap.
+      expect(line).not.toMatch(/\b(should|too much|enough already|stop|overdo|instead of)\b/i);
     }
   });
 

@@ -143,6 +143,25 @@ export const MOMENT_CONTENT: Record<MomentType, Record<string, readonly string[]
       'In the book. Same time tomorrow.',
     ],
   },
+  // QC2-F, the rest register. VOICE ONLY: logging is never blocked; a met
+  // weekly target never blocks the log. doneForWeek renders on the Focus rest
+  // line under a finished mark, next to the Log one more affordance. bonusLog
+  // renders on the postLog pill when someone logs a mark that was ALREADY done
+  // for the week: they chose to move, so honor it and remind gently. Rest is
+  // framed as PART of the training, never as absence of it. Mentor register
+  // throughout: no guilt, no scolding, nothing playful.
+  rest: {
+    doneForWeek: [
+      'Done for the week · rest is part of the plan.',
+      'Target met · the plan says rest now.',
+      'This week is covered. Recovery is training too.',
+    ],
+    bonusLog: [
+      'Counted. Rest still counts too.',
+      'Extra logged. Rest is still part of the plan.',
+      'A bonus one. Rest would count just the same.',
+    ],
+  },
   // M6, default greeting rotation: calm, {name} aware, no goal reference.
   // Honest about being general; it never pretends to be personal.
   greetingDefault: {

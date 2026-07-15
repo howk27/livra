@@ -32,7 +32,12 @@ import { useAppDateStore } from '../../state/appDateSlice';
 import { useGoalsStore } from '../../state/goalsSlice';
 import { effectivePersonalBest, useMomentumStore } from '../../state/momentumSlice';
 import { buildMomentContext } from '../../lib/moments/context';
-import { dayHashRng, previousDayGreetingDefaultId, selectMoment } from '../../lib/moments/select';
+import {
+  dayHashRng,
+  previousDayGreetingDefaultId,
+  previousDayRestLineId,
+  selectMoment,
+} from '../../lib/moments/select';
 import { deriveFocusEmptyVariant, getEmptyStateCopy } from '../../lib/moments/emptyState';
 import { MomentumBanner } from '../../components/ui/MomentumBanner';
 import { shouldShowMomentumBanner } from '../../lib/momentumPresenter';
@@ -300,6 +305,25 @@ export default function FocusScreen() {
     [uniqueCounters, allEvents],
   );
 
+  // QC2-F: the rest line under a doneForWeek mark speaks in the mentor voice —
+  // rest framed as part of the plan, not absence of it. Engine-owned words,
+  // greeting-style stateless rotation: day+mark seeded rng (stable within a
+  // day), yesterday's base pick excluded. The "Log one more" affordance next
+  // to it is untouched; a met weekly target never blocks today's log.
+  const restLineTextFor = useCallback(
+    (markId: string) => {
+      const lastId = previousDayRestLineId(todayStr, markId);
+      const moment = selectMoment('restLine', momentCtx, {
+        rng: dayHashRng(`${todayStr}:${markId}`),
+        lastMomentIds: lastId ? { rest: lastId } : undefined,
+        markDoneForWeek: true,
+      });
+      // Registry-walked, so the pool cannot ship empty; fallback is defensive.
+      return moment?.text ?? 'Done for the week.';
+    },
+    [momentCtx, todayStr],
+  );
+
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   const handleQuickIncrement = useCallback(
@@ -428,7 +452,7 @@ export default function FocusScreen() {
           {showRestLine && (
             <View style={styles.restLineRow}>
               <Text style={[styles.restLineText, { color: c.inkMuted }]}>
-                Done for the week.
+                {restLineTextFor(mark.id)}
               </Text>
               <TouchableOpacity
                 style={styles.bonusButton}
@@ -442,7 +466,7 @@ export default function FocusScreen() {
         </View>
       );
     },
-    [weeklyCountsMap, todayCountsMap, c, handleDeleteMark, handleRetireMark, handleMarkLongPress, handleQuickIncrement, router, celebrateStamp],
+    [weeklyCountsMap, todayCountsMap, c, handleDeleteMark, handleRetireMark, handleMarkLongPress, handleQuickIncrement, router, celebrateStamp, restLineTextFor],
   );
 
   // ── Render ────────────────────────────────────────────────────────────────

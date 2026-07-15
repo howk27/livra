@@ -90,15 +90,20 @@ export function evaluatePostLogVoice(inputs: PostLogVoiceInputs): Moment | null 
   // "Closes the week": the completions count sits exactly at the target, so the
   // day this log flipped is the day the week closed for this mark.
   const weeklyCount = weeklyCountsMap.get(mark.id) ?? 0;
-  const closesWeekForMark =
-    markWeeklyState(mark, weeklyCount) === 'doneForWeek' &&
-    weeklyCount === (mark.weekly_target ?? 3);
+  const doneForWeek = markWeeklyState(mark, weeklyCount) === 'doneForWeek';
+  const closesWeekForMark = doneForWeek && weeklyCount === (mark.weekly_target ?? 3);
+
+  // QC2-F "bonus log": the count sits PAST the target, so the week was already
+  // closed before this log landed. Disjoint from closesWeekForMark by
+  // construction (=== target vs > target); logging itself is never blocked.
+  const bonusAfterWeekDone = doneForWeek && weeklyCount > (mark.weekly_target ?? 3);
 
   return selectMoment('postLog', ctx, {
     rng: inputs.rng,
     goalId: mark.goal_id ?? undefined,
     lastMomentIds: inputs.lastMomentIds,
     closesWeekForMark,
+    bonusAfterWeekDone,
   });
 }
 
