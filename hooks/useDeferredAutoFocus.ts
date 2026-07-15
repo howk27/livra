@@ -1,15 +1,18 @@
 /**
- * useDeferredAutoFocus — VD-6 (new-goal half-render fix).
+ * useDeferredAutoFocus — VD-6, revised under QC2-D.
  *
- * `autoFocus` on a TextInput inside a native pageSheet modal makes the
- * keyboard's appearance animation race the sheet's presentation transition.
- * RN's KeyboardAvoidingView computes its padding from the frame it holds when
- * `keyboardWillShow` lands and only recomputes when the frame HEIGHT changes
- * (react-native/Libraries/Components/Keyboard/KeyboardAvoidingView.js:136),
- * so a measurement taken mid-transition leaves a stale, screen-scale
- * paddingBottom behind — the content sits squashed in the top half of the
- * sheet ("renders halfway only"). Focusing only after the transition settles
- * removes the race at its root instead of patching the padding.
+ * Focuses a TextInput only after the native-stack presentation transition
+ * settles, so the keyboard's appearance animation never overlaps the pageSheet
+ * slide-in. VD-6 shipped this as the half-render FIX; QC2-D's re-diagnosis
+ * showed the actual half-render root was KeyboardAvoidingView itself (now
+ * removed from the creation modals — see app/goal/new.tsx), so this hook is
+ * kept for presentation calm, not layout correctness.
+ *
+ * QC2-D also hardened the fallback: at 600ms it could fire BEFORE a real
+ * `transitionEnd` (iOS pageSheet presentation ≈ 500ms plus JS-thread latency
+ * from the chooser sheet's simultaneous close animation), re-creating the
+ * exact mid-transition focus it exists to avoid. 900ms keeps the fallback
+ * strictly a dead-event escape hatch (web, tests), never a competitor.
  *
  * Attach the returned ref to the TextInput and drop its `autoFocus` prop.
  */
@@ -17,8 +20,10 @@ import { useEffect, useRef } from 'react';
 import type { TextInput } from 'react-native';
 import { useNavigation } from 'expo-router';
 
-/** Fallback for navigators/platforms that never emit `transitionEnd` (web, tests). */
-const FALLBACK_DELAY_MS = 600;
+/** Fallback for navigators/platforms that never emit `transitionEnd` (web, tests).
+ * Must comfortably exceed the iOS pageSheet presentation (~500ms) so it can
+ * never fire mid-transition on a busy JS thread. */
+const FALLBACK_DELAY_MS = 900;
 
 type TransitionEndListener = (e: { data?: { closing?: boolean } }) => void;
 type NavigationLike = {
