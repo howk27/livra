@@ -63,6 +63,7 @@ export async function migrateMarkNotesFromAsyncStorage(notesStorageKey: string):
           `INSERT INTO mark_notes (id, mark_id, user_id, date, text, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(mark_id, date) DO UPDATE SET
+             id = excluded.id,
              text = excluded.text,
              updated_at = excluded.updated_at,
              user_id = excluded.user_id`,
@@ -88,10 +89,14 @@ export async function loadAllMarkNotes(): Promise<MarkNote[]> {
 
 export async function sqliteUpsertMarkNote(note: MarkNote): Promise<void> {
   const db = await getMarkNotesDb();
+  // `id = excluded.id` keeps local row identity converged with the in-memory /
+  // remote-merged row — without it, SQLite retained stale ids after remote
+  // merges and later pushed them to Supabase (duplicate-key class of bugs).
   await db.runAsync(
     `INSERT INTO mark_notes (id, mark_id, user_id, date, text, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(mark_id, date) DO UPDATE SET
+       id = excluded.id,
        text = excluded.text,
        updated_at = excluded.updated_at,
        user_id = excluded.user_id`,
@@ -99,9 +104,10 @@ export async function sqliteUpsertMarkNote(note: MarkNote): Promise<void> {
   );
 }
 
-export async function sqliteDeleteMarkNote(noteId: string): Promise<void> {
+/** Delete by the natural key (mark_id, date) — the table's real identity; ids can diverge across stores. */
+export async function sqliteDeleteMarkNote(markId: string, date: string): Promise<void> {
   const db = await getMarkNotesDb();
-  await db.runAsync('DELETE FROM mark_notes WHERE id = ?', [noteId]);
+  await db.runAsync('DELETE FROM mark_notes WHERE mark_id = ? AND date = ?', [markId, date]);
 }
 
 export async function sqliteDeleteNotesForMark(markId: string): Promise<void> {

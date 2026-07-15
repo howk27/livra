@@ -11,8 +11,16 @@ import { logger } from '../utils/logger';
 
 /**
  * Upsert a single note to Supabase.
- * Conflict resolution is keyed on (user_id, mark_id, date) — must match the
+ * Conflict resolution is keyed on (mark_id, date, user_id) — matches the
  * UNIQUE (mark_id, date, user_id) constraint. The most recent updated_at wins.
+ *
+ * IMPORTANT: the local `id` is deliberately NOT sent. ON CONFLICT only
+ * arbitrates on the composite index, never on mark_notes_pkey — a
+ * client-supplied id that diverged from the server's (fresh uuid for an
+ * existing remote row, stale SQLite id after a remote merge, concurrent
+ * double-saves) raises 23505 "duplicate key value violates unique constraint
+ * mark_notes_pkey". The server owns row ids; the natural key
+ * (user_id, mark_id, date) is the row's identity on the client.
  */
 export async function supabaseUpsertNote(note: MarkNote): Promise<void> {
   const supabase = getSupabaseClient();
@@ -20,7 +28,6 @@ export async function supabaseUpsertNote(note: MarkNote): Promise<void> {
     .from('mark_notes')
     .upsert(
       {
-        id: note.id,
         mark_id: note.mark_id,
         user_id: note.user_id,
         date: note.date,
@@ -37,15 +44,21 @@ export async function supabaseUpsertNote(note: MarkNote): Promise<void> {
 }
 
 /**
- * Hard-delete a note from Supabase by primary key.
- * Supabase RLS guarantees the caller can only delete their own rows.
+ * Hard-delete a note from Supabase by its natural key (user_id, mark_id, date).
+ * Local and remote `id`s can diverge (see supabaseUpsertNote), so deleting by
+ * primary key would silently miss the remote row and let it resurrect on the
+ * next merge. RLS guarantees the caller can only delete their own rows.
  */
-export async function supabaseDeleteNote(noteId: string): Promise<void> {
+export async function supabaseDeleteNote(
+  note: Pick<MarkNote, 'user_id' | 'mark_id' | 'date'>,
+): Promise<void> {
   const supabase = getSupabaseClient();
   const { error } = await supabase
     .from('mark_notes')
     .delete()
-    .eq('id', noteId);
+    .eq('user_id', note.user_id)
+    .eq('mark_id', note.mark_id)
+    .eq('date', note.date);
   if (error) {
     logger.error('[NotesSupabase] delete failed:', error.message);
     throw error;

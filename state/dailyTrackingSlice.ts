@@ -159,7 +159,9 @@ export const useDailyTrackingStore = create<DailyTrackingState>((set, get) => ({
     let updated: MarkNote[];
     let note: MarkNote;
     if (idx !== -1) {
-      note = { ...dailyLogs[idx], text, updated_at: now };
+      // Refresh user_id on edit: the stored row may carry 'local' (created
+      // signed-out) or a stale uid — the current editor owns the note.
+      note = { ...dailyLogs[idx], text, user_id: userId, updated_at: now };
       updated = dailyLogs.map((n, i) => (i === idx ? note : n));
     } else {
       note = {
@@ -203,12 +205,15 @@ export const useDailyTrackingStore = create<DailyTrackingState>((set, get) => ({
 
   deleteDailyLogNote: async (noteId) => {
     const toDelete = get().dailyLogs.find((n) => n.id === noteId);
+    if (!toDelete) return;
     const updated = get().dailyLogs.filter((n) => n.id !== noteId);
     set({ dailyLogs: updated });
 
     if (markNotesSqliteSupported()) {
       try {
-        await sqliteDeleteMarkNote(noteId);
+        // Delete by natural key — local SQLite ids can diverge from in-memory
+        // ids after remote merges, which stranded rows when deleting by id.
+        await sqliteDeleteMarkNote(toDelete.mark_id, toDelete.date);
       } catch (err) {
         logger.error('[DailyTracking] sqlite delete failed:', err);
         await persistNotes(updated);
@@ -217,8 +222,8 @@ export const useDailyTrackingStore = create<DailyTrackingState>((set, get) => ({
       await persistNotes(updated);
     }
 
-    if (toDelete && UUID_RE.test(toDelete.user_id)) {
-      supabaseDeleteNote(noteId)
+    if (UUID_RE.test(toDelete.user_id)) {
+      supabaseDeleteNote(toDelete)
         .then(() => set({ notesCloudError: null }))
         .catch((err) => {
           logger.warn('[DailyTracking] Supabase delete skipped:', err);
