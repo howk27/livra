@@ -54,7 +54,8 @@ interface MarkRowProps {
   title: string;
   subtitle?: string;
   category?: string;
-  icon?: PhosphorIcon;
+  /** Per-mark library icon (QC2-A); falls back to the category icon. */
+  icon?: PhosphorIcon | React.ComponentType<any>;
   loggedToday?: boolean;
   done?: boolean;
   onPress?: () => void;

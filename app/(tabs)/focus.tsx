@@ -52,7 +52,7 @@ import {
   buildWeeklyCountsMap,
   markWeeklyState,
 } from '../../lib/features';
-import { resolveMarkCategory } from '../../lib/markCategoryResolve';
+import { resolveMarkCategory, resolveMarkIcon } from '../../lib/markCategoryResolve';
 import { resolveFirstName } from '../../lib/profile/displayName';
 import { computeWeek } from '../../lib/consistency';
 import { logger } from '../../lib/utils/logger';
@@ -413,6 +413,7 @@ export default function FocusScreen() {
               <MarkRow
                 title={mark.name}
                 category={category}
+                icon={resolveMarkIcon(mark) ?? undefined}
                 loggedToday={(todayCountsMap.get(mark.id) ?? 0) > 0}
                 done={isDoneForWeek}
                 onPress={() => router.push(`/mark/${mark.id}` as any)}

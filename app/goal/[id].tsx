@@ -55,7 +55,12 @@ import {
   markWeeklyState,
 } from '../../lib/features';
 import { buildGoalWeekSentence } from '../../lib/goalWeekSentence';
-import { resolveMarkCategory, majorityCategory } from '../../lib/markCategoryResolve';
+import {
+  resolveMarkCategory,
+  majorityCategory,
+  resolveMarkIcon,
+  dominantMark,
+} from '../../lib/markCategoryResolve';
 import { logger } from '../../lib/utils/logger';
 import { applyOpacity } from '../../src/components/icons/color';
 
@@ -209,7 +214,11 @@ export default function GoalDetailScreen() {
 
   const heroCategory = useMemo(() => majorityCategory(linkedMarks), [linkedMarks]);
   const heroCat = CATEGORY_MAP[heroCategory] ?? CATEGORY_MAP.custom;
-  const HeroIcon = heroCat.Icon;
+  // QC2-A: the medallion carries the dominant mark's OWN icon (most-logged
+  // linked mark, ties to first). Accent stays categorical; empty goals and
+  // custom marks keep the category/custom icon fallback.
+  const heroMark = useMemo(() => dominantMark(linkedMarks), [linkedMarks]);
+  const HeroIcon = (heroMark ? resolveMarkIcon(heroMark) : null) ?? heroCat.Icon;
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -362,7 +371,7 @@ export default function GoalDetailScreen() {
           ) : (
             linkedMarks.map(mark => {
               const catData = CATEGORY_MAP[resolveMarkCategory(mark)] ?? CATEGORY_MAP.custom;
-              const MarkIcon = catData.Icon;
+              const MarkIcon = resolveMarkIcon(mark) ?? catData.Icon;
               const weeklyCount = weeklyCountsMap.get(mark.id) ?? 0;
               const weeklyTarget = mark.weekly_target ?? 3;
               const weekPct = weeklyTarget > 0 ? Math.min(1, weeklyCount / weeklyTarget) : 0;

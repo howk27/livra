@@ -57,7 +57,7 @@ import { LoadingScreen } from '../../../components/LoadingScreen';
 import { useAuth } from '../../../hooks/useAuth';
 import { logger } from '../../../lib/utils/logger';
 import { useDailyTrackingStore } from '../../../state/dailyTrackingSlice';
-import { MARK_LIBRARY } from '@/lib/suggestedCounters';
+import { resolveLibraryMark } from '@/lib/markCategoryResolve';
 import { resolveDailyTarget } from '../../../lib/markDailyTarget';
 import { getEmptyStateCopy } from '../../../lib/moments/emptyState';
 import { currentWeekDates, markWeeklyState, computeCompletionsThisWeek } from '../../../lib/features';
@@ -120,7 +120,9 @@ function MarkDetailContent() {
   const { counters, loading, incrementCounter, decrementCounter, resetCounter, deleteCounter, updateMark } = useCounters();
   const allEvents = useEventsStore((state) => state.events || []);
   const counter = id ? counters.find((c) => c.id === id) : null;
-  const libraryMark = counter ? MARK_LIBRARY.find(m => m.emoji === counter.emoji) : undefined;
+  // QC2-A: shared resolver — name-first, emoji fallback (immune to library
+  // emoji collisions like '🚫').
+  const libraryMark = counter ? resolveLibraryMark(counter) : undefined;
 
   const [expandedActivityDate, setExpandedActivityDate] = useState<string | null>(null);
   const [historyExpanded, setHistoryExpanded] = useState(false);
@@ -335,7 +337,8 @@ function MarkDetailContent() {
   const catKey = libraryMark?.category ?? resolvedIconKey ?? 'custom';
   const catData = CATEGORY_MAP[catKey] ?? CATEGORY_MAP.custom;
   const accent = catData.accent;
-  const CatIcon = catData.Icon;
+  // QC2-A: the mark's OWN library icon; category icon only for custom marks.
+  const CatIcon = libraryMark?.icon ?? catData.Icon;
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
 
