@@ -278,7 +278,27 @@ export async function writeGoalPackageCache(
 
 // ─── Main entry point ─────────────────────────────────────────────────────────
 
-export const MIN_GOAL_LENGTH = 10;
+/**
+ * Minimum trimmed length for a goal to clear the pre-generation gate.
+ * Lowered 10 → 4 (QC3-B, 2026-07-15): the old floor rejected terse-but-real
+ * goals like "save 10k" (8 chars) and "read" (4). The gate now pairs a short
+ * length floor with a real-word check (see meetsGoalTextGate) so single
+ * characters and all-initials strings still bounce, but concrete short goals
+ * pass through to the model.
+ */
+export const MIN_GOAL_LENGTH = 4;
+
+/**
+ * Whether goalText clears the client-side gate before we spend a generation:
+ * at least MIN_GOAL_LENGTH characters AND at least one real word (a run of 2+
+ * non-space characters). Empty/whitespace-only, single characters, and
+ * all-single-letter strings ("a b c") fail; "save 10k", "read", "learn" pass.
+ */
+export function meetsGoalTextGate(goalText: string): boolean {
+  const trimmed = goalText.trim();
+  if (trimmed.length < MIN_GOAL_LENGTH) return false;
+  return trimmed.split(/\s+/).some((word) => word.length >= 2);
+}
 
 /** Shape returned by the ai-goal-generation Edge Function. */
 type EdgeResponse =
@@ -308,7 +328,7 @@ export async function generateGoalPackage(
   goalText: string,
 ): Promise<GenerationResult> {
   const trimmed = goalText.trim();
-  if (trimmed.length < MIN_GOAL_LENGTH) {
+  if (!meetsGoalTextGate(trimmed)) {
     return { ok: false, reason: 'goal_too_short' };
   }
 

@@ -20,7 +20,7 @@ import { GOAL_LIMIT_MESSAGE, GENERATION_ERROR_COPY } from '../lib/copy';
 import { createFromAIPackage } from '../lib/goals/createFromAIPackage';
 import {
   generateGoalPackage,
-  MIN_GOAL_LENGTH,
+  meetsGoalTextGate,
   type AIGoalPackage,
 } from '../lib/ai/goalGeneration';
 import type { GoalPackageReviewSelection } from '../components/ai/GoalPackageReview';
@@ -65,7 +65,9 @@ export function useSuggestGoalFlow() {
   );
   const panelBorder = useMemo(() => applyOpacity(c.ember, 0.55), [c.ember]);
 
-  const tooShort = goalText.trim().length < MIN_GOAL_LENGTH;
+  // QC3-B: the AIHatchButton enables the moment the text clears the relaxed
+  // gate (short length floor + one real word), so "save 10k" / "read" pass.
+  const tooShort = !meetsGoalTextGate(goalText);
 
   const handleGenerate = useCallback(async () => {
     if (!user?.id) return;
