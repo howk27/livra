@@ -100,7 +100,7 @@ export const useMarks = () => {
     }) => {
       // Free-tier caps: two independent buckets, both bypassed by Pro and by batch
       // operations (onboarding) via skipSync.
-      //   • goal-linked marks  → 3 per goal_id (per-goal, not a global ceiling)
+      //   • goal-linked marks  → 5 per goal_id (per-goal, not a global ceiling)
       //   • unlinked "daily habit" marks (no goal_id) → 3 total
       if (!data.skipSync && !isProUnlocked) {
         if (proStatus.verification === 'unverified' && proStatus.status === 'unknown') {
@@ -110,7 +110,7 @@ export const useMarks = () => {
           const marksInGoal = countMarksInGoal(marks, data.goal_id);
           if (!canAddMarkToGoal(isProUnlocked, marksInGoal)) {
             throw new Error(
-              "FREE_COUNTER_LIMIT_REACHED: You've added 3 marks to this goal. Livra+ lets you add more."
+              "FREE_COUNTER_LIMIT_REACHED: You've added 5 marks to this goal. Livra+ lets you add more."
             );
           }
         } else {

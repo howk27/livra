@@ -2,7 +2,7 @@
  * Phase 4b Task 1 — AI goal generation unit tests.
  *
  * Covers:
- *   1. validateAIGoalPackage: valid input, off-model icon repair, >3 marks truncation,
+ *   1. validateAIGoalPackage: valid input, off-model icon repair, >4 marks truncation,
  *      out-of-range frequency drop, missing name/why drop, bad envelope → null.
  *   2. normalizeGoalText: lowercasing, stop-word removal, sort, dedup handling.
  *   3. resolveMarkForAIIcon: known icon → correct markId; unknown icon → fallback.
@@ -117,7 +117,7 @@ describe('validateAIGoalPackage', () => {
     expect(result!.marks[0].name).toBe('Valid');
   });
 
-  test('truncates to 3 marks max', () => {
+  test('accepts a 4-mark package intact (QC2-G: server suggests 3–4)', () => {
     const result = validateAIGoalPackage({
       ...validPackage,
       marks: [
@@ -127,8 +127,41 @@ describe('validateAIGoalPackage', () => {
         { name: 'M4', icon: 'water', frequency: 7, why: 'W4' },
       ],
     });
+    expect(result!.marks).toHaveLength(4);
+    expect(result!.marks.map((m) => m.name)).toEqual(['M1', 'M2', 'M3', 'M4']);
+  });
+
+  test('accepts a 3-mark package intact', () => {
+    const result = validateAIGoalPackage({
+      ...validPackage,
+      marks: [
+        { name: 'M1', icon: 'gym', frequency: 3, why: 'W1' },
+        { name: 'M2', icon: 'sleep', frequency: 2, why: 'W2' },
+        { name: 'M3', icon: 'reading', frequency: 4, why: 'W3' },
+      ],
+    });
     expect(result!.marks).toHaveLength(3);
-    expect(result!.marks.map((m) => m.name)).toEqual(['M1', 'M2', 'M3']);
+  });
+
+  test('still accepts a legacy 2-mark package (pre-QC2-G server / stale cache rows)', () => {
+    const result = validateAIGoalPackage(validPackage);
+    expect(result).not.toBeNull();
+    expect(result!.marks).toHaveLength(2);
+  });
+
+  test('truncates to AI_PACKAGE_MAX_MARKS (4) when the server over-delivers', () => {
+    const result = validateAIGoalPackage({
+      ...validPackage,
+      marks: [
+        { name: 'M1', icon: 'gym', frequency: 3, why: 'W1' },
+        { name: 'M2', icon: 'sleep', frequency: 2, why: 'W2' },
+        { name: 'M3', icon: 'reading', frequency: 4, why: 'W3' },
+        { name: 'M4', icon: 'water', frequency: 7, why: 'W4' },
+        { name: 'M5', icon: 'run', frequency: 2, why: 'W5' },
+      ],
+    });
+    expect(result!.marks).toHaveLength(4);
+    expect(result!.marks.map((m) => m.name)).toEqual(['M1', 'M2', 'M3', 'M4']);
   });
 
   test('returns null when no valid marks remain', () => {
@@ -310,5 +343,28 @@ describe('VALID_ICONS client/server drift guard', () => {
   test('client list contains exactly 29 icons with no duplicates', () => {
     expect(VALID_ICONS).toHaveLength(29);
     expect(new Set(VALID_ICONS).size).toBe(29);
+  });
+});
+
+// ─── Edge-function mark-count drift guard (QC2-G) ─────────────────────────────
+
+describe('edge-function mark count (3–4, QC2-G)', () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, '../../../supabase/functions/ai-goal-generation/index.ts'),
+    'utf8',
+  );
+
+  test('system prompt asks for 3–4 marks', () => {
+    expect(source).toContain('marks: 3–4 items');
+    expect(source).not.toContain('marks: 2–3 items');
+  });
+
+  test('distinctness rule survives the count raise', () => {
+    expect(source).toContain('Each mark must be a separate real-world effort.');
+    expect(source).toContain('Prefer 3 distinct marks over 4 overlapping ones');
+  });
+
+  test('server validation caps at 4 marks, matching AI_PACKAGE_MAX_MARKS', () => {
+    expect(source).toContain('validMarks.slice(0, 4)');
   });
 });

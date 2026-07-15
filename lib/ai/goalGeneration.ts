@@ -38,9 +38,16 @@ export type AIGoalPackage = {
   timeframeWeeks: number;
   /** 'low' → manual fallback, goal text preserved */
   confidence: 'high' | 'low';
-  /** Capped to 3 on activate */
+  /** Capped to AI_PACKAGE_MAX_MARKS on validate/activate */
   marks: AIGoalMark[];
 };
+
+/**
+ * Max marks kept in a validated AI package. Raised 3 → 4 (QC2-G, 2026-07-14):
+ * the server now suggests 3–4 marks. Mirrors the Edge Function's cap; below the
+ * free per-goal cap (FREE_MARKS_PER_GOAL = 5) so a full package always activates.
+ */
+export const AI_PACKAGE_MAX_MARKS = 4;
 
 export type GenerationResult =
   | { ok: true; package: AIGoalPackage; source: 'api' | 'cache' }
@@ -149,7 +156,9 @@ export function resolveMarkForAIIcon(icon: string): {
  * - Off-model icon → replaced with FALLBACK_ICON (not dropped)
  * - Marks with frequency out of 1–7 → dropped
  * - Marks with missing name/why → dropped
- * - Marks array capped at 3 (free-tier activate cap)
+ * - Marks array capped at AI_PACKAGE_MAX_MARKS (4). Legacy 2–3-mark packages
+ *   (pre-QC2-G server, or cache rows written before the founder redeploys the
+ *   Edge Function) still validate — the minimum is 1 salvageable mark.
  *
  * Returns null if the package cannot be salvaged (no valid marks, bad envelope).
  */
@@ -215,7 +224,7 @@ export function validateAIGoalPackage(raw: unknown): AIGoalPackage | null {
     goalTitle: String(r.goalTitle).trim(),
     timeframeWeeks,
     confidence: r.confidence as 'high' | 'low',
-    marks: distinctMarks.slice(0, 3),
+    marks: distinctMarks.slice(0, AI_PACKAGE_MAX_MARKS),
   };
 }
 

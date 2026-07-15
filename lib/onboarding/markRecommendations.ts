@@ -7,7 +7,7 @@ export type { MarkDefinition as MarkTemplate };
 
 // Goal templates with metadata for dropdown selection.
 // minMarks is internal only — never shown to the user.
-// free tier hard cap is 3 marks. Livra+ is unlimited.
+// free tier hard cap is 5 marks per goal. Livra+ is unlimited.
 export type GoalTemplate = {
   id: string;
   name: string;

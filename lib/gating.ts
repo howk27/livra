@@ -1,8 +1,8 @@
 // ── Free-tier caps ──────────────────────────────────────────────────────────
 /** Active (non-completed/non-expired) goals allowed on the free tier. */
 export const FREE_GOAL_LIMIT = 2;
-/** Marks allowed per goal on the free tier (cap is per-goal, not global). */
-export const FREE_MARKS_PER_GOAL = 3;
+/** Marks allowed per goal on the free tier (cap is per-goal, not global). Raised 3 → 5 (2026-07-14 QC2-G). */
+export const FREE_MARKS_PER_GOAL = 5;
 /** Unlinked daily-habit marks (no goal_id) allowed on the free tier. */
 export const FREE_HABIT_LIMIT = 3;
 /** @deprecated Global mark cap. Superseded by FREE_MARKS_PER_GOAL (per-goal). Kept for back-compat. */

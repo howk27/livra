@@ -17,8 +17,8 @@ describe('FREE limits', () => {
   test('FREE_GOAL_LIMIT is 2 (active goals on free)', () => {
     expect(FREE_GOAL_LIMIT).toBe(2);
   });
-  test('FREE_MARKS_PER_GOAL is 3', () => {
-    expect(FREE_MARKS_PER_GOAL).toBe(3);
+  test('FREE_MARKS_PER_GOAL is 5 (raised from 3, QC2-G)', () => {
+    expect(FREE_MARKS_PER_GOAL).toBe(5);
   });
   test('FREE_MARK_LIMIT (deprecated global) is 3', () => {
     expect(FREE_MARK_LIMIT).toBe(3);
@@ -41,10 +41,12 @@ describe('canAddMark (deprecated global)', () => {
 });
 
 describe('canAddMarkToGoal (per-goal cap)', () => {
-  test('free user with 2 marks on the goal can add', () =>
-    expect(canAddMarkToGoal(false, 2)).toBe(true));
-  test('free user with 3 marks on the goal is blocked', () =>
-    expect(canAddMarkToGoal(false, 3)).toBe(false));
+  test('free user with 3 marks on the goal can add a 4th', () =>
+    expect(canAddMarkToGoal(false, 3)).toBe(true));
+  test('free user with 4 marks on the goal can add a 5th (boundary)', () =>
+    expect(canAddMarkToGoal(false, 4)).toBe(true));
+  test('free user with 5 marks on the goal is blocked (6th gated)', () =>
+    expect(canAddMarkToGoal(false, 5)).toBe(false));
   test('free user with 0 marks on the goal can add', () =>
     expect(canAddMarkToGoal(false, 0)).toBe(true));
   test('pro user is never blocked', () => expect(canAddMarkToGoal(true, 99)).toBe(true));

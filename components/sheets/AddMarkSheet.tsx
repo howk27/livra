@@ -144,8 +144,8 @@ export function AddMarkSheet({ visible, onClose }: AddMarkSheetProps) {
       if (msg.includes('FREE_COUNTER_LIMIT_REACHED')) {
         // Soft, per-goal upsell — never a wall on the core loop.
         Alert.alert(
-          "That's 3 marks on this goal",
-          'Three focused marks per goal keeps things doable. Livra+ lets you add more when you want to.',
+          "That's 5 marks on this goal",
+          'Five focused marks per goal keeps things doable. Livra+ lets you add more when you want to.',
           [
             { text: 'Not now', style: 'cancel' },
             { text: 'See Livra+', onPress: () => router.push('/paywall') },

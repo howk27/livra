@@ -146,7 +146,7 @@ export default function NewCounterScreen() {
       showError('Unable to verify your subscription. Please check your connection and try again.');
     } else if (error instanceof Error && error.message.includes('FREE_COUNTER_LIMIT_REACHED')) {
       logger.warn('[Counter] Per-goal mark limit reached for free user');
-      showError('That’s 3 marks on this goal. Livra+ lets you add more.');
+      showError('That’s 5 marks on this goal. Livra+ lets you add more.');
       setTimeout(() => {
         router.replace('/paywall');
       }, 2000);
