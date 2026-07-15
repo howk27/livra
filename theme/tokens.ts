@@ -25,6 +25,16 @@ export const colors = {
   // never chrome. Alphas only via applyOpacity(). `momentumAmber` stays as an
   // alias role for the cushion gauge — same value, do not repoint call sites.
   ember: '#C8913F',
+  // Sanctioned VD-1 carve-out (2026-07-15, QC3-E — founder call "the ring is a
+  // star"): the goal-progress ring AND the matching goals-list bar are the ONE
+  // place progress is a warm amber→ember gradient instead of structural
+  // forest/mint. They represent the user's own progression and are the hero of
+  // their screens, so they earn the gradient. [lighter amber, deeper ember] —
+  // the two stops must differ (flat `ember`/`momentumAmber` are the same hex in
+  // light, so a real two-stop needs the lighter-amber → deeper-ember pair).
+  // Everywhere else progress stays forest/mint; ember stays never-a-button-fill,
+  // never-chrome.
+  progressGradient: ['#D8A658', '#C8913F'] as [string, string],
   dangerLight: '#FDECEA',
   success: '#2D6A4F',
   borderLight: '#E0DBD4',
@@ -70,6 +80,9 @@ const colorsDark: typeof colors = {
   // goal-title flourish, warm status lines); never a button fill, never
   // chrome. See `ember` in `colors`. Alphas only via applyOpacity().
   ember: '#D8A658',
+  // Sanctioned VD-1 carve-out (QC3-E) — dark-theme stops. Lighter amber →
+  // deeper amber; see the `progressGradient` note in `colors`.
+  progressGradient: ['#E0B36A', '#D8A658'] as [string, string],
   dangerLight: '#3A2422',
   success: '#5FA585',
   borderLight: '#2A3A35',

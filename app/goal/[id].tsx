@@ -67,7 +67,7 @@ import {
   dominantMark,
 } from '../../lib/markCategoryResolve';
 import { logger } from '../../lib/utils/logger';
-import { ringFraction, isRingComplete } from '../../lib/goalRingProgress';
+import { ringFraction } from '../../lib/goalRingProgress';
 import { applyOpacity } from '../../src/components/icons/color';
 
 // QC2-C (founder reversal of VD-4): the ring is the hero again — centered at
@@ -75,6 +75,10 @@ import { applyOpacity } from '../../src/components/icons/color';
 // mounts with from=0; reduced motion lands it instantly via useMotion).
 const RING_SIZE = 116;
 const RING_STROKE = 8;
+// QC3-E: the category icon now sits centered INSIDE the ring and fills
+// bottom-to-top alongside the arc. Icon box centered within the ring.
+const RING_ICON_SIZE = 48;
+const RING_ICON_OFFSET = (RING_SIZE - RING_ICON_SIZE) / 2;
 
 type ThemeColors = ReturnType<typeof themedColors>;
 type GoalEvents = Parameters<typeof buildWeeklyCountsMap>[1];
@@ -84,37 +88,72 @@ type GoalEvents = Parameters<typeof buildWeeklyCountsMap>[1];
 // SuggestGoalScreen precedent: hooks/state stay in GoalDetailScreen, each
 // section takes props, the parent render is a thin composition.
 
-/** Hero ring + check-in story. Owns its entrance motion: the sweep comes from
- *  ProgressArc mounting at from=0, the story fade from a mount-scoped effect —
- *  both fire once per screen open (goal detail is pushed per open), never on
- *  re-render. Reduced motion collapses both to the final value via useMotion. */
+/** Hero ring + centered category icon + check-in story (QC3-E "the ring is a
+ *  star"). The ring stroke is the sanctioned `progressGradient` (amber→ember);
+ *  the category icon sits centered INSIDE the ring and fills bottom-to-top in
+ *  the deeper amber as the arc sweeps, so ring and icon are one warming gesture.
+ *
+ *  Owns its entrance motion — all three fire once per screen open (goal detail
+ *  is pushed per open), never on re-render: the arc sweeps from ProgressArc
+ *  mounting at from=0, the icon fill from `fillFrac` (0 → final fraction), the
+ *  story from `storyOpacity`. Reduced motion lands each at its final value via
+ *  useMotion's reduced-safe `timing` (duration 0). The icon fill is a
+ *  bottom-anchored, overflow-clipped copy of the base glyph — the clip height
+ *  = fraction × icon size, the RN equivalent of a ClipPath rect. */
 function RingHero({
   c,
   progress,
   threshold,
+  heroMark,
+  fallbackIcon,
 }: {
   c: ThemeColors;
   progress: number;
   threshold: number;
+  heroMark: Mark | null;
+  fallbackIcon: ComponentType<any>;
 }) {
   const { timing } = useMotion();
+  const frac = ringFraction(progress, threshold);
   const storyOpacity = useSharedValue(0);
+  const fillFrac = useSharedValue(0);
   useEffect(() => {
     storyOpacity.value = timing(1, motion.gentle);
+    fillFrac.value = timing(frac, motion.moment);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const storyStyle = useAnimatedStyle(() => ({ opacity: storyOpacity.value }));
+  const fillStyle = useAnimatedStyle(() => ({ height: RING_ICON_SIZE * fillFrac.value }));
+
+  // The centered icon: the goal's own dominant-mark glyph, category/custom
+  // fallback for empty goals — same resolution the medallion used before it
+  // moved into the ring. Base = faint inkMuted, fill = deeper amber (the ember
+  // stop of progressGradient) so it reads as the same warmth as the arc.
+  const heroIcon = (heroMark ? resolveMarkIcon(heroMark) : null) ?? fallbackIcon;
+  const fillColor = c.progressGradient[1];
 
   return (
     <View style={styles.ringHero}>
-      <ProgressArc
-        from={0}
-        to={ringFraction(progress, threshold)}
-        size={RING_SIZE}
-        strokeWidth={RING_STROKE}
-        color={isRingComplete(progress, threshold) ? c.ember : c.forest}
-        trackColor={c.borderLight}
-      />
+      <View style={styles.ringStack}>
+        <ProgressArc
+          from={0}
+          to={frac}
+          size={RING_SIZE}
+          strokeWidth={RING_STROKE}
+          color={c.forest}
+          trackColor={c.borderLight}
+          gradientColors={c.progressGradient}
+          gradientId="goalRingGradient"
+        />
+        <View style={styles.ringIconBox} pointerEvents="none">
+          {createElement(heroIcon, { size: RING_ICON_SIZE, color: c.inkMuted, weight: 'duotone' })}
+          <Animated.View style={[styles.ringIconFill, fillStyle]} pointerEvents="none">
+            <View style={styles.ringIconFillInner}>
+              {createElement(heroIcon, { size: RING_ICON_SIZE, color: fillColor, weight: 'duotone' })}
+            </View>
+          </Animated.View>
+        </View>
+      </View>
       <Animated.View style={[styles.progressStory, storyStyle]}>
         <Text style={[styles.progressNumber, { color: c.inkDark }]}>{progress}</Text>
         <Text style={[styles.progressCaption, { color: c.inkMid }]}>
@@ -125,15 +164,10 @@ function RingHero({
   );
 }
 
-/** Medallion + title (view/edit) + the captured why. The medallion glyph is a
- *  stable MARK_LIBRARY/CATEGORY_MAP reference (never created during render),
- *  rendered via createElement on a lowercase binding — fixes the QC2-A
- *  react-hooks/static-components false positive on the capitalized JSX form. */
+/** Title (view/edit) + the captured why. The goal's icon moved into the hero
+ *  ring center (QC3-E), so this block is now the title study alone. */
 function GoalIdentity({
   c,
-  accent,
-  heroMark,
-  fallbackIcon,
   title,
   description,
   editingTitle,
@@ -142,9 +176,6 @@ function GoalIdentity({
   onSaveTitle,
 }: {
   c: ThemeColors;
-  accent: string;
-  heroMark: Mark | null;
-  fallbackIcon: ComponentType<any>;
   title: string;
   description?: string | null;
   editingTitle: boolean;
@@ -152,18 +183,8 @@ function GoalIdentity({
   onChangeDraft: (text: string) => void;
   onSaveTitle: () => void;
 }) {
-  // QC2-A: the medallion carries the dominant mark's OWN icon (most-logged
-  // linked mark, ties to first). Accent stays categorical; empty goals and
-  // custom marks keep the category/custom icon fallback.
-  const heroIcon = (heroMark ? resolveMarkIcon(heroMark) : null) ?? fallbackIcon;
-
   return (
-    <>
-      {/* ── The goal's study: medallion + title ── */}
-      <View style={[styles.heroTile, { backgroundColor: applyOpacity(c.ember, 0.12) }]}>
-        {createElement(heroIcon, { size: 24, color: accent, weight: 'duotone' })}
-      </View>
-
+    <View style={styles.identityBlock}>
       {editingTitle ? (
         <View style={styles.titleEditRow}>
           <TextInput
@@ -187,7 +208,7 @@ function GoalIdentity({
       {!!description && (
         <Text style={[styles.why, { color: c.inkMid }]}>{description}</Text>
       )}
-    </>
+    </View>
   );
 }
 
@@ -634,13 +655,16 @@ export default function GoalDetailScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <RingHero c={c} progress={progress} threshold={threshold} />
+        <RingHero
+          c={c}
+          progress={progress}
+          threshold={threshold}
+          heroMark={heroMark}
+          fallbackIcon={heroCat.Icon}
+        />
 
         <GoalIdentity
           c={c}
-          accent={heroCat.accent}
-          heroMark={heroMark}
-          fallbackIcon={heroCat.Icon}
           title={goal.title}
           description={goal.description}
           editingTitle={editingTitle}
@@ -704,6 +728,41 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: spacing.md,
   },
+  // QC3-E: the ring + the centered category icon share one square stack so the
+  // icon can be absolutely centered over the arc.
+  ringStack: {
+    width: RING_SIZE,
+    height: RING_SIZE,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ringIconBox: {
+    position: 'absolute',
+    top: RING_ICON_OFFSET,
+    left: RING_ICON_OFFSET,
+    width: RING_ICON_SIZE,
+    height: RING_ICON_SIZE,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // The amber fill copy: bottom-anchored + overflow-clipped, height driven by
+  // the animated fraction — a rising clip that reveals the glyph bottom-to-top.
+  ringIconFill: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    width: RING_ICON_SIZE,
+    overflow: 'hidden',
+  },
+  ringIconFillInner: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    width: RING_ICON_SIZE,
+    height: RING_ICON_SIZE,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   progressStory: { alignItems: 'center', marginTop: spacing.sm },
   progressNumber: {
     fontFamily: fonts.sansBold,
@@ -715,16 +774,9 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
   },
 
-  // The goal's study: medallion shrinks under the hero ring (QC2-C).
-  heroTile: {
-    width: 48,
-    height: 48,
-    borderRadius: radius.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: spacing.lg,
-    marginBottom: spacing.md,
-  },
+  // The goal's title study sits below the hero ring (QC3-E: the icon moved into
+  // the ring, so this block leads with the title and carries the top gutter).
+  identityBlock: { marginTop: spacing.lg },
   // Type lives in <GoalTitle>; layout spacing only.
   title: { marginTop: 0 },
   why: {
