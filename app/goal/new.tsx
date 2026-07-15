@@ -5,8 +5,7 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
+  ScrollView,
   Alert,
   Keyboard,
 } from 'react-native';
@@ -23,6 +22,7 @@ import { getMarksForGoal } from '../../lib/goalMarkSuggestions';
 import { CommitmentScreen, CommitmentSelection } from '../../components/CommitmentScreen';
 import { MarkDefinition } from '../../lib/suggestedCounters';
 import { useDeferredAutoFocus } from '../../hooks/useDeferredAutoFocus';
+import { useHalfRenderProbe } from '../../hooks/useHalfRenderProbe';
 
 type Step = 'title' | 'commitment';
 
@@ -41,9 +41,13 @@ export default function NewGoalScreen() {
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
   const [suggestedMarks, setSuggestedMarks] = useState<MarkDefinition[]>([]);
-  // VD-6: focus after the pageSheet transition settles — autoFocus racing the
-  // modal presentation left KeyboardAvoidingView with a stale half-screen padding.
+  // VD-6/QC2-D: focus only after the pageSheet transition settles so the
+  // keyboard animation never overlaps the sheet presentation (calm entrance).
   const titleInputRef = useDeferredAutoFocus(step === 'title');
+  // QC2-D diagnostic: dev-only probe — if the half-render ever reproduces
+  // again, one Metro line tells us whether the CONTAINER itself is short
+  // (react-native-screens native measurement) or full (something inside).
+  const onProbeLayout = useHalfRenderProbe('goal/new');
 
   const handleNext = () => {
     const trimmed = title.trim();
@@ -121,7 +125,7 @@ export default function NewGoalScreen() {
 
   if (step === 'commitment') {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: c.linen }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: c.linen }} onLayout={onProbeLayout}>
         <CommitmentScreen
           goalTitle={title}
           suggestedMarks={suggestedMarks}
@@ -134,11 +138,15 @@ export default function NewGoalScreen() {
   }
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: c.linen }]}>
-      <KeyboardAvoidingView
-        style={styles.inner}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+    <SafeAreaView style={[styles.container, { backgroundColor: c.linen }]} onLayout={onProbeLayout}>
+      {/* QC2-D: no KeyboardAvoidingView here, deliberately. It was the root of
+          the device half-render: a keyboard-driven paddingBottom applied (via
+          LayoutAnimation) against a native pageSheet is the only stateful layout
+          in this flow that can stick at ~keyboard height — half the sheet. All
+          content on this step is top-anchored (the primary action lives in the
+          header), so nothing needs to avoid the keyboard; overflow on small
+          devices scrolls instead. */}
+      <View style={styles.inner}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()}>
             <Text style={[styles.cancel, { color: c.inkMuted }]}>Cancel</Text>
@@ -151,7 +159,12 @@ export default function NewGoalScreen() {
           </TouchableOpacity>
         </View>
 
-        <View style={styles.form}>
+        <ScrollView
+          style={styles.formScroll}
+          contentContainerStyle={styles.form}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           <Text style={[styles.label, { color: c.inkMuted }]}>Name the goal · that’s all it takes</Text>
           <TextInput
             style={[
@@ -189,8 +202,9 @@ export default function NewGoalScreen() {
           <TouchableOpacity
             style={styles.aiFallbackLink}
             onPress={() => {
-              // VD-6: never present the next pageSheet while the keyboard is up —
-              // the incoming modal gets measured against the keyboard-shrunk area.
+              // VD-6/QC2-D: never present the next pageSheet while the keyboard
+              // is up — the incoming modal can be measured against the
+              // keyboard-shrunk area.
               Keyboard.dismiss();
               const trimmed = title.trim();
               router.replace({
@@ -210,8 +224,8 @@ export default function NewGoalScreen() {
               Or let Livra suggest a plan
             </Text>
           </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
+        </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
@@ -229,7 +243,8 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: fontSize.md, fontWeight: fontWeight.semibold },
   cancel: { fontSize: fontSize.md },
   save: { fontSize: fontSize.md, fontWeight: fontWeight.semibold },
-  form: { flex: 1, paddingHorizontal: spacing.md, paddingTop: spacing.lg, gap: spacing.xs },
+  formScroll: { flex: 1 },
+  form: { paddingHorizontal: spacing.md, paddingTop: spacing.lg, paddingBottom: spacing.xl, gap: spacing.xs },
   label: { fontSize: fontSize.sm, fontWeight: fontWeight.medium, marginBottom: 4 },
   input: {
     borderWidth: 1,

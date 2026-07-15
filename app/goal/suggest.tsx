@@ -9,8 +9,6 @@
  */
 import React from 'react';
 import {
-  KeyboardAvoidingView,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -26,6 +24,7 @@ import { fonts, spacing, radius, themedColors, fontSize } from '../../theme/toke
 import { AI_EXHAUSTED_COPY } from '../../lib/copy';
 import { useSuggestGoalFlow } from '../../hooks/useSuggestGoalFlow';
 import { useDeferredAutoFocus } from '../../hooks/useDeferredAutoFocus';
+import { useHalfRenderProbe } from '../../hooks/useHalfRenderProbe';
 
 // ─── Header — shared between describe and review phases ────────────────────
 // Split out (with SuggestDescribePhase/SuggestExhaustedPanel below) so the
@@ -111,8 +110,8 @@ function SuggestDescribePhase({
   onUpgrade,
   onManualInstead,
 }: SuggestDescribePhaseProps) {
-  // VD-6: focus after the pageSheet transition settles — autoFocus racing the
-  // modal presentation left KeyboardAvoidingView with a stale half-screen padding.
+  // VD-6/QC2-D: focus only after the pageSheet transition settles so the
+  // keyboard animation never overlaps the sheet presentation (calm entrance).
   const inputRef = useDeferredAutoFocus();
   return (
     <ScrollView
@@ -181,6 +180,10 @@ function SuggestDescribePhase({
 }
 
 export default function SuggestGoalScreen() {
+  // QC2-D diagnostic: dev-only probe — if the half-render ever reproduces
+  // again, one Metro line tells us whether the CONTAINER itself is short
+  // (react-native-screens native measurement) or full (something inside).
+  const onProbeLayout = useHalfRenderProbe('goal/suggest');
   const {
     c,
     router,
@@ -203,7 +206,7 @@ export default function SuggestGoalScreen() {
   // ── Phase 2: review ────────────────────────────────────────────────────────
   if (pkg) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: c.linen }]}>
+      <SafeAreaView style={[styles.container, { backgroundColor: c.linen }]} onLayout={onProbeLayout}>
         <SuggestHeader c={c} onCancel={() => router.back()} />
         <GoalPackageReview
           pkg={pkg}
@@ -218,11 +221,12 @@ export default function SuggestGoalScreen() {
 
   // ── Phase 1: describe ──────────────────────────────────────────────────────
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: c.linen }]}>
-      <KeyboardAvoidingView
-        style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+    <SafeAreaView style={[styles.container, { backgroundColor: c.linen }]} onLayout={onProbeLayout}>
+      {/* QC2-D: no KeyboardAvoidingView here, deliberately — it was the root of
+          the device half-render (see app/goal/new.tsx). All content is
+          top-anchored and already lives in a ScrollView, so nothing needs to
+          avoid the keyboard. */}
+      <View style={styles.container}>
         <SuggestHeader c={c} onCancel={() => router.back()} />
         <SuggestDescribePhase
           c={c}
@@ -241,7 +245,7 @@ export default function SuggestGoalScreen() {
           onUpgrade={() => router.push('/paywall')}
           onManualInstead={handleManualInstead}
         />
-      </KeyboardAvoidingView>
+      </View>
     </SafeAreaView>
   );
 }
