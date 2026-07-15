@@ -1,4 +1,5 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, createElement } from 'react';
+import type { ComponentType } from 'react';
 import {
   View,
   Text,
@@ -12,7 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import Svg, { Circle } from 'react-native-svg';
+import Animated, { useSharedValue, useAnimatedStyle } from 'react-native-reanimated';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { format, parseISO } from 'date-fns';
 import * as Haptics from 'expo-haptics';
@@ -32,7 +33,9 @@ import {
   borderRadius,
   radius,
   fonts,
+  motion,
 } from '../../theme/tokens';
+import type { Mark } from '../../types';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useGoalsStore } from '../../state/goalsSlice';
 import { useMarksStore } from '../../state/countersSlice';
@@ -45,9 +48,11 @@ import { getAppDate } from '../../lib/appDate';
 import { formatDate } from '../../lib/date';
 import { useCounters } from '../../hooks/useCounters';
 import { useAuth } from '../../hooks/useAuth';
+import { useMotion } from '../../hooks/useMotion';
 import { useNotification } from '../../contexts/NotificationContext';
 import { CATEGORY_MAP } from '../../components/ui/MarkRow';
 import { GoalTitle } from '../../components/ui/GoalTitle';
+import { ProgressArc } from '../../components/ui/ProgressArc';
 import { VoiceLine } from '../../components/ui/VoiceLine';
 import {
   currentWeekDates,
@@ -62,57 +67,441 @@ import {
   dominantMark,
 } from '../../lib/markCategoryResolve';
 import { logger } from '../../lib/utils/logger';
+import { ringFraction, isRingComplete } from '../../lib/goalRingProgress';
 import { applyOpacity } from '../../src/components/icons/color';
 
-// Reframed ring (VD-4): a quiet 64px instance beside the text story,
-// no longer the screen's centerpiece. Stroke stays forest (structure).
-const RING_SIZE = 64;
-const STROKE = 6;
+// QC2-C (founder reversal of VD-4): the ring is the hero again — centered at
+// the top, sweeping 0 -> current fraction once per screen open (ProgressArc
+// mounts with from=0; reduced motion lands it instantly via useMotion).
+const RING_SIZE = 116;
+const RING_STROKE = 8;
 
-function ProgressRing({
+type ThemeColors = ReturnType<typeof themedColors>;
+type GoalEvents = Parameters<typeof buildWeeklyCountsMap>[1];
+
+// ── Sections (QC2-C retry #1, fallow complexity gate) ───────────────────────
+// The screen body decomposes into small same-file components per the FU-6
+// SuggestGoalScreen precedent: hooks/state stay in GoalDetailScreen, each
+// section takes props, the parent render is a thin composition.
+
+/** Hero ring + check-in story. Owns its entrance motion: the sweep comes from
+ *  ProgressArc mounting at from=0, the story fade from a mount-scoped effect —
+ *  both fire once per screen open (goal detail is pushed per open), never on
+ *  re-render. Reduced motion collapses both to the final value via useMotion. */
+function RingHero({
+  c,
   progress,
   threshold,
-  size = RING_SIZE,
-  stroke = STROKE,
 }: {
+  c: ThemeColors;
   progress: number;
   threshold: number;
-  size?: number;
-  stroke?: number;
 }) {
-  const theme = useEffectiveTheme();
-  const c = themedColors(theme);
-  const r = (size - stroke) / 2;
-  const circumference = 2 * Math.PI * r;
-  const pct = threshold > 0 ? Math.min(1, progress / threshold) : 0;
-  const strokeDashoffset = circumference * (1 - pct);
+  const { timing } = useMotion();
+  const storyOpacity = useSharedValue(0);
+  useEffect(() => {
+    storyOpacity.value = timing(1, motion.gentle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const storyStyle = useAnimatedStyle(() => ({ opacity: storyOpacity.value }));
 
   return (
-    <Svg width={size} height={size}>
-      <Circle
-        cx={size / 2}
-        cy={size / 2}
-        r={r}
-        stroke={c.borderLight}
-        strokeWidth={stroke}
-        fill="none"
+    <View style={styles.ringHero}>
+      <ProgressArc
+        from={0}
+        to={ringFraction(progress, threshold)}
+        size={RING_SIZE}
+        strokeWidth={RING_STROKE}
+        color={isRingComplete(progress, threshold) ? c.ember : c.forest}
+        trackColor={c.borderLight}
       />
-      <Circle
-        cx={size / 2}
-        cy={size / 2}
-        r={r}
-        stroke={c.forest}
-        strokeWidth={stroke}
-        fill="none"
-        strokeDasharray={circumference}
-        strokeDashoffset={strokeDashoffset}
-        strokeLinecap="round"
-        rotation="-90"
-        origin={`${size / 2}, ${size / 2}`}
-      />
-    </Svg>
+      <Animated.View style={[styles.progressStory, storyStyle]}>
+        <Text style={[styles.progressNumber, { color: c.inkDark }]}>{progress}</Text>
+        <Text style={[styles.progressCaption, { color: c.inkMid }]}>
+          of {threshold} check-ins
+        </Text>
+      </Animated.View>
+    </View>
   );
 }
+
+/** Medallion + title (view/edit) + the captured why. The medallion glyph is a
+ *  stable MARK_LIBRARY/CATEGORY_MAP reference (never created during render),
+ *  rendered via createElement on a lowercase binding — fixes the QC2-A
+ *  react-hooks/static-components false positive on the capitalized JSX form. */
+function GoalIdentity({
+  c,
+  accent,
+  heroMark,
+  fallbackIcon,
+  title,
+  description,
+  editingTitle,
+  titleDraft,
+  onChangeDraft,
+  onSaveTitle,
+}: {
+  c: ThemeColors;
+  accent: string;
+  heroMark: Mark | null;
+  fallbackIcon: ComponentType<any>;
+  title: string;
+  description?: string | null;
+  editingTitle: boolean;
+  titleDraft: string;
+  onChangeDraft: (text: string) => void;
+  onSaveTitle: () => void;
+}) {
+  // QC2-A: the medallion carries the dominant mark's OWN icon (most-logged
+  // linked mark, ties to first). Accent stays categorical; empty goals and
+  // custom marks keep the category/custom icon fallback.
+  const heroIcon = (heroMark ? resolveMarkIcon(heroMark) : null) ?? fallbackIcon;
+
+  return (
+    <>
+      {/* ── The goal's study: medallion + title ── */}
+      <View style={[styles.heroTile, { backgroundColor: applyOpacity(c.ember, 0.12) }]}>
+        {createElement(heroIcon, { size: 24, color: accent, weight: 'duotone' })}
+      </View>
+
+      {editingTitle ? (
+        <View style={styles.titleEditRow}>
+          <TextInput
+            style={[styles.titleInput, { color: c.inkDark, borderColor: c.borderMid, backgroundColor: c.surface }]}
+            value={titleDraft}
+            onChangeText={onChangeDraft}
+            onBlur={onSaveTitle}
+            autoFocus
+            returnKeyType="done"
+            onSubmitEditing={onSaveTitle}
+          />
+          <TouchableOpacity onPress={onSaveTitle} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Check size={22} color={c.forest} weight="bold" />
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <GoalTitle title={title} size="detail" color={c.inkDark} style={styles.title} />
+      )}
+
+      {/* The captured why comes home here. */}
+      {!!description && (
+        <Text style={[styles.why, { color: c.inkMid }]}>{description}</Text>
+      )}
+    </>
+  );
+}
+
+/** One quiet sentence about the week; renders nothing when there is nothing to say. */
+function WeekSentenceLine({ c, sentence }: { c: ThemeColors; sentence: string }) {
+  if (sentence === '') return null;
+  return <Text style={[styles.weekSentence, { color: c.inkMid }]}>{sentence}</Text>;
+}
+
+/** YOUR MARKS section: living rows with weekly tracks + quick log, or the
+ *  empty invitation. A met weekly target never blocks today's log. */
+function LinkedMarkRows({
+  c,
+  marks,
+  weeklyCountsMap,
+  emptyLine,
+  onQuickLog,
+  onAddMark,
+  onOpenMark,
+}: {
+  c: ThemeColors;
+  marks: Mark[];
+  weeklyCountsMap: Map<string, number>;
+  emptyLine: string;
+  onQuickLog: (markId: string) => void;
+  onAddMark: () => void;
+  onOpenMark: (markId: string) => void;
+}) {
+  return (
+    <View style={styles.section}>
+      <Text style={[styles.sectionLabel, { color: c.inkMuted }]}>YOUR MARKS</Text>
+      {marks.length === 0 ? (
+        <View style={[styles.emptyMarks, { backgroundColor: c.surface, borderColor: c.borderLight }]}>
+          <Text style={[styles.emptyMarksText, { color: c.inkMid }]}>
+            {emptyLine}
+          </Text>
+          <TouchableOpacity
+            style={[styles.addMarkBtn, { backgroundColor: c.forest }]}
+            onPress={onAddMark}
+          >
+            <Plus size={14} color={c.inkInverse} weight="bold" />
+            <Text style={[styles.addMarkBtnText, { color: c.inkInverse }]}>Add a mark</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        marks.map(mark => {
+          const catData = CATEGORY_MAP[resolveMarkCategory(mark)] ?? CATEGORY_MAP.custom;
+          const MarkIcon = resolveMarkIcon(mark) ?? catData.Icon;
+          const weeklyCount = weeklyCountsMap.get(mark.id) ?? 0;
+          const weeklyTarget = mark.weekly_target ?? 3;
+          const weekPct = weeklyTarget > 0 ? Math.min(1, weeklyCount / weeklyTarget) : 0;
+          return (
+            <TouchableOpacity
+              key={mark.id}
+              style={[styles.markRow, { backgroundColor: c.surface, borderColor: c.borderLight }]}
+              onPress={() => onOpenMark(mark.id)}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.markIconTile, { backgroundColor: applyOpacity(catData.accent, 0.12) }]}>
+                <MarkIcon size={18} color={catData.accent} weight="duotone" />
+              </View>
+              <View style={styles.markBody}>
+                <Text style={[styles.markName, { color: c.inkDark }]} numberOfLines={1}>
+                  {mark.name}
+                </Text>
+                <View style={[styles.weekTrack, { backgroundColor: applyOpacity(c.ember, 0.16) }]}>
+                  <View
+                    style={[
+                      styles.weekFill,
+                      // Dynamic width — the one allowed inline value.
+                      { backgroundColor: applyOpacity(c.ember, 0.6), width: `${weekPct * 100}%` },
+                    ]}
+                  />
+                </View>
+              </View>
+              <TouchableOpacity
+                style={[styles.logBtn, { backgroundColor: applyOpacity(c.accent, 0.12) }]}
+                onPress={() => onQuickLog(mark.id)}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                activeOpacity={0.7}
+                accessibilityLabel={`Log ${mark.name}`}
+              >
+                <Plus size={16} color={c.accent} weight="bold" />
+              </TouchableOpacity>
+            </TouchableOpacity>
+          );
+        })
+      )}
+    </View>
+  );
+}
+
+/** Quiet footer group: target date, complete (when earned), remove. */
+function DetailFooter({
+  c,
+  targetDate,
+  canComplete,
+  onOpenDatePicker,
+  onComplete,
+  onDelete,
+}: {
+  c: ThemeColors;
+  targetDate?: string | null;
+  canComplete: boolean;
+  onOpenDatePicker: () => void;
+  onComplete: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <View style={styles.footerGroup}>
+      <TouchableOpacity
+        style={[styles.card, { backgroundColor: c.surface, borderColor: c.borderLight }]}
+        onPress={onOpenDatePicker}
+        activeOpacity={0.75}
+      >
+        <Text style={[styles.cardLabel, { color: c.inkMuted }]}>TARGET DATE</Text>
+        <Text style={[styles.cardValue, { color: targetDate ? c.inkDark : c.inkMuted }]}>
+          {targetDate ? format(parseISO(targetDate), 'MMM d, yyyy') : 'Not set'}
+        </Text>
+      </TouchableOpacity>
+
+      {canComplete && (
+        <TouchableOpacity
+          style={[styles.completeBtn, { backgroundColor: c.forest }]}
+          onPress={onComplete}
+          activeOpacity={0.85}
+        >
+          <Text style={[styles.completeBtnText, { color: c.inkInverse }]}>Mark complete</Text>
+        </TouchableOpacity>
+      )}
+
+      <TouchableOpacity style={styles.deleteBtn} onPress={onDelete} activeOpacity={0.7}>
+        <Trash size={16} color={c.inkMuted} weight="duotone" />
+        <Text style={[styles.deleteBtnText, { color: c.inkMuted }]}>Remove goal</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+/** Target-date picker host: iOS bottom-sheet modal / Android native dialog.
+ *  Same platform semantics as before the extraction — the iOS modal stays
+ *  mounted and toggles via `visible`; Android mounts the dialog on demand. */
+function TargetDateSheet({
+  c,
+  visible,
+  date,
+  onChangeDate,
+  onClose,
+  onSave,
+}: {
+  c: ThemeColors;
+  visible: boolean;
+  date: Date;
+  onChangeDate: (date: Date) => void;
+  onClose: () => void;
+  onSave: (date: Date) => void;
+}) {
+  if (Platform.OS === 'ios') {
+    return (
+      <Modal
+        visible={visible}
+        transparent
+        animationType="slide"
+        onRequestClose={onClose}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={onClose}
+        >
+          <TouchableOpacity
+            style={[styles.modalSheet, { backgroundColor: c.surface }]}
+            activeOpacity={1}
+          >
+            <Text style={[styles.modalLabel, { color: c.inkMuted }]}>TARGET DATE</Text>
+            <DateTimePicker
+              value={date}
+              mode="date"
+              display="spinner"
+              minimumDate={new Date()}
+              onChange={(_, picked) => { if (picked) onChangeDate(picked); }}
+              style={{ width: '100%' }}
+            />
+            <TouchableOpacity
+              style={[styles.dateSetBtn, { backgroundColor: c.forest }]}
+              onPress={() => onSave(date)}
+            >
+              <Text style={[styles.dateSetBtnText, { color: c.inkInverse }]}>Set date</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+    );
+  }
+
+  if (Platform.OS !== 'android' || !visible) return null;
+  return (
+    <DateTimePicker
+      value={date}
+      mode="date"
+      display="default"
+      minimumDate={new Date()}
+      onChange={(event, picked) => {
+        onClose();
+        if (event.type === 'set' && picked) {
+          onSave(picked);
+        }
+      }}
+    />
+  );
+}
+
+// ── Derivation + confirm helpers (QC2-C retry #1) ───────────────────────────
+
+/** Weekly state + momentum story for a goal — the same machinery Focus uses,
+ *  packaged as a hook per the FU-6 useSuggestGoalFlow precedent. */
+function useGoalWeekStory({
+  goal,
+  linkedMarks,
+  allEvents,
+  appDateKey,
+  momentumSnapshot,
+  longestRunEntry,
+  todayStr,
+}: {
+  goal: { created_at: string } | undefined;
+  linkedMarks: Mark[];
+  allEvents: GoalEvents;
+  appDateKey: string;
+  momentumSnapshot: { state: string; days: number } | undefined;
+  longestRunEntry: Parameters<typeof effectivePersonalBest>[0];
+  todayStr: string;
+}) {
+  // appDateKey is an intentional dep: recompute the week when the debug date moves.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const weekDates = useMemo(() => currentWeekDates(), [appDateKey]);
+
+  const weeklyCountsMap = useMemo(
+    () => buildWeeklyCountsMap(linkedMarks, allEvents, weekDates),
+    [linkedMarks, allEvents, weekDates],
+  );
+
+  const dueCount = useMemo(
+    () =>
+      linkedMarks.filter(
+        (m) => markWeeklyState(m, weeklyCountsMap.get(m.id) ?? 0) === 'due',
+      ).length,
+    [linkedMarks, weeklyCountsMap],
+  );
+
+  // M2 (PL-2): on the day the run passes the personal best, the momentum clause
+  // reads "{N} days · your longest yet". Every other day, the plain sentence.
+  const runDays =
+    momentumSnapshot && momentumSnapshot.state !== 'broken'
+      ? Math.max(0, momentumSnapshot.days)
+      : 0;
+  const isNewBest = deriveIsNewBest(runDays, effectivePersonalBest(longestRunEntry, todayStr));
+
+  const weekSentence = useMemo(
+    () =>
+      buildGoalWeekSentence({
+        momentumDays: runDays > 0 ? runDays : null,
+        markCount: linkedMarks.length,
+        dueCount,
+        isNewBest,
+        // M1 (PL-3): a week-one goal with no run yet leads with its day count.
+        goalAgeDays: goal ? goalAgeDays(goal.created_at, todayStr) : null,
+      }),
+    [runDays, isNewBest, linkedMarks.length, dueCount, goal, todayStr],
+  );
+
+  return { weeklyCountsMap, weekSentence };
+}
+
+/** Confirm-then-run for completing a goal. Copy unchanged. */
+function confirmCompleteGoal(title: string, run: () => Promise<unknown>, onDone: () => void) {
+  Alert.alert(
+    'Complete this goal?',
+    `"${title}" will move to your history.`,
+    [
+      { text: 'Not yet', style: 'cancel' },
+      {
+        text: "Done, it's mine",
+        onPress: () => {
+          run().then(onDone).catch(() => {
+            Alert.alert('Error', 'Could not complete goal. Please try again.');
+          });
+        },
+      },
+    ],
+  );
+}
+
+/** Confirm-then-run for removing a goal. Copy unchanged. */
+function confirmRemoveGoal(title: string, run: () => Promise<unknown>, onDone: () => void) {
+  Alert.alert(
+    'Remove this goal?',
+    `"${title}" will be permanently removed.`,
+    [
+      { text: 'Keep it', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: () => {
+          run().then(onDone).catch(() => {
+            Alert.alert('Error', 'Could not remove goal. Please try again.');
+          });
+        },
+      },
+    ],
+  );
+}
+
+// ── Screen ───────────────────────────────────────────────────────────────────
 
 export default function GoalDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -172,53 +561,21 @@ export default function GoalDetailScreen() {
 
   // ── Weekly state (same machinery Focus uses) ──────────────────────────────
 
-  // appDateKey is an intentional dep: recompute the week when the debug date moves.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const weekDates = useMemo(() => currentWeekDates(), [appDateKey]);
-
-  const weeklyCountsMap = useMemo(
-    () => buildWeeklyCountsMap(linkedMarks, allEvents, weekDates),
-    [linkedMarks, allEvents, weekDates],
-  );
-
-  const dueCount = useMemo(
-    () =>
-      linkedMarks.filter(
-        (m) => markWeeklyState(m, weeklyCountsMap.get(m.id) ?? 0) === 'due',
-      ).length,
-    [linkedMarks, weeklyCountsMap],
-  );
-
-  // M2 (PL-2): on the day the run passes the personal best, the momentum clause
-  // reads "{N} days · your longest yet". Every other day, the plain sentence.
-  const runDays =
-    momentumSnapshot && momentumSnapshot.state !== 'broken'
-      ? Math.max(0, momentumSnapshot.days)
-      : 0;
-  const isNewBest = deriveIsNewBest(runDays, effectivePersonalBest(longestRunEntry, todayStr));
-
-  const weekSentence = useMemo(
-    () =>
-      buildGoalWeekSentence({
-        momentumDays: runDays > 0 ? runDays : null,
-        markCount: linkedMarks.length,
-        dueCount,
-        isNewBest,
-        // M1 (PL-3): a week-one goal with no run yet leads with its day count.
-        goalAgeDays: goal ? goalAgeDays(goal.created_at, todayStr) : null,
-      }),
-    [runDays, isNewBest, linkedMarks.length, dueCount, goal, todayStr],
-  );
+  const { weeklyCountsMap, weekSentence } = useGoalWeekStory({
+    goal,
+    linkedMarks,
+    allEvents,
+    appDateKey,
+    momentumSnapshot,
+    longestRunEntry,
+    todayStr,
+  });
 
   // ── Hero category (majority of linked marks) ──────────────────────────────
 
   const heroCategory = useMemo(() => majorityCategory(linkedMarks), [linkedMarks]);
   const heroCat = CATEGORY_MAP[heroCategory] ?? CATEGORY_MAP.custom;
-  // QC2-A: the medallion carries the dominant mark's OWN icon (most-logged
-  // linked mark, ties to first). Accent stays categorical; empty goals and
-  // custom marks keep the category/custom icon fallback.
   const heroMark = useMemo(() => dominantMark(linkedMarks), [linkedMarks]);
-  const HeroIcon = (heroMark ? resolveMarkIcon(heroMark) : null) ?? heroCat.Icon;
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -264,47 +621,6 @@ export default function GoalDetailScreen() {
     setShowDatePicker(false);
   };
 
-  const handleComplete = () => {
-    Alert.alert(
-      'Complete this goal?',
-      `"${goal.title}" will move to your history.`,
-      [
-        { text: 'Not yet', style: 'cancel' },
-        {
-          text: "Done, it's mine",
-          onPress: () => {
-            completeGoal(id!).then(() => {
-              router.back();
-            }).catch(() => {
-              Alert.alert('Error', 'Could not complete goal. Please try again.');
-            });
-          },
-        },
-      ],
-    );
-  };
-
-  const handleDelete = () => {
-    Alert.alert(
-      'Remove this goal?',
-      `"${goal.title}" will be permanently removed.`,
-      [
-        { text: 'Keep it', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: () => {
-            deleteGoal(id!).then(() => {
-              router.back();
-            }).catch(() => {
-              Alert.alert('Error', 'Could not remove goal. Please try again.');
-            });
-          },
-        },
-      ],
-    );
-  };
-
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: c.linen }]}>
       {/* Header */}
@@ -318,195 +634,51 @@ export default function GoalDetailScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        {/* ── Hero: the goal's study ── */}
-        <View style={[styles.heroTile, { backgroundColor: applyOpacity(c.ember, 0.12) }]}>
-          <HeroIcon size={32} color={heroCat.accent} weight="duotone" />
-        </View>
+        <RingHero c={c} progress={progress} threshold={threshold} />
 
-        {editingTitle ? (
-          <View style={styles.titleEditRow}>
-            <TextInput
-              style={[styles.titleInput, { color: c.inkDark, borderColor: c.borderMid, backgroundColor: c.surface }]}
-              value={titleDraft}
-              onChangeText={setTitleDraft}
-              onBlur={handleSaveTitle}
-              autoFocus
-              returnKeyType="done"
-              onSubmitEditing={handleSaveTitle}
-            />
-            <TouchableOpacity onPress={handleSaveTitle} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Check size={22} color={c.forest} weight="bold" />
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <GoalTitle title={goal.title} size="detail" color={c.inkDark} style={styles.title} />
-        )}
+        <GoalIdentity
+          c={c}
+          accent={heroCat.accent}
+          heroMark={heroMark}
+          fallbackIcon={heroCat.Icon}
+          title={goal.title}
+          description={goal.description}
+          editingTitle={editingTitle}
+          titleDraft={titleDraft}
+          onChangeDraft={setTitleDraft}
+          onSaveTitle={handleSaveTitle}
+        />
 
-        {/* The captured why comes home here. */}
-        {!!goal.description && (
-          <Text style={[styles.why, { color: c.inkMid }]}>{goal.description}</Text>
-        )}
+        <WeekSentenceLine c={c} sentence={weekSentence} />
 
-        {/* ── Week sentence ── */}
-        {weekSentence !== '' && (
-          <Text style={[styles.weekSentence, { color: c.inkMid }]}>{weekSentence}</Text>
-        )}
+        <LinkedMarkRows
+          c={c}
+          marks={linkedMarks}
+          weeklyCountsMap={weeklyCountsMap}
+          emptyLine={emptyMarksLine}
+          onQuickLog={handleQuickLog}
+          onAddMark={() => router.push({ pathname: '/mark/new', params: { goalId: id } } as any)}
+          onOpenMark={(markId) => router.push(`/mark/${markId}` as any)}
+        />
 
-        {/* ── Living mark rows ── */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionLabel, { color: c.inkMuted }]}>YOUR MARKS</Text>
-          {linkedMarks.length === 0 ? (
-            <View style={[styles.emptyMarks, { backgroundColor: c.surface, borderColor: c.borderLight }]}>
-              <Text style={[styles.emptyMarksText, { color: c.inkMid }]}>
-                {emptyMarksLine}
-              </Text>
-              <TouchableOpacity
-                style={[styles.addMarkBtn, { backgroundColor: c.forest }]}
-                onPress={() => router.push({ pathname: '/mark/new', params: { goalId: id } } as any)}
-              >
-                <Plus size={14} color={c.inkInverse} weight="bold" />
-                <Text style={[styles.addMarkBtnText, { color: c.inkInverse }]}>Add a mark</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            linkedMarks.map(mark => {
-              const catData = CATEGORY_MAP[resolveMarkCategory(mark)] ?? CATEGORY_MAP.custom;
-              const MarkIcon = resolveMarkIcon(mark) ?? catData.Icon;
-              const weeklyCount = weeklyCountsMap.get(mark.id) ?? 0;
-              const weeklyTarget = mark.weekly_target ?? 3;
-              const weekPct = weeklyTarget > 0 ? Math.min(1, weeklyCount / weeklyTarget) : 0;
-              return (
-                <TouchableOpacity
-                  key={mark.id}
-                  style={[styles.markRow, { backgroundColor: c.surface, borderColor: c.borderLight }]}
-                  onPress={() => router.push(`/mark/${mark.id}` as any)}
-                  activeOpacity={0.8}
-                >
-                  <View style={[styles.markIconTile, { backgroundColor: applyOpacity(catData.accent, 0.12) }]}>
-                    <MarkIcon size={18} color={catData.accent} weight="duotone" />
-                  </View>
-                  <View style={styles.markBody}>
-                    <Text style={[styles.markName, { color: c.inkDark }]} numberOfLines={1}>
-                      {mark.name}
-                    </Text>
-                    <View style={[styles.weekTrack, { backgroundColor: applyOpacity(c.ember, 0.16) }]}>
-                      <View
-                        style={[
-                          styles.weekFill,
-                          // Dynamic width — the one allowed inline value.
-                          { backgroundColor: applyOpacity(c.ember, 0.6), width: `${weekPct * 100}%` },
-                        ]}
-                      />
-                    </View>
-                  </View>
-                  <TouchableOpacity
-                    style={[styles.logBtn, { backgroundColor: applyOpacity(c.accent, 0.12) }]}
-                    onPress={() => handleQuickLog(mark.id)}
-                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                    activeOpacity={0.7}
-                    accessibilityLabel={`Log ${mark.name}`}
-                  >
-                    <Plus size={16} color={c.accent} weight="bold" />
-                  </TouchableOpacity>
-                </TouchableOpacity>
-              );
-            })
-          )}
-        </View>
-
-        {/* ── Progress, reframed as a story beside a small ring ── */}
-        <View style={styles.progressRow}>
-          <ProgressRing progress={progress} threshold={threshold} />
-          <View style={styles.progressStory}>
-            <Text style={[styles.progressNumber, { color: c.inkDark }]}>{progress}</Text>
-            <Text style={[styles.progressCaption, { color: c.inkMid }]}>
-              of {threshold} check-ins
-            </Text>
-          </View>
-        </View>
-
-        {/* ── Quiet footer group ── */}
-        <View style={styles.footerGroup}>
-          <TouchableOpacity
-            style={[styles.card, { backgroundColor: c.surface, borderColor: c.borderLight }]}
-            onPress={handleOpenDatePicker}
-            activeOpacity={0.75}
-          >
-            <Text style={[styles.cardLabel, { color: c.inkMuted }]}>TARGET DATE</Text>
-            <Text style={[styles.cardValue, { color: goal.target_date ? c.inkDark : c.inkMuted }]}>
-              {goal.target_date ? format(parseISO(goal.target_date), 'MMM d, yyyy') : 'Not set'}
-            </Text>
-          </TouchableOpacity>
-
-          {canComplete && (
-            <TouchableOpacity
-              style={[styles.completeBtn, { backgroundColor: c.forest }]}
-              onPress={handleComplete}
-              activeOpacity={0.85}
-            >
-              <Text style={[styles.completeBtnText, { color: c.inkInverse }]}>Mark complete</Text>
-            </TouchableOpacity>
-          )}
-
-          <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete} activeOpacity={0.7}>
-            <Trash size={16} color={c.inkMuted} weight="duotone" />
-            <Text style={[styles.deleteBtnText, { color: c.inkMuted }]}>Remove goal</Text>
-          </TouchableOpacity>
-        </View>
+        <DetailFooter
+          c={c}
+          targetDate={goal.target_date}
+          canComplete={canComplete}
+          onOpenDatePicker={handleOpenDatePicker}
+          onComplete={() => confirmCompleteGoal(goal.title, () => completeGoal(id!), () => router.back())}
+          onDelete={() => confirmRemoveGoal(goal.title, () => deleteGoal(id!), () => router.back())}
+        />
       </ScrollView>
 
-      {/* Date picker — iOS bottom sheet */}
-      {Platform.OS === 'ios' && (
-        <Modal
-          visible={showDatePicker}
-          transparent
-          animationType="slide"
-          onRequestClose={() => setShowDatePicker(false)}
-        >
-          <TouchableOpacity
-            style={styles.modalOverlay}
-            activeOpacity={1}
-            onPress={() => setShowDatePicker(false)}
-          >
-            <TouchableOpacity
-              style={[styles.modalSheet, { backgroundColor: c.surface }]}
-              activeOpacity={1}
-            >
-              <Text style={[styles.modalLabel, { color: c.inkMuted }]}>TARGET DATE</Text>
-              <DateTimePicker
-                value={pickerDate}
-                mode="date"
-                display="spinner"
-                minimumDate={new Date()}
-                onChange={(_, date) => { if (date) setPickerDate(date); }}
-                style={{ width: '100%' }}
-              />
-              <TouchableOpacity
-                style={[styles.dateSetBtn, { backgroundColor: c.forest }]}
-                onPress={() => handleSaveDate(pickerDate)}
-              >
-                <Text style={[styles.dateSetBtnText, { color: c.inkInverse }]}>Set date</Text>
-              </TouchableOpacity>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </Modal>
-      )}
-
-      {/* Date picker — Android native dialog */}
-      {Platform.OS === 'android' && showDatePicker && (
-        <DateTimePicker
-          value={pickerDate}
-          mode="date"
-          display="default"
-          minimumDate={new Date()}
-          onChange={(event, date) => {
-            setShowDatePicker(false);
-            if (event.type === 'set' && date) {
-              void handleSaveDate(date);
-            }
-          }}
-        />
-      )}
+      <TargetDateSheet
+        c={c}
+        visible={showDatePicker}
+        date={pickerDate}
+        onChangeDate={setPickerDate}
+        onClose={() => setShowDatePicker(false)}
+        onSave={(date) => { void handleSaveDate(date); }}
+      />
 
       {/* PL-4 (M5): post-log voice line — the quick-log rows here share
           Focus's increment path, so the line renders here too. */}
@@ -527,14 +699,30 @@ const styles = StyleSheet.create({
   // Screen gutter = spacing.lg, applied ONCE here; cards carry no horizontal margins.
   content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl * 2 },
 
-  // Hero
+  // Hero ring (QC2-C): centered, first thing seen.
+  ringHero: {
+    alignItems: 'center',
+    marginTop: spacing.md,
+  },
+  progressStory: { alignItems: 'center', marginTop: spacing.sm },
+  progressNumber: {
+    fontFamily: fonts.sansBold,
+    fontSize: fontSize['2xl'],
+    lineHeight: 34,
+  },
+  progressCaption: {
+    fontFamily: fonts.sans,
+    fontSize: fontSize.sm,
+  },
+
+  // The goal's study: medallion shrinks under the hero ring (QC2-C).
   heroTile: {
-    width: 64,
-    height: 64,
+    width: 48,
+    height: 48,
     borderRadius: radius.lg,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: spacing.sm,
+    marginTop: spacing.lg,
     marginBottom: spacing.md,
   },
   // Type lives in <GoalTitle>; layout spacing only.
@@ -624,24 +812,6 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.md,
   },
   addMarkBtnText: { fontSize: fontSize.sm, fontFamily: fonts.sansSemibold },
-
-  // Progress story
-  progressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    marginTop: spacing.xl,
-  },
-  progressStory: { flex: 1 },
-  progressNumber: {
-    fontFamily: fonts.sansBold,
-    fontSize: fontSize['2xl'],
-    lineHeight: 34,
-  },
-  progressCaption: {
-    fontFamily: fonts.sans,
-    fontSize: fontSize.sm,
-  },
 
   // Footer group
   footerGroup: { marginTop: spacing.xl },
