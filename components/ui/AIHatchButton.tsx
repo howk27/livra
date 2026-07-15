@@ -5,7 +5,7 @@
  * the semantic spark accent — hollow, never a fill. 1px ember border over a
  * low-alpha ember wash, ember ✦ + label. A slow breathe (3.6s cycle)
  * oscillates the border/wash opacity 0.6 → 1.0 so the CTA feels alive
- * without shouting. Consumed by onboarding step 1, GoalPathSheet, /goal/suggest.
+ * without shouting. Consumed by onboarding step 1, /goal/new, /goal/suggest.
  * Reduced motion (hooks/useReducedMotion, the app's single source): static at
  * rest, full opacity. Disabled/loading: lower alpha, no breathe.
  * Contrast note: ember on light linen is 2.37:1 — the label is therefore

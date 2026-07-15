@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -9,23 +9,100 @@ import {
   Alert,
   Keyboard,
 } from 'react-native';
+import Animated, { useSharedValue, useAnimatedStyle } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { themedColors, spacing, fontSize, fontWeight, fonts } from '../../theme/tokens';
+import { themedColors, spacing, fontSize, fonts, radius } from '../../theme/tokens';
+import { applyOpacity } from '../../src/components/icons/color';
 import { GoalCardPreview } from '../../components/creation/GoalCardPreview';
+import { AIHatchButton } from '../../components/ui/AIHatchButton';
+import { PillButton } from '../../components/ui/PillButton';
+import { CATEGORY_MAP } from '../../components/ui/MarkRow';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useGoalsStore, GoalLimitError } from '../../state/goalsSlice';
 import { useMarksStore } from '../../state/countersSlice';
 import { useAuth } from '../../hooks/useAuth';
+import { useMotion } from '../../hooks/useMotion';
 import { checkProStatus } from '../../lib/iap/iap';
 import { GOAL_LIMIT_MESSAGE } from '@/lib/copy';
 import { getMarksForGoal } from '../../lib/goalMarkSuggestions';
+import { goalPreviewMarks } from '../../lib/creation/creationPreview';
 import { CommitmentScreen, CommitmentSelection } from '../../components/CommitmentScreen';
 import { MarkDefinition } from '../../lib/suggestedCounters';
 import { useDeferredAutoFocus } from '../../hooks/useDeferredAutoFocus';
 import { useHalfRenderProbe } from '../../hooks/useHalfRenderProbe';
 
 type Step = 'title' | 'commitment';
+
+// Example goals that seed the title on tap — smart defaults so the screen is
+// never a blank box (ux-psychology rule 1). Each is a concrete, real goal that
+// getMarksForGoal resolves to a strong mark strip, so a tap immediately shows
+// the card "taking shape." They collapse the moment a title exists.
+const EXAMPLE_GOALS = ['Run a 5k', 'Read nightly', 'Meditate daily', 'Save $5k'];
+
+/**
+ * One mark tile in the live "what this takes" strip. Settles in on mount
+ * (useMotion, reduced-motion static) so newly-matched marks materialize as the
+ * title is typed — the surface's one orchestrated motion moment (QC3-A / A1).
+ * Category-accent duotone glyph on a low-alpha wash: a quiet preview, never the
+ * ember spark and never a loud selection.
+ */
+function MarkPreviewChip({ mark, labelColor }: { mark: MarkDefinition; labelColor: string }) {
+  const { reduced, spring } = useMotion();
+  const entered = useSharedValue(reduced ? 1 : 0);
+
+  useEffect(() => {
+    entered.value = spring(1, 'settle');
+    // Mount-only entrance; the chip remounts (replaying) when a new mark matches.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const style = useAnimatedStyle(() => ({
+    opacity: entered.value,
+    transform: [{ translateY: (1 - entered.value) * 6 }],
+  }));
+
+  const cat = CATEGORY_MAP[mark.category] ?? CATEGORY_MAP.custom;
+  const Icon = mark.icon ?? cat.Icon;
+
+  return (
+    <Animated.View
+      testID="goal-mark-preview-chip"
+      accessibilityLabel={mark.name}
+      style={[
+        styles.previewChip,
+        { backgroundColor: applyOpacity(cat.accent, 0.1), borderColor: applyOpacity(cat.accent, 0.3) },
+        style,
+      ]}
+    >
+      <Icon size={14} color={cat.accent} weight="duotone" />
+      <Text style={[styles.previewChipLabel, { color: labelColor }]} numberOfLines={1}>
+        {mark.name}
+      </Text>
+    </Animated.View>
+  );
+}
+
+/**
+ * The live mark-preview strip: getMarksForGoal(title), capped to 3–4 faint
+ * tiles. Renders nothing for a sparse title (goalPreviewMarks gate) so the
+ * screen fills with the user's OWN forming plan, not a generic guess.
+ */
+function MarkPreviewStrip({ title }: { title: string }) {
+  const c = themedColors(useEffectiveTheme());
+  const marks = goalPreviewMarks(title);
+  if (marks.length === 0) return null;
+  return (
+    <View style={styles.previewBlock} testID="goal-mark-preview">
+      <Text style={[styles.previewLabel, { color: c.inkMuted }]}>What this takes</Text>
+      <View style={styles.previewStrip}>
+        {marks.map((m) => (
+          <MarkPreviewChip key={m.id} mark={m} labelColor={c.inkMid} />
+        ))}
+      </View>
+    </View>
+  );
+}
 
 export default function NewGoalScreen() {
   const theme = useEffectiveTheme();
@@ -48,13 +125,31 @@ export default function NewGoalScreen() {
   // QC2-D diagnostic: dev-only probe — if the half-render ever reproduces
   // again, one Metro line tells us whether the CONTAINER itself is short
   // (react-native-screens native measurement) or full (something inside).
+  // QC3-A: kept as a verification instrument only — the real half-render fix is
+  // now the DIRECT route into this screen (no chooser-sheet → pageSheet hop).
   const onProbeLayout = useHalfRenderProbe('goal/new');
 
-  const handleNext = () => {
+  const canProceed = !!title.trim() && !saving;
+
+  const handleSetPlan = () => {
     const trimmed = title.trim();
     if (!trimmed) return;
+    Keyboard.dismiss();
     setSuggestedMarks(getMarksForGoal(trimmed));
     setStep('commitment');
+  };
+
+  const handleSuggestPlan = () => {
+    // VD-6/QC2-D: never present the next pageSheet while the keyboard is up —
+    // the incoming modal can be measured against the keyboard-shrunk area.
+    Keyboard.dismiss();
+    const trimmed = title.trim();
+    router.replace({
+      pathname: '/goal/suggest' as any,
+      params: trimmed
+        ? { goalText: trimmed, source: 'goal_create_fallback' }
+        : { source: 'goal_create_fallback' },
+    });
   };
 
   const handleConfirm = async (selection: CommitmentSelection) => {
@@ -145,19 +240,17 @@ export default function NewGoalScreen() {
           the device half-render: a keyboard-driven paddingBottom applied (via
           LayoutAnimation) against a native pageSheet is the only stateful layout
           in this flow that can stick at ~keyboard height — half the sheet. All
-          content on this step is top-anchored (the primary action lives in the
-          header), so nothing needs to avoid the keyboard; overflow on small
-          devices scrolls instead. */}
+          content is top-anchored (the primary action lives in a bottom bar, not
+          a keyboard-avoiding footer), so nothing needs to avoid the keyboard;
+          overflow on small devices scrolls instead. */}
       <View style={styles.inner}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()}>
+          <TouchableOpacity onPress={() => router.back()} accessibilityRole="button">
             <Text style={[styles.cancel, { color: c.inkMuted }]}>Cancel</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={handleNext} disabled={!title.trim() || saving}>
-            <Text style={[styles.save, { color: title.trim() && !saving ? c.accent : c.inkMuted }]}>
-              Next
-            </Text>
-          </TouchableOpacity>
+          {/* QC3-A: the header's "Next" is gone — the primary action now lives
+              in the bottom-anchored forest CTA (founder: move the action off the
+              tiny header). */}
         </View>
 
         <ScrollView
@@ -183,7 +276,7 @@ export default function NewGoalScreen() {
                   onChangeText={setTitle}
                   maxLength={80}
                   returnKeyType="next"
-                  onSubmitEditing={handleNext}
+                  onSubmitEditing={handleSetPlan}
                 />
                 <TextInput
                   style={[styles.whyInput, { color: c.inkMid }]}
@@ -198,36 +291,49 @@ export default function NewGoalScreen() {
             }
           />
 
-          <Text style={[styles.benchLine, { color: c.inkMuted }]}>
-            Your goal card · exactly as you will see it every day.
-          </Text>
+          {/* Example goals seed the title, then collapse — the screen opens with
+              a prompt, not a void (ux-psychology: smart defaults). */}
+          {!title.trim() && (
+            <View style={styles.exampleBlock} testID="goal-example-chips">
+              <Text style={[styles.exampleLabel, { color: c.inkMuted }]}>Try one to start</Text>
+              <View style={styles.exampleRow}>
+                {EXAMPLE_GOALS.map((example) => (
+                  <TouchableOpacity
+                    key={example}
+                    style={[styles.exampleChip, { backgroundColor: c.surface, borderColor: c.borderLight }]}
+                    onPress={() => setTitle(example)}
+                    activeOpacity={0.75}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Start with ${example}`}
+                  >
+                    <Text style={[styles.exampleChipText, { color: c.inkMid }]}>{example}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          )}
 
-          <TouchableOpacity
-            style={styles.aiFallbackLink}
-            onPress={() => {
-              // VD-6/QC2-D: never present the next pageSheet while the keyboard
-              // is up — the incoming modal can be measured against the
-              // keyboard-shrunk area.
-              Keyboard.dismiss();
-              const trimmed = title.trim();
-              router.replace({
-                pathname: '/goal/suggest' as any,
-                params: trimmed
-                  ? { goalText: trimmed, source: 'goal_create_fallback' }
-                  : { source: 'goal_create_fallback' },
-              });
-            }}
-            accessibilityRole="button"
-            accessibilityLabel="Or let Livra suggest a plan"
-          >
-            {/* VD-5: ember ✦ marks the AI voice; the link text stays inkMid
-                because ember fails contrast at this small size (VD-1 rule). */}
-            <Text style={[styles.aiFallbackLinkText, { color: c.inkMid }]}>
-              <Text style={{ color: c.ember }}>{'✦ '}</Text>
-              Or let Livra suggest a plan
-            </Text>
-          </TouchableOpacity>
+          {/* The empty space becomes a preview of the future: the marks this
+              goal will take, materializing as the title is typed. */}
+          <MarkPreviewStrip title={title} />
         </ScrollView>
+
+        {/* Bottom-anchored action zone. NOT keyboard-avoiding (see QC2-D note) —
+            a fixed bar, so overflow scrolls above it. The ember AIHatchButton is
+            now the ONLY AI door; the forest CTA carries the manual build. */}
+        <View style={[styles.footer, { borderTopColor: c.borderLight, backgroundColor: c.linen }]}>
+          <AIHatchButton
+            label="✦ Or let Livra suggest a plan"
+            onPress={handleSuggestPlan}
+            style={styles.footerHatch}
+          />
+          <PillButton
+            label="Set the plan →"
+            onPress={handleSetPlan}
+            disabled={!canProceed}
+            fullWidth
+          />
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -242,9 +348,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
+    minHeight: 44,
   },
   cancel: { fontSize: fontSize.md },
-  save: { fontSize: fontSize.md, fontWeight: fontWeight.semibold },
   formScroll: { flex: 1 },
   // Screen gutter = spacing.lg applied ONCE, here on the scroll content
   // (the card carries no outer margin) — 2026-07-12 width rule.
@@ -266,19 +372,66 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     textAlignVertical: 'top',
   },
-  benchLine: {
-    fontSize: fontSize.sm,
-    textAlign: 'center',
-    marginTop: spacing.md,
+  exampleBlock: {
+    marginTop: spacing.lg,
   },
-  aiFallbackLink: {
-    marginTop: spacing.md,
+  exampleLabel: {
+    fontFamily: fonts.sans,
+    fontSize: fontSize.sm,
+    marginBottom: spacing.sm,
+  },
+  exampleRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  exampleChip: {
+    borderWidth: 1,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     minHeight: 44,
     justifyContent: 'center',
-    alignItems: 'center',
   },
-  aiFallbackLinkText: {
+  exampleChipText: {
+    fontFamily: fonts.sansMedium,
+    fontSize: fontSize.base,
+  },
+  previewBlock: {
+    marginTop: spacing.xl,
+  },
+  previewLabel: {
+    fontFamily: fonts.sans,
     fontSize: fontSize.sm,
-    textAlign: 'center',
+    marginBottom: spacing.sm,
+  },
+  previewStrip: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  previewChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    borderWidth: 1,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    minHeight: 32,
+  },
+  previewChipLabel: {
+    fontFamily: fonts.sansMedium,
+    fontSize: fontSize.sm,
+  },
+  footer: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
+    borderTopWidth: 1,
+    gap: spacing.sm,
+  },
+  footerHatch: {
+    alignSelf: 'stretch',
   },
 });

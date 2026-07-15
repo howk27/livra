@@ -4,7 +4,8 @@
 // Everything here is unit-tested; the components only render these results.
 
 import type { ComponentType } from 'react';
-import { FREQUENCIES, type FrequencyId } from '../goalMarkSuggestions';
+import { FREQUENCIES, getMarksForGoal, type FrequencyId } from '../goalMarkSuggestions';
+import type { MarkDefinition } from '../suggestedCounters';
 import type { FrequencyPreset } from '../markFrequencyPreset';
 import { resolveMarkCategory, resolveMarkIcon } from '../markCategoryResolve';
 
@@ -81,6 +82,25 @@ export function goalCardContent<M>(input: {
     marks: input.marks ?? [],
     planMeta: input.planMeta ?? null,
   };
+}
+
+/**
+ * The live "what this goal will take" strip on goal/new (QC3-A / A1): the
+ * marks getMarksForGoal would seed, capped to the 3–4 the card can show, so
+ * the empty screen fills with a preview of the user's OWN plan as they type.
+ *
+ * Sparse titles earn NO preview — below MIN_PREVIEW_CHARS real characters the
+ * strip renders nothing rather than guess loudly (the A1 aesthetic-risk note:
+ * an essentially-empty field must not show the generic fallback set). Once the
+ * title carries a real word, the (deliberately faint) tiles materialize.
+ */
+export const MIN_PREVIEW_CHARS = 3;
+export const MAX_PREVIEW_MARKS = 4;
+
+export function goalPreviewMarks(title: string): MarkDefinition[] {
+  const trimmed = title.trim();
+  if (trimmed.length < MIN_PREVIEW_CHARS) return [];
+  return getMarksForGoal(trimmed).slice(0, MAX_PREVIEW_MARKS);
 }
 
 export type MarkPreviewIdentity = {

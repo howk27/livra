@@ -4,6 +4,8 @@ import {
   cadenceLabel,
   suggestedCadenceLabel,
   markPreviewIdentity,
+  goalPreviewMarks,
+  MAX_PREVIEW_MARKS,
 } from '../../lib/creation/creationPreview';
 import { FREQUENCIES } from '../../lib/goalMarkSuggestions';
 
@@ -84,6 +86,28 @@ describe('suggestedCadenceLabel — library pick cadence', () => {
 
   it('falls back to 3x when the recommendation is missing', () => {
     expect(suggestedCadenceLabel({ frequencyKind: 'variable', frequency_recommended: 0 })).toBe('3x a week');
+  });
+});
+
+describe('goalPreviewMarks — the live "what this takes" strip (QC3-A / A1)', () => {
+  it('renders nothing for a sparse title (< 3 real chars) — no loud guessing', () => {
+    expect(goalPreviewMarks('')).toEqual([]);
+    expect(goalPreviewMarks('   ')).toEqual([]);
+    expect(goalPreviewMarks('a')).toEqual([]);
+    expect(goalPreviewMarks('go')).toEqual([]);
+  });
+
+  it('surfaces the goal\'s own marks once the title carries a real word', () => {
+    const marks = goalPreviewMarks('Run a 5k');
+    expect(marks.length).toBeGreaterThan(0);
+    // The strip previews real, resolvable library marks (has an id + category).
+    expect(marks[0]).toHaveProperty('id');
+    expect(marks[0]).toHaveProperty('category');
+  });
+
+  it('caps the strip at MAX_PREVIEW_MARKS so the card never overflows', () => {
+    const marks = goalPreviewMarks('Train for a marathon and sleep and stretch and run');
+    expect(marks.length).toBeLessThanOrEqual(MAX_PREVIEW_MARKS);
   });
 });
 

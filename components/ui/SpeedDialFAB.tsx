@@ -18,10 +18,10 @@ import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CheckCircle, Flag, Plus } from 'phosphor-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { spacing, radius, shadow, themedColors, fontSize, fonts } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { AddMarkSheet } from '../sheets/AddMarkSheet';
-import { GoalPathSheet } from '../sheets/GoalPathSheet';
 
 const FAB_HINT_KEY = 'fab_hint_shown';
 const SPRING = { damping: 18, stiffness: 260, mass: 0.9 };
@@ -30,10 +30,10 @@ export function SpeedDialFAB() {
   const theme = useEffectiveTheme();
   const colors = themedColors(theme);
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const fabBottom = 64 + insets.bottom + 16;
   const [expanded, setExpanded] = useState(false);
   const [markSheetVisible, setMarkSheetVisible] = useState(false);
-  const [goalSheetVisible, setGoalSheetVisible] = useState(false);
 
   // Animation values
   const rotation = useSharedValue(0);
@@ -107,10 +107,13 @@ export function SpeedDialFAB() {
   }, [doCollapse]);
 
   const handleAddGoal = useCallback(() => {
+    // QC3-A: route straight into goal/new (no chooser sheet). The amber
+    // AIHatchButton on that screen is now the only AI door, and the direct
+    // route (no sheet → pageSheet hop) is the leading half-render fix.
     doCollapse();
     setExpanded(false);
-    setTimeout(() => setGoalSheetVisible(true), 160);
-  }, [doCollapse]);
+    router.push('/goal/new');
+  }, [doCollapse, router]);
 
   const fabRotateStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${rotation.value * 45}deg` }],
@@ -176,8 +179,8 @@ export function SpeedDialFAB() {
           </View>
         </Animated.View>
 
-        {/* Main FAB — hidden when a sheet is open */}
-        {!markSheetVisible && !goalSheetVisible && (
+        {/* Main FAB — hidden while the add-mark sheet is open */}
+        {!markSheetVisible && (
           <TouchableOpacity
             style={[styles.fab, { backgroundColor: colors.forest, bottom: fabBottom }]}
             onPress={toggle}
@@ -191,7 +194,6 @@ export function SpeedDialFAB() {
       </View>
 
       <AddMarkSheet visible={markSheetVisible} onClose={() => setMarkSheetVisible(false)} />
-      <GoalPathSheet visible={goalSheetVisible} onClose={() => setGoalSheetVisible(false)} />
     </>
   );
 }

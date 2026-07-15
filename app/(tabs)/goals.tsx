@@ -13,6 +13,7 @@ import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { format, parseISO } from 'date-fns';
 import { DotsSixVertical, CaretRight } from 'phosphor-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
@@ -29,7 +30,6 @@ import { Breathing } from '../../components/ui/Breathing';
 import { SectionLabel } from '../../components/ui/SectionLabel';
 import { GoalTitle } from '../../components/ui/GoalTitle';
 import { HistoryRow } from '../../components/goals/HistoryRow';
-import { GoalPathSheet } from '../../components/sheets/GoalPathSheet';
 import { useGoalsStore } from '../../state/goalsSlice';
 import { useMarksStore } from '../../state/countersSlice';
 import { useEventsStore } from '../../state/eventsSlice';
@@ -97,11 +97,13 @@ function ActiveGoalCard({ goal, progress, threshold, canComplete, weeklyDone = 0
       {threshold > 0 && (
         <View style={styles.progressSection}>
           <View style={[styles.progressTrack, { backgroundColor: applyOpacity(c.accent, 0.16) }]}>
-            <View
-              style={[
-                styles.progressFill,
-                { backgroundColor: c.accent, width: `${pct}%` as any },
-              ]}
+            {/* QC3-E: same `progressGradient` (amber→ember) the goal-detail ring
+                uses, so the two progress surfaces read as one family. */}
+            <LinearGradient
+              colors={c.progressGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={[styles.progressFill, { width: `${pct}%` as any }]}
             />
           </View>
           <Text style={[styles.progressLabel, { color: c.inkMid }]}>
@@ -390,12 +392,12 @@ export default function GoalsScreen() {
     [goals, marks],
   );
 
-  const [pathSheetVisible, setPathSheetVisible] = React.useState(false);
-
   const handleAddGoal = useCallback(() => {
+    // QC3-A: "+ Goal" routes straight into goal/new (GoalPathSheet deleted; the
+    // amber AIHatchButton on that screen is now the only AI door).
     if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setPathSheetVisible(true);
-  }, []);
+    router.push('/goal/new');
+  }, [router]);
 
   const handleOpenGoal = useCallback(
     (goalId: string) => {
@@ -488,8 +490,6 @@ export default function GoalsScreen() {
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
-
-      <GoalPathSheet visible={pathSheetVisible} onClose={() => setPathSheetVisible(false)} />
     </View>
   );
 }
