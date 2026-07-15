@@ -36,6 +36,8 @@ import {
   scheduleForPreset,
 } from '../../lib/markFrequencyPreset';
 import { ICON_TYPE_TO_EMOJI, MARK_ICON_OPTIONS } from '../../lib/markIcons';
+import { MarkRowPreview } from '../../components/creation/MarkRowPreview';
+import { cadenceLabel, suggestedCadenceLabel } from '../../lib/creation/creationPreview';
 
 // VD-7 retry #1: the icon emoji map + selectable list live in lib/markIcons.ts,
 // shared with mark/[id]/edit.tsx so the two grids can never diverge.
@@ -318,15 +320,14 @@ export default function NewCounterScreen() {
                 },
               ]}
             >
-              <Text style={[styles.sectionKicker, { color: themeColors.inkMuted, marginBottom: spacing.xs }]}>
-                Your pick
-              </Text>
-              <Text style={[styles.suggestedSelectionTitle, { color: themeColors.inkDark }]}>
-                {pendingSuggestedCounter.name}
-              </Text>
-              <Text style={[styles.sectionKickerRight, { color: themeColors.inkMuted }]}>
-                {getCategoryForSuggestedCounter(pendingSuggestedCounter)}
-              </Text>
+              {/* QC2-H: the pick loads INTO the same artifact row the custom
+                  path assembles — one mental model for both modes. */}
+              <MarkRowPreview
+                testID="suggested-mark-preview"
+                name={pendingSuggestedCounter.name}
+                emoji={pendingSuggestedCounter.emoji}
+                cadence={suggestedCadenceLabel(pendingSuggestedCounter)}
+              />
               <Text style={[styles.suggestedSelectionHint, { color: themeColors.inkMid }]}>
                 Set today&apos;s target, then add it.
               </Text>
@@ -334,7 +335,6 @@ export default function NewCounterScreen() {
                 value={dailyTarget}
                 onChange={setDailyTarget}
                 label={null}
-                helperText="TIMES"
               />
               <TouchableOpacity
                 style={[
@@ -361,6 +361,20 @@ export default function NewCounterScreen() {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
+            {/* QC2-H "The Card Takes Shape": the REAL Focus mark row sits at
+                the top and assembles live — name as typed, glyph as picked,
+                cadence as chosen. The controls below only shape it. */}
+            <MarkRowPreview
+              testID="mark-row-preview"
+              name={name}
+              emoji={ICON_TYPE_TO_EMOJI[selectedIconType] || ICON_TYPE_TO_EMOJI.gym}
+              cadence={cadenceLabel(frequencyPreset, scheduleDaysForDisplay.length)}
+            />
+            <Text style={[styles.benchLine, { color: themeColors.inkMuted }]}>
+              Your mark · exactly as it will sit on Focus.
+            </Text>
+
+            {/* Identity: name + face, one quiet group. */}
             <View
               style={[
                 styles.card,
@@ -370,7 +384,7 @@ export default function NewCounterScreen() {
                 },
               ]}
             >
-              <Text style={[styles.sectionKicker, { color: themeColors.inkMuted }]}>What you’ll do</Text>
+              <Text style={[styles.groupLabel, { color: themeColors.inkMuted }]}>What you’ll do</Text>
               <TextInput
                 style={[
                   styles.inputInCard,
@@ -385,20 +399,9 @@ export default function NewCounterScreen() {
                 placeholder="e.g. Morning run"
                 placeholderTextColor={themeColors.inkMuted}
               />
-            </View>
-
-            <View
-              style={[
-                styles.card,
-                {
-                  backgroundColor: themeColors.surface,
-                  borderColor: themeColors.borderMid,
-                },
-              ]}
-            >
               <View style={styles.sectionHeaderRow}>
-                <Text style={[styles.sectionTitle, { color: themeColors.inkDark }]}>Give it a face</Text>
-                <Text style={[styles.sectionKickerRight, { color: themeColors.inkMuted }]}>{selectedCategory}</Text>
+                <Text style={[styles.groupLabel, styles.groupLabelInRow, { color: themeColors.inkMuted }]}>Give it a face</Text>
+                <Text style={[styles.categoryLabel, { color: themeColors.inkMid }]}>{selectedCategory}</Text>
               </View>
               <View style={styles.iconGrid}>
                 {ICON_OPTIONS.map((iconType) => {
@@ -429,6 +432,7 @@ export default function NewCounterScreen() {
               </View>
             </View>
 
+            {/* Rhythm: how much and how often, one quiet group. */}
             <View
               style={[
                 styles.card,
@@ -438,25 +442,12 @@ export default function NewCounterScreen() {
                 },
               ]}
             >
-              <Text style={[styles.sectionTitle, { color: themeColors.inkDark, textAlign: 'center', marginBottom: spacing.xs }]}>
-                Enough for today
-              </Text>
+              <Text style={[styles.groupLabel, { color: themeColors.inkMuted }]}>Enough for today</Text>
               <Text style={[styles.cardHint, { color: themeColors.inkMid, textAlign: 'center', marginBottom: spacing.md }]}>
                 How many times makes today count.
               </Text>
-              <DailyTargetStepper value={dailyTarget} onChange={setDailyTarget} label={null} helperText="TIMES" />
-            </View>
-
-            <View
-              style={[
-                styles.card,
-                {
-                  backgroundColor: themeColors.surface,
-                  borderColor: themeColors.borderMid,
-                },
-              ]}
-            >
-              <Text style={[styles.sectionTitle, { color: themeColors.inkDark, marginBottom: spacing.md }]}>How often</Text>
+              <DailyTargetStepper value={dailyTarget} onChange={setDailyTarget} label={null} />
+              <Text style={[styles.groupLabel, styles.groupLabelSpaced, { color: themeColors.inkMuted }]}>How often</Text>
               <View style={styles.presetRow}>
                 {(Object.keys(FREQUENCY_PRESET_LABELS) as FrequencyPreset[]).map((preset) => {
                   const active = preset === frequencyPreset;
@@ -654,10 +645,6 @@ const styles = StyleSheet.create({
   suggestedSelectionWrap: {
     gap: spacing.sm,
   },
-  suggestedSelectionTitle: {
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.bold,
-  },
   suggestedSelectionHint: {
     fontSize: fontSize.sm,
     lineHeight: fontSize.sm * 1.35,
@@ -679,27 +666,34 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     marginBottom: spacing.sm,
   },
-  sectionKicker: {
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.bold,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
+  // QC2-H: the mentor's quiet labels — sentence case, centered, no tracked
+  // uppercase kickers (design-system ban).
+  groupLabel: {
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.medium,
+    textAlign: 'center',
     marginBottom: spacing.sm,
   },
-  sectionKickerRight: {
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.bold,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
+  groupLabelInRow: {
+    textAlign: 'left',
+    marginBottom: 0,
   },
-  sectionTitle: {
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.bold,
+  groupLabelSpaced: {
+    marginTop: spacing.lg,
+  },
+  categoryLabel: {
+    fontSize: fontSize.sm,
+  },
+  benchLine: {
+    fontSize: fontSize.sm,
+    textAlign: 'center',
+    marginBottom: spacing.md,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginTop: spacing.lg,
     marginBottom: spacing.md,
   },
   cardHint: {

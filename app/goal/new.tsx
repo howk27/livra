@@ -11,7 +11,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { themedColors, spacing, fontSize, fontWeight, borderRadius } from '../../theme/tokens';
+import { themedColors, spacing, fontSize, fontWeight, fonts } from '../../theme/tokens';
+import { GoalCardPreview } from '../../components/creation/GoalCardPreview';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useGoalsStore, GoalLimitError } from '../../state/goalsSlice';
 import { useMarksStore } from '../../state/countersSlice';
@@ -128,6 +129,7 @@ export default function NewGoalScreen() {
       <SafeAreaView style={{ flex: 1, backgroundColor: c.linen }} onLayout={onProbeLayout}>
         <CommitmentScreen
           goalTitle={title}
+          goalWhy={description.trim() || undefined}
           suggestedMarks={suggestedMarks}
           userMarks={marks}
           onConfirm={handleConfirm}
@@ -151,7 +153,6 @@ export default function NewGoalScreen() {
           <TouchableOpacity onPress={() => router.back()}>
             <Text style={[styles.cancel, { color: c.inkMuted }]}>Cancel</Text>
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: c.inkDark }]}>New goal</Text>
           <TouchableOpacity onPress={handleNext} disabled={!title.trim() || saving}>
             <Text style={[styles.save, { color: title.trim() && !saving ? c.accent : c.inkMuted }]}>
               Next
@@ -165,39 +166,41 @@ export default function NewGoalScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <Text style={[styles.label, { color: c.inkMuted }]}>Name the goal · that’s all it takes</Text>
-          <TextInput
-            style={[
-              styles.input,
-              { color: c.inkDark, backgroundColor: c.surface, borderColor: c.borderLight },
-            ]}
-            placeholder="e.g. Run a marathon"
-            placeholderTextColor={c.inkMuted}
-            ref={titleInputRef}
-            value={title}
-            onChangeText={setTitle}
-            maxLength={80}
-            returnKeyType="next"
-            onSubmitEditing={handleNext}
+          {/* QC2-H "The Card Takes Shape": the REAL hollow goal card (FU-5
+              treatment) is the screen's one focal point, and the caret lives
+              inside it — typing renders straight into the Signature serif.
+              A title alone completes the card (FU-7a). */}
+          <GoalCardPreview
+            testID="goal-card-preview"
+            titleSlot={
+              <>
+                <TextInput
+                  style={[styles.titleInput, { color: c.inkDark }]}
+                  placeholder="Name it…"
+                  placeholderTextColor={c.inkMuted}
+                  ref={titleInputRef}
+                  value={title}
+                  onChangeText={setTitle}
+                  maxLength={80}
+                  returnKeyType="next"
+                  onSubmitEditing={handleNext}
+                />
+                <TextInput
+                  style={[styles.whyInput, { color: c.inkMid }]}
+                  placeholder="Why it matters · optional"
+                  placeholderTextColor={c.inkMuted}
+                  value={description}
+                  onChangeText={setDescription}
+                  maxLength={200}
+                  multiline
+                />
+              </>
+            }
           />
 
-          <Text style={[styles.label, { color: c.inkMuted }]}>
-            Why it matters · optional
+          <Text style={[styles.benchLine, { color: c.inkMuted }]}>
+            Your goal card · exactly as you will see it every day.
           </Text>
-          <TextInput
-            style={[
-              styles.input,
-              styles.descInput,
-              { color: c.inkDark, backgroundColor: c.surface, borderColor: c.borderLight },
-            ]}
-            placeholder="What will finishing this change for you?"
-            placeholderTextColor={c.inkMuted}
-            value={description}
-            onChangeText={setDescription}
-            maxLength={200}
-            multiline
-            numberOfLines={3}
-          />
 
           <TouchableOpacity
             style={styles.aiFallbackLink}
@@ -237,29 +240,45 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
   },
-  headerTitle: { fontSize: fontSize.md, fontWeight: fontWeight.semibold },
   cancel: { fontSize: fontSize.md },
   save: { fontSize: fontSize.md, fontWeight: fontWeight.semibold },
   formScroll: { flex: 1 },
-  form: { paddingHorizontal: spacing.md, paddingTop: spacing.lg, paddingBottom: spacing.xl, gap: spacing.xs },
-  label: { fontSize: fontSize.sm, fontWeight: fontWeight.medium, marginBottom: 4 },
-  input: {
-    borderWidth: 1,
-    borderRadius: borderRadius.md,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
-    fontSize: fontSize.md,
+  // Screen gutter = spacing.lg applied ONCE, here on the scroll content
+  // (the card carries no outer margin) — 2026-07-12 width rule.
+  form: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.xl },
+  // The card's own serif, as a caret-carrying input: same face/size/leading
+  // as GoalTitle size="card" so the typed title IS the card title, live.
+  titleInput: {
+    fontFamily: fonts.serifSemibold,
+    fontSize: fontSize[22],
+    lineHeight: 28,
+    letterSpacing: -0.3,
+    padding: 0,
   },
-  descInput: { height: 80, textAlignVertical: 'top' },
+  whyInput: {
+    fontFamily: fonts.serifItalic,
+    fontSize: fontSize.lg,
+    lineHeight: 22,
+    padding: 0,
+    marginTop: spacing.sm,
+    textAlignVertical: 'top',
+  },
+  benchLine: {
+    fontSize: fontSize.sm,
+    textAlign: 'center',
+    marginTop: spacing.md,
+  },
   aiFallbackLink: {
     marginTop: spacing.md,
     minHeight: 44,
     justifyContent: 'center',
+    alignItems: 'center',
   },
   aiFallbackLinkText: {
     fontSize: fontSize.sm,
+    textAlign: 'center',
   },
 });

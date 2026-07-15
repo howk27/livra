@@ -10,7 +10,8 @@ import {
 import { useRouter } from 'expo-router';
 import { themedColors, spacing, fontSize, fontWeight, borderRadius, fonts } from '../theme/tokens';
 import { applyOpacity } from '../src/components/icons/color';
-import { GoalTitle } from './ui/GoalTitle';
+import { GoalCardPreview } from './creation/GoalCardPreview';
+import { goalPlanMeta } from '../lib/creation/creationPreview';
 import { useEffectiveTheme } from '../state/uiSlice';
 import {
   TierId,
@@ -36,6 +37,8 @@ export type CommitmentSelection = {
 
 type Props = {
   goalTitle: string;
+  /** The why, if entered on the previous step — rides on the live card. */
+  goalWhy?: string;
   suggestedMarks: MarkDefinition[];
   userMarks: Mark[];
   onConfirm: (selection: CommitmentSelection) => void;
@@ -55,6 +58,7 @@ function findOwnedMark(suggested: MarkDefinition, userMarks: Mark[]): Mark | und
 
 export function CommitmentScreen({
   goalTitle,
+  goalWhy,
   suggestedMarks,
   userMarks,
   onConfirm,
@@ -119,6 +123,14 @@ export function CommitmentScreen({
   const summary = totalSelected > 0 ? commitmentSummary(tier, frequency, totalSelected) : '';
   const canProceed = canCreateGoalFromCommitment({ isOnboarding, selectedMarkCount: totalSelected });
 
+  // QC2-H: every selected mark lands on the live card as an icon tile, and
+  // the card's meta line rewrites with the tier/frequency decision — the plan
+  // assembles on the artifact itself.
+  const selectedForCard = suggestedMarks
+    .filter(s => (findOwnedMark(s, userMarks) ? true : selectedNewIds.has(s.id)))
+    .map(s => ({ id: s.id, name: s.name, icon: s.icon, category: s.category }));
+  const planMeta = goalPlanMeta(totalSelected, totalSelected > 0 ? frequency : null);
+
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: c.linen }}
@@ -137,10 +149,18 @@ export function CommitmentScreen({
           </Text>
         </>
       ) : (
-        /* VD-7: reflect the user's title back once, in the Signature serif —
-           the goal is already theirs before a single option is picked. */
+        /* QC2-H: the SAME hollow card from the title step persists here and
+           gains its plan live — tiles for picked marks, a meta line for the
+           cadence. The flourish draws now that the title is committed. */
         <View style={styles.echoWrap}>
-          <GoalTitle title={goalTitle} size="card" flourish />
+          <GoalCardPreview
+            testID="commitment-goal-card"
+            title={goalTitle}
+            why={goalWhy}
+            flourish
+            marks={selectedForCard}
+            planMeta={planMeta}
+          />
           <Text style={[styles.echoLine, { color: c.inkMid }]}>
             Yours now · here’s what it takes.
           </Text>
@@ -148,7 +168,7 @@ export function CommitmentScreen({
       )}
 
       {/* ── Marks ── */}
-      <Text style={[styles.sectionLabel, { color: c.inkMuted }]}>THE WORK</Text>
+      <Text style={[styles.sectionLabel, { color: c.inkMuted }]}>Pick the work</Text>
       <View style={styles.chipRow}>
         {suggestedMarks.map(s => {
           const owned = findOwnedMark(s, userMarks);
@@ -179,7 +199,7 @@ export function CommitmentScreen({
 
       {/* ── Tier ── */}
       <View style={styles.sectionRow}>
-        <Text style={[styles.sectionLabel, { color: c.inkMuted }]}>HOW MUCH</Text>
+        <Text style={[styles.sectionLabel, styles.sectionLabelInRow, { color: c.inkMuted }]}>How much</Text>
         <TouchableOpacity
           onPress={() => setExplanationVisible('tier')}
           style={[styles.explainBtn, { borderColor: c.borderMid }]}
@@ -214,7 +234,7 @@ export function CommitmentScreen({
 
       {/* ── Frequency ── */}
       <View style={styles.sectionRow}>
-        <Text style={[styles.sectionLabel, { color: c.inkMuted }]}>HOW OFTEN</Text>
+        <Text style={[styles.sectionLabel, styles.sectionLabelInRow, { color: c.inkMuted }]}>How often</Text>
         <TouchableOpacity
           onPress={() => setExplanationVisible('frequency')}
           style={[styles.explainBtn, { borderColor: c.borderMid }]}
@@ -300,7 +320,9 @@ export function CommitmentScreen({
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: spacing.md,
+    // Screen gutter = spacing.lg applied once, matching the title step so the
+    // live card keeps its exact width across the two steps (same object).
+    paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
     paddingBottom: spacing.xxl,
     gap: spacing.xs,
@@ -316,21 +338,25 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     marginTop: spacing.sm,
   },
+  // QC2-H: the mentor's quiet labels — sentence case, centered, no tracked
+  // uppercase (design-system kicker ban). One plain line per decision.
   sectionLabel: {
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.semibold,
-    letterSpacing: 1,
+    fontFamily: fonts.sansMedium,
+    fontSize: fontSize.sm,
+    textAlign: 'center',
     marginTop: spacing.lg,
     marginBottom: spacing.sm,
   },
   sectionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
+    gap: spacing.xs,
     marginTop: spacing.lg,
     marginBottom: spacing.sm,
   },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  sectionLabelInRow: { marginTop: 0, marginBottom: 0 },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
   markChip: {
     flexDirection: 'row',
     alignItems: 'center',
