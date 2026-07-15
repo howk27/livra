@@ -642,7 +642,7 @@ function MarkDetailContent() {
             >
               {completedToday ? (
                 <>
-                  <Check size={18} color={c.accent} weight="bold" />
+                  <Check size={18} color={c.ember} weight="bold" />
                   <Text style={styles.logBtnTextDone}>Logged today</Text>
                 </>
               ) : (
@@ -731,7 +731,7 @@ function MarkDetailContent() {
                     <Text style={styles.historyDate}>
                       {dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                     </Text>
-                    <Check size={14} color={c.accent} weight="bold" />
+                    <Check size={14} color={c.ember} weight="bold" />
                   </TouchableOpacity>
                 );
               })
