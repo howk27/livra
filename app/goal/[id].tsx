@@ -23,6 +23,7 @@ import {
   Check,
   Plus,
   Trash,
+  ArrowRight,
 } from 'phosphor-react-native';
 import {
   colors,
@@ -35,9 +36,10 @@ import {
   fonts,
   motion,
 } from '../../theme/tokens';
-import type { Mark } from '../../types';
+import type { Mark, GoalNote } from '../../types';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useGoalsStore } from '../../state/goalsSlice';
+import { useGoalNotesStore } from '../../state/goalNotesSlice';
 import { useMarksStore } from '../../state/countersSlice';
 import { useEventsStore } from '../../state/eventsSlice';
 import { useAppDateStore } from '../../state/appDateSlice';
@@ -421,6 +423,121 @@ function TargetDateSheet({
   );
 }
 
+/** QC3-D compact journal preview: a compose field, the ~3 most-recent entries,
+ *  and a link to the full journal. Multi-entry — every add appends a new row.
+ *  Handles empty / loading / error inline (convention floor). */
+function GoalJournalPreview({
+  c,
+  goalId,
+  userId,
+  onViewAll,
+}: {
+  c: ThemeColors;
+  goalId: string;
+  userId: string;
+  onViewAll: () => void;
+}) {
+  const loading = useGoalNotesStore((s) => s.loading);
+  const recent = useGoalNotesStore((s) => s.getEntriesForGoal(goalId, 3));
+  const totalForGoal = useGoalNotesStore(
+    (s) => s.entries.filter((n) => n.goal_id === goalId).length,
+  );
+  const cloudError = useGoalNotesStore((s) => s.goalNotesCloudError);
+  const clearCloudError = useGoalNotesStore((s) => s.clearGoalNotesCloudError);
+  const addGoalNote = useGoalNotesStore((s) => s.addGoalNote);
+
+  const [draft, setDraft] = useState('');
+  const [saving, setSaving] = useState(false);
+  const trimmed = draft.trim();
+  const canAdd = trimmed.length > 0 && !saving;
+
+  const handleAdd = async () => {
+    if (!canAdd) return;
+    if (Platform.OS !== 'web') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    }
+    setSaving(true);
+    try {
+      const localDate = formatDate(getAppDate());
+      await addGoalNote(goalId, userId, localDate, trimmed);
+      setDraft('');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <View style={styles.section}>
+      <Text style={[styles.sectionLabel, { color: c.inkMuted }]}>JOURNAL</Text>
+
+      <View style={[styles.journalCompose, { backgroundColor: c.surface, borderColor: c.borderLight }]}>
+        <TextInput
+          value={draft}
+          onChangeText={(t) => setDraft(t.slice(0, 1000))}
+          placeholder="What did you do, what's working, what's not?"
+          placeholderTextColor={c.inkMuted}
+          multiline
+          style={[styles.journalInput, { color: c.inkDark, borderColor: c.borderMid, backgroundColor: c.surface }]}
+          textAlignVertical="top"
+        />
+        <TouchableOpacity
+          style={[styles.journalAddBtn, { backgroundColor: canAdd ? c.forest : c.surfaceAlt }]}
+          onPress={handleAdd}
+          disabled={!canAdd}
+          activeOpacity={0.85}
+          accessibilityLabel="Add journal entry"
+        >
+          <Plus size={14} color={canAdd ? c.inkInverse : c.inkMuted} weight="bold" />
+          <Text style={[styles.journalAddText, { color: canAdd ? c.inkInverse : c.inkMuted }]}>
+            {saving ? 'Adding…' : 'Add entry'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {cloudError ? (
+        <View style={styles.journalCloudRow}>
+          <Text style={[styles.journalCloudHint, { color: c.inkMuted }]}>{cloudError}</Text>
+          <TouchableOpacity onPress={() => clearCloudError()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+            <Text style={[styles.journalCloudDismiss, { color: c.accent }]}>Dismiss</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
+      {loading && recent.length === 0 ? (
+        <View
+          style={[styles.journalSkeleton, { backgroundColor: applyOpacity(c.inkMuted, 0.12) }]}
+        />
+      ) : recent.length === 0 ? (
+        <Text style={[styles.journalEmpty, { color: c.inkMid }]}>
+          {"A quiet place to note how it's really going."}
+        </Text>
+      ) : (
+        <>
+          {recent.map((entry: GoalNote, i: number) => (
+            <View key={entry.id}>
+              {i > 0 && <View style={[styles.journalSeparator, { backgroundColor: c.borderLight }]} />}
+              <View style={styles.journalEntry}>
+                <Text style={[styles.journalEntryDate, { color: c.inkMuted }]}>
+                  {format(parseISO(entry.created_at), 'MMM d')}
+                </Text>
+                <Text style={[styles.journalEntryText, { color: c.inkDark }]} numberOfLines={3}>
+                  {entry.text.trim()}
+                </Text>
+              </View>
+            </View>
+          ))}
+          <TouchableOpacity style={styles.journalViewAll} onPress={onViewAll} activeOpacity={0.7}>
+            <Text style={[styles.journalViewAllText, { color: c.accent }]}>
+              {totalForGoal > recent.length ? `View journal · ${totalForGoal} entries` : 'View journal'}
+            </Text>
+            <ArrowRight size={14} color={c.accent} weight="bold" />
+          </TouchableOpacity>
+        </>
+      )}
+    </View>
+  );
+}
+
 // ── Derivation + confirm helpers (QC2-C retry #1) ───────────────────────────
 
 /** Weekly state + momentum story for a goal — the same machinery Focus uses,
@@ -685,6 +802,13 @@ export default function GoalDetailScreen() {
           onOpenMark={(markId) => router.push(`/mark/${markId}` as any)}
         />
 
+        <GoalJournalPreview
+          c={c}
+          goalId={id!}
+          userId={userId ?? 'local'}
+          onViewAll={() => router.push(`/goal/journal/${id}` as any)}
+        />
+
         <DetailFooter
           c={c}
           targetDate={goal.target_date}
@@ -864,6 +988,62 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.md,
   },
   addMarkBtnText: { fontSize: fontSize.sm, fontFamily: fonts.sansSemibold },
+
+  // Journal preview (QC3-D)
+  journalCompose: {
+    borderWidth: 1,
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  journalInput: {
+    borderWidth: 1,
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    minHeight: 72,
+    fontSize: fontSize.md,
+    fontFamily: fonts.sans,
+    lineHeight: 22,
+  },
+  journalAddBtn: {
+    alignSelf: 'flex-end',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.md,
+  },
+  journalAddText: { fontSize: fontSize.sm, fontFamily: fonts.sansSemibold },
+  journalCloudRow: {
+    marginTop: spacing.xs,
+    gap: spacing.xs,
+  },
+  journalCloudHint: { fontSize: fontSize.sm, fontFamily: fonts.sans, lineHeight: 18 },
+  journalCloudDismiss: { fontSize: fontSize.sm, fontFamily: fonts.sansMedium },
+  journalSkeleton: {
+    height: 60,
+    borderRadius: borderRadius.md,
+    marginTop: spacing.sm,
+  },
+  journalEmpty: {
+    fontFamily: fonts.serifItalic,
+    fontSize: fontSize.lg,
+    lineHeight: 22,
+    marginTop: spacing.sm,
+  },
+  journalEntry: { paddingVertical: spacing.sm, gap: 3 },
+  journalEntryDate: { fontSize: fontSize.sm, fontFamily: fonts.sans },
+  journalEntryText: { fontSize: fontSize.md, fontFamily: fonts.sans, lineHeight: 20 },
+  journalSeparator: { height: StyleSheet.hairlineWidth, marginTop: spacing.xs },
+  journalViewAll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  journalViewAllText: { fontSize: fontSize.sm, fontFamily: fonts.sansMedium },
 
   // Footer group
   footerGroup: { marginTop: spacing.xl },

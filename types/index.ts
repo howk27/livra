@@ -115,6 +115,20 @@ export type MarkNote = {
 /** Alias: persisted note attached to that day’s tracking record (same storage as MarkNote). */
 export type DailyTrackingLogEntry = MarkNote;
 
+// QC3-D: goal-level MULTI-ENTRY journal. Many timestamped entries per goal (and
+// per day); the entry's identity is a client-generated uuid (`id`), NOT a
+// natural (goal_id, date) key. `local_date` is the author's local day, used only
+// for UI day-grouping — it is NOT unique.
+export type GoalNote = {
+  id: string;
+  goal_id: string;
+  user_id: string;
+  local_date: string; // YYYY-MM-DD
+  text: string;
+  created_at: string;
+  updated_at: string;
+};
+
 // Feature 3: Skip Token records
 export type SkipToken = {
   id: string;

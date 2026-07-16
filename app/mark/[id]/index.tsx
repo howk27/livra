@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
+import React, { useMemo, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -34,12 +34,10 @@ import {
   setSleepNotifTime,
 } from '../../../lib/notifications/sleepNotification';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import {
   ArrowRight,
-  CaretDown,
-  CaretUp,
   Check,
   CheckCircle,
   Flag,
@@ -56,7 +54,6 @@ import { useEventsStore } from '../../../state/eventsSlice';
 import { LoadingScreen } from '../../../components/LoadingScreen';
 import { useAuth } from '../../../hooks/useAuth';
 import { logger } from '../../../lib/utils/logger';
-import { useDailyTrackingStore } from '../../../state/dailyTrackingSlice';
 import { resolveLibraryMark } from '@/lib/markCategoryResolve';
 import { resolveDailyTarget } from '../../../lib/markDailyTarget';
 import { getEmptyStateCopy } from '../../../lib/moments/emptyState';
@@ -73,7 +70,6 @@ function toLocalDateStr(d: Date): string {
   return formatDate(d);
 }
 
-const NOTE_MAX_LEN = 500;
 const HISTORY_COLLAPSED_DAYS = 3;
 const HISTORY_MAX_DAYS = 14;
 
@@ -124,18 +120,8 @@ function MarkDetailContent() {
   // emoji collisions like '🚫').
   const libraryMark = counter ? resolveLibraryMark(counter) : undefined;
 
-  const [expandedActivityDate, setExpandedActivityDate] = useState<string | null>(null);
   const [historyExpanded, setHistoryExpanded] = useState(false);
-  const [draftNote, setDraftNote] = useState('');
-  const [savingNote, setSavingNote] = useState(false);
-  const [deletingNote, setDeletingNote] = useState(false);
-  const noteFieldBusy = savingNote || deletingNote;
-  const scrollRef = useRef<ScrollView>(null);
-  const noteSectionYRef = useRef(0);
   const undoInFlight = useRef(false);
-  const draftNoteRef = useRef(draftNote);
-  draftNoteRef.current = draftNote;
-  const [expandedNoteIds, setExpandedNoteIds] = useState<Set<string>>(new Set());
   const appDateKey = useAppDateStore((s) => s.debugDateOverride ?? '');
 
   const [healthModalVisible, setHealthModalVisible] = useState(false);
@@ -224,42 +210,6 @@ function MarkDetailContent() {
     : recentActivity.slice(0, HISTORY_COLLAPSED_DAYS);
   const hiddenHistoryCount = recentActivity.length - HISTORY_COLLAPSED_DAYS;
 
-  const dailyLogsForMark = useDailyTrackingStore(
-    (s) => (id ? s.getDailyLogsForMark(id, 60) : []),
-  );
-
-  const todayDailyLog = useDailyTrackingStore(
-    (s) => (id ? s.getDailyLogForDate(id, todayStr) : null),
-  );
-
-  const upsertDailyLogNote = useDailyTrackingStore((s) => s.upsertDailyLogNote);
-  const deleteDailyLogNote = useDailyTrackingStore((s) => s.deleteDailyLogNote);
-  const notesCloudError = useDailyTrackingStore((s) => s.notesCloudError);
-  const clearNotesCloudError = useDailyTrackingStore((s) => s.clearNotesCloudError);
-
-  const savedNoteText = todayDailyLog?.text ?? '';
-  const savedTrimmed = savedNoteText.trim();
-  const draftTrimmed = draftNote.trim();
-  const canSaveNote =
-    draftTrimmed !== savedTrimmed && !(draftTrimmed === '' && savedTrimmed !== '');
-  const hasSavedNote = Boolean(todayDailyLog && savedTrimmed.length > 0);
-
-  const notesByDate = useMemo(() => {
-    const map = new Map<string, string>();
-    dailyLogsForMark.forEach((n) => {
-      const t = n.text.trim();
-      if (t) map.set(n.date, t);
-    });
-    return map;
-  }, [dailyLogsForMark]);
-
-  const markNotes = useMemo(
-    () => dailyLogsForMark.filter((n) => n.date !== todayStr && n.text.trim().length > 0),
-    [dailyLogsForMark, todayStr],
-  );
-
-  const noteUserId = user?.id ?? 'local';
-
   // Goals linked to this mark
   const goals = useGoalsStore(s => s.goals);
   const linkedGoals = useMemo(
@@ -273,35 +223,6 @@ function MarkDetailContent() {
     [goals, counter?.goal_id],
   );
 
-  useFocusEffect(
-    useCallback(() => {
-      if (!id) return;
-      const row = useDailyTrackingStore.getState().getDailyLogForDate(id, todayStr);
-      setDraftNote(row?.text ?? '');
-    }, [id, todayStr]),
-  );
-
-  // Auto-save note on unmount (navigation away)
-  useEffect(() => {
-    return () => {
-      const draft = draftNote.trim();
-      const saved = savedNoteText.trim();
-      if (!id || !noteUserId || draft === saved) return;
-      if (draft.length === 0 && saved.length === 0) return;
-      // Fire-and-forget — do not await in cleanup
-      useDailyTrackingStore.getState().upsertDailyLogNote(id, noteUserId, todayStr, draft);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftNote]);
-
-  // Sync draft when the store hydrates from SQLite after an async load.
-  // Only updates if draft is currently empty to avoid overwriting in-progress typing.
-  useEffect(() => {
-    if (todayDailyLog?.text && draftNoteRef.current === '') {
-      setDraftNote(todayDailyLog.text);
-    }
-  }, [todayDailyLog?.text]);
-
   // Log button animation
   const logBtnScale = useSharedValue(1);
   const logBtnStyle = useAnimatedStyle(() => ({
@@ -311,12 +232,6 @@ function MarkDetailContent() {
   const bannerStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: bannerY.value }],
   }));
-
-  const scrollNoteIntoView = useCallback(() => {
-    requestAnimationFrame(() => {
-      scrollRef.current?.scrollTo({ y: Math.max(0, noteSectionYRef.current - spacing.md), animated: true });
-    });
-  }, []);
 
   const styles = useMemo(() => createStyles(c), [c]);
 
@@ -463,44 +378,6 @@ function MarkDetailContent() {
     );
   };
 
-  const handleSaveNote = async () => {
-    if (!id || !canSaveNote || noteFieldBusy) return;
-    setSavingNote(true);
-    try {
-      await upsertDailyLogNote(id, noteUserId, todayStr, draftTrimmed);
-      // Do NOT clear draftNote — keep saved text visible in TextInput.
-      // canSaveNote will become false once savedTrimmed matches draftTrimmed.
-    } catch (error) {
-      logger.error('save note failed:', error);
-      Alert.alert('Error', 'Could not save your note.');
-    } finally {
-      setSavingNote(false);
-    }
-  };
-
-  const handleDeleteNote = () => {
-    if (!todayDailyLog?.id || !hasSavedNote || noteFieldBusy) return;
-    Alert.alert('Delete note?', 'Remove the saved note for today?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          setDeletingNote(true);
-          try {
-            await deleteDailyLogNote(todayDailyLog.id);
-            setDraftNote('');
-          } catch (error) {
-            logger.error('delete note failed:', error);
-            Alert.alert('Error', 'Could not delete the note.');
-          } finally {
-            setDeletingNote(false);
-          }
-        },
-      },
-    ]);
-  };
-
   const handleConnectHealth = async () => {
     const status = await checkProStatus();
     if (!status.effectiveUnlocked) {
@@ -583,7 +460,6 @@ function MarkDetailContent() {
         keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
       >
         <ScrollView
-          ref={scrollRef}
           contentContainerStyle={[
             styles.content,
             { paddingBottom: spacing.xxl + insets.bottom + (Platform.OS === 'android' ? 24 : 12) },
@@ -716,23 +592,13 @@ function MarkDetailContent() {
                 // date is a 'yyyy-MM-dd' string — parse as local midnight to avoid UTC shift
                 const [y, m, d] = date.split('-').map(Number);
                 const dt = new Date(y, m - 1, d);
-                const dateNote = notesByDate.get(date);
-                const isExpanded = expandedActivityDate === date;
                 return (
-                  <TouchableOpacity
-                    key={date}
-                    style={styles.historyRow}
-                    activeOpacity={dateNote ? 0.82 : 1}
-                    onPress={() => {
-                      if (!dateNote) return;
-                      setExpandedActivityDate(isExpanded ? null : date);
-                    }}
-                  >
+                  <View key={date} style={styles.historyRow}>
                     <Text style={styles.historyDate}>
                       {dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                     </Text>
                     <Check size={14} color={c.ember} weight="bold" />
-                  </TouchableOpacity>
+                  </View>
                 );
               })
             ) : (
@@ -751,85 +617,9 @@ function MarkDetailContent() {
             )}
           </View>
 
-          {/* ── Today's note ─────────────────────────────────────────────── */}
-          <View
-            onLayout={(e) => { noteSectionYRef.current = e.nativeEvent.layout.y; }}
-            style={styles.noteCard}
-          >
-            <Text style={styles.noteSectionLabel}>TODAY'S NOTE</Text>
-            <TextInput
-              value={draftNote}
-              onChangeText={(t) => setDraftNote(t.slice(0, NOTE_MAX_LEN))}
-              placeholder="What did you do today?"
-              placeholderTextColor={c.inkMuted}
-              multiline
-              editable={!noteFieldBusy}
-              onFocus={scrollNoteIntoView}
-              onBlur={async () => {
-                const draft = draftNote.trim();
-                const saved = savedNoteText.trim();
-                if (!id || !noteUserId || draft === saved) return;
-                await upsertDailyLogNote(id, noteUserId, todayStr, draft);
-              }}
-              style={styles.noteInput}
-              textAlignVertical="top"
-            />
-            <View style={styles.noteActionsRow}>
-              {hasSavedNote && draftTrimmed === savedTrimmed ? (
-                <Text style={styles.noteSavedIndicator}>Saved</Text>
-              ) : (
-                <Text style={styles.noteCharCount}>{draftNote.length}/{NOTE_MAX_LEN}</Text>
-              )}
-              {hasSavedNote && (
-                <TouchableOpacity onPress={handleDeleteNote} disabled={noteFieldBusy} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Text style={[styles.noteDeleteText, noteFieldBusy && { opacity: 0.4 }]}>Delete</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-            {notesCloudError ? (
-              <View style={styles.noteCloudRow}>
-                <Text style={styles.noteCloudHint}>{notesCloudError}</Text>
-                <TouchableOpacity onPress={() => clearNotesCloudError()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Text style={styles.noteCloudDismiss}>Dismiss</Text>
-                </TouchableOpacity>
-              </View>
-            ) : null}
-          </View>
-
-          {/* ── Past notes ───────────────────────────────────────────────── */}
-          {markNotes.length > 0 && (
-            <View style={styles.noteCard}>
-              <Text style={styles.noteSectionLabel}>PREVIOUS NOTES</Text>
-              {markNotes.map((note, i) => {
-                const [y, mo, d] = note.date.split('-').map(Number);
-                const dt = new Date(y, mo - 1, d);
-                const dateLabel = dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-                const isExpanded = expandedNoteIds.has(note.date);
-                const toggleExpand = () =>
-                  setExpandedNoteIds(prev => {
-                    const next = new Set(prev);
-                    if (next.has(note.date)) { next.delete(note.date); } else { next.add(note.date); }
-                    return next;
-                  });
-                return (
-                  <View key={note.date}>
-                    {i > 0 && <View style={styles.pastNoteSeparator} />}
-                    <TouchableOpacity style={styles.pastNoteRow} onPress={toggleExpand} activeOpacity={0.75}>
-                      <View style={styles.pastNoteContent}>
-                        <Text style={styles.pastNoteDate}>{dateLabel}</Text>
-                        <Text style={styles.pastNoteText} numberOfLines={isExpanded ? undefined : 3}>
-                          {note.text.trim()}
-                        </Text>
-                      </View>
-                      {isExpanded
-                        ? <CaretUp size={14} color={c.inkMuted} weight="bold" />
-                        : <CaretDown size={14} color={c.inkMuted} weight="bold" />}
-                    </TouchableOpacity>
-                  </View>
-                );
-              })}
-            </View>
-          )}
+          {/* Per-mark notes moved to the goal-level journal (QC3-D). The daily
+              note UI was removed here; reflection now lives on the goal detail
+              and its full journal screen. */}
 
           {/* Wake-up alarm (sleep mark) */}
           {counter?.health_kit_type === 'sleep' && (
@@ -1139,64 +929,6 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     fontFamily: fonts.sansMedium,
     fontSize: fontSize.sm,
   },
-
-  // Note
-  noteCard: {
-    backgroundColor: c.surface,
-    borderRadius: borderRadius.card,
-    padding: spacing.lg,
-    gap: spacing.sm,
-    ...shadow.card,
-  },
-  noteSectionLabel: {
-    fontSize: fontSize.xs,
-    fontFamily: fonts.sansSemibold,
-    color: c.inkMuted,
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
-    marginBottom: spacing.xs,
-  },
-  noteInput: {
-    borderWidth: 1,
-    borderColor: c.borderMid,
-    borderRadius: 12,
-    padding: spacing.md,
-    minHeight: 90,
-    fontSize: fontSize.md,
-    fontFamily: fonts.sans,
-    color: c.inkDark,
-    lineHeight: 22,
-    backgroundColor: c.surface,
-  },
-  noteActionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  noteCharCount: { fontSize: fontSize.xs, fontFamily: fonts.sans, color: c.inkMuted },
-  noteSavedIndicator: { fontSize: fontSize.xs, fontFamily: fonts.sans, color: c.inkMuted },
-  noteDeleteText: { fontSize: fontSize[13], fontFamily: fonts.sansMedium, color: c.danger },
-  noteCloudRow: {
-    marginTop: spacing.xs,
-    paddingTop: spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: c.borderLight,
-    gap: spacing.xs,
-  },
-  noteCloudHint: { fontSize: fontSize.sm, fontFamily: fonts.sans, color: c.inkMuted, lineHeight: 18 },
-  noteCloudDismiss: { fontSize: fontSize.sm, fontFamily: fonts.sansMedium, color: c.accent },
-
-  // Past notes
-  pastNoteRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.sm,
-    paddingVertical: spacing.sm,
-  },
-  pastNoteContent: { flex: 1, gap: 3 },
-  pastNoteDate: { fontSize: fontSize.sm, fontFamily: fonts.sans, color: c.inkMuted },
-  pastNoteText: { fontSize: fontSize.base, fontFamily: fonts.sans, color: c.inkDark, lineHeight: 20 },
-  pastNoteSeparator: { height: StyleSheet.hairlineWidth, backgroundColor: c.borderLight },
 
   // Settings cards
   settingCard: {

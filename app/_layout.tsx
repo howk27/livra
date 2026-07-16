@@ -41,6 +41,7 @@ import { useGoalsStore } from '../state/goalsSlice';
 import { useMarksStore } from '../state/countersSlice';
 import { syncWidgetData } from '../lib/widgets/widgetSync';
 import { useDailyTrackingStore } from '../state/dailyTrackingSlice';
+import { useGoalNotesStore } from '../state/goalNotesSlice';
 import { useAppDateStore } from '../state/appDateSlice';
 import {
   recordBehaviorNotificationTap,
@@ -267,6 +268,7 @@ export default function RootLayout() {
       await initDatabase();
       await useAppDateStore.getState().hydrate();
       await useDailyTrackingStore.getState().loadDailyTracking();
+      await useGoalNotesStore.getState().loadGoalNotes();
       await useFeaturesStore.getState().loadSkipFeatures();
       // Cleanup badges with invalid user_id (like "local-user")
       const removedCount = await cleanupInvalidBadges();
@@ -516,6 +518,7 @@ export default function RootLayout() {
           await useCountersStore.getState().loadMarks(user.id);
           useEventsStore.getState().loadEvents(undefined, user.id);
           await useDailyTrackingStore.getState().loadDailyTracking();
+          await useGoalNotesStore.getState().loadGoalNotes();
           await useFeaturesStore.getState().loadSkipFeatures();
         } catch (error: any) {
           // Parse error to extract clean message (handles HTML responses like Cloudflare errors)
@@ -604,6 +607,7 @@ function RootNavigator() {
         <Stack.Screen name="goal/new" options={{ presentation: 'modal', title: 'New Goal', headerShown: false }} />
         <Stack.Screen name="goal/suggest" options={{ presentation: 'modal', title: 'Suggest a plan', headerShown: false }} />
         <Stack.Screen name="goal/[id]" options={{ presentation: 'modal', headerShown: false }} />
+        <Stack.Screen name="goal/journal/[id]" options={{ presentation: 'modal', headerShown: false }} />
         <Stack.Screen
           name="goal/complete"
           options={{
