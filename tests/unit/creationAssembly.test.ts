@@ -31,10 +31,20 @@ const CREATION_SURFACES = [
 ];
 
 describe('the artifact anchors every creation screen (QC2-H)', () => {
-  it('goal/new assembles the live goal card with the caret inside it', () => {
-    const src = read('app/goal/new.tsx');
+  // QC4-E supersedes QC2-H's caret-in-card on THIS screen: with the caret
+  // inside it, the card only contained the user's keystrokes and nothing
+  // answered ("just text" — founder). The artifact is now read-only and the
+  // caret lives in the instrument group below it. The QC2-H requirement the
+  // guard actually protects — the REAL live card anchors the screen — is
+  // unchanged, so the assertion moves rather than relaxing.
+  it('goal/new assembles the live goal card as a read-only artifact, caret outside it', () => {
+    // stripComments: the screen's comments name titleSlot to record what
+    // superseded it, and that prose must not trip the guard.
+    const src = stripComments(read('app/goal/new.tsx'));
     expect(src).toContain('<GoalCardPreview');
-    expect(src).toContain('titleSlot');
+    expect(src).toContain('title={title}');
+    // The card is an object, not an input: no caret may live inside it again.
+    expect(src).not.toContain('titleSlot');
   });
 
   it('the commitment step keeps the same card and feeds it the plan', () => {
