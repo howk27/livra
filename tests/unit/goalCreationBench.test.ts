@@ -193,12 +193,21 @@ describe('QC5-B — the welcome bin: ten outcome-shaped goals, at the bottom', (
     expect(strip).toBeLessThan(bin);
   });
 
-  it('is a welcome: shown by goal count read ONCE at mount, never by title', () => {
-    // The QC4-C trap is gating on a value that flips while you type. The goal
-    // count is frozen in a useState initializer, so the bin cannot vanish under
-    // an editing thumb.
-    expect(src).toContain('useState(() => useGoalsStore.getState().goals.length === 0)');
-    expect(src).toContain('showWelcomeGoals ?');
+  // SUPERSEDED (founder, 2026-07-16): this asserted the bin was gated on "user
+  // has zero goals" — QC5-B read "as a welcome" as first-run-only. The founder
+  // corrected the premise: "The preset goals are not only for their first goal.
+  // They are there to have Livra users experiment with the app and actually have
+  // a chance to Enjoy it." Presets are a way in every time, so the gate is gone
+  // and the assertion inverts: no gate may return.
+  it('the presets are ALWAYS shown — never gated on goal count or title', () => {
+    // The QC4-C trap: gating on a value that flips while you type, so the screen
+    // empties at the moment you commit. Still forbidden.
     expect(src).not.toMatch(/!title\.trim\(\)\s*&&\s*\(/);
+    // QC5-B's first-run gate. Also forbidden — presets are not a tutorial that
+    // gets taken away once you own a goal.
+    expect(src).not.toContain('showWelcomeGoals');
+    expect(src).not.toMatch(/goals\.length === 0/);
+    // The bin renders unconditionally.
+    expect(src).toContain('testID="goal-example-chips"');
   });
 });

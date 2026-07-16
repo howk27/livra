@@ -212,23 +212,12 @@ export default function NewGoalScreen() {
   // now the DIRECT route into this screen (no chooser-sheet → pageSheet hop).
   const onProbeLayout = useHalfRenderProbe('goal/new');
 
-  // QC5-B: the bin is a WELCOME, not permanent furniture — founder: "as a
-  // welcome for new users that are trying out the app. After that, they can do
-  // their own thing." So it shows only to a user who has never had a goal.
-  //
-  // This does NOT resurrect the QC4-C bug. That bug was gating on
-  // `!title.trim()`: a value that flips WHILE YOU TYPE, so the screen emptied at
-  // the exact moment you committed. This reads the goal count ONCE, at mount,
-  // via a useState initializer — it is frozen for the life of the screen, so a
-  // user who sees the bin keeps it through every keystroke, every preset swap,
-  // and every clear. Nothing can pop out from under the thumb.
-  //
-  // Frozen rather than subscribed on purpose: goals hydrate from SQLite, so a
-  // live `goals.length` could go 0 -> n mid-session and yank the bin away —
-  // which is the QC4-C failure shape wearing different clothes. Worst case of
-  // freezing is that a late hydration shows a returning user the welcome once;
-  // that is a cosmetic miss, not a control disappearing under their hand.
-  const [showWelcomeGoals] = useState(() => useGoalsStore.getState().goals.length === 0);
+  // QC5-B2: the presets are ALWAYS shown. QC5-B gated them on "user has zero
+  // goals", reading "as a welcome" as first-run-only. The founder corrected it:
+  // "The preset goals are not only for their first goal. They are there to have
+  // Livra users experiment with the app and actually have a chance to Enjoy it."
+  // They are a way in, every time — not a first-run tutorial that gets taken
+  // away the moment you have one goal. There is deliberately no gate here.
 
   const canProceed = !!title.trim() && !saving;
 
@@ -461,7 +450,6 @@ export default function NewGoalScreen() {
               already below the action zone, so the CTA does not move by a single
               point: nothing above `styles.actionZone` changed in this task. That
               ordering is the QC4-D guarantee and it is pinned by test. */}
-          {showWelcomeGoals ? (
           <View style={styles.exampleBlock} testID="goal-example-chips">
             <Text style={[styles.sectionLabel, { color: c.inkDark }]}>Popular goals</Text>
             {/* One line, and it earns it: it points back UP at the instrument,
@@ -500,7 +488,6 @@ export default function NewGoalScreen() {
               })}
             </View>
           </View>
-          ) : null}
         </ScrollView>
       </View>
     </SafeAreaView>
