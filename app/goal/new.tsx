@@ -55,7 +55,28 @@ type Step = 'title' | 'commitment';
 // left no way to change your mind about a pick except cancelling out of the
 // screen and coming back (founder). The bin is permanent, like mark/new's
 // Popular marks.
-const EXAMPLE_GOALS = ['Run a 5k', 'Read nightly', 'Meditate daily', 'Save $5k'];
+//
+// QC5-B: ten, and every one is OUTCOME-shaped — a thing you finish or reach.
+// The founder's objection to "Read nightly" ("sounds like a mark, not a goal")
+// is a grammar rule, not a one-off: a recurring action IS a mark in this
+// product, so offering one as a goal teaches the wrong model on first open.
+// "Meditate daily" was dropped for the same reason. The ten also span 8 of the
+// 9 library categories, so the bin shows the app's breadth as a welcome.
+// Each was verified against the real getMarksForGoal — see
+// tests/unit/goalCreationBench.test.ts, which pins the list and re-runs the
+// resolution so a library change can never quietly hollow one out.
+const EXAMPLE_GOALS = [
+  'Run a 5k',
+  'Lose 15 pounds',
+  'Save $5k',
+  'Fix my sleep',
+  'Get my stress under control',
+  'Learn Spanish',
+  'Read 12 books this year',
+  'Write a book',
+  'Be more present with my family',
+  'Launch a side hustle',
+];
 
 // QC4-E: the parts bin gets color. Each preset resolves its category from its
 // top getMarksForGoal hit, so the chip carries the same accent + duotone glyph
@@ -190,6 +211,24 @@ export default function NewGoalScreen() {
   // QC3-A: kept as a verification instrument only — the real half-render fix is
   // now the DIRECT route into this screen (no chooser-sheet → pageSheet hop).
   const onProbeLayout = useHalfRenderProbe('goal/new');
+
+  // QC5-B: the bin is a WELCOME, not permanent furniture — founder: "as a
+  // welcome for new users that are trying out the app. After that, they can do
+  // their own thing." So it shows only to a user who has never had a goal.
+  //
+  // This does NOT resurrect the QC4-C bug. That bug was gating on
+  // `!title.trim()`: a value that flips WHILE YOU TYPE, so the screen emptied at
+  // the exact moment you committed. This reads the goal count ONCE, at mount,
+  // via a useState initializer — it is frozen for the life of the screen, so a
+  // user who sees the bin keeps it through every keystroke, every preset swap,
+  // and every clear. Nothing can pop out from under the thumb.
+  //
+  // Frozen rather than subscribed on purpose: goals hydrate from SQLite, so a
+  // live `goals.length` could go 0 -> n mid-session and yank the bin away —
+  // which is the QC4-C failure shape wearing different clothes. Worst case of
+  // freezing is that a late hydration shows a returning user the welcome once;
+  // that is a cosmetic miss, not a control disappearing under their hand.
+  const [showWelcomeGoals] = useState(() => useGoalsStore.getState().goals.length === 0);
 
   const canProceed = !!title.trim() && !saving;
 
@@ -409,11 +448,27 @@ export default function NewGoalScreen() {
             />
           </View>
 
-          {/* THE PARTS BIN (QC4-C + QC4-E): permanent and colored. Tap to seed
-              the title, tap another to swap, tap the selected one to clear —
-              you can change your mind without cancelling the screen. */}
+          {/* The empty space becomes a preview of the future: the marks this
+              goal will take, materializing as the title is typed. */}
+          <MarkPreviewStrip title={title} />
+
+          {/* THE PARTS BIN (QC4-C + QC4-E + QC5-B): colored, and — for a first
+              -time user — the last thing on the screen. Tap to seed the title,
+              tap another to swap, tap the selected one to clear; you can change
+              your mind without cancelling the screen.
+
+              QC5-B moved it BELOW the strip, to the bottom of the step. It was
+              already below the action zone, so the CTA does not move by a single
+              point: nothing above `styles.actionZone` changed in this task. That
+              ordering is the QC4-D guarantee and it is pinned by test. */}
+          {showWelcomeGoals ? (
           <View style={styles.exampleBlock} testID="goal-example-chips">
             <Text style={[styles.sectionLabel, { color: c.inkDark }]}>Popular goals</Text>
+            {/* One line, and it earns it: it points back UP at the instrument,
+                so the bin reads as a way in rather than the only way in. */}
+            <Text style={[styles.exampleHint, { color: c.inkMid }]}>
+              Tap one to start, or write your own above.
+            </Text>
             <View style={styles.exampleRow}>
               {EXAMPLE_GOAL_PARTS.map(({ title: example, accent, Icon }) => {
                 const selected = title.trim() === example;
@@ -445,10 +500,7 @@ export default function NewGoalScreen() {
               })}
             </View>
           </View>
-
-          {/* The empty space becomes a preview of the future: the marks this
-              goal will take, materializing as the title is typed. */}
-          <MarkPreviewStrip title={title} />
+          ) : null}
         </ScrollView>
       </View>
     </SafeAreaView>
@@ -524,6 +576,15 @@ const styles = StyleSheet.create({
   },
   exampleBlock: {
     marginTop: spacing.xl,
+  },
+  // QC5-B: sits between the sectionLabel and the row, so the label keeps its own
+  // marginBottom and this only adds its own leading gap.
+  exampleHint: {
+    fontFamily: fonts.sans,
+    fontSize: fontSize.base,
+    lineHeight: fontSize.base * 1.45,
+    marginTop: -spacing.sm,
+    marginBottom: spacing.md,
   },
   exampleRow: {
     flexDirection: 'row',

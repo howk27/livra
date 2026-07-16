@@ -20,6 +20,30 @@ function stripComments(src: string): string {
   return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
 }
 
+/**
+ * QC5-B — the ten welcome goals, pinned. Every one is OUTCOME-shaped (a thing
+ * you finish or reach). The founder's note is the rule: "Read nightly ... sounds
+ * like a mark, not a goal" — a recurring action IS a mark in this product, so a
+ * mark-shaped preset teaches the wrong model on a new user's first open.
+ * "Meditate daily" was removed under the same rule.
+ *
+ * These are the behavioural fixtures for the whole file: the preset list and the
+ * data assertions below are the SAME ten, so a library change can never leave a
+ * shipped chip resolving to nothing.
+ */
+const WELCOME_GOALS = [
+  'Run a 5k',
+  'Lose 15 pounds',
+  'Save $5k',
+  'Fix my sleep',
+  'Get my stress under control',
+  'Learn Spanish',
+  'Read 12 books this year',
+  'Write a book',
+  'Be more present with my family',
+  'Launch a side hustle',
+];
+
 describe('QC4-E — the card is the object, the group below is the instrument', () => {
   const src = stripComments(read('app/goal/new.tsx'));
 
@@ -113,7 +137,7 @@ describe('QC4-B-ui — every suggested mark can explain itself', () => {
   });
 
   it('every mark a real goal resolves to has a description to disclose', () => {
-    for (const goal of ['Run a 5k', 'Read nightly', 'Meditate daily', 'Save $5k']) {
+    for (const goal of WELCOME_GOALS) {
       const marks = goalPreviewMarks(goal);
       expect(marks.length).toBeGreaterThan(0);
       for (const mark of marks) {
@@ -124,8 +148,57 @@ describe('QC4-B-ui — every suggested mark can explain itself', () => {
   });
 
   it('every preset resolves a category, so no chip falls back to the custom grey', () => {
-    for (const goal of ['Run a 5k', 'Read nightly', 'Meditate daily', 'Save $5k']) {
+    for (const goal of WELCOME_GOALS) {
       expect(getMarksForGoal(goal)[0]?.category).toBeTruthy();
     }
+  });
+});
+
+describe('QC5-B — the welcome bin: ten outcome-shaped goals, at the bottom', () => {
+  const src = stripComments(read('app/goal/new.tsx'));
+
+  it('ships exactly the ten pinned goals, in order', () => {
+    const list = src.match(/const EXAMPLE_GOALS = \[([\s\S]*?)\];/);
+    expect(list).toBeTruthy();
+    const shipped = [...list![1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+    expect(shipped).toEqual(WELCOME_GOALS);
+  });
+
+  it('drops the mark-shaped presets the founder called out', () => {
+    // "Read nightly ... sounds like a mark, not a goal" (founder). "Meditate
+    // daily" is the same grammar and went with it.
+    expect(src).not.toContain("'Read nightly'");
+    expect(src).not.toContain("'Meditate daily'");
+  });
+
+  it('every welcome goal is an outcome, never a recurring action', () => {
+    // The grammar rule behind the founder's note, enforced: a goal is a thing
+    // you finish or reach, so no preset may wear a cadence adverb.
+    for (const goal of WELCOME_GOALS) {
+      expect(goal).not.toMatch(/\b(daily|nightly|weekly|every day|each day)\b/i);
+    }
+  });
+
+  it('the bin sits at the BOTTOM — below the action zone AND below the strip', () => {
+    // QC4-D's guarantee, restated at this task's granularity: the CTA must not
+    // move down. The bin is the last thing in the scroll, so nothing it renders
+    // can push "Set the plan" further from the thumb.
+    const actions = src.indexOf('styles.actionZone');
+    const strip = src.indexOf('<MarkPreviewStrip');
+    const bin = src.indexOf('testID="goal-example-chips"');
+    expect(actions).toBeGreaterThan(-1);
+    expect(strip).toBeGreaterThan(-1);
+    expect(bin).toBeGreaterThan(-1);
+    expect(actions).toBeLessThan(strip);
+    expect(strip).toBeLessThan(bin);
+  });
+
+  it('is a welcome: shown by goal count read ONCE at mount, never by title', () => {
+    // The QC4-C trap is gating on a value that flips while you type. The goal
+    // count is frozen in a useState initializer, so the bin cannot vanish under
+    // an editing thumb.
+    expect(src).toContain('useState(() => useGoalsStore.getState().goals.length === 0)');
+    expect(src).toContain('showWelcomeGoals ?');
+    expect(src).not.toMatch(/!title\.trim\(\)\s*&&\s*\(/);
   });
 });
