@@ -446,7 +446,7 @@ export default function NewCounterScreen() {
             emoji={previewEmoji}
             cadence={previewCadence}
           />
-          <Text style={[styles.benchLine, { color: themeColors.inkMuted }]}>
+          <Text style={[styles.benchLine, { color: themeColors.inkMid }]}>
             Your mark · exactly as it will sit on Focus.
           </Text>
         </View>
@@ -510,7 +510,7 @@ export default function NewCounterScreen() {
         {/* Or create your own — always visible below the popular marks. */}
         <View style={styles.divider}>
           <View style={[styles.dividerLine, { backgroundColor: themeColors.borderMid }]} />
-          <Text style={[styles.dividerText, { color: themeColors.inkMuted }]}>Or create your own</Text>
+          <Text style={[styles.dividerText, { color: themeColors.inkMid }]}>Or create your own</Text>
           <View style={[styles.dividerLine, { backgroundColor: themeColors.borderMid }]} />
         </View>
 
@@ -524,7 +524,7 @@ export default function NewCounterScreen() {
             },
           ]}
         >
-          <Text style={[styles.groupLabel, { color: themeColors.inkMuted }]}>What you’ll do</Text>
+          <Text style={[styles.groupLabel, { color: themeColors.inkMid }]}>What you’ll do</Text>
           <TextInput
             style={[
               styles.inputInCard,
@@ -540,7 +540,7 @@ export default function NewCounterScreen() {
             placeholderTextColor={themeColors.inkMuted}
           />
           <View style={styles.sectionHeaderRow}>
-            <Text style={[styles.groupLabel, styles.groupLabelInRow, { color: themeColors.inkMuted }]}>Give it a face</Text>
+            <Text style={[styles.groupLabel, styles.groupLabelInRow, { color: themeColors.inkMid }]}>Give it a face</Text>
             <Text style={[styles.categoryLabel, { color: themeColors.inkMid }]}>
               {CATEGORY_LABELS[selectedCategory]}
             </Text>
@@ -600,12 +600,12 @@ export default function NewCounterScreen() {
             },
           ]}
         >
-          <Text style={[styles.groupLabel, { color: themeColors.inkMuted }]}>Enough for today</Text>
+          <Text style={[styles.groupLabel, { color: themeColors.inkMid }]}>Enough for today</Text>
           <Text style={[styles.cardHint, { color: themeColors.inkMid, textAlign: 'center', marginBottom: spacing.md }]}>
             How many times makes today count.
           </Text>
           <DailyTargetStepper value={dailyTarget} onChange={setDailyTarget} label={null} />
-          <Text style={[styles.groupLabel, styles.groupLabelSpaced, { color: themeColors.inkMuted }]}>How often</Text>
+          <Text style={[styles.groupLabel, styles.groupLabelSpaced, { color: themeColors.inkMid }]}>How often</Text>
           <View style={styles.presetRow}>
             {(Object.keys(FREQUENCY_PRESET_LABELS) as FrequencyPreset[]).map((preset) => {
               const active = preset === frequencyPreset;
@@ -671,7 +671,7 @@ export default function NewCounterScreen() {
             </View>
           ) : null}
 
-          <Text style={[styles.cadenceHint, { color: themeColors.inkMuted }]}>
+          <Text style={[styles.cadenceHint, { color: themeColors.inkMid }]}>
             Log as many as you want · a met target never blocks today.
           </Text>
         </View>
@@ -681,7 +681,7 @@ export default function NewCounterScreen() {
             means no card, and the mark saves as a standalone daily habit. */}
         {goalsLoading && activeGoals.length === 0 ? (
           <View style={[styles.card, { backgroundColor: themeColors.surface, borderColor: themeColors.borderMid }]}>
-            <Text style={[styles.toggleDescription, { color: themeColors.inkMuted }]}>
+            <Text style={[styles.toggleDescription, { color: themeColors.inkMid }]}>
               Loading your goals…
             </Text>
           </View>

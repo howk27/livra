@@ -318,7 +318,7 @@ export default function NewGoalScreen() {
       <View style={styles.inner}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} accessibilityRole="button" style={styles.headerBtn}>
-            <Text style={[styles.cancel, { color: c.inkMuted }]}>Cancel</Text>
+            <Text style={[styles.cancel, { color: c.inkMid }]}>Cancel</Text>
           </TouchableOpacity>
           {/* QC3-A: the header's "Next" is gone — the primary action now lives
               in the bottom-anchored forest CTA (founder: move the action off the
@@ -360,7 +360,7 @@ export default function NewGoalScreen() {
               old TextInput (VD-6/QC2-D: focus only after the pageSheet
               transition settles). */}
           <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.borderMid }]}>
-            <Text style={[styles.groupLabel, { color: c.inkMuted }]}>What you’re working toward</Text>
+            <Text style={[styles.groupLabel, { color: c.inkMid }]}>What you’re working toward</Text>
             <TextInput
               testID="goal-title-input"
               style={[styles.inputInCard, { backgroundColor: c.linen, color: c.inkDark, borderColor: c.borderMid }]}
