@@ -12,7 +12,17 @@ import {
 import Animated from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { themedColors, spacing, fontSize, fonts, radius } from '../../theme/tokens';
+import {
+  themedColors,
+  spacing,
+  fontSize,
+  fontWeight,
+  fonts,
+  radius,
+  borderRadius,
+  headerControl,
+  headerControlBoxLeading,
+} from '../../theme/tokens';
 import { applyOpacity } from '../../src/components/icons/color';
 import { GoalCardPreview } from '../../components/creation/GoalCardPreview';
 import { AIHatchButton } from '../../components/ui/AIHatchButton';
@@ -29,6 +39,7 @@ import { getMarksForGoal } from '../../lib/goalMarkSuggestions';
 import { goalPreviewMarks } from '../../lib/creation/creationPreview';
 import { CommitmentScreen, CommitmentSelection } from '../../components/CommitmentScreen';
 import { MarkDefinition } from '../../lib/suggestedCounters';
+import { colorForSuggestedCounter } from '../../lib/markCategory';
 import { useDeferredAutoFocus } from '../../hooks/useDeferredAutoFocus';
 import { useHalfRenderProbe } from '../../hooks/useHalfRenderProbe';
 
@@ -37,8 +48,24 @@ type Step = 'title' | 'commitment';
 // Example goals that seed the title on tap — smart defaults so the screen is
 // never a blank box (ux-psychology rule 1). Each is a concrete, real goal that
 // getMarksForGoal resolves to a strong mark strip, so a tap immediately shows
-// the card "taking shape." They collapse the moment a title exists.
+// the card "taking shape."
+//
+// QC4-C: they NO LONGER collapse when a title exists. Gating them on
+// `!title.trim()` emptied the screen at the exact moment creation began, and
+// left no way to change your mind about a pick except cancelling out of the
+// screen and coming back (founder). The bin is permanent, like mark/new's
+// Popular marks.
 const EXAMPLE_GOALS = ['Run a 5k', 'Read nightly', 'Meditate daily', 'Save $5k'];
+
+// QC4-E: the parts bin gets color. Each preset resolves its category from its
+// top getMarksForGoal hit, so the chip carries the same accent + duotone glyph
+// treatment as mark/new's popular chips — parts, not beige chrome. Pure over a
+// module constant, so it resolves once at import rather than per render.
+const EXAMPLE_GOAL_PARTS = EXAMPLE_GOALS.map((title) => {
+  const top = getMarksForGoal(title)[0];
+  const cat = CATEGORY_MAP[top?.category ?? 'custom'] ?? CATEGORY_MAP.custom;
+  return { title, accent: cat.accent, Icon: top?.icon ?? cat.Icon };
+});
 
 /**
  * One mark tile in the live "what this takes" strip. Settles in on mount
@@ -47,7 +74,17 @@ const EXAMPLE_GOALS = ['Run a 5k', 'Read nightly', 'Meditate daily', 'Save $5k']
  * Category-accent duotone glyph on a low-alpha wash: a quiet preview, never the
  * ember spark and never a loud selection.
  */
-function MarkPreviewChip({ mark, labelColor }: { mark: MarkDefinition; labelColor: string }) {
+function MarkPreviewChip({
+  mark,
+  labelColor,
+  expanded,
+  onPress,
+}: {
+  mark: MarkDefinition;
+  labelColor: string;
+  expanded: boolean;
+  onPress: () => void;
+}) {
   // Mount-only entrance; the chip remounts (replaying) when a new mark matches.
   const style = useSettleEntrance(6);
 
@@ -55,19 +92,31 @@ function MarkPreviewChip({ mark, labelColor }: { mark: MarkDefinition; labelColo
   const Icon = mark.icon ?? cat.Icon;
 
   return (
-    <Animated.View
-      testID="goal-mark-preview-chip"
-      accessibilityLabel={mark.name}
-      style={[
-        styles.previewChip,
-        { backgroundColor: applyOpacity(cat.accent, 0.1), borderColor: applyOpacity(cat.accent, 0.3) },
-        style,
-      ]}
-    >
-      <Icon size={14} color={cat.accent} weight="duotone" />
-      <Text style={[styles.previewChipLabel, { color: labelColor }]} numberOfLines={1}>
-        {mark.name}
-      </Text>
+    <Animated.View style={style}>
+      {/* QC4-B-ui: the chip is the disclosure — a real 44pt touch box (never
+          hitSlop, which clips at the parent's bounds), so it is reachable
+          one-handed. Expanding tints it up to the mark/new selected weight. */}
+      <TouchableOpacity
+        testID="goal-mark-preview-chip"
+        onPress={onPress}
+        activeOpacity={0.8}
+        accessibilityRole="button"
+        accessibilityLabel={mark.name}
+        accessibilityHint="Shows what this mark tracks"
+        accessibilityState={{ expanded }}
+        style={[
+          styles.previewChip,
+          {
+            backgroundColor: applyOpacity(cat.accent, expanded ? 0.14 : 0.1),
+            borderColor: applyOpacity(cat.accent, expanded ? 0.45 : 0.3),
+          },
+        ]}
+      >
+        <Icon size={18} color={cat.accent} weight="duotone" />
+        <Text style={[styles.previewChipLabel, { color: labelColor }]} numberOfLines={1}>
+          {mark.name}
+        </Text>
+      </TouchableOpacity>
     </Animated.View>
   );
 }
@@ -79,16 +128,40 @@ function MarkPreviewChip({ mark, labelColor }: { mark: MarkDefinition; labelColo
  */
 function MarkPreviewStrip({ title }: { title: string }) {
   const c = themedColors(useEffectiveTheme());
+  // QC4-B-ui: which mark's explanation is open. Transient view state, not
+  // persistent data — useState is correct here (no slice), same call as
+  // mark/new's icon-grid disclosure (QC4-F).
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const marks = goalPreviewMarks(title);
   if (marks.length === 0) return null;
+  const expanded = marks.find((m) => m.id === expandedId) ?? null;
   return (
     <View style={styles.previewBlock} testID="goal-mark-preview">
-      <Text style={[styles.previewLabel, { color: c.inkMuted }]}>What this takes</Text>
+      {/* QC4-B-ui: a headline, not a whisper (was fontSize.sm inkMuted) —
+          mirrors mark/new's sectionLabel so the two bins read as one grammar. */}
+      <Text style={[styles.sectionLabel, { color: c.inkDark }]}>What this takes</Text>
       <View style={styles.previewStrip}>
         {marks.map((m) => (
-          <MarkPreviewChip key={m.id} mark={m} labelColor={c.inkMid} />
+          <MarkPreviewChip
+            key={m.id}
+            mark={m}
+            labelColor={c.inkMid}
+            expanded={m.id === expandedId}
+            onPress={() => setExpandedId((cur) => (cur === m.id ? null : m.id))}
+          />
         ))}
       </View>
+      {/* The explanation lands under the strip rather than inside the chip, so
+          disclosing never reflows the row you are still reading. One plain
+          sentence, straight from the mark library (QC4-B-data). */}
+      {expanded ? (
+        <Text
+          testID="goal-mark-preview-description"
+          style={[styles.previewDescription, { color: c.inkMid }]}
+        >
+          {expanded.description}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -119,6 +192,14 @@ export default function NewGoalScreen() {
   const onProbeLayout = useHalfRenderProbe('goal/new');
 
   const canProceed = !!title.trim() && !saving;
+
+  // QC4-C: the preset row stays on screen, so it stays a control. Tap seeds the
+  // title, tapping a different one swaps it, tapping the selected one clears
+  // it — changing your mind never requires cancelling out of the screen
+  // (founder). Mirrors mark/new's stage/un-stage on the popular chips.
+  const handlePresetPress = (example: string) => {
+    setTitle((cur) => (cur.trim() === example ? '' : example));
+  };
 
   const handleSetPlan = () => {
     const trimmed = title.trim();
@@ -168,7 +249,9 @@ export default function NewGoalScreen() {
         const newMark = await addMark({
           name: sugg.name,
           emoji: sugg.emoji,
-          color: sugg.color,
+          // QC4-M: category-derived, never the library's authored `color` —
+          // that field is unsanctioned and disagrees with what the row renders.
+          color: colorForSuggestedCounter(sugg),
           unit: sugg.unit,
           user_id: user.id,
           goal_period: 'day',
@@ -229,13 +312,13 @@ export default function NewGoalScreen() {
           the device half-render: a keyboard-driven paddingBottom applied (via
           LayoutAnimation) against a native pageSheet is the only stateful layout
           in this flow that can stick at ~keyboard height — half the sheet. All
-          content is top-anchored (the primary action lives in a bottom bar, not
-          a keyboard-avoiding footer), so nothing needs to avoid the keyboard;
+          content is top-anchored and everything, including the QC4-D action
+          zone, lives inside the scroll, so nothing needs to avoid the keyboard;
           overflow on small devices scrolls instead. */}
       <View style={styles.inner}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} accessibilityRole="button">
-            <Text style={[styles.cancel, { color: c.inkMuted }]}>Cancel</Text>
+          <TouchableOpacity onPress={() => router.back()} accessibilityRole="button" style={styles.headerBtn}>
+            <Text style={[styles.cancel, { color: c.inkMid }]}>Cancel</Text>
           </TouchableOpacity>
           {/* QC3-A: the header's "Next" is gone — the primary action now lives
               in the bottom-anchored forest CTA (founder: move the action off the
@@ -248,81 +331,125 @@ export default function NewGoalScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* QC2-H "The Card Takes Shape": the REAL hollow goal card (FU-5
-              treatment) is the screen's one focal point, and the caret lives
-              inside it — typing renders straight into the Signature serif.
-              A title alone completes the card (FU-7a). */}
+          {/* QC4-E "The Bench and the Object": the REAL hollow goal card (FU-5
+              treatment) is the screen's one focal point — and it is an OBJECT,
+              not an input. QC2-H's caret-in-card (titleSlot) is superseded
+              here: with the caret inside it, the card only ever CONTAINED your
+              keystrokes, so nothing on the screen answered you (founder: "just
+              text"). Now you operate the instrument below and watch this fill —
+              small mechanical sans down there becomes Cormorant up here. It
+              carries no touch targets at all. A title alone completes the card
+              (FU-7a), and the QC3-A workbench law holds: it fills as you name
+              it, live, per keystroke, no animation (that would be jitter). */}
           <GoalCardPreview
             testID="goal-card-preview"
-            titleSlot={
-              <>
-                <TextInput
-                  style={[styles.titleInput, { color: c.inkDark }]}
-                  placeholder="Name it…"
-                  placeholderTextColor={c.inkMuted}
-                  ref={titleInputRef}
-                  value={title}
-                  onChangeText={setTitle}
-                  maxLength={80}
-                  returnKeyType="next"
-                  onSubmitEditing={handleSetPlan}
-                />
-                <TextInput
-                  style={[styles.whyInput, { color: c.inkMid }]}
-                  placeholder="Why it matters · optional"
-                  placeholderTextColor={c.inkMuted}
-                  value={description}
-                  onChangeText={setDescription}
-                  maxLength={200}
-                  multiline
-                />
-              </>
-            }
+            title={title}
+            titlePlaceholder="Your goal"
+            why={description}
+            // The one thing that happens TO the goal rather than because of a
+            // keystroke: the ember hairline arrives when the goal has a name.
+            // Sanctioned ember (design-decisions Tokens: "goal-title flourish")
+            // — a tint, never text, so the 2.37:1 light rule is not engaged.
+            flourish={!!title.trim()}
           />
 
-          {/* Example goals seed the title, then collapse — the screen opens with
-              a prompt, not a void (ux-psychology: smart defaults). */}
-          {!title.trim() && (
-            <View style={styles.exampleBlock} testID="goal-example-chips">
-              <Text style={[styles.exampleLabel, { color: c.inkMuted }]}>Try one to start</Text>
-              <View style={styles.exampleRow}>
-                {EXAMPLE_GOALS.map((example) => (
+          {/* THE INSTRUMENT (QC4-E) — mark/new's exact grammar: surface card,
+              hairline borderMid, quiet centered label, linen input inside. The
+              translation between this and the card above IS the creation
+              feeling. useDeferredAutoFocus's ref moved here from the card's
+              old TextInput (VD-6/QC2-D: focus only after the pageSheet
+              transition settles). */}
+          <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.borderMid }]}>
+            <Text style={[styles.groupLabel, { color: c.inkMid }]}>What you’re working toward</Text>
+            <TextInput
+              testID="goal-title-input"
+              style={[styles.inputInCard, { backgroundColor: c.linen, color: c.inkDark, borderColor: c.borderMid }]}
+              placeholder="e.g. Run a 5k"
+              placeholderTextColor={c.inkMuted}
+              ref={titleInputRef}
+              value={title}
+              onChangeText={setTitle}
+              maxLength={80}
+              returnKeyType="next"
+              onSubmitEditing={handleSetPlan}
+            />
+            <TextInput
+              testID="goal-why-input"
+              style={[
+                styles.inputInCard,
+                styles.whyInputInCard,
+                { backgroundColor: c.linen, color: c.inkDark, borderColor: c.borderMid },
+              ]}
+              placeholder="Why it matters · optional"
+              placeholderTextColor={c.inkMuted}
+              value={description}
+              onChangeText={setDescription}
+              maxLength={200}
+              multiline
+            />
+          </View>
+
+          {/* QC4-D: the action zone rides directly under the instrument instead
+              of in a screen-anchored bottom bar, where the keyboard buried it
+              (founder). "Set the plan" first, the AI door directly below it.
+              It sits BELOW the instrument, so it cannot push the input under
+              the keyboard (the QC4-D × QC4-E shared constraint). Still not
+              keyboard-avoiding — see the QC2-D note above; it scrolls. */}
+          <View style={styles.actionZone}>
+            <PillButton
+              label="Set the plan →"
+              onPress={handleSetPlan}
+              disabled={!canProceed}
+              fullWidth
+            />
+            <AIHatchButton
+              label="✦ Or let Livra suggest a plan"
+              onPress={handleSuggestPlan}
+              style={styles.footerHatch}
+            />
+          </View>
+
+          {/* THE PARTS BIN (QC4-C + QC4-E): permanent and colored. Tap to seed
+              the title, tap another to swap, tap the selected one to clear —
+              you can change your mind without cancelling the screen. */}
+          <View style={styles.exampleBlock} testID="goal-example-chips">
+            <Text style={[styles.sectionLabel, { color: c.inkDark }]}>Popular goals</Text>
+            <View style={styles.exampleRow}>
+              {EXAMPLE_GOAL_PARTS.map(({ title: example, accent, Icon }) => {
+                const selected = title.trim() === example;
+                return (
                   <TouchableOpacity
                     key={example}
-                    style={[styles.exampleChip, { backgroundColor: c.surface, borderColor: c.borderLight }]}
-                    onPress={() => setTitle(example)}
-                    activeOpacity={0.75}
+                    style={[
+                      styles.exampleChip,
+                      {
+                        backgroundColor: selected
+                          ? applyOpacity(c.forest, 0.1)
+                          : applyOpacity(accent, 0.14),
+                        borderColor: selected ? c.forest : applyOpacity(accent, 0.45),
+                      },
+                    ]}
+                    onPress={() => handlePresetPress(example)}
+                    activeOpacity={0.8}
                     accessibilityRole="button"
-                    accessibilityLabel={`Start with ${example}`}
+                    accessibilityLabel={example}
+                    accessibilityHint={selected ? 'Clears this goal' : 'Starts your goal with this'}
+                    accessibilityState={{ selected }}
                   >
-                    <Text style={[styles.exampleChipText, { color: c.inkMid }]}>{example}</Text>
+                    <Icon size={18} color={selected ? c.forest : accent} weight="duotone" />
+                    <Text style={[styles.exampleChipText, { color: c.inkDark }]} numberOfLines={1}>
+                      {example}
+                    </Text>
                   </TouchableOpacity>
-                ))}
-              </View>
+                );
+              })}
             </View>
-          )}
+          </View>
 
           {/* The empty space becomes a preview of the future: the marks this
               goal will take, materializing as the title is typed. */}
           <MarkPreviewStrip title={title} />
         </ScrollView>
-
-        {/* Bottom-anchored action zone. NOT keyboard-avoiding (see QC2-D note) —
-            a fixed bar, so overflow scrolls above it. The ember AIHatchButton is
-            now the ONLY AI door; the forest CTA carries the manual build. */}
-        <View style={[styles.footer, { borderTopColor: c.borderLight, backgroundColor: c.linen }]}>
-          <AIHatchButton
-            label="✦ Or let Livra suggest a plan"
-            onPress={handleSuggestPlan}
-            style={styles.footerHatch}
-          />
-          <PillButton
-            label="Set the plan →"
-            onPress={handleSetPlan}
-            disabled={!canProceed}
-            fullWidth
-          />
-        </View>
       </View>
     </SafeAreaView>
   );
@@ -331,74 +458,115 @@ export default function NewGoalScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   inner: { flex: 1 },
+  // QC4-K: paddingTop = headerControl.topGap so the Cancel control clears the
+  // safe-area inset instead of sitting flush against the notch.
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    minHeight: 44,
+    paddingTop: headerControl.topGap,
+    paddingBottom: spacing.sm,
+    minHeight: headerControl.minTarget,
   },
+  headerBtn: { ...headerControlBoxLeading },
   cancel: { fontSize: fontSize.md },
   formScroll: { flex: 1 },
   // Screen gutter = spacing.lg applied ONCE, here on the scroll content
   // (the card carries no outer margin) — 2026-07-12 width rule.
-  form: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.xl },
-  // The card's own serif, as a caret-carrying input: same face/size/leading
-  // as GoalTitle size="card" so the typed title IS the card title, live.
-  titleInput: {
-    fontFamily: fonts.serifSemibold,
-    fontSize: fontSize[22],
-    lineHeight: 28,
-    letterSpacing: -0.3,
-    padding: 0,
+  // QC4-D: spacing.md (not lg) between the card, the instrument, and the
+  // action zone. The CTA's whole point is to clear the keyboard on a 667pt
+  // device; 8pt of gutter each is the cheapest 24pt available and the rhythm
+  // still reads (mark/new stacks its groups on spacing.sm).
+  form: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.xl },
+  // QC4-E: the instrument group — mark/new's styles.card verbatim
+  // (app/mark/new.tsx:809): surface fill, hairline borderMid, spacing.md pad.
+  card: {
+    borderRadius: borderRadius.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: spacing.md,
+    marginTop: spacing.md,
   },
-  whyInput: {
-    fontFamily: fonts.serifItalic,
-    fontSize: fontSize.lg,
-    lineHeight: 22,
-    padding: 0,
-    marginTop: spacing.sm,
+  // Mirrors mark/new's styles.groupLabel — the mentor's quiet label, sentence
+  // case, centered, no tracked uppercase kicker (design-system ban).
+  groupLabel: {
+    fontFamily: fonts.sansMedium,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.medium,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+  },
+  // Mirrors mark/new's styles.inputInCard. QC4-J: explicit height + horizontal
+  // padding only — symmetric padding on a heightless single-line TextInput
+  // lands the text and placeholder rects on different baselines.
+  inputInCard: {
+    height: 48,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.md,
+    fontFamily: fonts.sans,
+    fontSize: fontSize.base,
+    borderWidth: 1,
+  },
+  // The why is the same control, given room to wrap. Multiline needs its own
+  // vertical padding (no fixed height to center against) — the QC4-J baseline
+  // trap does not apply once textAlignVertical is explicit.
+  whyInputInCard: {
+    height: undefined,
+    minHeight: 48,
+    paddingTop: 14,
+    paddingBottom: 14,
     textAlignVertical: 'top',
+    marginTop: spacing.sm,
+  },
+  actionZone: {
+    marginTop: spacing.md,
+    gap: spacing.sm,
   },
   exampleBlock: {
-    marginTop: spacing.lg,
-  },
-  exampleLabel: {
-    fontFamily: fonts.sans,
-    fontSize: fontSize.sm,
-    marginBottom: spacing.sm,
+    marginTop: spacing.xl,
   },
   exampleRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
   },
+  // QC4-E: mark/new's popular-chip treatment verbatim (app/mark/new.tsx:768) —
+  // 1.5 accent border on a 0.14 accent fill, duotone glyph, 44pt floor. The
+  // accent never touches the label ink (inkDark), so contrast is mark/new-safe.
   exampleChip: {
-    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    borderWidth: 1.5,
     borderRadius: radius.full,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: 14,
     paddingVertical: spacing.sm,
-    minHeight: 44,
-    justifyContent: 'center',
+    minHeight: headerControl.minTarget,
   },
   exampleChipText: {
     fontFamily: fonts.sansMedium,
     fontSize: fontSize.base,
+    fontWeight: fontWeight.medium,
+  },
+  // Mirrors mark/new's styles.sectionLabel (app/mark/new.tsx:758) — the two
+  // bins on the two creation screens now carry the same headline weight.
+  sectionLabel: {
+    fontFamily: fonts.sansSemibold,
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.semibold,
+    marginBottom: spacing.md,
   },
   previewBlock: {
     marginTop: spacing.xl,
-  },
-  previewLabel: {
-    fontFamily: fonts.sans,
-    fontSize: fontSize.sm,
-    marginBottom: spacing.sm,
   },
   previewStrip: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
   },
+  // QC4-B-ui: the tiles "show themselves" — 44pt tap targets (the HIG minimum,
+  // via headerControl.minTarget, the app's single source) carrying an 18pt
+  // glyph and a base-size label, up from a 32pt decorative pill.
   previewChip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -406,19 +574,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: radius.full,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    minHeight: 32,
+    paddingVertical: spacing.sm,
+    minHeight: headerControl.minTarget,
   },
   previewChipLabel: {
     fontFamily: fonts.sansMedium,
-    fontSize: fontSize.sm,
+    fontSize: fontSize.base,
   },
-  footer: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.sm,
-    borderTopWidth: 1,
-    gap: spacing.sm,
+  previewDescription: {
+    fontFamily: fonts.sans,
+    fontSize: fontSize.base,
+    lineHeight: fontSize.base * 1.45,
+    marginTop: spacing.md,
   },
   footerHatch: {
     alignSelf: 'stretch',

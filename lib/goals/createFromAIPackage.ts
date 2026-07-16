@@ -14,6 +14,7 @@
 import { useGoalsStore } from '../../state/goalsSlice';
 import { useMarksStore } from '../../state/countersSlice';
 import { MARK_LIBRARY } from '../suggestedCounters';
+import { colorForSuggestedCounter } from '../markCategory';
 import {
   resolveMarkForAIIcon,
   writeGoalPackageCache,
@@ -68,7 +69,8 @@ export async function createFromAIPackage(args: CreateFromAIPackageArgs): Promis
       const newMark = await addMark({
         name: m.name,
         emoji: libraryMark.emoji,
-        color: libraryMark.color,
+        // QC4-M: category-derived, matching every other creation path.
+        color: colorForSuggestedCounter(libraryMark),
         unit: libraryMark.unit,
         user_id: userId,
         goal_period: 'day',

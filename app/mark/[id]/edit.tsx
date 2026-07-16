@@ -2,7 +2,16 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { themedColors, spacing, borderRadius, fontSize, fontWeight } from '../../../theme/tokens';
+import {
+  themedColors,
+  spacing,
+  borderRadius,
+  fontSize,
+  fontWeight,
+  headerControl,
+  headerControlBoxLeading,
+  headerControlBoxTrailing,
+} from '../../../theme/tokens';
 import { useEffectiveTheme } from '../../../state/uiSlice';
 import { useCounters } from '../../../hooks/useCounters';
 import { SchedulePicker } from '../../../components/SchedulePicker';
@@ -122,11 +131,11 @@ export default function EditCounterScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn}>
             <Text style={[styles.cancelButton, { color: themeColors.inkMid }]}>Cancel</Text>
           </TouchableOpacity>
           <Text style={[styles.headerTitle, { color: themeColors.inkDark }]}>Edit Mark</Text>
-          <TouchableOpacity onPress={handleSave} disabled={loading}>
+          <TouchableOpacity onPress={handleSave} disabled={loading} style={styles.headerBtnRight}>
             <Text style={[styles.saveButton, { color: themeColors.accent }]}>Save</Text>
           </TouchableOpacity>
         </View>
@@ -209,6 +218,9 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: spacing.lg,
+    // QC4-K: converge the header's distance below the safe-area inset onto the
+    // shared headerControl.topGap (was the spacing.lg page padding, 24).
+    paddingTop: headerControl.topGap,
   },
   header: {
     flexDirection: 'row',
@@ -216,6 +228,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing.xl,
   },
+  // QC4-K: Cancel/Save were bare Texts with no touch box at all.
+  headerBtn: { ...headerControlBoxLeading },
+  headerBtnRight: { ...headerControlBoxTrailing },
   cancelButton: {
     fontSize: fontSize.base,
   },

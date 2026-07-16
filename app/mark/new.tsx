@@ -12,7 +12,16 @@ import {
 import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { themedColors, spacing, borderRadius, fontSize, fontWeight, shadow } from '../../theme/tokens';
+import {
+  themedColors,
+  spacing,
+  borderRadius,
+  fontSize,
+  fontWeight,
+  shadow,
+  headerControl,
+  headerControlBoxLeading,
+} from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useMotion } from '../../hooks/useMotion';
 import { useCounters } from '../../hooks/useCounters';
@@ -28,7 +37,12 @@ import { logger } from '../../lib/utils/logger';
 import CounterIcon from '@/src/components/icons/CounterIcon';
 import { applyOpacity, foregroundForHexBackground } from '@/src/components/icons/color';
 import type { MarkType } from '@/src/types/counters';
-import { getCategoryColor, getCategoryForIcon, getCategoryForSuggestedCounter } from '../../lib/markCategory';
+import {
+  CATEGORY_LABELS,
+  colorForSuggestedCounter,
+  getCategoryColor,
+  getCategoryForIcon,
+} from '../../lib/markCategory';
 import {
   FrequencyPreset,
   DEFAULT_FREQUENCY_PRESET,
@@ -36,7 +50,7 @@ import {
   weeklyTargetForPreset,
   scheduleForPreset,
 } from '../../lib/markFrequencyPreset';
-import { ICON_TYPE_TO_EMOJI, MARK_ICON_OPTIONS } from '../../lib/markIcons';
+import { ICON_TYPE_TO_EMOJI, MARK_ICON_OPTIONS, MARK_ICON_PRIMARY } from '../../lib/markIcons';
 import { MarkRowPreview } from '../../components/creation/MarkRowPreview';
 import { cadenceLabel, suggestedCadenceLabel } from '../../lib/creation/creationPreview';
 
@@ -66,6 +80,11 @@ const WEEKDAY_CHIPS: Array<{ value: DayOfWeek; label: string }> = [
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const ICON_GRID_COLUMNS = 4;
+// QC4-H: the popular chips were content-sized pills in a wrap, so short names
+// ("Water", "Sleep") left a ragged strip of dead space down the right of the
+// screen. Two fixed columns spend the full width on every row at every device
+// size (founder: "make the popular marks take more of the right side").
+const POPULAR_GRID_COLUMNS = 2;
 
 /**
  * QC3-G: the staged confirm zone — rises under the popular grid when a chip is
@@ -124,12 +143,26 @@ export default function NewCounterScreen() {
   const { createCounter, counters } = useCounters();
   const { user } = useAuth();
   const { showError, showSuccess } = useNotification();
-  const activeGoal = useGoalsStore(s => s.goals.find(g => g.status === 'active'));
+  // QC4-L: WHICH goal a new mark joins is the user's call. This used to be
+  // `goals.find(g => g.status === 'active')` — the FIRST active goal, with no
+  // chooser — so a user with several goals watched their mark attach to an
+  // arbitrary one. It also read `useGoalsStore.getState()` inline during
+  // render, which is a snapshot outside the subscription: the title never
+  // updated when the goal did. Both go through selectors now.
+  const goals = useGoalsStore(s => s.goals);
+  const goalsLoading = useGoalsStore(s => s.isLoading);
+  const goalsError = useGoalsStore(s => s.error);
   const linkMarkToGoal = useGoalsStore(s => s.linkMarkToGoal);
-  const targetGoalId = goalIdParam ?? activeGoal?.id ?? null;
-  const targetGoalTitle = goalIdParam
-    ? useGoalsStore.getState().goals.find(g => g.id === goalIdParam)?.title
-    : activeGoal?.title;
+  const activeGoals = useMemo(() => goals.filter(g => g.status === 'active'), [goals]);
+  // Smart default (ux-psychology): one active goal is not a decision — don't
+  // stage one. Two or more, and the user picks; we never guess for them.
+  const soleActiveGoalId = activeGoals.length === 1 ? activeGoals[0].id : null;
+  const [chosenGoalId, setChosenGoalId] = useState<string | null>(goalIdParam ?? null);
+  const targetGoalId = chosenGoalId ?? soleActiveGoalId;
+  const targetGoal = useMemo(
+    () => (targetGoalId ? goals.find(g => g.id === targetGoalId) : undefined),
+    [goals, targetGoalId],
+  );
 
   const [name, setName] = useState('');
   const [selectedIconType, setSelectedIconType] = useState<Exclude<MarkType, 'custom'>>(ICON_OPTIONS[0]);
@@ -141,8 +174,18 @@ export default function NewCounterScreen() {
   const [frequencyPreset, setFrequencyPreset] = useState<FrequencyPreset>(DEFAULT_FREQUENCY_PRESET);
   const [loading, setLoading] = useState(false);
   const [dailyTarget, setDailyTarget] = useState(1);
-  const [linkToGoal, setLinkToGoal] = useState(!!targetGoalId);
+  // null = the user hasn't touched the toggle, so it follows the smart default.
+  // A plain `useState(!!targetGoalId)` would freeze the default at first render
+  // and miss goals that arrive from the async fetch a beat later.
+  const [linkToGoalOverride, setLinkToGoalOverride] = useState<boolean | null>(null);
+  const linkToGoal = linkToGoalOverride ?? !!targetGoalId;
+  // Link only ever happens to a goal the user can see named on screen.
+  const linkTargetId = linkToGoal ? targetGoalId : null;
+  const needsGoalChoice = linkToGoal && !targetGoalId;
   const [pendingSuggestedCounter, setPendingSuggestedCounter] = useState<SuggestedCounter | null>(null);
+  // QC4-F: transient disclosure state for the icon grid — view state, not
+  // persistent mark data, so useState is correct here (no slice).
+  const [iconsExpanded, setIconsExpanded] = useState(false);
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
   const [duplicateCounterName, setDuplicateCounterName] = useState('');
   const [existingCounterId, setExistingCounterId] = useState<string | null>(null);
@@ -153,7 +196,27 @@ export default function NewCounterScreen() {
     const cardPad = spacing.md;
     const rowInner = SCREEN_WIDTH - scrollPad * 2 - cardPad * 2;
     const gap = spacing.sm;
-    return (rowInner - gap * (ICON_GRID_COLUMNS - 1)) / ICON_GRID_COLUMNS;
+    const cell = (rowInner - gap * (ICON_GRID_COLUMNS - 1)) / ICON_GRID_COLUMNS;
+    // QC4-F: never let the derived cell fall under the HIG touch minimum. The
+    // 44pt floor is headerControl.minTarget — the app's single source for it —
+    // rather than a fresh literal. (At 320pt the derived cell is ~54, so this
+    // is a guard, not the active value; if it ever bound, the grid wraps to
+    // fewer columns rather than shipping an unhittable target.)
+    return Math.max(cell, headerControl.minTarget);
+  }, []);
+  // QC4-F: collapsed 4x4 by default. If the user's selected icon lives in the
+  // secondary set, force the grid open — a selection you cannot see is worse
+  // than a taller grid.
+  const selectedIconIsPrimary = MARK_ICON_PRIMARY.includes(selectedIconType);
+  const iconsShowingAll = iconsExpanded || !selectedIconIsPrimary;
+  const visibleIconOptions = iconsShowingAll ? ICON_OPTIONS : MARK_ICON_PRIMARY;
+
+  // QC4-H: two full-width columns inside the scroll gutter. The popular grid
+  // sits directly in scrollContent (not inside styles.card), so only the
+  // scroll gutter comes off the width — no card padding.
+  const popularChipWidth = useMemo(() => {
+    const rowInner = SCREEN_WIDTH - spacing.lg * 2;
+    return (rowInner - spacing.sm * (POPULAR_GRID_COLUMNS - 1)) / POPULAR_GRID_COLUMNS;
   }, []);
   const selectedCategory = useMemo(() => getCategoryForIcon(selectedIconType), [selectedIconType]);
   // VD-7: color is always the category-derived color — the manual hex palette
@@ -241,8 +304,8 @@ export default function NewCounterScreen() {
   // new mark to its goal (fire-and-forget), toast, then pop back after the
   // toast is visible. Callers pass their own success copy.
   const finishMarkCreation = (savedMark: { id?: string } | null | undefined, successMessage: string) => {
-    if (linkToGoal && targetGoalId && savedMark?.id) {
-      linkMarkToGoal(targetGoalId, savedMark.id).catch(() => {});
+    if (linkTargetId && savedMark?.id) {
+      linkMarkToGoal(linkTargetId, savedMark.id).catch(() => {});
     }
     showSuccess(successMessage);
     setTimeout(() => {
@@ -252,21 +315,27 @@ export default function NewCounterScreen() {
 
   const handleConfirmSuggestedCounter = async () => {
     if (!pendingSuggestedCounter) return;
+    if (needsGoalChoice) {
+      showError('Pick which goal this mark belongs to.');
+      return;
+    }
 
     try {
       setLoading(true);
-      const categoryColor = getCategoryColor(getCategoryForSuggestedCounter(pendingSuggestedCounter));
       const savedMark = await createCounter({
         name: pendingSuggestedCounter.name,
         emoji: pendingSuggestedCounter.emoji,
-        color: categoryColor,
+        // QC4-M: the exact color the chip above previewed.
+        color: colorForSuggestedCounter(pendingSuggestedCounter),
         unit: 'sessions' as const,
         enable_streak: false,
         user_id: user?.id!,
         dailyTarget,
         frequency_kind: pendingSuggestedCounter.frequencyKind,
         weekly_target: pendingSuggestedCounter.frequency_recommended ?? 3,
-        ...(linkToGoal && targetGoalId ? { goal_id: targetGoalId } : {}),
+        // The per-goal free cap (5, lib/gating.ts) is enforced by createCounter
+        // off this goal_id — never reimplemented here.
+        ...(linkTargetId ? { goal_id: linkTargetId } : {}),
       } as any);
       setPendingSuggestedCounter(null);
       finishMarkCreation(savedMark, 'Mark added');
@@ -281,6 +350,10 @@ export default function NewCounterScreen() {
   const handleSave = async () => {
     if (!name.trim()) {
       showError('Give your mark a name first.');
+      return;
+    }
+    if (needsGoalChoice) {
+      showError('Pick which goal this mark belongs to.');
       return;
     }
 
@@ -307,7 +380,9 @@ export default function NewCounterScreen() {
         schedule_days: schedule.schedule_days,
         weekly_target: weeklyTarget,
         frequency_kind: 'variable',
-        ...(linkToGoal && targetGoalId ? { goal_id: targetGoalId } : {}),
+        // The per-goal free cap (5, lib/gating.ts) is enforced by createCounter
+        // off this goal_id — never reimplemented here.
+        ...(linkTargetId ? { goal_id: linkTargetId } : {}),
       } as any);
 
       finishMarkCreation(savedMark, 'Mark created');
@@ -336,7 +411,7 @@ export default function NewCounterScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: themeColors.linen }]}>
       <View style={[styles.header, { borderBottomColor: theme === 'dark' ? applyOpacity(themeColors.inkInverse, 0.08) : themeColors.borderMid }]}>
         <View style={{ width: headerSideWidth }}>
-          <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn}>
             <Text style={[styles.cancelButton, { color: themeColors.inkMid }]}>Cancel</Text>
           </TouchableOpacity>
         </View>
@@ -351,19 +426,30 @@ export default function NewCounterScreen() {
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
+        // QC4-I: the preview block is child 0 and sticks to the top of the
+        // viewport, so the mark being built stays visible the whole way down
+        // (founder). This is plain ScrollView behaviour — no
+        // KeyboardAvoidingView and no LayoutAnimation, so it cannot
+        // reintroduce the QC2-D half-render class. It also PRESERVES the
+        // creation grammar (qc4-E-direction): the object stays up there,
+        // separate from the controls you operate down here — now permanently
+        // rather than only until you scroll.
+        stickyHeaderIndices={[0]}
       >
         {/* QC2-H "The Card Takes Shape" / QC3-G: the REAL Focus mark row sits at
             the top and assembles live — from a staged popular pick OR the
             custom fields below, whichever the user last touched. */}
-        <MarkRowPreview
-          testID="mark-row-preview"
-          name={previewName}
-          emoji={previewEmoji}
-          cadence={previewCadence}
-        />
-        <Text style={[styles.benchLine, { color: themeColors.inkMuted }]}>
-          Your mark · exactly as it will sit on Focus.
-        </Text>
+        <View style={[styles.previewSticky, { backgroundColor: themeColors.linen }]}>
+          <MarkRowPreview
+            testID="mark-row-preview"
+            name={previewName}
+            emoji={previewEmoji}
+            cadence={previewCadence}
+          />
+          <Text style={[styles.benchLine, { color: themeColors.inkMid }]}>
+            Your mark · exactly as it will sit on Focus.
+          </Text>
+        </View>
 
         {/* Popular marks — real, colorful, tappable; a tap stages into the
             preview above (no instant create). */}
@@ -372,16 +458,23 @@ export default function NewCounterScreen() {
           {POPULAR_MARKS.map((mark) => {
             const staged = pendingSuggestedCounter?.id === mark.id;
             const MarkIcon = mark.icon;
+            // QC4-M: the chip paints in the SAME color the created mark will
+            // carry — one resolver, called here and at save. The chip used to
+            // read `mark.color` (the library's own authored hex) while save
+            // derived a bright generic from a keyword guess, so the mark you
+            // previewed was never the mark you got.
+            const markColor = colorForSuggestedCounter(mark);
             return (
               <TouchableOpacity
                 key={mark.id}
                 style={[
                   styles.popularChip,
                   {
+                    width: popularChipWidth,
                     backgroundColor: staged
                       ? applyOpacity(themeColors.forest, 0.1)
-                      : applyOpacity(mark.color, 0.14),
-                    borderColor: staged ? themeColors.forest : applyOpacity(mark.color, 0.45),
+                      : applyOpacity(markColor, 0.14),
+                    borderColor: staged ? themeColors.forest : applyOpacity(markColor, 0.45),
                   },
                 ]}
                 onPress={() => handleStagePopularMark(mark)}
@@ -390,9 +483,12 @@ export default function NewCounterScreen() {
                 accessibilityState={{ selected: staged }}
               >
                 {MarkIcon ? (
-                  <MarkIcon weight="duotone" size={18} color={staged ? themeColors.forest : mark.color} />
+                  <MarkIcon weight="duotone" size={18} color={staged ? themeColors.forest : markColor} />
                 ) : null}
-                <Text style={[styles.popularChipText, { color: themeColors.inkDark }]}>
+                <Text
+                  style={[styles.popularChipText, { color: themeColors.inkDark }]}
+                  numberOfLines={1}
+                >
                   {mark.name}
                 </Text>
               </TouchableOpacity>
@@ -414,7 +510,7 @@ export default function NewCounterScreen() {
         {/* Or create your own — always visible below the popular marks. */}
         <View style={styles.divider}>
           <View style={[styles.dividerLine, { backgroundColor: themeColors.borderMid }]} />
-          <Text style={[styles.dividerText, { color: themeColors.inkMuted }]}>Or create your own</Text>
+          <Text style={[styles.dividerText, { color: themeColors.inkMid }]}>Or create your own</Text>
           <View style={[styles.dividerLine, { backgroundColor: themeColors.borderMid }]} />
         </View>
 
@@ -428,7 +524,7 @@ export default function NewCounterScreen() {
             },
           ]}
         >
-          <Text style={[styles.groupLabel, { color: themeColors.inkMuted }]}>What you’ll do</Text>
+          <Text style={[styles.groupLabel, { color: themeColors.inkMid }]}>What you’ll do</Text>
           <TextInput
             style={[
               styles.inputInCard,
@@ -444,11 +540,13 @@ export default function NewCounterScreen() {
             placeholderTextColor={themeColors.inkMuted}
           />
           <View style={styles.sectionHeaderRow}>
-            <Text style={[styles.groupLabel, styles.groupLabelInRow, { color: themeColors.inkMuted }]}>Give it a face</Text>
-            <Text style={[styles.categoryLabel, { color: themeColors.inkMid }]}>{selectedCategory}</Text>
+            <Text style={[styles.groupLabel, styles.groupLabelInRow, { color: themeColors.inkMid }]}>Give it a face</Text>
+            <Text style={[styles.categoryLabel, { color: themeColors.inkMid }]}>
+              {CATEGORY_LABELS[selectedCategory]}
+            </Text>
           </View>
           <View style={styles.iconGrid}>
-            {ICON_OPTIONS.map((iconType) => {
+            {visibleIconOptions.map((iconType) => {
               const isSelected = iconType === selectedIconType;
               return (
                 <TouchableOpacity
@@ -474,6 +572,22 @@ export default function NewCounterScreen() {
               );
             })}
           </View>
+          {/* QC4-F: the disclosure. Hidden while the grid is forced open by a
+              secondary selection — collapsing would hide the user's own pick. */}
+          {selectedIconIsPrimary ? (
+            <TouchableOpacity
+              style={styles.iconDisclosure}
+              onPress={() => setIconsExpanded((v) => !v)}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: iconsShowingAll }}
+              testID="icon-grid-disclosure"
+            >
+              <Text style={[styles.iconDisclosureText, { color: themeColors.inkMid }]}>
+                {iconsShowingAll ? 'Show less' : 'Show more'}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
 
         {/* Rhythm: how much and how often, one quiet group. */}
@@ -486,12 +600,12 @@ export default function NewCounterScreen() {
             },
           ]}
         >
-          <Text style={[styles.groupLabel, { color: themeColors.inkMuted }]}>Enough for today</Text>
+          <Text style={[styles.groupLabel, { color: themeColors.inkMid }]}>Enough for today</Text>
           <Text style={[styles.cardHint, { color: themeColors.inkMid, textAlign: 'center', marginBottom: spacing.md }]}>
             How many times makes today count.
           </Text>
           <DailyTargetStepper value={dailyTarget} onChange={setDailyTarget} label={null} />
-          <Text style={[styles.groupLabel, styles.groupLabelSpaced, { color: themeColors.inkMuted }]}>How often</Text>
+          <Text style={[styles.groupLabel, styles.groupLabelSpaced, { color: themeColors.inkMid }]}>How often</Text>
           <View style={styles.presetRow}>
             {(Object.keys(FREQUENCY_PRESET_LABELS) as FrequencyPreset[]).map((preset) => {
               const active = preset === frequencyPreset;
@@ -557,27 +671,84 @@ export default function NewCounterScreen() {
             </View>
           ) : null}
 
-          <Text style={[styles.cadenceHint, { color: themeColors.inkMuted }]}>
+          <Text style={[styles.cadenceHint, { color: themeColors.inkMid }]}>
             Log as many as you want · a met target never blocks today.
           </Text>
         </View>
 
-        {targetGoalId && targetGoalTitle ? (
-          <TouchableOpacity
-            style={[styles.card, styles.streakCard, { backgroundColor: themeColors.surface, borderColor: themeColors.borderMid }]}
-            onPress={() => setLinkToGoal(!linkToGoal)}
-            activeOpacity={0.85}
+        {/* QC4-L: the goal this mark joins — the user's choice, not the first
+            active goal's. Loading / error / empty all handled: no goals at all
+            means no card, and the mark saves as a standalone daily habit. */}
+        {goalsLoading && activeGoals.length === 0 ? (
+          <View style={[styles.card, { backgroundColor: themeColors.surface, borderColor: themeColors.borderMid }]}>
+            <Text style={[styles.toggleDescription, { color: themeColors.inkMid }]}>
+              Loading your goals…
+            </Text>
+          </View>
+        ) : goalsError && activeGoals.length === 0 ? (
+          <View style={[styles.card, { backgroundColor: themeColors.surface, borderColor: themeColors.borderMid }]}>
+            <Text style={[styles.toggleDescription, { color: themeColors.inkMid }]}>
+              We couldn’t load your goals. This mark will save as a daily habit. You can link it from the goal later.
+            </Text>
+          </View>
+        ) : activeGoals.length > 0 ? (
+          <View
+            style={[styles.card, { backgroundColor: themeColors.surface, borderColor: themeColors.borderMid }]}
           >
-            <View style={styles.streakTextWrap}>
-              <Text style={[styles.toggleLabel, { color: themeColors.inkDark }]}>Link to goal</Text>
-              <Text style={[styles.toggleDescription, { color: themeColors.inkMid }]} numberOfLines={1}>
-                {targetGoalTitle}
-              </Text>
-            </View>
-            <View style={[styles.toggleSwitch, { backgroundColor: linkToGoal ? color : themeColors.borderMid, alignItems: linkToGoal ? 'flex-end' : 'flex-start' }]}>
-              <View style={[styles.toggleThumb, { backgroundColor: themeColors.surface }]} />
-            </View>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.goalToggleRow}
+              onPress={() => setLinkToGoalOverride(!linkToGoal)}
+              activeOpacity={0.85}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: linkToGoal }}
+              accessibilityLabel="Link this mark to a goal"
+            >
+              <View style={styles.streakTextWrap}>
+                <Text style={[styles.toggleLabel, { color: themeColors.inkDark }]}>Link to goal</Text>
+                <Text style={[styles.toggleDescription, { color: themeColors.inkMid }]} numberOfLines={1}>
+                  {!linkToGoal
+                    ? 'Keep it as a daily habit'
+                    : (targetGoal?.title ?? 'Choose which goal')}
+                </Text>
+              </View>
+              <View style={[styles.toggleSwitch, { backgroundColor: linkToGoal ? color : themeColors.borderMid, alignItems: linkToGoal ? 'flex-end' : 'flex-start' }]}>
+                <View style={[styles.toggleThumb, { backgroundColor: themeColors.surface }]} />
+              </View>
+            </TouchableOpacity>
+
+            {/* One active goal is not a decision — no chooser. Two or more and
+                the user picks; nothing is pre-selected for them. */}
+            {linkToGoal && activeGoals.length > 1 ? (
+              <View style={styles.goalChooser} testID="goal-chooser">
+                {activeGoals.map((g) => {
+                  const picked = g.id === targetGoalId;
+                  return (
+                    <TouchableOpacity
+                      key={g.id}
+                      style={[
+                        styles.goalOption,
+                        {
+                          backgroundColor: picked ? applyOpacity(color, 0.14) : themeColors.linen,
+                          borderColor: picked ? color : themeColors.borderMid,
+                        },
+                      ]}
+                      onPress={() => setChosenGoalId(g.id)}
+                      activeOpacity={0.85}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: picked }}
+                    >
+                      <Text
+                        style={[styles.goalOptionText, { color: picked ? color : themeColors.inkMid }]}
+                        numberOfLines={1}
+                      >
+                        {g.title}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ) : null}
+          </View>
         ) : null}
 
         <View style={{ height: spacing.md }} />
@@ -646,14 +817,18 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: fontSize.base,
   },
+  // QC4-K: see theme/tokens headerControl — offset from the safe-area inset,
+  // 44pt Cancel target (was hitSlop 8 on a bare Text).
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
+    paddingTop: headerControl.topGap,
+    paddingBottom: spacing.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
+  headerBtn: { ...headerControlBoxLeading },
   headerTitle: {
     flex: 1,
     fontSize: fontSize.xl,
@@ -668,8 +843,15 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
+    // QC4-I: the top gap moved onto previewSticky. A paddingTop here would sit
+    // ABOVE the sticky header, so scrolling content would show through it.
     paddingBottom: spacing.lg,
+  },
+  // QC4-I: the sticky preview block. Needs an opaque background of its own —
+  // a sticky header is siblings-on-top, so anything translucent lets the
+  // scrolling content read through the benchLine.
+  previewSticky: {
+    paddingTop: spacing.md,
   },
   benchLine: {
     fontSize: fontSize.sm,
@@ -763,8 +945,17 @@ const styles = StyleSheet.create({
     lineHeight: fontSize.sm * 1.35,
     marginBottom: spacing.sm,
   },
+  // QC4-J: the placeholder sat off the field's optical centre. Cause: symmetric
+  // `padding` on a single-line TextInput with no explicit height — RN insets the
+  // text rect and the native placeholder rect independently there, so the two
+  // land on different baselines. Every other input in the app already dodges
+  // this with the same shape (height + horizontal-only padding): see
+  // app/settings/profile.tsx `input`, app/goal/suggest.tsx `input`,
+  // components/ai/GoalPackageReview.tsx. 48 is that established input height.
+  // Fixing the geometry, not nudging with an offset.
   inputInCard: {
-    padding: spacing.md,
+    height: 48,
+    paddingHorizontal: spacing.md,
     borderRadius: borderRadius.md,
     fontSize: fontSize.base,
     borderWidth: 1,
@@ -779,6 +970,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
+  },
+  // QC4-F: 44pt disclosure target (headerControl.minTarget is the app's single
+  // source for the HIG minimum). A real touch box, never hitSlop.
+  iconDisclosure: {
+    minHeight: headerControl.minTarget,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: spacing.sm,
+  },
+  iconDisclosureText: {
+    fontSize: fontSize.base,
+    fontWeight: fontWeight.medium,
   },
   presetRow: {
     flexDirection: 'row',
@@ -822,10 +1025,28 @@ const styles = StyleSheet.create({
     fontSize: fontSize[13],
     fontWeight: fontWeight.semibold,
   },
-  streakCard: {
+  // QC4-L: the toggle row inside the goal card. The card is a View now (it hosts
+  // the chooser below), so the row carries the touch target itself.
+  goalToggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
+    minHeight: headerControl.minTarget,
+  },
+  goalChooser: {
+    gap: spacing.xs,
+    marginTop: spacing.md,
+  },
+  goalOption: {
+    justifyContent: 'center',
+    minHeight: headerControl.minTarget,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.md,
+    borderWidth: 1.5,
+  },
+  goalOptionText: {
+    fontSize: fontSize.base,
+    fontWeight: fontWeight.medium,
   },
   streakTextWrap: {
     flex: 1,

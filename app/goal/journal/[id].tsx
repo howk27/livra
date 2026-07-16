@@ -21,6 +21,8 @@ import {
   fontSize,
   borderRadius,
   fonts,
+  headerControl,
+  headerControlBoxLeading,
 } from '../../../theme/tokens';
 import type { GoalNote } from '../../../types';
 import { useEffectiveTheme } from '../../../state/uiSlice';
@@ -226,7 +228,7 @@ export default function GoalJournalScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: c.linen }]} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn} activeOpacity={0.7}>
           <X size={22} color={c.inkDark} weight="bold" />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: c.inkDark }]} numberOfLines={1}>
@@ -304,15 +306,20 @@ export default function GoalJournalScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   flex: { flex: 1 },
+  // QC4-K: close offset from the safe-area inset by headerControl.topGap, on a
+  // 44pt target (was hitSlop 8 on a 22pt icon).
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingTop: headerControl.topGap,
+    paddingBottom: spacing.sm,
   },
+  headerBtn: { ...headerControlBoxLeading },
   headerTitle: { fontFamily: fonts.sansSemibold, fontSize: fontSize.md },
-  headerSpacer: { width: 22 },
+  // Matches headerBtn's width so the title stays optically centred.
+  headerSpacer: { width: headerControl.minTarget },
   content: { paddingHorizontal: spacing.lg },
   goalName: {
     fontFamily: fonts.serifItalic,

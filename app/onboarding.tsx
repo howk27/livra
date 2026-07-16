@@ -25,6 +25,7 @@ import { useGoalsStore } from '../state/goalsSlice';
 import { useMarksStore } from '../state/countersSlice';
 import { useAuth } from '../hooks/useAuth';
 import { MARK_LIBRARY } from '../lib/suggestedCounters';
+import { colorForSuggestedCounter } from '../lib/markCategory';
 import { getMarksForCommitment, CommitmentMarkSelection } from '../lib/onboarding/commitmentEngine';
 import { frequencyLabel } from '../components/ui/MarkFrequencyPicker';
 import { logger } from '../lib/utils/logger';
@@ -267,7 +268,9 @@ export default function OnboardingScreen() {
         const newMark = await addMark({
           name: markName,
           emoji: sugg.emoji,
-          color: sugg.color,
+          // QC4-M: same call the mark screen uses, so the first mark a user ever
+          // makes is not a different color than the same mark made later.
+          color: colorForSuggestedCounter(sugg),
           unit: sugg.unit,
           user_id: userId,
           goal_period: 'day',

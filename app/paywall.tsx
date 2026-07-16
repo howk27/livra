@@ -23,7 +23,17 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import Constants from 'expo-constants';
-import { spacing, borderRadius, fontSize, fontWeight, shadow, themedColors, fonts } from '../theme/tokens';
+import {
+  spacing,
+  borderRadius,
+  fontSize,
+  fontWeight,
+  shadow,
+  themedColors,
+  fonts,
+  headerControl,
+  headerControlBoxTrailing,
+} from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { useIapSubscriptions } from '../hooks/useIapSubscriptions';
 import { MONTHLY_PRODUCT_ID, YEARLY_PRODUCT_ID } from '../lib/iap/iap';
@@ -1012,8 +1022,7 @@ function PaywallScreenContent() {
             <TouchableOpacity
               onPress={() => router.back()}
               disabled={purchaseInProgress}
-              style={{ opacity: purchaseInProgress ? 0.5 : 1 }}
-              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              style={[styles.headerBtn, { opacity: purchaseInProgress ? 0.5 : 1 }]}
             >
               <X size={28} color={c.inkMid} weight="regular" />
             </TouchableOpacity>
@@ -1040,8 +1049,7 @@ function PaywallScreenContent() {
           <TouchableOpacity
             onPress={() => router.back()}
             disabled={purchaseInProgress}
-            style={{ opacity: purchaseInProgress ? 0.5 : 1 }}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            style={[styles.headerBtn, { opacity: purchaseInProgress ? 0.5 : 1 }]}
           >
             <X size={28} color={c.inkMid} weight="regular" />
           </TouchableOpacity>
@@ -1636,11 +1644,17 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: spacing.xl,
+    // QC4-K: converge the close button's distance below the safe-area inset onto
+    // the shared headerControl.topGap (was the spacing.xl page padding, 32).
+    paddingTop: headerControl.topGap,
   },
   header: {
     alignItems: 'flex-end',
     marginBottom: spacing.md,
   },
+  // QC4-K: 44pt close target (was hitSlop 12 on a 28pt icon = 52 wide but the
+  // slop clipped against the header's own bounds).
+  headerBtn: { ...headerControlBoxTrailing },
   titleSection: {
     alignItems: 'center',
     marginBottom: spacing.xl,

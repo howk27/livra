@@ -6,7 +6,7 @@
 // Structure (fallow retry #1): the assembly states live in
 // lib/creation/creationPreview.goalCardContent (unit-tested), the visuals in
 // small presentational subcomponents; the exported component is composition.
-import React, { useEffect, type ComponentType, type ReactNode } from 'react';
+import React, { useEffect, type ComponentType } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle } from 'react-native-reanimated';
 import { fonts, spacing, radius, themedColors, fontSize } from '../../theme/tokens';
@@ -28,10 +28,16 @@ export type GoalCardPreviewMark = {
 };
 
 interface GoalCardPreviewProps {
-  /** Rendered through GoalTitle (Signature serif). Ignored when titleSlot is set. */
+  /** Rendered through GoalTitle (Signature serif). */
   title?: string;
-  /** Editable-title mode: goal/new puts its serif TextInput here. */
-  titleSlot?: ReactNode;
+  /**
+   * QC4-E: shown in the title's place, in the same serif at inkMuted, while
+   * `title` is empty — a hollow title waiting to be filled. The card is an
+   * OBJECT, never an input: creation surfaces put their caret in the
+   * instrument group below and watch this respond (the "bench and the object"
+   * gap). Superseded QC2-H's `titleSlot`, which made the card a TextInput.
+   */
+  titlePlaceholder?: string;
   /** Ember hairline under the title (the committed-title flourish). */
   flourish?: boolean;
   /** The why, as a quiet serif-italic line under the title. */
@@ -106,7 +112,7 @@ function CardMeta({ planMeta, color }: { planMeta: string | null; color: string 
 
 export function GoalCardPreview({
   title,
-  titleSlot,
+  titlePlaceholder,
   flourish = false,
   why,
   marks,
@@ -117,6 +123,11 @@ export function GoalCardPreview({
   const c = themedColors(theme);
   const entranceStyle = useSettleEntrance();
   const content = goalCardContent({ why, marks, planMeta });
+
+  // QC4-E: the hollow title. An empty card shows its placeholder in the same
+  // Signature serif at inkMuted — the shape of the title, not a caret.
+  const hasTitle = !!title?.trim();
+  const shownTitle = hasTitle ? (title as string) : (titlePlaceholder ?? '');
 
   // FU-5 hollow treatment, verbatim from the Goals screen: hairline accent
   // border + translucent forest wash (denser on the dark ground).
@@ -132,9 +143,12 @@ export function GoalCardPreview({
         <View style={[styles.dot, { backgroundColor: c.accent }]} />
       </View>
 
-      {titleSlot ?? (
-        <GoalTitle title={title ?? ''} size="card" flourish={flourish} color={c.inkDark} />
-      )}
+      <GoalTitle
+        title={shownTitle}
+        size="card"
+        flourish={flourish}
+        color={hasTitle ? c.inkDark : c.inkMuted}
+      />
 
       <CardWhy why={content.why} color={c.inkMid} />
       <CardMarkStrip marks={content.marks} />
