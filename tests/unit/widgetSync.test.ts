@@ -8,7 +8,8 @@ jest.mock('react-native-shared-group-preferences', () => ({
 jest.mock('../../state/goalsSlice', () => ({
   useGoalsStore: {
     getState: jest.fn(() => ({
-      getActiveGoal: () => ({ id: 'goal-1', title: 'Run a 5K' }),
+      getActiveGoal: () => ({ id: 'goal-1', title: 'Run a 5K', icon: '🏃' }),
+      getGoalProgress: () => ({ progress: 4, threshold: 10, canComplete: false }),
     })),
   },
 }));
@@ -44,6 +45,9 @@ describe('buildWidgetData', () => {
   it('returns active goal title and marks with completion state', async () => {
     const data = await buildWidgetData();
     expect(data.activeGoalTitle).toBe('Run a 5K');
+    expect(data.goalIcon).toBe('🏃');
+    expect(data.goalProgress).toBe(4);
+    expect(data.goalThreshold).toBe(10);
     expect(data.marks).toHaveLength(2);
     expect(data.marks.find(m => m.id === 'mark-1')?.completed).toBe(true);
     expect(data.marks.find(m => m.id === 'mark-2')?.completed).toBe(false);
@@ -57,6 +61,9 @@ describe('buildWidgetData', () => {
     useGoalsStore.getState.mockReturnValueOnce({ getActiveGoal: () => undefined });
     const data = await buildWidgetData();
     expect(data.activeGoalTitle).toBeNull();
+    expect(data.goalIcon).toBe('');
+    expect(data.goalProgress).toBe(0);
+    expect(data.goalThreshold).toBe(7);
   });
 });
 

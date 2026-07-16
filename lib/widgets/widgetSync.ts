@@ -8,9 +8,16 @@ import type { WidgetData, WidgetMarkData } from './widgetTypes';
 import { APP_GROUP_ID, WIDGET_DATA_KEY } from './widgetTypes';
 
 export async function buildWidgetData(): Promise<WidgetData> {
-  const activeGoal = useGoalsStore.getState().getActiveGoal();
+  const goalsState = useGoalsStore.getState();
+  const activeGoal = goalsState.getActiveGoal();
   const { marks } = useMarksStore.getState();
   const { effectiveUnlocked: isPro } = await checkProStatus();
+
+  // Ring: progress toward the active goal's unlock threshold. Mirrors the
+  // goal-detail ring so the widget reads the same as the in-app view.
+  const goalRing = activeGoal
+    ? goalsState.getGoalProgress(activeGoal.id)
+    : { progress: 0, threshold: 7 };
 
   const appDate = getAppDate();
   const today = `${appDate.getFullYear()}-${String(appDate.getMonth() + 1).padStart(2, '0')}-${String(appDate.getDate()).padStart(2, '0')}`;
@@ -38,6 +45,9 @@ export async function buildWidgetData(): Promise<WidgetData> {
 
   return {
     activeGoalTitle: activeGoal?.title ?? null,
+    goalIcon: activeGoal?.icon ?? '',
+    goalProgress: goalRing.progress,
+    goalThreshold: Math.max(1, goalRing.threshold),
     marks: widgetMarks,
     completedCount,
     totalCount: widgetMarks.length,

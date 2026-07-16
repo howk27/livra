@@ -3,7 +3,7 @@ module.exports = {
   name: 'LivraWidget',
   bundleIdentifier: 'com.livra.app.widget',
   deploymentTarget: '16.0',
-  frameworks: ['SwiftUI', 'WidgetKit'],
+  frameworks: ['SwiftUI', 'WidgetKit', 'AppIntents'],
   entitlements: {
     'com.apple.security.application-groups': ['group.com.livra.app'],
   },

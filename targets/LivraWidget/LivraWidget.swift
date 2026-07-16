@@ -1,6 +1,16 @@
 import WidgetKit
 import SwiftUI
 
+// MARK: - Palette (Livra 2.0 dark surface — mirrors theme/colors dark)
+
+enum WidgetPalette {
+    static let bg = Color(hex: "#1C2826")        // dark surface
+    static let ink = Color(hex: "#F0EDE8")       // inkDark (dark theme)
+    static let inkMuted = Color(hex: "#A8C4BC")  // inkInverseMuted
+    static let accent = Color(hex: "#8DB5A8")    // mint accent (dark)
+    static let ringTrack = Color(hex: "#F0EDE8").opacity(0.14)
+}
+
 // MARK: - Timeline
 
 struct LivraWidgetEntry: TimelineEntry {
@@ -25,98 +35,174 @@ struct LivraWidgetProvider: TimelineProvider {
     }
 }
 
-// MARK: - Small Widget (2×2)
+// MARK: - Goal ring (icon centered inside a progress ring)
+
+struct GoalRingView: View {
+    let data: WidgetData
+    let diameter: CGFloat
+    var lineWidth: CGFloat = 6
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(WidgetPalette.ringTrack, lineWidth: lineWidth)
+            Circle()
+                .trim(from: 0, to: max(0.0001, data.progressFraction))
+                .stroke(
+                    WidgetPalette.accent,
+                    style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+            Text(data.goalIcon.isEmpty ? "🎯" : data.goalIcon)
+                .font(.system(size: diameter * 0.42))
+        }
+        .frame(width: diameter, height: diameter)
+    }
+}
+
+// MARK: - Log button (interactive on iOS 17+, deep-link fallback on iOS 16)
+
+struct LogMarkButton: View {
+    let mark: WidgetMarkData
+    var compact: Bool = false
+
+    var body: some View {
+        if #available(iOS 17.0, *) {
+            Button(intent: LogMarkIntent(markId: mark.id)) {
+                LogMarkLabel(mark: mark, compact: compact)
+            }
+            .buttonStyle(.plain)
+        } else {
+            Link(destination: URL(string: "livra://log-mark?markId=\(mark.id)")!) {
+                LogMarkLabel(mark: mark, compact: compact)
+            }
+        }
+    }
+}
+
+struct LogMarkLabel: View {
+    let mark: WidgetMarkData
+    var compact: Bool = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if !mark.icon.isEmpty {
+                Text(mark.icon)
+                    .font(.system(size: compact ? 14 : 17))
+            }
+            Text(mark.name)
+                .font(.system(size: compact ? 12 : 14, weight: .semibold))
+                .foregroundColor(WidgetPalette.ink)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Spacer(minLength: 4)
+            Image(systemName: "plus.circle.fill")
+                .font(.system(size: compact ? 17 : 21))
+                .foregroundColor(WidgetPalette.accent)
+        }
+        .padding(.vertical, compact ? 7 : 9)
+        .padding(.horizontal, compact ? 9 : 11)
+        .frame(maxWidth: .infinity)
+        .background(WidgetPalette.accent.opacity(0.13))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
+
+// MARK: - Status line (queued count / done / empty)
+
+struct QueueStatusText: View {
+    let data: WidgetData
+    var body: some View {
+        Text(statusText)
+            .font(.system(size: 11, weight: .medium))
+            .foregroundColor(WidgetPalette.inkMuted)
+            .lineLimit(1)
+    }
+
+    private var statusText: String {
+        if data.marks.isEmpty { return "Open Livra to add a mark" }
+        if data.nextQueuedMark == nil { return "All done today ✓" }
+        let more = data.remainingQueuedCount
+        return more > 0 ? "\(more) more queued" : "Last one for today"
+    }
+}
+
+struct AllDoneOrEmpty: View {
+    let data: WidgetData
+    var body: some View {
+        Text(data.marks.isEmpty ? "Open Livra to add a mark" : "All done today ✓")
+            .font(.system(size: 12, weight: .medium))
+            .foregroundColor(WidgetPalette.inkMuted)
+            .lineLimit(2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+// MARK: - Small Widget (2×2): ring + one queued mark to log
 
 struct SmallWidgetView: View {
     let data: WidgetData
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(data.activeGoalTitle ?? "No active goal")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(Color(hex: "#F0E6D0"))
-                .lineLimit(2)
-                .minimumScaleFactor(0.8)
+        VStack(spacing: 8) {
+            GoalRingView(data: data, diameter: 58, lineWidth: 6)
 
-            Spacer()
-
-            if data.isStale && data.lastUpdated > 0 {
-                Text("Updated \(data.lastUpdatedString)")
-                    .font(.system(size: 9))
-                    .foregroundColor(Color(hex: "#F0E6D0").opacity(0.4))
+            if !data.isPro {
+                Text("Livra+ to log here")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(WidgetPalette.accent)
+                    .lineLimit(1)
+            } else if let mark = data.nextQueuedMark {
+                LogMarkButton(mark: mark, compact: true)
+                QueueStatusText(data: data)
+            } else {
+                AllDoneOrEmpty(data: data)
             }
-
-            Text("\(data.completedCount) of \(data.totalCount) done")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundColor(Color(hex: "#C47E8A"))
         }
         .padding(12)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .background(Color(hex: "#1C2826"))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(WidgetPalette.bg)
         .widgetURL(URL(string: "livra://home"))
     }
 }
 
-// MARK: - Medium Widget (2×4)
+// MARK: - Medium Widget (2×4): ring left, queued mark + log action right
 
 struct MediumWidgetView: View {
     let data: WidgetData
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(data.activeGoalTitle ?? "No active goal")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(Color(hex: "#F0E6D0"))
-                .lineLimit(1)
-                .truncationMode(.tail)
+        HStack(spacing: 14) {
+            GoalRingView(data: data, diameter: 76, lineWidth: 7)
 
-            Divider()
-                .background(Color(hex: "#F0E6D0").opacity(0.1))
+            VStack(alignment: .leading, spacing: 7) {
+                Text(data.activeGoalTitle ?? "No active goal")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(WidgetPalette.ink)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
 
-            if !data.isPro {
-                Spacer()
-                Text("Upgrade to Livra+ to see your marks here.")
-                    .font(.system(size: 11))
-                    .foregroundColor(Color(hex: "#C47E8A"))
-                    .multilineTextAlignment(.leading)
-                Spacer()
-            } else if data.marks.isEmpty {
-                Spacer()
-                Text("No marks yet — open Livra to add some.")
-                    .font(.system(size: 11))
-                    .foregroundColor(Color(hex: "#F0E6D0").opacity(0.5))
-                Spacer()
-            } else {
-                ForEach(data.marks.prefix(4)) { mark in
-                    Link(destination: URL(string: "livra://log-mark?markId=\(mark.id)")!) {
-                        HStack(spacing: 8) {
-                            if !mark.icon.isEmpty {
-                                Text(mark.icon)
-                                    .font(.system(size: 14))
-                            }
-                            Text(mark.name)
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(Color(hex: "#F0E6D0"))
-                            Spacer()
-                            Circle()
-                                .fill(mark.completed
-                                    ? Color(hex: mark.color)
-                                    : Color(hex: "#F0E6D0").opacity(0.15))
-                                .frame(width: 8, height: 8)
-                        }
-                    }
-                }
-
-                if data.isStale && data.lastUpdated > 0 {
-                    Text("Updated \(data.lastUpdatedString)")
-                        .font(.system(size: 9))
-                        .foregroundColor(Color(hex: "#F0E6D0").opacity(0.3))
+                if !data.isPro {
+                    Spacer(minLength: 0)
+                    Text("Upgrade to Livra+ to log from your widget.")
+                        .font(.system(size: 12))
+                        .foregroundColor(WidgetPalette.accent)
+                        .lineLimit(2)
+                    Spacer(minLength: 0)
+                } else if let mark = data.nextQueuedMark {
+                    LogMarkButton(mark: mark, compact: false)
+                    QueueStatusText(data: data)
+                } else {
+                    Spacer(minLength: 0)
+                    AllDoneOrEmpty(data: data)
+                    Spacer(minLength: 0)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .background(Color(hex: "#1C2826"))
+        .padding(14)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(WidgetPalette.bg)
         .widgetURL(URL(string: "livra://home"))
     }
 }
@@ -149,7 +235,7 @@ struct LivraWidget: Widget {
             LivraWidgetEntryView(entry: entry)
         }
         .configurationDisplayName("Livra")
-        .description("Your active goal and today's marks at a glance.")
+        .description("Your goal ring and the next mark to log — one tap.")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
 }

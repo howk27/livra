@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 
 import { fonts, fontSize, spacing, radius, shadow, themedColors } from '../../theme/tokens';
@@ -58,6 +58,7 @@ import { computeWeek } from '../../lib/consistency';
 import { logger } from '../../lib/utils/logger';
 import { useNotification } from '../../contexts/NotificationContext';
 import { applyOpacity } from '../../src/components/icons/color';
+import { useWidgetLogSync } from '../../hooks/useWidgetLogSync';
 
 import type { Counter } from '../../types';
 
@@ -67,8 +68,12 @@ export default function FocusScreen() {
   const theme = useEffectiveTheme();
   const c = themedColors(theme);
   const router = useRouter();
+  const params = useLocalSearchParams<{ logMarkId?: string }>();
   const { user } = useAuth();
   const { counters, loading, error, incrementCounter, deleteCounter } = useCounters();
+
+  // Reconcile logs tapped in the iOS 17+ interactive widget (AppIntent queue).
+  useWidgetLogSync(incrementCounter, user?.id);
   const { showError } = useNotification();
   const { sync } = useSync();
   const appDateKey = useAppDateStore((s) => s.debugDateOverride ?? '');
@@ -317,6 +322,31 @@ export default function FocusScreen() {
     },
     [user?.id, incrementCounter, showError],
   );
+
+  // Widget deep-link fallback (iOS 16, or any tap routed through the app):
+  // `livra://log-mark?markId=…` lands here with a logMarkId param. Log it once
+  // through the real increment path, then clear the param so it can't re-fire
+  // on re-render or when the tab regains focus.
+  const handledLogMarkRef = useRef<string | null>(null);
+  useEffect(() => {
+    const logMarkId = typeof params.logMarkId === 'string' ? params.logMarkId : undefined;
+    if (!logMarkId) {
+      handledLogMarkRef.current = null;
+      return;
+    }
+    if (!user?.id) return;
+    if (loading) return;
+    if (handledLogMarkRef.current === logMarkId) return;
+    if (!activeCounters.some((m) => m.id === logMarkId)) {
+      // Unknown mark (deleted, or not yet loaded on a cold start) — drop it.
+      handledLogMarkRef.current = logMarkId;
+      router.setParams({ logMarkId: undefined });
+      return;
+    }
+    handledLogMarkRef.current = logMarkId;
+    void handleQuickIncrement(logMarkId);
+    router.setParams({ logMarkId: undefined });
+  }, [params.logMarkId, user?.id, loading, activeCounters, handleQuickIncrement, router]);
 
   const handleMarkLongPress = useCallback((markId: string, markName: string) => {
     Alert.alert(
