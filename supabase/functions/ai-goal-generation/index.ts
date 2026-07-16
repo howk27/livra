@@ -35,12 +35,30 @@ const FALLBACK_ICON = 'focus';
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 const MODEL = 'gpt-4o-mini';
 const REQUEST_TIMEOUT_MS = 14_000;
-const MIN_GOAL_LENGTH = 10;
+
+// Kept in sync with lib/ai/goalGeneration.ts (QC3-B gate + QC3-C context cap).
+// Lowered 10 → 4 (QC3-C) so the server accepts the same terse-but-real goals the
+// client button now allows ("save 10k", "read"); without this parity the button
+// passes but the server returns goal_too_short.
+const MIN_GOAL_LENGTH = 4;
+const CONTEXT_MAX_LENGTH = 400;
 
 const STOP_WORDS = new Set([
   'a', 'an', 'the', 'and', 'or', 'to', 'i', 'my', 'want', 'get',
   'be', 'do', 'make', 'become', 'have', 'of', 'in', 'for',
 ]);
+
+/**
+ * Server-side mirror of the client gate (lib/ai/goalGeneration.ts):
+ * at least MIN_GOAL_LENGTH characters AND at least one real word (a run of 2+
+ * non-space characters). Empty/whitespace-only, single characters, and
+ * all-single-letter strings ("a b c") fail; "save 10k", "read", "learn" pass.
+ */
+function meetsGoalTextGate(goalText: string): boolean {
+  const trimmed = goalText.trim();
+  if (trimmed.length < MIN_GOAL_LENGTH) return false;
+  return trimmed.split(/\s+/).some((word) => word.length >= 2);
+}
 
 const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -127,7 +145,11 @@ Respond with valid JSON matching this exact schema. No markdown. No explanation.
 
 Rules:
 - goalTitle: specific and achievable, max 80 characters
-- timeframeWeeks: integer 1–52
+- timeframeWeeks: integer 1–52. This is an HONEST, CONSERVATIVE estimate of when the user will realistically be READY for the goal — never flattering, never rounded down to look encouraging. Weigh the user's context (if any) to judge how committed and experienced they are:
+  - If the context signals a beginner, limited time, or thin/uncertain commitment, lean LONGER.
+  - If no context is given, assume a typical motivated beginner and stay conservative.
+  - Only shorten the estimate when the context gives concrete evidence of experience, prior progress, or heavy time commitment.
+  - Never inflate confidence or shorten the timeframe just to be motivating. A realistic longer timeframe is more useful than an encouraging wrong one.
 - confidence: default to "high". Use "high" for any goal a coach could plan 3 or 4 weekly marks for, even if phrased loosely. Use "low" ONLY when the input is genuinely ambiguous (no plannable goal at all), unsafe, or contains multiple goals
 - Confidence anchors:
   - "I want to get stronger" → high
@@ -142,7 +164,12 @@ Rules:
 - If multiple goals are given: scope to one; use "low" confidence`;
 }
 
-async function callOpenAI(goalText: string, apiKey: string): Promise<unknown> {
+function buildUserMessage(goalText: string, context: string): string {
+  if (!context) return `Goal: ${goalText}`;
+  return `Goal: ${goalText}\n\nContext from the user (use it to judge how committed/experienced they are and to set a REALISTIC timeframe): ${context}`;
+}
+
+async function callOpenAI(goalText: string, context: string, apiKey: string): Promise<unknown> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
@@ -160,7 +187,7 @@ async function callOpenAI(goalText: string, apiKey: string): Promise<unknown> {
         response_format: { type: 'json_object' },
         messages: [
           { role: 'system', content: buildSystemPrompt() },
-          { role: 'user', content: `Goal: ${goalText}` },
+          { role: 'user', content: buildUserMessage(goalText, context) },
         ],
       }),
       signal: controller.signal,
@@ -214,13 +241,18 @@ Deno.serve(async (req: Request) => {
 
   // Parse body.
   let goalText = '';
+  let context = '';
   try {
     const body = await req.json();
     goalText = String(body?.goalText ?? '').trim();
+    // Optional commitment/experience signal (QC3-C). Trimmed + capped; never logged.
+    context = String(body?.context ?? '').trim().slice(0, CONTEXT_MAX_LENGTH);
   } catch {
     return json(400, { ok: false, reason: 'invalid_output' });
   }
-  if (goalText.length < MIN_GOAL_LENGTH) {
+  // Server-parity gate (QC3-C): mirrors the client's meetsGoalTextGate so a goal
+  // that clears the button also clears the server (was a bare length check).
+  if (!meetsGoalTextGate(goalText)) {
     return json(200, { ok: false, reason: 'goal_too_short' });
   }
 
@@ -265,10 +297,10 @@ Deno.serve(async (req: Request) => {
   // 5. OpenAI call with one silent retry on any error.
   let raw: unknown;
   try {
-    raw = await callOpenAI(goalText, OPENAI_API_KEY);
+    raw = await callOpenAI(goalText, context, OPENAI_API_KEY);
   } catch {
     try {
-      raw = await callOpenAI(goalText, OPENAI_API_KEY);
+      raw = await callOpenAI(goalText, context, OPENAI_API_KEY);
     } catch {
       return json(200, { ok: false, reason: 'network_error' });
     }

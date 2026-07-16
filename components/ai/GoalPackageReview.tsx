@@ -22,7 +22,12 @@ import { Check } from 'phosphor-react-native';
 import { PillButton } from '../ui/PillButton';
 import { fonts, radius, spacing, themedColors, fontSize } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
-import { resolveMarkForAIIcon, type AIGoalPackage, type AIGoalMark } from '../../lib/ai/goalGeneration';
+import {
+  buildReadinessLine,
+  resolveMarkForAIIcon,
+  type AIGoalPackage,
+  type AIGoalMark,
+} from '../../lib/ai/goalGeneration';
 
 export type GoalPackageReviewSelection = {
   /** Edited (or original) goal title, trimmed; falls back to the package title. */
@@ -103,10 +108,13 @@ export function GoalPackageReview({
           />
         </View>
 
-        {/* Timeframe (display only) */}
+        {/* Timeframe (display only) + the client-derived readiness date (QC3-C) */}
         <View style={{ marginTop: spacing.md }}>
           <Text style={[styles.label, { color: c.inkMuted }]}>TIMEFRAME</Text>
           <Text style={[styles.timeframe, { color: c.inkDark }]}>{pkg.timeframeWeeks} weeks</Text>
+          <Text style={[styles.readiness, { color: c.inkMid }]}>
+            {buildReadinessLine(title.trim() || pkg.goalTitle, pkg.timeframeWeeks)}
+          </Text>
         </View>
 
         {/* Editable description */}
@@ -238,6 +246,11 @@ const styles = StyleSheet.create({
     fontFamily: fonts.sans,
     fontSize: fontSize.md,
     paddingVertical: spacing.xs,
+  },
+  readiness: {
+    fontFamily: fonts.sans,
+    fontSize: fontSize.sm,
+    lineHeight: 19,
   },
   descriptionInput: {
     minHeight: 72,

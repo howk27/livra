@@ -99,7 +99,10 @@ jest.mock('../../../lib/ai/goalGeneration', () => ({
   generateGoalPackage: jest.fn(),
   resolveMarkForAIIcon: (icon: string) => ({ markId: icon, emoji: '🏃', color: '#4A6A8C' }),
   writeGoalPackageCache: jest.fn().mockResolvedValue(undefined),
-  MIN_GOAL_LENGTH: 10,
+  // QC3-C: GoalPackageReview now renders the soft readiness line.
+  buildReadinessLine: (title: string, weeks: number) => `You'll be ready to ${title} in about ${weeks} weeks.`,
+  deriveTargetDate: (weeks: number) => `2026-10-07`,
+  MIN_GOAL_LENGTH: 4,
 }));
 
 jest.mock('../../../hooks/useAuth', () => ({

@@ -10,7 +10,7 @@
  */
 
 import { GoalLimitError } from '../../state/goalsSlice';
-import type { AIGoalPackage } from '../../lib/ai/goalGeneration';
+import { type AIGoalPackage } from '../../lib/ai/goalGeneration';
 
 const mockCreateGoal = jest.fn();
 const mockLinkMarkToGoal = jest.fn();
@@ -88,6 +88,23 @@ describe('createFromAIPackage — confirm path', () => {
         method: 'ai',
       }),
     );
+  });
+
+  test('does NOT write the AI projection to target_date — soft projection only (QC3-C)', async () => {
+    await createFromAIPackage({
+      userId: 'user-1',
+      isPro: false,
+      goalText: 'run a half marathon this year',
+      pkg: SAMPLE_PACKAGE, // timeframeWeeks: 12
+      title: 'Half marathon',
+      marks: SAMPLE_PACKAGE.marks,
+    });
+
+    // Founder call: the AI finish date is a soft projection shown only at review
+    // (GoalPackageReview derives it from timeframeWeeks). It must never become the
+    // goal's expiring deadline, so createGoal is called with no target_date.
+    const arg = mockCreateGoal.mock.calls[0]![0] as { target_date?: string };
+    expect(arg.target_date).toBeUndefined();
   });
 
   test('falls back to the package title when the confirmed title is blank', async () => {

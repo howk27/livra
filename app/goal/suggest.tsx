@@ -22,6 +22,7 @@ import { GoalPackageReview } from '../../components/ai/GoalPackageReview';
 import { PillButton } from '../../components/ui/PillButton';
 import { fonts, spacing, radius, themedColors, fontSize } from '../../theme/tokens';
 import { AI_EXHAUSTED_COPY } from '../../lib/copy';
+import { CONTEXT_MAX_LENGTH } from '../../lib/ai/goalGeneration';
 import { useSuggestGoalFlow } from '../../hooks/useSuggestGoalFlow';
 import { useDeferredAutoFocus } from '../../hooks/useDeferredAutoFocus';
 import { useHalfRenderProbe } from '../../hooks/useHalfRenderProbe';
@@ -83,6 +84,8 @@ interface SuggestDescribePhaseProps {
   c: ReturnType<typeof themedColors>;
   goalText: string;
   setGoalText: (text: string) => void;
+  context: string;
+  setContext: (text: string) => void;
   tooShort: boolean;
   aiLoading: boolean;
   aiError: string | null;
@@ -99,6 +102,8 @@ function SuggestDescribePhase({
   c,
   goalText,
   setGoalText,
+  context,
+  setContext,
   tooShort,
   aiLoading,
   aiError,
@@ -139,6 +144,22 @@ function SuggestDescribePhase({
         maxLength={80}
         returnKeyType="go"
         onSubmitEditing={onSubmitEditing}
+      />
+
+      {/* QC3-C: optional context — shapes a realistic timeframe. Never gates the
+          button; leaving it blank is fine. */}
+      <TextInput
+        style={[
+          styles.contextInput,
+          { backgroundColor: c.surfaceAlt, color: c.inkDark, borderColor: c.borderLight },
+        ]}
+        value={context}
+        onChangeText={setContext}
+        placeholder="Anything that shapes this? Your experience, the time you can give it, a deadline…"
+        placeholderTextColor={c.inkMuted}
+        multiline
+        maxLength={CONTEXT_MAX_LENGTH}
+        textAlignVertical="top"
       />
 
       {exhausted ? (
@@ -189,6 +210,8 @@ export default function SuggestGoalScreen() {
     router,
     goalText,
     setGoalText,
+    context,
+    setContext,
     aiLoading,
     aiError,
     exhausted,
@@ -232,6 +255,8 @@ export default function SuggestGoalScreen() {
           c={c}
           goalText={goalText}
           setGoalText={setGoalText}
+          context={context}
+          setContext={setContext}
           tooShort={tooShort}
           aiLoading={aiLoading}
           aiError={aiError}
@@ -295,6 +320,17 @@ const styles = StyleSheet.create({
     fontSize: fontSize.md,
     borderWidth: 1,
     marginTop: spacing.xl,
+  },
+  contextInput: {
+    minHeight: 72,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    fontFamily: fonts.sans,
+    fontSize: fontSize.md,
+    borderWidth: 1,
+    marginTop: spacing.md,
+    lineHeight: 20,
   },
   hatch: {
     marginTop: spacing.lg,

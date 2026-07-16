@@ -43,6 +43,10 @@ export function useSuggestGoalFlow() {
   const [goalText, setGoalText] = useState(
     typeof params.goalText === 'string' ? params.goalText : '',
   );
+  // QC3-C: optional free-text the user gives about their experience, the time
+  // they can give it, or a deadline — fed to the model to set a realistic
+  // timeframe. Never gates the button; blank is fine.
+  const [context, setContext] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [exhausted, setExhausted] = useState(false);
@@ -74,7 +78,7 @@ export function useSuggestGoalFlow() {
     setAiLoading(true);
     setAiError(null);
 
-    const result = await generateGoalPackage(goalText.trim());
+    const result = await generateGoalPackage(goalText.trim(), context);
     setAiLoading(false);
 
     if (result.ok) {
@@ -91,7 +95,7 @@ export function useSuggestGoalFlow() {
       return;
     }
     setAiError(GENERATION_ERROR_COPY[result.reason] || 'Something went wrong.');
-  }, [user?.id, goalText, source]);
+  }, [user?.id, goalText, context, source]);
 
   const handleManualInstead = useCallback(() => {
     // VD-6: never present the next pageSheet while the keyboard is up —
@@ -159,6 +163,8 @@ export function useSuggestGoalFlow() {
     router,
     goalText,
     setGoalText,
+    context,
+    setContext,
     aiLoading,
     aiError,
     exhausted,

@@ -44,6 +44,12 @@ export async function createFromAIPackage(args: CreateFromAIPackageArgs): Promis
   const { addMark } = useMarksStore.getState();
 
   // 1. Create the goal. GoalLimitError propagates to the caller (soft-cap Alert).
+  //    QC3-C (founder call): the AI's projected finish is a SOFT projection —
+  //    surfaced as the "you'll be ready by" line at review only (GoalPackageReview
+  //    derives it from pkg.timeframeWeeks). We deliberately do NOT write it to
+  //    target_date: target_date is the expiring deadline (goal ends, marks →
+  //    maintenance, when it passes), and an AI estimate must never silently end
+  //    someone's goal. The projection is not persisted on the goal.
   const goal = await createGoal({
     title: title.trim() || pkg.goalTitle,
     description: description?.trim() || undefined,

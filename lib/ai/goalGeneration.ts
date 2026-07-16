@@ -16,6 +16,7 @@
  *   normalizeGoalText     — semantic cache key (shared shape with the server)
  */
 
+import { addDays, format } from 'date-fns';
 import { getSupabaseClient } from '../supabase';
 import { MARK_LIBRARY } from '../suggestedCounters';
 import { logger } from '../utils/logger';
@@ -276,6 +277,36 @@ export async function writeGoalPackageCache(
   }
 }
 
+// ─── Projected finish date (client-owned calendar math) ────────────────────────
+// QC3-C: the model returns an honest `timeframeWeeks`; the client owns the
+// calendar so no stale/hallucinated absolute date ever ships from the model.
+// today + weeks*7 days → the goal's target_date and the review readiness line.
+
+/** The projected Date the user will be ready, from now + timeframeWeeks*7 days. */
+export function projectedFinishDate(timeframeWeeks: number, from: Date = new Date()): Date {
+  const days = Math.max(0, Math.round(timeframeWeeks)) * 7;
+  return addDays(from, days);
+}
+
+/** Projected finish date as a `yyyy-MM-dd` string for goal.target_date storage. */
+export function deriveTargetDate(timeframeWeeks: number, from: Date = new Date()): string {
+  return format(projectedFinishDate(timeframeWeeks, from), 'yyyy-MM-dd');
+}
+
+/**
+ * Readiness line for the review/commit step:
+ * "You'll be ready to {goal} by {Mon D, YYYY}." (no dash-as-dash; `·` reserved
+ * for the mark rows). The date is derived, never model-emitted.
+ */
+export function buildReadinessLine(
+  goalTitle: string,
+  timeframeWeeks: number,
+  from: Date = new Date(),
+): string {
+  const dateLabel = format(projectedFinishDate(timeframeWeeks, from), 'MMM d, yyyy');
+  return `You'll be ready to ${goalTitle.trim()} by ${dateLabel}.`;
+}
+
 // ─── Main entry point ─────────────────────────────────────────────────────────
 
 /**
@@ -323,19 +354,31 @@ const KNOWN_FAIL_REASONS: ReadonlySet<string> = new Set([
  * The client never sees the API key and cannot bypass the free-use gate.
  * Every generation (including regenerations) counts as a use for non-Pro users.
  * The typed goal text is preserved on every failure path (caller keeps it).
+ *
+ * `context` (QC3-C): optional free-text the user gives about their experience,
+ * time, or a deadline. Trimmed and capped to CONTEXT_MAX_LENGTH here (the edge
+ * fn re-caps defensively); the server uses it to set a REALISTIC timeframe.
  */
+export const CONTEXT_MAX_LENGTH = 400;
+
 export async function generateGoalPackage(
   goalText: string,
+  context?: string,
 ): Promise<GenerationResult> {
   const trimmed = goalText.trim();
   if (!meetsGoalTextGate(trimmed)) {
     return { ok: false, reason: 'goal_too_short' };
   }
 
+  const trimmedContext = (context ?? '').trim().slice(0, CONTEXT_MAX_LENGTH);
+
   try {
     const supabase = getSupabaseClient();
     const { data, error } = await supabase.functions.invoke('ai-goal-generation', {
-      body: { goalText: trimmed },
+      body: {
+        goalText: trimmed,
+        ...(trimmedContext ? { context: trimmedContext } : {}),
+      },
     });
 
     if (error) {
