@@ -1,7 +1,6 @@
 -- Migration: create goal_notes table (QC3-D — goal-level MULTI-ENTRY journal)
--- STATUS: NOT YET APPLIED — founder must apply at the deploy gate
---   (`npx supabase db push`, or run this in the Supabase SQL editor).
---   Do NOT mark APPLIED until verified live.
+-- STATUS: APPLIED 2026-07-15 (founder). goal_notes table + RLS live; the
+--   goal journal syncs to Supabase.
 --
 -- Unlike mark_notes (one row per mark/date), a goal may have MANY journal
 -- entries per day. The entry's IDENTITY is a client-generated UUID (the primary

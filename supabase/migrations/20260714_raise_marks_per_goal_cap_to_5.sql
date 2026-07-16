@@ -1,9 +1,6 @@
 -- QC2-G (2026-07-14) — Raise the free-tier per-goal mark cap 3 → 5
--- STATUS: NOT YET APPLIED — founder must run `npx supabase db push` (or
---   `npx supabase migration up`) BEFORE the 5-cap client ships, otherwise a
---   free user's 4th/5th goal-linked mark passes client gating but is rejected
---   by this RESTRICTIVE policy at sync time (Postgres 42501, generic error).
---   Applying it first is safe: old clients still gate at 3 locally.
+-- STATUS: APPLIED 2026-07-15 (founder). The 5-cap policy is live; free users
+--   can link up to 5 marks per goal.
 --
 -- Founder decision (QC2 intake): "the free marks-per-goal cap should be raised
 -- in order to actually help people." Client source of truth: lib/gating.ts
