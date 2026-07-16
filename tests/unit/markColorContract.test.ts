@@ -70,10 +70,23 @@ describe('mark color comes only from the sanctioned palette (QC4-M)', () => {
     expect(colorForSuggestedCounter(alien)).toBe(categoryAccents.custom);
   });
 
-  it('a stored color still wins for an existing mark — no silent rewrite of user data', () => {
-    expect(getCategoryColorForMark({ name: 'Run', color: '#F97316' })).toBe('#F97316');
+  // SUPERSEDED (founder call, 2026-07-16, on device after the QC4 merge): this
+  // asserted that a stored color always wins, pinning the deliberate decision to
+  // leave pre-QC4-M marks alone. The founder saw the result — old bright marks
+  // beside new muted ones in one list — and asked for the update to reach them.
+  // The concern the test names, "no silent rewrite of user data", still holds and
+  // is now asserted directly: healing is on READ, and nothing is written.
+  it('a SANCTIONED stored color still wins for an existing mark', () => {
+    expect(getCategoryColorForMark({ name: 'Run', color: categoryAccents.fitness }))
+      .toBe(categoryAccents.fitness);
     // Only a mark with no color at all gets one derived.
     expect(SANCTIONED.has(getCategoryColorForMark({ name: 'Run', color: '' }))).toBe(true);
+  });
+
+  it('never rewrites stored data — healing is read-only', () => {
+    const src = readFileSync(join(ROOT, 'lib/markCategory.ts'), 'utf8');
+    // A resolver, not a migration: no writes, no UPDATE, no store mutation.
+    expect(src).not.toMatch(/\bUPDATE\b|execAsync|runAsync|setState/);
   });
 
   it('labels every category key it can return', () => {
@@ -162,5 +175,60 @@ describe('goal detail can link and unlink marks (QC4-L)', () => {
 
   it('tells the user what unlinking costs before it happens', () => {
     expect(src).toMatch(/keeps all of its history/);
+  });
+});
+
+/**
+ * QC4-M follow-up — marks written BEFORE QC4-M must heal on read.
+ *
+ * Founder, on device after the QC4 merge: "QC4-M didn't change the colors for
+ * the marks already written." True — QC4-M fixed the WRITE path, but
+ * getCategoryColorForMark returned `mark.color || derived`, so any stored value
+ * won and old marks stayed bright next to new muted ones in the same list.
+ */
+describe('QC4-M — legacy stored colors heal on read', () => {
+  // The five invented generics QC4-M deleted, plus the old "Vibe" picker's
+  // palette (VD-7 removed it) and widgetSync's private fallback. Four of the
+  // Vibe swatches are byte-identical to the generics, so a hand-picked color is
+  // indistinguishable from a machine-derived one — both must heal.
+  const LEGACY_HEXES = [
+    '#3B82F6', '#F97316', '#10B981', '#A855F7', '#9CA3AF', // CATEGORY_DEFAULT_COLORS
+    '#EF4444', '#EC4899',                                   // Vibe-only swatches
+    '#C47E8A',                                              // widgetSync fallback
+  ];
+
+  it.each(LEGACY_HEXES)('ignores the dead stored hex %s', (hex) => {
+    const color = getCategoryColorForMark({ name: 'Run', color: hex });
+    expect(color).not.toBe(hex);
+    expect(SANCTIONED.has(color)).toBe(true);
+  });
+
+  it('heals to the SAME color the mark would be created with today', () => {
+    for (const mark of MARK_LIBRARY.slice(0, 12)) {
+      const fresh = colorForSuggestedCounter(mark);
+      const legacy = getCategoryColorForMark({ name: mark.name, color: '#F97316' });
+      // An old mark and a new mark of the same name must not disagree.
+      expect(legacy).toBe(getCategoryColorForMark({ name: mark.name, color: null }));
+      expect(SANCTIONED.has(fresh)).toBe(true);
+    }
+  });
+
+  it('still honours a stored color that IS sanctioned', () => {
+    const sanctioned = categoryAccents.fitness;
+    expect(getCategoryColorForMark({ name: 'Anything', color: sanctioned })).toBe(sanctioned);
+  });
+
+  it('handles null/empty stored color without falling back to a raw hex', () => {
+    for (const stored of [null, undefined, '']) {
+      const color = getCategoryColorForMark({ name: 'Run', color: stored as any });
+      expect(SANCTIONED.has(color)).toBe(true);
+    }
+  });
+
+  it('the widget resolves color through the same healer, not mark.color raw', () => {
+    const src = readFileSync(join(ROOT, 'lib/widgets/widgetSync.ts'), 'utf8');
+    expect(src).toContain('getCategoryColorForMark');
+    // The private fallback that bypassed the palette entirely.
+    expect(src).not.toContain('#C47E8A');
   });
 });

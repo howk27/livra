@@ -163,6 +163,37 @@ export function getCategoryForMark(mark: Pick<Mark, 'name' | 'color'>): MarkCate
   return categoryFromKeywords(mark.name || '');
 }
 
+const SANCTIONED_COLORS: ReadonlySet<string> = new Set(
+  Object.values(categoryAccents).map(hex => hex.toLowerCase())
+);
+
+/**
+ * True only for a hex that is currently in `categoryAccents`.
+ *
+ * A whitelist, deliberately — not a blacklist of the legacy hexes. Marks saved
+ * before QC4-M carry a dead value: either one of the five invented generics
+ * (`#F97316`, `#3B82F6`, …) or a hand-picked one from the old "Vibe" grid that
+ * VD-7 deleted. Listing those would rot the moment another stale value turns up;
+ * asking "is this a color we still sanction?" cannot.
+ */
+function isSanctionedColor(color: string | null | undefined): boolean {
+  return !!color && SANCTIONED_COLORS.has(color.toLowerCase());
+}
+
+/**
+ * Render color for a stored mark. QC4-M made new marks save a sanctioned accent,
+ * but marks written BEFORE it kept their dead hex and `mark.color ||` handed it
+ * straight back — so old marks stayed bright while new ones went muted, in the
+ * same list. Heals on READ: an unsanctioned stored color is ignored and the
+ * category-derived accent is used instead.
+ *
+ * Read, not a data migration: nothing is rewritten, so this reverses by deleting
+ * the check. The cost is that a color hand-picked from the old Vibe grid is also
+ * replaced — four of its six swatches were byte-identical to the machine
+ * defaults, so a deliberate pick is genuinely indistinguishable from a derived
+ * one. VD-7 already settled that direction: color is category-derived, not chosen.
+ */
 export function getCategoryColorForMark(mark: Pick<Mark, 'name' | 'color'>): string {
-  return mark.color || getCategoryColor(getCategoryForMark(mark));
+  if (isSanctionedColor(mark.color)) return mark.color as string;
+  return getCategoryColor(getCategoryForMark(mark));
 }

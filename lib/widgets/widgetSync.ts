@@ -6,6 +6,7 @@ import { useGoalsStore } from '../../state/goalsSlice';
 import { useMarksStore } from '../../state/countersSlice';
 import type { WidgetData, WidgetMarkData } from './widgetTypes';
 import { APP_GROUP_ID, WIDGET_DATA_KEY } from './widgetTypes';
+import { getCategoryColorForMark } from '../markCategory';
 
 export async function buildWidgetData(): Promise<WidgetData> {
   const activeGoal = useGoalsStore.getState().getActiveGoal();
@@ -30,7 +31,11 @@ export async function buildWidgetData(): Promise<WidgetData> {
     id: mark.id,
     name: mark.name,
     icon: mark.emoji ?? '',
-    color: mark.color ?? '#C47E8A',
+    // QC4-M: the widget read `mark.color` raw, so it kept showing the dead
+    // pre-QC4-M hex — and carried its own fallback literal, sanctioned by
+    // nothing — while the app healed. Same resolver as MarkCard: one color per
+    // mark, wherever it is rendered.
+    color: getCategoryColorForMark({ name: mark.name, color: mark.color }),
     completed: loggedTodayIds.has(mark.id),
   }));
 
