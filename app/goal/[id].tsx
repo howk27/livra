@@ -24,6 +24,8 @@ import {
   Plus,
   Trash,
   ArrowRight,
+  LinkSimple,
+  LinkBreak,
 } from 'phosphor-react-native';
 import {
   colors,
@@ -53,6 +55,8 @@ import { getAppDate } from '../../lib/appDate';
 import { formatDate } from '../../lib/date';
 import { useCounters } from '../../hooks/useCounters';
 import { useAuth } from '../../hooks/useAuth';
+import { useIapSubscriptions } from '../../hooks/useIapSubscriptions';
+import { canAddMarkToGoal, countMarksInGoal, FREE_MARKS_PER_GOAL } from '../../lib/gating';
 import { useMotion } from '../../hooks/useMotion';
 import { useNotification } from '../../contexts/NotificationContext';
 import { CATEGORY_MAP } from '../../components/ui/MarkRow';
@@ -224,28 +228,130 @@ function WeekSentenceLine({ c, sentence }: { c: ThemeColors; sentence: string })
   return <Text style={[styles.weekSentence, { color: c.inkMid }]}>{sentence}</Text>;
 }
 
+/** QC4-L: the picker for linking a mark that already exists. Candidates are the
+ *  user's other live marks — a mark feeds one goal at a time (`goal_id`), so
+ *  linking one that already sits on another goal moves it, and the sheet says
+ *  so plainly rather than doing it silently. */
+function LinkMarkSheet({
+  c,
+  visible,
+  candidates,
+  goalTitleById,
+  onPick,
+  onClose,
+}: {
+  c: ThemeColors;
+  visible: boolean;
+  candidates: Mark[];
+  goalTitleById: (goalId: string | null | undefined) => string | undefined;
+  onPick: (markId: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={onClose}>
+        <TouchableOpacity style={[styles.modalSheet, { backgroundColor: c.surface }]} activeOpacity={1}>
+          <Text style={[styles.modalLabel, { color: c.inkMuted }]}>LINK A MARK</Text>
+          {candidates.length === 0 ? (
+            <Text style={[styles.pickerEmpty, { color: c.inkMid }]}>
+              Every mark you have already feeds this goal.
+            </Text>
+          ) : (
+            <ScrollView style={styles.pickerList} showsVerticalScrollIndicator={false}>
+              {candidates.map((mark) => {
+                const catData = CATEGORY_MAP[resolveMarkCategory(mark)] ?? CATEGORY_MAP.custom;
+                const MarkIcon = resolveMarkIcon(mark) ?? catData.Icon;
+                const heldBy = goalTitleById(mark.goal_id);
+                return (
+                  <TouchableOpacity
+                    key={mark.id}
+                    style={[styles.pickerRow, { borderColor: c.borderLight }]}
+                    onPress={() => onPick(mark.id)}
+                    activeOpacity={0.75}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Link ${mark.name} to this goal`}
+                  >
+                    <View style={[styles.markIconTile, { backgroundColor: applyOpacity(catData.accent, 0.12) }]}>
+                      <MarkIcon size={18} color={catData.accent} weight="duotone" />
+                    </View>
+                    <View style={styles.markBody}>
+                      <Text style={[styles.markName, { color: c.inkDark }]} numberOfLines={1}>
+                        {mark.name}
+                      </Text>
+                      {heldBy ? (
+                        <Text style={[styles.pickerRowHint, { color: c.inkMuted }]} numberOfLines={1}>
+                          Currently on “{heldBy}” — linking moves it here
+                        </Text>
+                      ) : null}
+                    </View>
+                    <LinkSimple size={18} color={c.accent} weight="bold" />
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          )}
+          <TouchableOpacity style={[styles.dateSetBtn, { backgroundColor: c.forest }]} onPress={onClose}>
+            <Text style={[styles.dateSetBtnText, { color: c.inkInverse }]}>Done</Text>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
+  );
+}
+
 /** YOUR MARKS section: living rows with weekly tracks + quick log, or the
- *  empty invitation. A met weekly target never blocks today's log. */
+ *  empty invitation. A met weekly target never blocks today's log.
+ *
+ *  QC4-L: the goal screen had no linking UI at all — a mark could only ever
+ *  reach a goal at the moment it was created. "Manage" flips the trailing
+ *  control from log to unlink, so control is always one tap away without
+ *  putting a third button on every row. */
 function LinkedMarkRows({
   c,
   marks,
   weeklyCountsMap,
   emptyLine,
+  managing,
+  onToggleManaging,
+  canLinkMore,
   onQuickLog,
   onAddMark,
+  onLinkExisting,
+  onUnlink,
   onOpenMark,
 }: {
   c: ThemeColors;
   marks: Mark[];
   weeklyCountsMap: Map<string, number>;
   emptyLine: string;
+  managing: boolean;
+  onToggleManaging: () => void;
+  canLinkMore: boolean;
   onQuickLog: (markId: string) => void;
   onAddMark: () => void;
+  onLinkExisting: () => void;
+  onUnlink: (mark: Mark) => void;
   onOpenMark: (markId: string) => void;
 }) {
   return (
     <View style={styles.section}>
-      <Text style={[styles.sectionLabel, { color: c.inkMuted }]}>YOUR MARKS</Text>
+      <View style={styles.sectionHeaderRow}>
+        <Text style={[styles.sectionLabel, { color: c.inkMuted }]}>YOUR MARKS</Text>
+        {marks.length > 0 ? (
+          <TouchableOpacity
+            style={styles.manageBtn}
+            onPress={onToggleManaging}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: managing }}
+            testID="goal-marks-manage"
+          >
+            <Text style={[styles.manageBtnText, { color: c.accent }]}>
+              {managing ? 'Done' : 'Manage'}
+            </Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
       {marks.length === 0 ? (
         <View style={[styles.emptyMarks, { backgroundColor: c.surface, borderColor: c.borderLight }]}>
           <Text style={[styles.emptyMarksText, { color: c.inkMid }]}>
@@ -258,6 +364,12 @@ function LinkedMarkRows({
             <Plus size={14} color={c.inkInverse} weight="bold" />
             <Text style={[styles.addMarkBtnText, { color: c.inkInverse }]}>Add a mark</Text>
           </TouchableOpacity>
+          {canLinkMore ? (
+            <TouchableOpacity style={styles.linkExistingBtn} onPress={onLinkExisting} activeOpacity={0.7}>
+              <LinkSimple size={14} color={c.accent} weight="bold" />
+              <Text style={[styles.linkExistingText, { color: c.accent }]}>Link one you already have</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       ) : (
         marks.map(mark => {
@@ -290,19 +402,51 @@ function LinkedMarkRows({
                   />
                 </View>
               </View>
-              <TouchableOpacity
-                style={[styles.logBtn, { backgroundColor: applyOpacity(c.accent, 0.12) }]}
-                onPress={() => onQuickLog(mark.id)}
-                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                activeOpacity={0.7}
-                accessibilityLabel={`Log ${mark.name}`}
-              >
-                <Plus size={16} color={c.accent} weight="bold" />
-              </TouchableOpacity>
+              {managing ? (
+                <TouchableOpacity
+                  style={[styles.logBtn, { backgroundColor: applyOpacity(c.inkMuted, 0.12) }]}
+                  onPress={() => onUnlink(mark)}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                  activeOpacity={0.7}
+                  accessibilityLabel={`Unlink ${mark.name} from this goal`}
+                >
+                  <LinkBreak size={16} color={c.inkMid} weight="bold" />
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.logBtn, { backgroundColor: applyOpacity(c.accent, 0.12) }]}
+                  onPress={() => onQuickLog(mark.id)}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                  activeOpacity={0.7}
+                  accessibilityLabel={`Log ${mark.name}`}
+                >
+                  <Plus size={16} color={c.accent} weight="bold" />
+                </TouchableOpacity>
+              )}
             </TouchableOpacity>
           );
         })
       )}
+
+      {/* QC4-L: both ways to grow the goal, side by side. Hidden at the free
+          per-goal cap, where the paywall path takes over. */}
+      {marks.length > 0 ? (
+        <View style={styles.markActions}>
+          <TouchableOpacity style={styles.markActionBtn} onPress={onAddMark} activeOpacity={0.7}>
+            <Plus size={14} color={c.accent} weight="bold" />
+            <Text style={[styles.markActionText, { color: c.accent }]}>New mark</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.markActionBtn}
+            onPress={onLinkExisting}
+            activeOpacity={0.7}
+            testID="goal-link-existing"
+          >
+            <LinkSimple size={14} color={c.accent} weight="bold" />
+            <Text style={[styles.markActionText, { color: c.accent }]}>Link existing</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -621,8 +765,14 @@ export default function GoalDetailScreen() {
   const { incrementCounter } = useCounters();
   const { showError } = useNotification();
 
+  const { isProUnlocked } = useIapSubscriptions();
+
   const goal = useGoalsStore(s => s.goals.find(g => g.id === id));
+  const goals = useGoalsStore(s => s.goals);
   const marks = useMarksStore(s => s.marks);
+  const updateMark = useMarksStore(s => s.updateMark);
+  const linkMarkToGoal = useGoalsStore(s => s.linkMarkToGoal);
+  const unlinkMarkFromGoal = useGoalsStore(s => s.unlinkMarkFromGoal);
   const updateGoalTitle = useGoalsStore(s => s.updateGoalTitle);
   const updateGoalTargetDate = useGoalsStore(s => s.updateGoalTargetDate);
   const completeGoal = useGoalsStore(s => s.completeGoal);
@@ -647,6 +797,10 @@ export default function GoalDetailScreen() {
   const [titleDraft, setTitleDraft] = useState(goal?.title ?? '');
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [pickerDate, setPickerDate] = useState(new Date());
+  // QC4-L: view state (which control the rows show, whether the sheet is up) —
+  // transient, never persisted, so useState is right here.
+  const [managingMarks, setManagingMarks] = useState(false);
+  const [showLinkSheet, setShowLinkSheet] = useState(false);
 
   const handleSaveTitle = useCallback(async () => {
     if (titleDraft.trim().length >= 3) {
@@ -658,6 +812,28 @@ export default function GoalDetailScreen() {
   const linkedMarks = useMemo(
     () => marks.filter(m => m.goal_id === id && !m.deleted_at),
     [marks, id],
+  );
+
+  // QC4-L: candidates to link = every live mark not already on this goal. A
+  // mark carries one goal_id, so a candidate already on another goal MOVES —
+  // the sheet names that goal rather than letting it happen quietly.
+  const linkCandidates = useMemo(
+    () => marks.filter(m => !m.deleted_at && m.goal_id !== id),
+    [marks, id],
+  );
+
+  const goalTitleById = useCallback(
+    (goalId: string | null | undefined) =>
+      goalId ? goals.find(g => g.id === goalId)?.title : undefined,
+    [goals],
+  );
+
+  // The real gate from lib/gating.ts — free is 5 marks per goal, Livra+ lifts
+  // it. Control itself is never premium: unlink, manage and choose stay free at
+  // any tier; only the cap on how many is a Livra+ line.
+  const canLinkMore = useMemo(
+    () => canAddMarkToGoal(isProUnlocked, countMarksInGoal(marks, id ?? '')),
+    [isProUnlocked, marks, id],
   );
 
   // M4 (PL-5): a goal that never had a mark gets day-one copy; a goal whose
@@ -703,6 +879,68 @@ export default function GoalDetailScreen() {
       }
     },
     [userId, incrementCounter, showError],
+  );
+
+  // QC4-L: a mark reaches a goal through TWO records — `mark.goal_id` (what
+  // this screen and the free cap read) and `goal_mark_links` / `linked_mark_ids`
+  // (what progress and momentum read). Creation writes both; linking here must
+  // too, or the mark shows in the list and counts against the cap while
+  // contributing nothing to the ring.
+  const handleOpenLinkSheet = useCallback(() => {
+    if (!canLinkMore) {
+      showError(`That’s ${FREE_MARKS_PER_GOAL} marks on this goal. Livra+ lets you add more.`);
+      setTimeout(() => router.push('/paywall'), 2000);
+      return;
+    }
+    setShowLinkSheet(true);
+  }, [canLinkMore, showError, router]);
+
+  const handleLinkExisting = useCallback(
+    async (markId: string) => {
+      setShowLinkSheet(false);
+      const previousGoalId = marks.find(m => m.id === markId)?.goal_id ?? null;
+      try {
+        if (previousGoalId && previousGoalId !== id) {
+          await unlinkMarkFromGoal(previousGoalId, markId);
+        }
+        await updateMark(markId, { goal_id: id! });
+        await linkMarkToGoal(id!, markId);
+      } catch (error: unknown) {
+        logger.error('Error linking mark to goal:', error);
+        showError('Could not link that mark. Try again.');
+      }
+    },
+    [marks, id, unlinkMarkFromGoal, updateMark, linkMarkToGoal, showError],
+  );
+
+  // The honest version. Unlinking leaves every logged event intact on the mark
+  // — nothing is deleted — but this goal's ring counts only the marks still
+  // linked (lib/goalLogic.ts calculateGoalProgress), so it will step back. Say
+  // that plainly up front instead of letting the number move unexplained. No
+  // guilt, no warning-off: the user asked for control.
+  const handleUnlink = useCallback(
+    (mark: Mark) => {
+      Alert.alert(
+        'Unlink this mark?',
+        `"${mark.name}" keeps all of its history and carries on as a daily habit. This goal's progress will count only the marks still linked to it.`,
+        [
+          { text: 'Keep it linked', style: 'cancel' },
+          {
+            text: 'Unlink',
+            onPress: () => {
+              (async () => {
+                await unlinkMarkFromGoal(id!, mark.id);
+                await updateMark(mark.id, { goal_id: null });
+              })().catch((error: unknown) => {
+                logger.error('Error unlinking mark from goal:', error);
+                showError('Could not unlink that mark. Try again.');
+              });
+            },
+          },
+        ],
+      );
+    },
+    [id, unlinkMarkFromGoal, updateMark, showError],
   );
 
   if (!goal) {
@@ -767,8 +1005,13 @@ export default function GoalDetailScreen() {
           marks={linkedMarks}
           weeklyCountsMap={weeklyCountsMap}
           emptyLine={emptyMarksLine}
+          managing={managingMarks}
+          onToggleManaging={() => setManagingMarks(v => !v)}
+          canLinkMore={canLinkMore && linkCandidates.length > 0}
           onQuickLog={handleQuickLog}
           onAddMark={() => router.push({ pathname: '/mark/new', params: { goalId: id } } as any)}
+          onLinkExisting={handleOpenLinkSheet}
+          onUnlink={handleUnlink}
           onOpenMark={(markId) => router.push(`/mark/${markId}` as any)}
         />
 
@@ -788,6 +1031,15 @@ export default function GoalDetailScreen() {
           onDelete={() => confirmRemoveGoal(goal.title, () => deleteGoal(id!), () => router.back())}
         />
       </ScrollView>
+
+      <LinkMarkSheet
+        c={c}
+        visible={showLinkSheet}
+        candidates={linkCandidates}
+        goalTitleById={goalTitleById}
+        onPick={(markId) => { void handleLinkExisting(markId); }}
+        onClose={() => setShowLinkSheet(false)}
+      />
 
       <TargetDateSheet
         c={c}
@@ -963,6 +1215,58 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.md,
   },
   addMarkBtnText: { fontSize: fontSize.sm, fontFamily: fonts.sansSemibold },
+
+  // QC4-L: manage / link affordances. Every target clears the HIG minimum from
+  // the shared token — real boxes, never hitSlop.
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  manageBtn: {
+    minHeight: headerControl.minTarget,
+    justifyContent: 'center',
+    paddingLeft: spacing.md,
+  },
+  manageBtnText: { fontSize: fontSize.sm, fontFamily: fonts.sansMedium },
+  markActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  markActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    minHeight: headerControl.minTarget,
+  },
+  markActionText: { fontSize: fontSize.sm, fontFamily: fonts.sansMedium },
+  linkExistingBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    minHeight: headerControl.minTarget,
+  },
+  linkExistingText: { fontSize: fontSize.sm, fontFamily: fonts.sansMedium },
+  pickerList: { maxHeight: 320 },
+  pickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    minHeight: headerControl.minTarget,
+  },
+  pickerRowHint: { fontSize: fontSize.xs, fontFamily: fonts.sans },
+  pickerEmpty: {
+    fontFamily: fonts.serifItalic,
+    fontSize: fontSize.lg,
+    lineHeight: 22,
+    paddingVertical: spacing.md,
+  },
 
   // Journal preview (QC3-D)
   journalCloudRow: {

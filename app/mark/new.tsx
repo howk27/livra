@@ -37,7 +37,12 @@ import { logger } from '../../lib/utils/logger';
 import CounterIcon from '@/src/components/icons/CounterIcon';
 import { applyOpacity, foregroundForHexBackground } from '@/src/components/icons/color';
 import type { MarkType } from '@/src/types/counters';
-import { getCategoryColor, getCategoryForIcon, getCategoryForSuggestedCounter } from '../../lib/markCategory';
+import {
+  CATEGORY_LABELS,
+  colorForSuggestedCounter,
+  getCategoryColor,
+  getCategoryForIcon,
+} from '../../lib/markCategory';
 import {
   FrequencyPreset,
   DEFAULT_FREQUENCY_PRESET,
@@ -138,12 +143,26 @@ export default function NewCounterScreen() {
   const { createCounter, counters } = useCounters();
   const { user } = useAuth();
   const { showError, showSuccess } = useNotification();
-  const activeGoal = useGoalsStore(s => s.goals.find(g => g.status === 'active'));
+  // QC4-L: WHICH goal a new mark joins is the user's call. This used to be
+  // `goals.find(g => g.status === 'active')` — the FIRST active goal, with no
+  // chooser — so a user with several goals watched their mark attach to an
+  // arbitrary one. It also read `useGoalsStore.getState()` inline during
+  // render, which is a snapshot outside the subscription: the title never
+  // updated when the goal did. Both go through selectors now.
+  const goals = useGoalsStore(s => s.goals);
+  const goalsLoading = useGoalsStore(s => s.isLoading);
+  const goalsError = useGoalsStore(s => s.error);
   const linkMarkToGoal = useGoalsStore(s => s.linkMarkToGoal);
-  const targetGoalId = goalIdParam ?? activeGoal?.id ?? null;
-  const targetGoalTitle = goalIdParam
-    ? useGoalsStore.getState().goals.find(g => g.id === goalIdParam)?.title
-    : activeGoal?.title;
+  const activeGoals = useMemo(() => goals.filter(g => g.status === 'active'), [goals]);
+  // Smart default (ux-psychology): one active goal is not a decision — don't
+  // stage one. Two or more, and the user picks; we never guess for them.
+  const soleActiveGoalId = activeGoals.length === 1 ? activeGoals[0].id : null;
+  const [chosenGoalId, setChosenGoalId] = useState<string | null>(goalIdParam ?? null);
+  const targetGoalId = chosenGoalId ?? soleActiveGoalId;
+  const targetGoal = useMemo(
+    () => (targetGoalId ? goals.find(g => g.id === targetGoalId) : undefined),
+    [goals, targetGoalId],
+  );
 
   const [name, setName] = useState('');
   const [selectedIconType, setSelectedIconType] = useState<Exclude<MarkType, 'custom'>>(ICON_OPTIONS[0]);
@@ -155,7 +174,14 @@ export default function NewCounterScreen() {
   const [frequencyPreset, setFrequencyPreset] = useState<FrequencyPreset>(DEFAULT_FREQUENCY_PRESET);
   const [loading, setLoading] = useState(false);
   const [dailyTarget, setDailyTarget] = useState(1);
-  const [linkToGoal, setLinkToGoal] = useState(!!targetGoalId);
+  // null = the user hasn't touched the toggle, so it follows the smart default.
+  // A plain `useState(!!targetGoalId)` would freeze the default at first render
+  // and miss goals that arrive from the async fetch a beat later.
+  const [linkToGoalOverride, setLinkToGoalOverride] = useState<boolean | null>(null);
+  const linkToGoal = linkToGoalOverride ?? !!targetGoalId;
+  // Link only ever happens to a goal the user can see named on screen.
+  const linkTargetId = linkToGoal ? targetGoalId : null;
+  const needsGoalChoice = linkToGoal && !targetGoalId;
   const [pendingSuggestedCounter, setPendingSuggestedCounter] = useState<SuggestedCounter | null>(null);
   // QC4-F: transient disclosure state for the icon grid — view state, not
   // persistent mark data, so useState is correct here (no slice).
@@ -278,8 +304,8 @@ export default function NewCounterScreen() {
   // new mark to its goal (fire-and-forget), toast, then pop back after the
   // toast is visible. Callers pass their own success copy.
   const finishMarkCreation = (savedMark: { id?: string } | null | undefined, successMessage: string) => {
-    if (linkToGoal && targetGoalId && savedMark?.id) {
-      linkMarkToGoal(targetGoalId, savedMark.id).catch(() => {});
+    if (linkTargetId && savedMark?.id) {
+      linkMarkToGoal(linkTargetId, savedMark.id).catch(() => {});
     }
     showSuccess(successMessage);
     setTimeout(() => {
@@ -289,21 +315,27 @@ export default function NewCounterScreen() {
 
   const handleConfirmSuggestedCounter = async () => {
     if (!pendingSuggestedCounter) return;
+    if (needsGoalChoice) {
+      showError('Pick which goal this mark belongs to.');
+      return;
+    }
 
     try {
       setLoading(true);
-      const categoryColor = getCategoryColor(getCategoryForSuggestedCounter(pendingSuggestedCounter));
       const savedMark = await createCounter({
         name: pendingSuggestedCounter.name,
         emoji: pendingSuggestedCounter.emoji,
-        color: categoryColor,
+        // QC4-M: the exact color the chip above previewed.
+        color: colorForSuggestedCounter(pendingSuggestedCounter),
         unit: 'sessions' as const,
         enable_streak: false,
         user_id: user?.id!,
         dailyTarget,
         frequency_kind: pendingSuggestedCounter.frequencyKind,
         weekly_target: pendingSuggestedCounter.frequency_recommended ?? 3,
-        ...(linkToGoal && targetGoalId ? { goal_id: targetGoalId } : {}),
+        // The per-goal free cap (5, lib/gating.ts) is enforced by createCounter
+        // off this goal_id — never reimplemented here.
+        ...(linkTargetId ? { goal_id: linkTargetId } : {}),
       } as any);
       setPendingSuggestedCounter(null);
       finishMarkCreation(savedMark, 'Mark added');
@@ -318,6 +350,10 @@ export default function NewCounterScreen() {
   const handleSave = async () => {
     if (!name.trim()) {
       showError('Give your mark a name first.');
+      return;
+    }
+    if (needsGoalChoice) {
+      showError('Pick which goal this mark belongs to.');
       return;
     }
 
@@ -344,7 +380,9 @@ export default function NewCounterScreen() {
         schedule_days: schedule.schedule_days,
         weekly_target: weeklyTarget,
         frequency_kind: 'variable',
-        ...(linkToGoal && targetGoalId ? { goal_id: targetGoalId } : {}),
+        // The per-goal free cap (5, lib/gating.ts) is enforced by createCounter
+        // off this goal_id — never reimplemented here.
+        ...(linkTargetId ? { goal_id: linkTargetId } : {}),
       } as any);
 
       finishMarkCreation(savedMark, 'Mark created');
@@ -420,6 +458,12 @@ export default function NewCounterScreen() {
           {POPULAR_MARKS.map((mark) => {
             const staged = pendingSuggestedCounter?.id === mark.id;
             const MarkIcon = mark.icon;
+            // QC4-M: the chip paints in the SAME color the created mark will
+            // carry — one resolver, called here and at save. The chip used to
+            // read `mark.color` (the library's own authored hex) while save
+            // derived a bright generic from a keyword guess, so the mark you
+            // previewed was never the mark you got.
+            const markColor = colorForSuggestedCounter(mark);
             return (
               <TouchableOpacity
                 key={mark.id}
@@ -429,8 +473,8 @@ export default function NewCounterScreen() {
                     width: popularChipWidth,
                     backgroundColor: staged
                       ? applyOpacity(themeColors.forest, 0.1)
-                      : applyOpacity(mark.color, 0.14),
-                    borderColor: staged ? themeColors.forest : applyOpacity(mark.color, 0.45),
+                      : applyOpacity(markColor, 0.14),
+                    borderColor: staged ? themeColors.forest : applyOpacity(markColor, 0.45),
                   },
                 ]}
                 onPress={() => handleStagePopularMark(mark)}
@@ -439,7 +483,7 @@ export default function NewCounterScreen() {
                 accessibilityState={{ selected: staged }}
               >
                 {MarkIcon ? (
-                  <MarkIcon weight="duotone" size={18} color={staged ? themeColors.forest : mark.color} />
+                  <MarkIcon weight="duotone" size={18} color={staged ? themeColors.forest : markColor} />
                 ) : null}
                 <Text
                   style={[styles.popularChipText, { color: themeColors.inkDark }]}
@@ -497,7 +541,9 @@ export default function NewCounterScreen() {
           />
           <View style={styles.sectionHeaderRow}>
             <Text style={[styles.groupLabel, styles.groupLabelInRow, { color: themeColors.inkMuted }]}>Give it a face</Text>
-            <Text style={[styles.categoryLabel, { color: themeColors.inkMid }]}>{selectedCategory}</Text>
+            <Text style={[styles.categoryLabel, { color: themeColors.inkMid }]}>
+              {CATEGORY_LABELS[selectedCategory]}
+            </Text>
           </View>
           <View style={styles.iconGrid}>
             {visibleIconOptions.map((iconType) => {
@@ -630,22 +676,79 @@ export default function NewCounterScreen() {
           </Text>
         </View>
 
-        {targetGoalId && targetGoalTitle ? (
-          <TouchableOpacity
-            style={[styles.card, styles.streakCard, { backgroundColor: themeColors.surface, borderColor: themeColors.borderMid }]}
-            onPress={() => setLinkToGoal(!linkToGoal)}
-            activeOpacity={0.85}
+        {/* QC4-L: the goal this mark joins — the user's choice, not the first
+            active goal's. Loading / error / empty all handled: no goals at all
+            means no card, and the mark saves as a standalone daily habit. */}
+        {goalsLoading && activeGoals.length === 0 ? (
+          <View style={[styles.card, { backgroundColor: themeColors.surface, borderColor: themeColors.borderMid }]}>
+            <Text style={[styles.toggleDescription, { color: themeColors.inkMuted }]}>
+              Loading your goals…
+            </Text>
+          </View>
+        ) : goalsError && activeGoals.length === 0 ? (
+          <View style={[styles.card, { backgroundColor: themeColors.surface, borderColor: themeColors.borderMid }]}>
+            <Text style={[styles.toggleDescription, { color: themeColors.inkMid }]}>
+              We couldn’t load your goals. This mark will save as a daily habit. You can link it from the goal later.
+            </Text>
+          </View>
+        ) : activeGoals.length > 0 ? (
+          <View
+            style={[styles.card, { backgroundColor: themeColors.surface, borderColor: themeColors.borderMid }]}
           >
-            <View style={styles.streakTextWrap}>
-              <Text style={[styles.toggleLabel, { color: themeColors.inkDark }]}>Link to goal</Text>
-              <Text style={[styles.toggleDescription, { color: themeColors.inkMid }]} numberOfLines={1}>
-                {targetGoalTitle}
-              </Text>
-            </View>
-            <View style={[styles.toggleSwitch, { backgroundColor: linkToGoal ? color : themeColors.borderMid, alignItems: linkToGoal ? 'flex-end' : 'flex-start' }]}>
-              <View style={[styles.toggleThumb, { backgroundColor: themeColors.surface }]} />
-            </View>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.goalToggleRow}
+              onPress={() => setLinkToGoalOverride(!linkToGoal)}
+              activeOpacity={0.85}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: linkToGoal }}
+              accessibilityLabel="Link this mark to a goal"
+            >
+              <View style={styles.streakTextWrap}>
+                <Text style={[styles.toggleLabel, { color: themeColors.inkDark }]}>Link to goal</Text>
+                <Text style={[styles.toggleDescription, { color: themeColors.inkMid }]} numberOfLines={1}>
+                  {!linkToGoal
+                    ? 'Keep it as a daily habit'
+                    : (targetGoal?.title ?? 'Choose which goal')}
+                </Text>
+              </View>
+              <View style={[styles.toggleSwitch, { backgroundColor: linkToGoal ? color : themeColors.borderMid, alignItems: linkToGoal ? 'flex-end' : 'flex-start' }]}>
+                <View style={[styles.toggleThumb, { backgroundColor: themeColors.surface }]} />
+              </View>
+            </TouchableOpacity>
+
+            {/* One active goal is not a decision — no chooser. Two or more and
+                the user picks; nothing is pre-selected for them. */}
+            {linkToGoal && activeGoals.length > 1 ? (
+              <View style={styles.goalChooser} testID="goal-chooser">
+                {activeGoals.map((g) => {
+                  const picked = g.id === targetGoalId;
+                  return (
+                    <TouchableOpacity
+                      key={g.id}
+                      style={[
+                        styles.goalOption,
+                        {
+                          backgroundColor: picked ? applyOpacity(color, 0.14) : themeColors.linen,
+                          borderColor: picked ? color : themeColors.borderMid,
+                        },
+                      ]}
+                      onPress={() => setChosenGoalId(g.id)}
+                      activeOpacity={0.85}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: picked }}
+                    >
+                      <Text
+                        style={[styles.goalOptionText, { color: picked ? color : themeColors.inkMid }]}
+                        numberOfLines={1}
+                      >
+                        {g.title}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ) : null}
+          </View>
         ) : null}
 
         <View style={{ height: spacing.md }} />
@@ -922,10 +1025,28 @@ const styles = StyleSheet.create({
     fontSize: fontSize[13],
     fontWeight: fontWeight.semibold,
   },
-  streakCard: {
+  // QC4-L: the toggle row inside the goal card. The card is a View now (it hosts
+  // the chooser below), so the row carries the touch target itself.
+  goalToggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
+    minHeight: headerControl.minTarget,
+  },
+  goalChooser: {
+    gap: spacing.xs,
+    marginTop: spacing.md,
+  },
+  goalOption: {
+    justifyContent: 'center',
+    minHeight: headerControl.minTarget,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.md,
+    borderWidth: 1.5,
+  },
+  goalOptionText: {
+    fontSize: fontSize.base,
+    fontWeight: fontWeight.medium,
   },
   streakTextWrap: {
     flex: 1,
