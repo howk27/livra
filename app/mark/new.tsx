@@ -38,7 +38,6 @@ import CounterIcon from '@/src/components/icons/CounterIcon';
 import { applyOpacity, foregroundForHexBackground } from '@/src/components/icons/color';
 import type { MarkType } from '@/src/types/counters';
 import {
-  CATEGORY_LABELS,
   colorForSuggestedCounter,
   getCategoryColor,
   getCategoryForIcon,
@@ -50,7 +49,7 @@ import {
   weeklyTargetForPreset,
   scheduleForPreset,
 } from '../../lib/markFrequencyPreset';
-import { ICON_TYPE_TO_EMOJI, MARK_ICON_OPTIONS, MARK_ICON_PRIMARY } from '../../lib/markIcons';
+import { ICON_TYPE_TO_EMOJI, MARK_ICON_OPTIONS, MARK_ICON_PRIMARY, groupMarkIcons } from '../../lib/markIcons';
 import { MarkRowPreview } from '../../components/creation/MarkRowPreview';
 import { cadenceLabel, suggestedCadenceLabel } from '../../lib/creation/creationPreview';
 
@@ -193,6 +192,11 @@ export default function NewCounterScreen() {
   const iconCellSize = useMemo(() => {
     const scrollPad = spacing.lg;
     // The icon grid lives inside styles.card, whose padding is spacing.md.
+    // QC5-A: grouping wraps each band in styles.iconGroup, which adds VERTICAL
+    // separation only (marginTop) — no horizontal padding, no nested gutter — so
+    // the width available to a row is byte-for-byte what it was before the
+    // groups existed and this derivation still holds. Any horizontal inset added
+    // to a band must be subtracted here too.
     const cardPad = spacing.md;
     const rowInner = SCREEN_WIDTH - scrollPad * 2 - cardPad * 2;
     const gap = spacing.sm;
@@ -210,6 +214,9 @@ export default function NewCounterScreen() {
   const selectedIconIsPrimary = MARK_ICON_PRIMARY.includes(selectedIconType);
   const iconsShowingAll = iconsExpanded || !selectedIconIsPrimary;
   const visibleIconOptions = iconsShowingAll ? ICON_OPTIONS : MARK_ICON_PRIMARY;
+  // QC5-A: the grid carries the category itself — grouped bands with a break
+  // between them — so no slot is reserved to print the category's name.
+  const visibleIconGroups = useMemo(() => groupMarkIcons(visibleIconOptions), [visibleIconOptions]);
 
   // QC4-H: two full-width columns inside the scroll gutter. The popular grid
   // sits directly in scrollContent (not inside styles.card), so only the
@@ -220,7 +227,10 @@ export default function NewCounterScreen() {
   }, []);
   const selectedCategory = useMemo(() => getCategoryForIcon(selectedIconType), [selectedIconType]);
   // VD-7: color is always the category-derived color — the manual hex palette
-  // ("Vibe" grid) is gone; the category label on the icon card is the identity feedback.
+  // ("Vibe" grid) is gone. QC5-A removed the reserved category-name slot but NOT
+  // this derivation: `selectedCategory` still resolves the mark's color, and the
+  // identity feedback moved into the grid — the band your pick sits in names its
+  // category, and that band's category is what paints it.
   const color = getCategoryColor(selectedCategory);
 
   const scheduleDaysForDisplay =
@@ -539,39 +549,50 @@ export default function NewCounterScreen() {
             placeholder="e.g. Morning run"
             placeholderTextColor={themeColors.inkMuted}
           />
-          <View style={styles.sectionHeaderRow}>
-            <Text style={[styles.groupLabel, styles.groupLabelInRow, { color: themeColors.inkMid }]}>Give it a face</Text>
-            <Text style={[styles.categoryLabel, { color: themeColors.inkMid }]}>
-              {CATEGORY_LABELS[selectedCategory]}
-            </Text>
-          </View>
-          <View style={styles.iconGrid}>
-            {visibleIconOptions.map((iconType) => {
-              const isSelected = iconType === selectedIconType;
-              return (
-                <TouchableOpacity
-                  key={iconType}
-                  style={[
-                    styles.iconButton,
-                    {
-                      width: iconCellSize,
-                      height: iconCellSize,
-                      backgroundColor: isSelected ? applyOpacity(color, 0.14) : themeColors.linen,
-                      borderColor: isSelected ? color : themeColors.borderMid,
-                    },
-                  ]}
-                  onPress={() => setSelectedIconType(iconType)}
-                >
-                  <CounterIcon
-                    type={iconType as any}
-                    size={Math.min(28, Math.floor(iconCellSize * 0.45))}
-                    color={isSelected ? color : themeColors.inkMid}
-                    variant="symbol"
-                  />
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+          {/* QC5-A: no reserved category slot beside the label — the grid below
+              says the category by grouping, not by printing a name into a gap. */}
+          <Text style={[styles.groupLabel, styles.groupLabelFace, { color: themeColors.inkMid }]}>
+            Give it a face
+          </Text>
+          {visibleIconGroups.map((group, groupIndex) => (
+            <View
+              key={group.category}
+              style={[styles.iconGroup, groupIndex === 0 ? styles.iconGroupFirst : null]}
+              testID={`icon-group-${group.category}`}
+            >
+              <Text style={[styles.iconGroupLabel, { color: themeColors.inkMid }]}>{group.label}</Text>
+              <View style={styles.iconGrid}>
+                {group.icons.map((iconType) => {
+                  const isSelected = iconType === selectedIconType;
+                  return (
+                    <TouchableOpacity
+                      key={iconType}
+                      style={[
+                        styles.iconButton,
+                        {
+                          width: iconCellSize,
+                          height: iconCellSize,
+                          backgroundColor: isSelected ? applyOpacity(color, 0.14) : themeColors.linen,
+                          borderColor: isSelected ? color : themeColors.borderMid,
+                        },
+                      ]}
+                      onPress={() => setSelectedIconType(iconType)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${group.label} · ${iconType.replace(/_/g, ' ')}`}
+                      accessibilityState={{ selected: isSelected }}
+                    >
+                      <CounterIcon
+                        type={iconType as any}
+                        size={Math.min(28, Math.floor(iconCellSize * 0.45))}
+                        color={isSelected ? color : themeColors.inkMid}
+                        variant="symbol"
+                      />
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          ))}
           {/* QC4-F: the disclosure. Hidden while the grid is forced open by a
               secondary selection — collapsing would hide the user's own pick. */}
           {selectedIconIsPrimary ? (
@@ -923,22 +944,38 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: spacing.sm,
   },
-  groupLabelInRow: {
-    textAlign: 'left',
-    marginBottom: 0,
-  },
   groupLabelSpaced: {
     marginTop: spacing.lg,
   },
-  categoryLabel: {
-    fontSize: fontSize.sm,
-  },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  // QC5-A: "Give it a face" keeps the card's centered group-label voice. It used
+  // to sit in a space-between row whose other half was the reserved category
+  // slot; with the slot gone there is no row, so the label stands on its own.
+  groupLabelFace: {
     marginTop: spacing.lg,
-    marginBottom: spacing.md,
+    marginBottom: 0,
+  },
+  // QC5-A: the break the founder asked for. Vertical only — spacing.lg between
+  // bands against the spacing.sm gap inside a band, so the gap that separates
+  // two categories reads as 3x the gap that separates two icons and the grouping
+  // is legible before any label is read. No horizontal inset: iconCellSize is
+  // derived from the card's real available width and a nested gutter here would
+  // silently invalidate it.
+  iconGroup: {
+    marginTop: spacing.lg,
+  },
+  // The first band answers "Give it a face" directly, so it sits closer to that
+  // label than two bands sit to each other — proximity carries the hierarchy.
+  iconGroupFirst: {
+    marginTop: spacing.md,
+  },
+  // QC5-A: a quiet band label, not a kicker. Sentence-case from CATEGORY_LABELS,
+  // sm/medium in inkMid — no uppercase, no letterSpacing (design-system ban, see
+  // CommitmentScreen `sectionLabel` + the QC3 kicker ban). It names the band; the
+  // break does the separating.
+  iconGroupLabel: {
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.medium,
+    marginBottom: spacing.sm,
   },
   cardHint: {
     fontSize: fontSize.sm,

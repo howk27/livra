@@ -1,6 +1,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { MARK_ICON_OPTIONS, MARK_ICON_PRIMARY, MARK_ICON_SECONDARY } from '../../lib/markIcons';
+import { MARK_ICON_OPTIONS, MARK_ICON_PRIMARY, MARK_ICON_SECONDARY, groupMarkIcons } from '../../lib/markIcons';
+import { CATEGORY_LABELS, getCategoryForIcon } from '../../lib/markCategory';
 
 /**
  * VD-7 acceptance guards for the creation flows.
@@ -125,13 +126,120 @@ describe('icon picker disclosure (QC4-F)', () => {
 
   it('the grid renders the collapsed set behind a real 44pt disclosure target', () => {
     const src = readFileSync(join(ROOT, 'app/mark/new.tsx'), 'utf8');
-    // Renders the sliced set, not the full list.
-    expect(src).toMatch(/visibleIconOptions\.map/);
+    // Renders the sliced set, not the full list. QC5-A: the sliced set is now
+    // rendered THROUGH the category grouping (`visibleIconOptions` →
+    // `groupMarkIcons` → bands), so the disclosure is asserted at the derivation
+    // rather than at a flat `.map` that no longer exists.
+    expect(src).toMatch(/groupMarkIcons\(visibleIconOptions\)/);
+    expect(src).toMatch(/visibleIconGroups\.map/);
     expect(src).toMatch(/iconsExpanded \|\| !selectedIconIsPrimary/);
     // Disclosure target comes off the shared HIG token, and is a real box —
     // hitSlop clips at the parent's bounds and can never be trusted for this.
     expect(src).toMatch(/iconDisclosure:\s*\{[\s\S]*?minHeight:\s*headerControl\.minTarget/);
     expect(stripComments(src)).not.toMatch(/hitSlop/);
+  });
+});
+
+/**
+ * QC5-A guards — the grid says the category; nothing reserves a slot for it.
+ *
+ * Founder: "What happened with the 4x4 grid on new marks, If you are leaving that
+ * space for the category, dont. Just add a break in between the 4x4 cards to mark
+ * the following category of Icons."
+ */
+describe('icon picker category grouping (QC5-A)', () => {
+  const src = readFileSync(join(ROOT, 'app/mark/new.tsx'), 'utf8');
+
+  it('no longer reserves a slot beside "Give it a face" for the category name', () => {
+    const code = stripComments(src);
+    expect(code).not.toMatch(/CATEGORY_LABELS\[selectedCategory\]/);
+    expect(code).not.toMatch(/styles\.categoryLabel/);
+    expect(code).not.toMatch(/styles\.sectionHeaderRow/);
+    // The label the founder kept.
+    expect(code).toContain('Give it a face');
+  });
+
+  it('still derives the mark color from the selected icon category (QC4-M contract)', () => {
+    const code = stripComments(src);
+    expect(code).toMatch(/getCategoryForIcon\(selectedIconType\)/);
+    expect(code).toMatch(/getCategoryColor\(selectedCategory\)/);
+  });
+
+  it('reads category from getCategoryForIcon — no second mapping', () => {
+    const iconsSrc = stripComments(readFileSync(join(ROOT, 'lib/markIcons.ts'), 'utf8'));
+    expect(iconsSrc).toMatch(/getCategoryForIcon\(iconType\)/);
+    // A local icon→category table here would be the drift QC4-M just deleted.
+    expect(iconsSrc).not.toMatch(/Record<[^>]*,\s*MarkCategory>/);
+  });
+
+  it('groups every icon under its own category, losing none and duplicating none', () => {
+    const groups = groupMarkIcons(MARK_ICON_OPTIONS);
+    expect(groups.flatMap((g) => g.icons)).toHaveLength(MARK_ICON_OPTIONS.length);
+    for (const group of groups) {
+      for (const iconType of group.icons) {
+        expect(getCategoryForIcon(iconType)).toBe(group.category);
+      }
+    }
+  });
+
+  it('opens exactly one band per category — no duplicate heading further down', () => {
+    const groups = groupMarkIcons(MARK_ICON_OPTIONS);
+    const categories = groups.map((g) => g.category);
+    expect(new Set(categories).size).toBe(categories.length);
+  });
+
+  it('labels bands from CATEGORY_LABELS, never an invented name', () => {
+    for (const group of groupMarkIcons(MARK_ICON_OPTIONS)) {
+      expect(group.label).toBe(CATEGORY_LABELS[group.category]);
+    }
+  });
+
+  it('"Show more" EXTENDS the bands already on screen rather than appending a tail', () => {
+    const collapsed = groupMarkIcons(MARK_ICON_PRIMARY);
+    const expanded = groupMarkIcons(MARK_ICON_OPTIONS);
+
+    // Every collapsed band survives expansion, in the same position, with its
+    // icons still leading it — the grid the user was looking at does not reorder.
+    collapsed.forEach((band, i) => {
+      expect(expanded[i].category).toBe(band.category);
+      expect(expanded[i].icons.slice(0, band.icons.length)).toEqual(band.icons);
+    });
+
+    // The restraint set (all `health`) lands INSIDE the existing Health band.
+    const health = expanded.find((g) => g.category === 'health');
+    expect(health?.icons).toEqual(expect.arrayContaining(['no_beer', 'no_smoking', 'no_sugar', 'soda_free']));
+    expect(expanded.filter((g) => g.category === 'health')).toHaveLength(1);
+
+    // Only genuinely new categories appear, and only after the ones already shown.
+    const newCategories = expanded.slice(collapsed.length).map((g) => g.category);
+    expect(newCategories.every((c) => !collapsed.some((b) => b.category === c))).toBe(true);
+  });
+
+  it('array order IS render order — PRIMARY is category-contiguous', () => {
+    // groupMarkIcons partitions on first appearance, so a scattered array would
+    // silently render in an order the source does not show.
+    const primaryBands = groupMarkIcons(MARK_ICON_PRIMARY);
+    expect(primaryBands.flatMap((g) => g.icons)).toEqual(MARK_ICON_PRIMARY);
+  });
+
+  it('the break is vertical only — a band adds no horizontal inset to the grid', () => {
+    // iconCellSize is derived from the card's real available width; a nested
+    // gutter inside a band would invalidate that derivation (the spacing.lg /
+    // spacing.md class of error a previous polish sweep already found here).
+    const block = src.match(/\n  iconGroup:\s*\{([\s\S]*?)\n  \}/)?.[1] ?? '';
+    expect(block).toMatch(/marginTop:\s*spacing\.lg/);
+    expect(block).not.toMatch(/padding|marginHorizontal|paddingHorizontal|width/);
+    expect(src).toMatch(/const cardPad = spacing\.md;/);
+  });
+
+  it('band labels are quiet — no tracked-uppercase kicker (design-system ban)', () => {
+    const block = src.match(/iconGroupLabel:\s*\{([\s\S]*?)\n  \}/)?.[1] ?? '';
+    expect(block).not.toMatch(/textTransform|letterSpacing/);
+    expect(block).toMatch(/fontSize:\s*fontSize\.sm/);
+  });
+
+  it('every icon target keeps the 44pt HIG floor off the shared token', () => {
+    expect(src).toMatch(/Math\.max\(cell,\s*headerControl\.minTarget\)/);
   });
 });
 

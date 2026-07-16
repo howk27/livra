@@ -1,4 +1,5 @@
 import type { MarkType } from '@/src/types/counters';
+import { CATEGORY_LABELS, getCategoryForIcon, type MarkCategory } from './markCategory';
 
 /**
  * Single source of truth for the manual mark-icon picker (creation + edit).
@@ -64,36 +65,53 @@ export const ICON_TYPE_TO_EMOJI: Record<SelectableMarkType, string> = {
  * exactly the guilt-forward first impression PRODUCT.md rules out. They are one
  * tap away, not gone.
  *
- * Within each group the order stays domain-grouped
- * (body → recovery → mind → learning → work → restraint).
+ * QC5-A: within each group the order is CATEGORY-CONTIGUOUS — every icon of a
+ * category sits next to its siblings, in the order `getCategoryForIcon` resolves
+ * them. `groupMarkIcons` partitions on exactly that, so array order and rendered
+ * order are the same fact and cannot drift. Same 16 members as QC4-F; only the
+ * sequence moved.
  */
 export const MARK_ICON_PRIMARY: SelectableMarkType[] = [
+  // fitness
   'gym',
   'steps',
+  // health
   'calories',
+  'water',
+  // recovery
   'sleep',
   'rest',
-  'water',
+  // mindset
   'meditation',
   'mood',
+  'journaling',
+  'gratitude',
+  // deep work
   'reading',
   'study',
   'language',
-  'journaling',
-  'gratitude',
   'focus',
   'tasks',
   'planning',
 ];
 
+/**
+ * QC5-A: ordered so the restraint marks (all `health`) land FIRST. Expanding the
+ * grid then extends the health group that is already on screen, rather than
+ * opening a second Health heading further down — the categories a user can
+ * already see grow in place, and only genuinely new ones (Discipline, Finance,
+ * Email) are appended at the end.
+ */
 export const MARK_ICON_SECONDARY: SelectableMarkType[] = [
-  'email',
-  'screen_free',
+  // health (the restraint set)
   'no_beer',
   'no_smoking',
   'no_sugar',
   'soda_free',
+  // the narrow tail — categories that exist only once the grid is expanded
+  'screen_free',
   'no_spending',
+  'email',
 ];
 
 /**
@@ -104,3 +122,50 @@ export const MARK_ICON_OPTIONS: SelectableMarkType[] = [
   ...MARK_ICON_PRIMARY,
   ...MARK_ICON_SECONDARY,
 ];
+
+/** One rendered band of the picker: a category and the icons that resolve to it. */
+export type MarkIconGroup = {
+  category: MarkCategory;
+  /** Display name from CATEGORY_LABELS — never a second, invented name. */
+  label: string;
+  icons: SelectableMarkType[];
+};
+
+/**
+ * QC5-A — the grid itself says the category, so nothing has to reserve a slot to
+ * name it.
+ *
+ * Founder: "What happened with the 4x4 grid on new marks, If you are leaving that
+ * space for the category, dont. Just add a break in between the 4x4 cards to mark
+ * the following category of Icons."
+ *
+ * Category comes from `getCategoryForIcon` (lib/markCategory.ts) — the same
+ * resolver that decides the mark's saved COLOR. There is no second mapping here,
+ * by construction: the break the user sees and the color the mark gets are the
+ * same answer to the same question.
+ *
+ * Order is first-appearance in the passed list, and an icon joins the group that
+ * is already open rather than starting a duplicate one. That is what makes the
+ * "Show more" disclosure extend the visible groups instead of appending an
+ * ungrouped tail: the collapsed call passes PRIMARY, the expanded call passes
+ * PRIMARY + SECONDARY, and every secondary icon whose category is already on
+ * screen lands inside that existing band.
+ */
+export function groupMarkIcons(icons: readonly SelectableMarkType[]): MarkIconGroup[] {
+  const groups: MarkIconGroup[] = [];
+  const byCategory = new Map<MarkCategory, MarkIconGroup>();
+
+  for (const iconType of icons) {
+    const category = getCategoryForIcon(iconType);
+    const existing = byCategory.get(category);
+    if (existing) {
+      existing.icons.push(iconType);
+      continue;
+    }
+    const group: MarkIconGroup = { category, label: CATEGORY_LABELS[category], icons: [iconType] };
+    byCategory.set(category, group);
+    groups.push(group);
+  }
+
+  return groups;
+}
