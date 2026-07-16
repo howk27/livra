@@ -21,7 +21,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { spacing, radius, shadow, themedColors, fontSize, fonts } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
-import { AddMarkSheet } from '../sheets/AddMarkSheet';
 
 const FAB_HINT_KEY = 'fab_hint_shown';
 const SPRING = { damping: 18, stiffness: 260, mass: 0.9 };
@@ -33,7 +32,6 @@ export function SpeedDialFAB() {
   const router = useRouter();
   const fabBottom = 64 + insets.bottom + 16;
   const [expanded, setExpanded] = useState(false);
-  const [markSheetVisible, setMarkSheetVisible] = useState(false);
 
   // Animation values
   const rotation = useSharedValue(0);
@@ -101,10 +99,13 @@ export function SpeedDialFAB() {
   }, [expanded, doExpand, doCollapse]);
 
   const handleAddMark = useCallback(() => {
+    // QC3-G: route straight into mark/new (no bottom sheet). The one
+    // add-a-mark surface now lives at /mark/new — popular marks first,
+    // "create your own" below — mirroring the QC3-A goal-path reroute.
     doCollapse();
     setExpanded(false);
-    setTimeout(() => setMarkSheetVisible(true), 160);
-  }, [doCollapse]);
+    router.push('/mark/new');
+  }, [doCollapse, router]);
 
   const handleAddGoal = useCallback(() => {
     // QC3-A: route straight into goal/new (no chooser sheet). The amber
@@ -179,21 +180,17 @@ export function SpeedDialFAB() {
           </View>
         </Animated.View>
 
-        {/* Main FAB — hidden while the add-mark sheet is open */}
-        {!markSheetVisible && (
-          <TouchableOpacity
-            style={[styles.fab, { backgroundColor: colors.forest, bottom: fabBottom }]}
-            onPress={toggle}
-            activeOpacity={0.9}
-          >
-            <Animated.View style={fabRotateStyle}>
-              <Plus size={22} color={colors.inkInverse} weight="bold" />
-            </Animated.View>
-          </TouchableOpacity>
-        )}
+        {/* Main FAB */}
+        <TouchableOpacity
+          style={[styles.fab, { backgroundColor: colors.forest, bottom: fabBottom }]}
+          onPress={toggle}
+          activeOpacity={0.9}
+        >
+          <Animated.View style={fabRotateStyle}>
+            <Plus size={22} color={colors.inkInverse} weight="bold" />
+          </Animated.View>
+        </TouchableOpacity>
       </View>
-
-      <AddMarkSheet visible={markSheetVisible} onClose={() => setMarkSheetVisible(false)} />
     </>
   );
 }

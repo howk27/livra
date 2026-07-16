@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -9,13 +9,14 @@ import {
   ActivityIndicator,
   Dimensions,
 } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { themedColors, spacing, borderRadius, fontSize, fontWeight, shadow } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
+import { useMotion } from '../../hooks/useMotion';
 import { useCounters } from '../../hooks/useCounters';
-import { SuggestedCountersList } from '../../components/SuggestedCountersList';
-import { SuggestedCounter } from '../../lib/suggestedCounters';
+import { SuggestedCounter, MARK_LIBRARY_BY_ID } from '../../lib/suggestedCounters';
 import { useAuth } from '../../hooks/useAuth';
 import { useGoalsStore } from '../../state/goalsSlice';
 import { DuplicateCounterError, DuplicateMarkError } from '../../state/countersSlice';
@@ -43,6 +44,15 @@ import { cadenceLabel, suggestedCadenceLabel } from '../../lib/creation/creation
 // shared with mark/[id]/edit.tsx so the two grids can never diverge.
 const ICON_OPTIONS = MARK_ICON_OPTIONS;
 
+// QC3-G: the popular-marks shortlist — real library marks (not the full 45),
+// resolved from MARK_LIBRARY_BY_ID so the chips carry the exact icon, color,
+// and cadence the created mark will keep. "Popular" = a curated first row the
+// founder asked to foreground, not the whole catalog.
+const POPULAR_MARK_IDS = ['run', 'workout', 'reading', 'meditation', 'water', 'sleep', 'journaling', 'study'];
+const POPULAR_MARKS: SuggestedCounter[] = POPULAR_MARK_IDS
+  .map((id) => MARK_LIBRARY_BY_ID[id])
+  .filter(Boolean);
+
 const ALL_SCHEDULE_DAYS: DayOfWeek[] = [0, 1, 2, 3, 4, 5, 6];
 const WEEKDAY_CHIPS: Array<{ value: DayOfWeek; label: string }> = [
   { value: 1, label: 'M' },
@@ -56,6 +66,54 @@ const WEEKDAY_CHIPS: Array<{ value: DayOfWeek; label: string }> = [
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const ICON_GRID_COLUMNS = 4;
+
+/**
+ * QC3-G: the staged confirm zone — rises under the popular grid when a chip is
+ * staged. One orchestrated entrance-settle motion moment (reduced-safe via
+ * useMotion), a centered daily-target stepper, and an inline "Add {name}" CTA.
+ */
+function StagedConfirmZone({
+  counter,
+  dailyTarget,
+  onChangeTarget,
+  onConfirm,
+  themeColors,
+}: {
+  counter: SuggestedCounter;
+  dailyTarget: number;
+  onChangeTarget: (next: number) => void;
+  onConfirm: () => void;
+  themeColors: ReturnType<typeof themedColors>;
+}) {
+  const { reduced, spring } = useMotion();
+  const entered = useSharedValue(reduced ? 1 : 0);
+  useEffect(() => {
+    entered.value = spring(1, 'settle');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: entered.value,
+    transform: [{ translateY: (1 - entered.value) * 10 }],
+  }));
+
+  return (
+    <Animated.View style={[styles.stagedZone, animatedStyle]}>
+      <Text style={[styles.stagedHint, { color: themeColors.inkMid }]}>
+        Set today’s target, then add it.
+      </Text>
+      <DailyTargetStepper value={dailyTarget} onChange={onChangeTarget} label={null} />
+      <TouchableOpacity
+        style={[styles.footerCta, styles.stagedCta, { backgroundColor: themeColors.forest }, shadow.sm]}
+        onPress={onConfirm}
+        activeOpacity={0.88}
+      >
+        <Text style={[styles.footerCtaText, { color: themeColors.inkInverse }]}>
+          Add {counter.name}
+        </Text>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
 
 export default function NewCounterScreen() {
   const theme = useEffectiveTheme();
@@ -73,12 +131,11 @@ export default function NewCounterScreen() {
     ? useGoalsStore.getState().goals.find(g => g.id === goalIdParam)?.title
     : activeGoal?.title;
 
-  const [mode, setMode] = useState<'suggested' | 'custom'>('suggested');
   const [name, setName] = useState('');
   const [selectedIconType, setSelectedIconType] = useState<Exclude<MarkType, 'custom'>>(ICON_OPTIONS[0]);
   const unit: 'sessions' | 'days' | 'items' = 'sessions';
-  const [goalValue, setGoalValue] = useState<number | null>(null);
-  const [goalPeriod, setGoalPeriod] = useState<GoalPeriod>('day');
+  const [goalValue] = useState<number | null>(null);
+  const [goalPeriod] = useState<GoalPeriod>('day');
   const [scheduleType, setScheduleType] = useState<ScheduleType>('daily');
   const [scheduleDays, setScheduleDays] = useState<DayOfWeek[]>([]);
   const [frequencyPreset, setFrequencyPreset] = useState<FrequencyPreset>(DEFAULT_FREQUENCY_PRESET);
@@ -105,6 +162,16 @@ export default function NewCounterScreen() {
   const scheduleDaysForDisplay =
     scheduleType === 'daily' ? ALL_SCHEDULE_DAYS : scheduleDays.length > 0 ? scheduleDays : [1, 2, 3, 4, 5];
 
+  // QC3-G: the shared MarkRowPreview fills from whichever path the user last
+  // touched — a staged popular chip, or the custom name/face/rhythm below.
+  const previewName = pendingSuggestedCounter ? pendingSuggestedCounter.name : name;
+  const previewEmoji = pendingSuggestedCounter
+    ? pendingSuggestedCounter.emoji
+    : ICON_TYPE_TO_EMOJI[selectedIconType] || ICON_TYPE_TO_EMOJI.gym;
+  const previewCadence = pendingSuggestedCounter
+    ? suggestedCadenceLabel(pendingSuggestedCounter)
+    : cadenceLabel(frequencyPreset, scheduleDaysForDisplay.length);
+
   const toggleScheduleDay = (day: DayOfWeek) => {
     const current = scheduleDaysForDisplay;
     const hasDay = current.includes(day);
@@ -124,8 +191,18 @@ export default function NewCounterScreen() {
     setScheduleDays(next as DayOfWeek[]);
   };
 
-  const handleSuggestedCounterSelect = (counter: SuggestedCounter) => {
-    setPendingSuggestedCounter(counter); // show the confirmation footer
+  // QC3-G: tapping a popular chip STAGES it (name + face + cadence fill the
+  // shared preview); tapping the staged chip again un-stages. Never an instant
+  // create — the user still confirms with "Add {name}" (founder call).
+  const handleStagePopularMark = (mark: SuggestedCounter) => {
+    setPendingSuggestedCounter((cur) => (cur?.id === mark.id ? null : mark));
+  };
+
+  // QC3-G: typing a custom name takes over the preview — clears any staged
+  // popular pick so the single preview never shows two sources at once.
+  const handleNameChange = (text: string) => {
+    setName(text);
+    if (pendingSuggestedCounter) setPendingSuggestedCounter(null);
   };
 
   // VD-7 retry #1: single failure handler for both create paths (suggested +
@@ -165,7 +242,7 @@ export default function NewCounterScreen() {
     try {
       setLoading(true);
       const categoryColor = getCategoryColor(getCategoryForSuggestedCounter(pendingSuggestedCounter));
-      await createCounter({
+      const savedMark = await createCounter({
         name: pendingSuggestedCounter.name,
         emoji: pendingSuggestedCounter.emoji,
         color: categoryColor,
@@ -175,7 +252,11 @@ export default function NewCounterScreen() {
         dailyTarget,
         frequency_kind: pendingSuggestedCounter.frequencyKind,
         weekly_target: pendingSuggestedCounter.frequency_recommended ?? 3,
+        ...(linkToGoal && targetGoalId ? { goal_id: targetGoalId } : {}),
       } as any);
+      if (linkToGoal && targetGoalId && savedMark?.id) {
+        linkMarkToGoal(targetGoalId, savedMark.id).catch(() => {});
+      }
       showSuccess('Mark added');
       setPendingSuggestedCounter(null);
       setTimeout(() => {
@@ -263,309 +344,268 @@ export default function NewCounterScreen() {
         <View style={{ width: headerSideWidth }} />
       </View>
 
-      <View style={[styles.modeToggle, { backgroundColor: themeColors.surfaceAlt || themeColors.surface }]}>
-        <TouchableOpacity
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        {/* QC2-H "The Card Takes Shape" / QC3-G: the REAL Focus mark row sits at
+            the top and assembles live — from a staged popular pick OR the
+            custom fields below, whichever the user last touched. */}
+        <MarkRowPreview
+          testID="mark-row-preview"
+          name={previewName}
+          emoji={previewEmoji}
+          cadence={previewCadence}
+        />
+        <Text style={[styles.benchLine, { color: themeColors.inkMuted }]}>
+          Your mark · exactly as it will sit on Focus.
+        </Text>
+
+        {/* Popular marks — real, colorful, tappable; a tap stages into the
+            preview above (no instant create). */}
+        <Text style={[styles.sectionLabel, { color: themeColors.inkDark }]}>Popular marks</Text>
+        <View style={styles.popularGrid}>
+          {POPULAR_MARKS.map((mark) => {
+            const staged = pendingSuggestedCounter?.id === mark.id;
+            const MarkIcon = mark.icon;
+            return (
+              <TouchableOpacity
+                key={mark.id}
+                style={[
+                  styles.popularChip,
+                  {
+                    backgroundColor: staged
+                      ? applyOpacity(themeColors.forest, 0.1)
+                      : applyOpacity(mark.color, 0.14),
+                    borderColor: staged ? themeColors.forest : applyOpacity(mark.color, 0.45),
+                  },
+                ]}
+                onPress={() => handleStagePopularMark(mark)}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityState={{ selected: staged }}
+              >
+                {MarkIcon ? (
+                  <MarkIcon weight="duotone" size={18} color={staged ? themeColors.forest : mark.color} />
+                ) : null}
+                <Text style={[styles.popularChipText, { color: themeColors.inkDark }]}>
+                  {mark.name}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {pendingSuggestedCounter ? (
+          <StagedConfirmZone
+            key={pendingSuggestedCounter.id}
+            counter={pendingSuggestedCounter}
+            dailyTarget={dailyTarget}
+            onChangeTarget={setDailyTarget}
+            onConfirm={handleConfirmSuggestedCounter}
+            themeColors={themeColors}
+          />
+        ) : null}
+
+        {/* Or create your own — always visible below the popular marks. */}
+        <View style={styles.divider}>
+          <View style={[styles.dividerLine, { backgroundColor: themeColors.borderMid }]} />
+          <Text style={[styles.dividerText, { color: themeColors.inkMuted }]}>Or create your own</Text>
+          <View style={[styles.dividerLine, { backgroundColor: themeColors.borderMid }]} />
+        </View>
+
+        {/* Identity: name + face, one quiet group. */}
+        <View
           style={[
-            styles.modeButton,
-            mode === 'suggested' && { backgroundColor: applyOpacity(themeColors.accent, 0.14) },
+            styles.card,
+            {
+              backgroundColor: themeColors.surface,
+              borderColor: themeColors.borderMid,
+            },
           ]}
-          onPress={() => setMode('suggested')}
         >
-          <Text
+          <Text style={[styles.groupLabel, { color: themeColors.inkMuted }]}>What you’ll do</Text>
+          <TextInput
             style={[
-              styles.modeButtonText,
-              { color: mode === 'suggested' ? themeColors.accent : themeColors.inkMid },
+              styles.inputInCard,
+              {
+                backgroundColor: themeColors.linen,
+                color: themeColors.inkDark,
+                borderColor: themeColors.borderMid,
+              },
             ]}
-          >
-            Suggested
+            value={name}
+            onChangeText={handleNameChange}
+            placeholder="e.g. Morning run"
+            placeholderTextColor={themeColors.inkMuted}
+          />
+          <View style={styles.sectionHeaderRow}>
+            <Text style={[styles.groupLabel, styles.groupLabelInRow, { color: themeColors.inkMuted }]}>Give it a face</Text>
+            <Text style={[styles.categoryLabel, { color: themeColors.inkMid }]}>{selectedCategory}</Text>
+          </View>
+          <View style={styles.iconGrid}>
+            {ICON_OPTIONS.map((iconType) => {
+              const isSelected = iconType === selectedIconType;
+              return (
+                <TouchableOpacity
+                  key={iconType}
+                  style={[
+                    styles.iconButton,
+                    {
+                      width: iconCellSize,
+                      height: iconCellSize,
+                      backgroundColor: isSelected ? applyOpacity(color, 0.14) : themeColors.linen,
+                      borderColor: isSelected ? color : themeColors.borderMid,
+                    },
+                  ]}
+                  onPress={() => setSelectedIconType(iconType)}
+                >
+                  <CounterIcon
+                    type={iconType as any}
+                    size={Math.min(28, Math.floor(iconCellSize * 0.45))}
+                    color={isSelected ? color : themeColors.inkMid}
+                    variant="symbol"
+                  />
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* Rhythm: how much and how often, one quiet group. */}
+        <View
+          style={[
+            styles.card,
+            {
+              backgroundColor: themeColors.surface,
+              borderColor: themeColors.borderMid,
+            },
+          ]}
+        >
+          <Text style={[styles.groupLabel, { color: themeColors.inkMuted }]}>Enough for today</Text>
+          <Text style={[styles.cardHint, { color: themeColors.inkMid, textAlign: 'center', marginBottom: spacing.md }]}>
+            How many times makes today count.
           </Text>
-        </TouchableOpacity>
+          <DailyTargetStepper value={dailyTarget} onChange={setDailyTarget} label={null} />
+          <Text style={[styles.groupLabel, styles.groupLabelSpaced, { color: themeColors.inkMuted }]}>How often</Text>
+          <View style={styles.presetRow}>
+            {(Object.keys(FREQUENCY_PRESET_LABELS) as FrequencyPreset[]).map((preset) => {
+              const active = preset === frequencyPreset;
+              return (
+                <TouchableOpacity
+                  key={preset}
+                  style={[
+                    styles.presetChip,
+                    {
+                      backgroundColor: active ? applyOpacity(color, 0.14) : themeColors.linen,
+                      borderColor: active ? color : themeColors.borderMid,
+                    },
+                  ]}
+                  onPress={() => setFrequencyPreset(preset)}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                >
+                  <Text
+                    style={[
+                      styles.presetChipText,
+                      { color: active ? color : themeColors.inkMid },
+                    ]}
+                  >
+                    {FREQUENCY_PRESET_LABELS[preset]}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {frequencyPreset === 'custom' ? (
+            <View style={styles.frequencyRow}>
+              {WEEKDAY_CHIPS.map(({ value, label }) => {
+                const active = scheduleDaysForDisplay.includes(value);
+                return (
+                  <TouchableOpacity
+                    key={`${label}-${value}`}
+                    style={[
+                      styles.dayChip,
+                      {
+                        backgroundColor: active ? color : themeColors.linen,
+                        borderColor: active ? color : themeColors.borderMid,
+                      },
+                    ]}
+                    onPress={() => toggleScheduleDay(value)}
+                    activeOpacity={0.8}
+                  >
+                    <Text
+                      style={[
+                        styles.dayChipText,
+                        {
+                          color: active ? foregroundForHexBackground(color, theme === 'dark') : themeColors.inkMid,
+                          opacity: active ? 1 : 0.72,
+                        },
+                      ]}
+                    >
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ) : null}
+
+          <Text style={[styles.cadenceHint, { color: themeColors.inkMuted }]}>
+            Log as many as you want · a met target never blocks today.
+          </Text>
+        </View>
+
+        {targetGoalId && targetGoalTitle ? (
+          <TouchableOpacity
+            style={[styles.card, styles.streakCard, { backgroundColor: themeColors.surface, borderColor: themeColors.borderMid }]}
+            onPress={() => setLinkToGoal(!linkToGoal)}
+            activeOpacity={0.85}
+          >
+            <View style={styles.streakTextWrap}>
+              <Text style={[styles.toggleLabel, { color: themeColors.inkDark }]}>Link to goal</Text>
+              <Text style={[styles.toggleDescription, { color: themeColors.inkMid }]} numberOfLines={1}>
+                {targetGoalTitle}
+              </Text>
+            </View>
+            <View style={[styles.toggleSwitch, { backgroundColor: linkToGoal ? color : themeColors.borderMid, alignItems: linkToGoal ? 'flex-end' : 'flex-start' }]}>
+              <View style={[styles.toggleThumb, { backgroundColor: themeColors.surface }]} />
+            </View>
+          </TouchableOpacity>
+        ) : null}
+
+        <View style={{ height: spacing.md }} />
+      </ScrollView>
+
+      <View
+        style={[
+          styles.footerCtaWrap,
+          {
+            borderTopColor: themeColors.borderMid,
+            backgroundColor: themeColors.linen,
+            paddingBottom: spacing.sm + insets.bottom,
+          },
+        ]}
+      >
         <TouchableOpacity
           style={[
-            styles.modeButton,
-            mode === 'custom' && { backgroundColor: applyOpacity(themeColors.accent, 0.14) },
+            styles.footerCta,
+            { backgroundColor: themeColors.forest, opacity: !name.trim() ? 0.4 : 1 },
+            shadow.sm,
           ]}
-          onPress={() => {
-            setMode('custom');
-            setPendingSuggestedCounter(null);
-          }}
+          onPress={handleSave}
+          disabled={loading || !name.trim()}
+          activeOpacity={0.88}
         >
-          <Text
-            style={[
-              styles.modeButtonText,
-              { color: mode === 'custom' ? themeColors.accent : themeColors.inkMid },
-            ]}
-          >
-            Custom
+          <Text style={[styles.footerCtaText, { color: themeColors.inkInverse }]}>
+            Create mark →
           </Text>
         </TouchableOpacity>
       </View>
-
-      {mode === 'suggested' ? (
-        <View style={styles.suggestedBody}>
-          <SuggestedCountersList
-            onCounterSelect={handleSuggestedCounterSelect}
-            selectedCounters={pendingSuggestedCounter ? [pendingSuggestedCounter] : []}
-            contentBottomPadding={pendingSuggestedCounter ? 240 : spacing.xl}
-          />
-          {pendingSuggestedCounter ? (
-            <View
-              style={[
-                styles.footerCtaWrap,
-                styles.suggestedSelectionWrap,
-                {
-                  borderTopColor: themeColors.borderMid,
-                  backgroundColor: themeColors.linen,
-                  paddingBottom: spacing.sm + insets.bottom,
-                },
-              ]}
-            >
-              {/* QC2-H: the pick loads INTO the same artifact row the custom
-                  path assembles — one mental model for both modes. */}
-              <MarkRowPreview
-                testID="suggested-mark-preview"
-                name={pendingSuggestedCounter.name}
-                emoji={pendingSuggestedCounter.emoji}
-                cadence={suggestedCadenceLabel(pendingSuggestedCounter)}
-              />
-              <Text style={[styles.suggestedSelectionHint, { color: themeColors.inkMid }]}>
-                Set today&apos;s target, then add it.
-              </Text>
-              <DailyTargetStepper
-                value={dailyTarget}
-                onChange={setDailyTarget}
-                label={null}
-              />
-              <TouchableOpacity
-                style={[
-                  styles.footerCta,
-                  styles.suggestedConfirmButton,
-                  { backgroundColor: themeColors.forest },
-                  shadow.sm,
-                ]}
-                onPress={handleConfirmSuggestedCounter}
-                activeOpacity={0.88}
-              >
-                <Text style={[styles.footerCtaText, { color: themeColors.inkInverse }]}>
-                  Add {pendingSuggestedCounter.name}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          ) : null}
-        </View>
-      ) : (
-        <>
-          <ScrollView
-            style={styles.customScroll}
-            contentContainerStyle={styles.customScrollContent}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            {/* QC2-H "The Card Takes Shape": the REAL Focus mark row sits at
-                the top and assembles live — name as typed, glyph as picked,
-                cadence as chosen. The controls below only shape it. */}
-            <MarkRowPreview
-              testID="mark-row-preview"
-              name={name}
-              emoji={ICON_TYPE_TO_EMOJI[selectedIconType] || ICON_TYPE_TO_EMOJI.gym}
-              cadence={cadenceLabel(frequencyPreset, scheduleDaysForDisplay.length)}
-            />
-            <Text style={[styles.benchLine, { color: themeColors.inkMuted }]}>
-              Your mark · exactly as it will sit on Focus.
-            </Text>
-
-            {/* Identity: name + face, one quiet group. */}
-            <View
-              style={[
-                styles.card,
-                {
-                  backgroundColor: themeColors.surface,
-                  borderColor: themeColors.borderMid,
-                },
-              ]}
-            >
-              <Text style={[styles.groupLabel, { color: themeColors.inkMuted }]}>What you’ll do</Text>
-              <TextInput
-                style={[
-                  styles.inputInCard,
-                  {
-                    backgroundColor: themeColors.linen,
-                    color: themeColors.inkDark,
-                    borderColor: themeColors.borderMid,
-                  },
-                ]}
-                value={name}
-                onChangeText={setName}
-                placeholder="e.g. Morning run"
-                placeholderTextColor={themeColors.inkMuted}
-              />
-              <View style={styles.sectionHeaderRow}>
-                <Text style={[styles.groupLabel, styles.groupLabelInRow, { color: themeColors.inkMuted }]}>Give it a face</Text>
-                <Text style={[styles.categoryLabel, { color: themeColors.inkMid }]}>{selectedCategory}</Text>
-              </View>
-              <View style={styles.iconGrid}>
-                {ICON_OPTIONS.map((iconType) => {
-                  const isSelected = iconType === selectedIconType;
-                  return (
-                    <TouchableOpacity
-                      key={iconType}
-                      style={[
-                        styles.iconButton,
-                        {
-                          width: iconCellSize,
-                          height: iconCellSize,
-                          backgroundColor: isSelected ? applyOpacity(color, 0.14) : themeColors.linen,
-                          borderColor: isSelected ? color : themeColors.borderMid,
-                        },
-                      ]}
-                      onPress={() => setSelectedIconType(iconType)}
-                    >
-                      <CounterIcon
-                        type={iconType as any}
-                        size={Math.min(28, Math.floor(iconCellSize * 0.45))}
-                        color={isSelected ? color : themeColors.inkMid}
-                        variant="symbol"
-                      />
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-
-            {/* Rhythm: how much and how often, one quiet group. */}
-            <View
-              style={[
-                styles.card,
-                {
-                  backgroundColor: themeColors.surface,
-                  borderColor: themeColors.borderMid,
-                },
-              ]}
-            >
-              <Text style={[styles.groupLabel, { color: themeColors.inkMuted }]}>Enough for today</Text>
-              <Text style={[styles.cardHint, { color: themeColors.inkMid, textAlign: 'center', marginBottom: spacing.md }]}>
-                How many times makes today count.
-              </Text>
-              <DailyTargetStepper value={dailyTarget} onChange={setDailyTarget} label={null} />
-              <Text style={[styles.groupLabel, styles.groupLabelSpaced, { color: themeColors.inkMuted }]}>How often</Text>
-              <View style={styles.presetRow}>
-                {(Object.keys(FREQUENCY_PRESET_LABELS) as FrequencyPreset[]).map((preset) => {
-                  const active = preset === frequencyPreset;
-                  return (
-                    <TouchableOpacity
-                      key={preset}
-                      style={[
-                        styles.presetChip,
-                        {
-                          backgroundColor: active ? applyOpacity(color, 0.14) : themeColors.linen,
-                          borderColor: active ? color : themeColors.borderMid,
-                        },
-                      ]}
-                      onPress={() => setFrequencyPreset(preset)}
-                      activeOpacity={0.85}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: active }}
-                    >
-                      <Text
-                        style={[
-                          styles.presetChipText,
-                          { color: active ? color : themeColors.inkMid },
-                        ]}
-                      >
-                        {FREQUENCY_PRESET_LABELS[preset]}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              {frequencyPreset === 'custom' ? (
-                <View style={styles.frequencyRow}>
-                  {WEEKDAY_CHIPS.map(({ value, label }) => {
-                    const active = scheduleDaysForDisplay.includes(value);
-                    return (
-                      <TouchableOpacity
-                        key={`${label}-${value}`}
-                        style={[
-                          styles.dayChip,
-                          {
-                            backgroundColor: active ? color : themeColors.linen,
-                            borderColor: active ? color : themeColors.borderMid,
-                          },
-                        ]}
-                        onPress={() => toggleScheduleDay(value)}
-                        activeOpacity={0.8}
-                      >
-                        <Text
-                          style={[
-                            styles.dayChipText,
-                            {
-                              color: active ? foregroundForHexBackground(color, theme === 'dark') : themeColors.inkMid,
-                              opacity: active ? 1 : 0.72,
-                            },
-                          ]}
-                        >
-                          {label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              ) : null}
-
-              <Text style={[styles.cadenceHint, { color: themeColors.inkMuted }]}>
-                Log as many as you want · a met target never blocks today.
-              </Text>
-            </View>
-
-            {targetGoalId && targetGoalTitle ? (
-              <TouchableOpacity
-                style={[styles.card, styles.streakCard, { backgroundColor: themeColors.surface, borderColor: themeColors.borderMid }]}
-                onPress={() => setLinkToGoal(!linkToGoal)}
-                activeOpacity={0.85}
-              >
-                <View style={styles.streakTextWrap}>
-                  <Text style={[styles.toggleLabel, { color: themeColors.inkDark }]}>Link to goal</Text>
-                  <Text style={[styles.toggleDescription, { color: themeColors.inkMid }]} numberOfLines={1}>
-                    {targetGoalTitle}
-                  </Text>
-                </View>
-                <View style={[styles.toggleSwitch, { backgroundColor: linkToGoal ? color : themeColors.borderMid, alignItems: linkToGoal ? 'flex-end' : 'flex-start' }]}>
-                  <View style={[styles.toggleThumb, { backgroundColor: themeColors.surface }]} />
-                </View>
-              </TouchableOpacity>
-            ) : null}
-
-            <View style={{ height: spacing.xl }} />
-          </ScrollView>
-
-          <View
-            style={[
-              styles.footerCtaWrap,
-              {
-                borderTopColor: themeColors.borderMid,
-                backgroundColor: themeColors.linen,
-                paddingBottom: spacing.sm + insets.bottom,
-              },
-            ]}
-          >
-            <TouchableOpacity
-              style={[
-                styles.footerCta,
-                { backgroundColor: themeColors.forest },
-                shadow.sm,
-              ]}
-              onPress={handleSave}
-              disabled={loading || !name.trim()}
-              activeOpacity={0.88}
-            >
-              <Text style={[styles.footerCtaText, { color: themeColors.inkInverse }]}>
-                Create mark →
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </>
-      )}
 
       <DuplicateCounterModal
         visible={showDuplicateModal}
@@ -618,47 +658,71 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.bold,
     textAlign: 'center',
   },
-  modeToggle: {
-    flexDirection: 'row',
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.sm,
-    marginBottom: spacing.sm,
-    borderRadius: borderRadius.md,
-    padding: 3,
-  },
-  modeButton: {
-    flex: 1,
-    paddingVertical: 7,
-    borderRadius: borderRadius.sm,
-    alignItems: 'center',
-  },
-  modeButtonText: {
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.medium,
-  },
   cancelButton: {
     fontSize: fontSize.base,
   },
-  suggestedBody: {
+  scroll: {
     flex: 1,
   },
-  suggestedSelectionWrap: {
+  scrollContent: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.lg,
+  },
+  benchLine: {
+    fontSize: fontSize.sm,
+    textAlign: 'center',
+    marginBottom: spacing.lg,
+  },
+  sectionLabel: {
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.semibold,
+    marginBottom: spacing.md,
+  },
+  popularGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.sm,
   },
-  suggestedSelectionHint: {
+  popularChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: 14,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.full,
+    borderWidth: 1.5,
+  },
+  popularChipText: {
+    fontSize: fontSize.base,
+    fontWeight: fontWeight.medium,
+  },
+  stagedZone: {
+    marginTop: spacing.md,
+    gap: spacing.sm,
+  },
+  stagedHint: {
     fontSize: fontSize.sm,
     lineHeight: fontSize.sm * 1.35,
+    textAlign: 'center',
   },
-  suggestedConfirmButton: {
+  stagedCta: {
     marginTop: spacing.xs,
   },
-  customScroll: {
-    flex: 1,
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginTop: spacing.xl,
+    marginBottom: spacing.lg,
   },
-  customScrollContent: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xs,
-    paddingBottom: spacing.lg,
+  dividerLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+  },
+  dividerText: {
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.medium,
   },
   card: {
     borderRadius: borderRadius.card,
@@ -683,11 +747,6 @@ const styles = StyleSheet.create({
   },
   categoryLabel: {
     fontSize: fontSize.sm,
-  },
-  benchLine: {
-    fontSize: fontSize.sm,
-    textAlign: 'center',
-    marginBottom: spacing.md,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
@@ -759,33 +818,10 @@ const styles = StyleSheet.create({
     fontSize: fontSize[13],
     fontWeight: fontWeight.semibold,
   },
-  unitButtons: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  unitButton: {
-    flex: 1,
-    padding: spacing.md,
-    borderRadius: borderRadius.md,
-    alignItems: 'center',
-    borderWidth: 2,
-  },
-  unitButtonText: {
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.medium,
-    textTransform: 'capitalize',
-  },
   streakCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-  },
-  streakIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: borderRadius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   streakTextWrap: {
     flex: 1,

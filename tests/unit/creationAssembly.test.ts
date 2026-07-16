@@ -44,10 +44,15 @@ describe('the artifact anchors every creation screen (QC2-H)', () => {
     expect(src).toContain('goalPlanMeta(');
   });
 
-  it('mark/new assembles the live Focus row in both modes', () => {
+  it('mark/new assembles ONE live Focus row that fills from either path (QC3-G)', () => {
     const src = read('app/mark/new.tsx');
+    // QC3-G unified the add-a-mark surface to a single shared preview (the
+    // Suggested/Custom toggle is gone): one MarkRowPreview, fed from whichever
+    // path the user last touched — a staged popular chip OR the custom fields.
     const previews = src.match(/<MarkRowPreview/g) ?? [];
-    expect(previews.length).toBeGreaterThanOrEqual(2);
+    expect(previews.length).toBe(1);
+    expect(src).toContain('name={previewName}');
+    expect(src).toContain('pendingSuggestedCounter ? pendingSuggestedCounter.name : name');
   });
 });
 

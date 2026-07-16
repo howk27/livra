@@ -31,12 +31,8 @@ describe('per-goal mark cap copy (5, QC2-G)', () => {
     expect(src).not.toContain('3 marks on this goal');
   });
 
-  test('AddMarkSheet upsell says 5', () => {
-    const src = read('components/sheets/AddMarkSheet.tsx');
-    expect(src).toContain("That's 5 marks on this goal");
-    expect(src).toContain('Five focused marks per goal keeps things doable.');
-    expect(src).not.toContain('3 marks on this goal');
-  });
+  // QC3-G: AddMarkSheet deleted — the add-a-mark surface unified to /mark/new,
+  // whose cap copy is guarded by the 'mark/new.tsx toast says 5' test above.
 
   test('onboarding footnote says 5', () => {
     const src = read('app/onboarding.tsx');
