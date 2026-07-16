@@ -1,4 +1,4 @@
-import { readFileSync } from 'fs';
+import { readFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { spacing, headerControl, headerControlBoxLeading, headerControlBoxTrailing } from '../../theme/tokens';
 
@@ -77,6 +77,12 @@ const TOP_GAP_SITES: [string, string][] = [
   ['app/paywall.tsx', 'content'],
   ['app/auth/reset-password.tsx', 'content'],
   ['app/auth/reset-password-complete.tsx', 'content'],
+  // QC5-C: a COMPONENT, not a screen — goal/new renders it as the "Set the plan"
+  // step, so it owns a real back control the founder actually hits. QC4-K's sweep
+  // and this list were both app/-only, which is why it kept the failing geometry
+  // after QC4-K "fixed" the note app-wide. The discovery guard below is what stops
+  // the next one; this entry pins the fix.
+  ['components/CommitmentScreen.tsx', 'container'],
 ];
 
 describe('every screen header offsets from the safe-area inset (QC4-K)', () => {
@@ -146,4 +152,72 @@ describe('every back/close/edit control reaches 44x44 (QC4-K)', () => {
       expect(offenders).toEqual([]);
     },
   );
+});
+
+/**
+ * QC5-C — the guard that finds its own subjects.
+ *
+ * TOP_GAP_SITES above is a hand-maintained list, and that is precisely how
+ * `components/CommitmentScreen.tsx` kept a back control with NO touch box and a
+ * half-size top gap through the whole of QC4-K: the sweep looked at `app/`, this
+ * list named only `app/` files, and the screen the founder was actually hitting
+ * lives in `components/`. They reported the same note twice as a result.
+ *
+ * Adding one entry fixes today; this fixes tomorrow. It asserts the coarse thing
+ * that actually failed — a surface owning a back control while never referencing
+ * the geometry contract at all — rather than trying to parse JSX with a regex.
+ * A first attempt matched style NAMES and immediately flagged three innocents (a
+ * text-only `cancelButton` label whose box lives on its parent, a modal dialog
+ * button, and comments recording hitSlop's removal). A guard that cries wolf gets
+ * switched off, so this one only asks a question it can answer correctly.
+ */
+describe('QC5-C — a surface with a back control must know the contract', () => {
+  function sourceFiles(): string[] {
+    const out: string[] = [];
+    const walk = (dir: string) => {
+      for (const e of readdirSync(join(ROOT, dir), { withFileTypes: true })) {
+        const rel = `${dir}/${e.name}`;
+        if (e.isDirectory()) { if (e.name !== 'node_modules') walk(rel); }
+        else if (e.name.endsWith('.tsx')) out.push(rel);
+      }
+    };
+    walk('app');
+    walk('components');
+    return out;
+  }
+
+  /**
+   * Surfaces that own a back/close control but legitimately do not set its
+   * geometry themselves. Each needs a REASON, not just a name.
+   */
+  const EXEMPT: Record<string, string> = {
+    'components/ui/LivraHeader.tsx': 'owns the contract for the 7 screens that use it; asserted directly above',
+    'app/_layout.tsx': 'navigator config, renders no control of its own',
+  };
+
+  // Comments are prose, not contract. Without this the guard reads a comment
+  // that MENTIONS headerControl.topGap and passes a file that never calls it —
+  // which is exactly what happened when this test was first mutation-tested.
+  function stripComments(src: string): string {
+    return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*/g, '');
+  }
+
+  it('every surface with a back control references headerControl geometry', () => {
+    const offenders: string[] = [];
+    for (const rel of sourceFiles()) {
+      if (EXEMPT[rel]) continue;
+      const src = stripComments(read(rel));
+      // A real back control: a press handler that pops, or a screen taking an
+      // onBack prop and rendering it. Modal onClose/dismiss is a different thing.
+      const ownsBackControl = /onPress=\{\s*\(?\)?\s*=>\s*router\.back\(\)/.test(src)
+        || /onPress=\{router\.back\}/.test(src)
+        || /onPress=\{onBack\}/.test(src);
+      if (!ownsBackControl) continue;
+      // It must reference the app's geometry contract somehow — either the box
+      // helpers, the tokens, or the shared header component.
+      const knowsContract = /headerControlBox(Leading|Trailing)|headerControl\.(minTarget|topGap)|LivraHeader/.test(src);
+      if (!knowsContract) offenders.push(rel);
+    }
+    expect(offenders).toEqual([]);
+  });
 });
