@@ -13,7 +13,15 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Animated, { FadeIn, SlideInDown } from 'react-native-reanimated';
-import { themedColors, spacing, borderRadius, fontSize, fontWeight, shadow } from '../../theme/tokens';
+import {
+  themedColors,
+  spacing,
+  borderRadius,
+  fontSize,
+  fontWeight,
+  shadow,
+  headerControl,
+} from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { getSupabaseClient } from '../../lib/supabase';
 
@@ -201,14 +209,17 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xl,
+    // QC4-K: converge the back control's distance below the safe-area inset onto
+    // the shared headerControl.topGap (was spacing.xl, 32).
+    paddingTop: headerControl.topGap,
   },
   header: {
     marginBottom: spacing.xl,
   },
+  // QC4-K: 40x40 was under the 44pt iOS HIG minimum.
   backButton: {
-    width: 40,
-    height: 40,
+    width: headerControl.minTarget,
+    height: headerControl.minTarget,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.md,

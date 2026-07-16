@@ -19,7 +19,7 @@ import {
 } from '../lib/debug/iapDiagnostics';
 import { isDashboardUnlocked, resetDashboardUnlock } from '../lib/debug/dashboardUnlock';
 import { getIapService } from '../lib/services/iap/getIapService';
-import { themedColors, spacing, borderRadius, fontSize, fontWeight } from '../theme/tokens';
+import { themedColors, spacing, borderRadius, fontSize, fontWeight, headerControl } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { AppText } from '../components/Typography';
 import { logger } from '../lib/utils/logger';
@@ -316,12 +316,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    // QC4-K: paddingTop = the shared headerControl.topGap (same value as the
+    // spacing.md it replaces — pinned to the token so it stays converged).
+    paddingTop: headerControl.topGap,
+    paddingBottom: spacing.md,
     borderBottomWidth: 1,
   },
+  // QC4-K: 40x40 was under the 44pt iOS HIG minimum. Doubles as the trailing
+  // spacer that keeps the title optically centred.
   backButton: {
-    width: 40,
-    height: 40,
+    width: headerControl.minTarget,
+    height: headerControl.minTarget,
     alignItems: 'center',
     justifyContent: 'center',
   },

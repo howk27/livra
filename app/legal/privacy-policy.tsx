@@ -3,7 +3,7 @@ import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft } from 'phosphor-react-native';
-import { themedColors, spacing, borderRadius } from '../../theme/tokens';
+import { themedColors, spacing, borderRadius, headerControl } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { AppText } from '../../components/Typography';
 import { GradientBackground } from '../../components/GradientBackground';
@@ -27,7 +27,7 @@ export default function PrivacyPolicyScreen() {
           <AppText variant="headline" style={[styles.headerTitle, { color: c.inkDark }]}>
             Privacy Policy
           </AppText>
-          <View style={{ width: 40 }} />
+          <View style={styles.headerSpacer} />
         </View>
 
         {/* Content */}
@@ -317,16 +317,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    // QC4-K: paddingTop = the shared headerControl.topGap (same value as the
+    // spacing.md it replaces — pinned to the token so it stays converged).
+    paddingTop: headerControl.topGap,
+    paddingBottom: spacing.md,
     borderBottomWidth: 1,
   },
+  // QC4-K: 40x40 was under the 44pt iOS HIG minimum.
   backButton: {
-    width: 40,
-    height: 40,
+    width: headerControl.minTarget,
+    height: headerControl.minTarget,
     borderRadius: borderRadius.full,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // Matches backButton's width so the title stays optically centred.
+  headerSpacer: { width: headerControl.minTarget },
   headerTitle: {
     flex: 1,
     textAlign: 'center',

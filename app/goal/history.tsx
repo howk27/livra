@@ -4,7 +4,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { CaretLeft } from 'phosphor-react-native';
 import { format, parseISO } from 'date-fns';
-import { themedColors, spacing, fontSize, fontWeight, fonts, borderRadius } from '../../theme/tokens';
+import {
+  themedColors,
+  spacing,
+  fontSize,
+  fontWeight,
+  fonts,
+  borderRadius,
+  headerControl,
+  headerControlBoxLeading,
+} from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useGoalsStore } from '../../state/goalsSlice';
 import { formatDuration, formatTargetDelta } from '../../lib/goalHistory';
@@ -34,7 +43,7 @@ export default function GoalHistoryScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: c.linen }]}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn}>
           <CaretLeft size={24} color={c.inkDark} weight="bold" />
         </TouchableOpacity>
         <View style={styles.headerTextWrap}>
@@ -92,15 +101,20 @@ export default function GoalHistoryScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  // QC4-K: back offset from the safe-area inset by headerControl.topGap, on a
+  // 44pt target (was hitSlop 8 on a 24pt icon).
   header: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingTop: headerControl.topGap,
+    paddingBottom: spacing.sm,
     gap: spacing.sm,
   },
+  headerBtn: { ...headerControlBoxLeading },
   headerTextWrap: { flex: 1 },
-  headerSpacer: { width: 24 },
+  // Matches headerBtn's width so the title block stays optically centred.
+  headerSpacer: { width: headerControl.minTarget },
   headerTitle: { fontSize: fontSize['2xl'], fontWeight: fontWeight.bold, lineHeight: 32 },
   headerSubtitle: { fontSize: fontSize.sm, marginTop: spacing.xxs },
   emptyState: { flex: 1, justifyContent: 'center', paddingHorizontal: spacing.xl },

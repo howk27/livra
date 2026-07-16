@@ -12,7 +12,16 @@ import {
 import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { themedColors, spacing, borderRadius, fontSize, fontWeight, shadow } from '../../theme/tokens';
+import {
+  themedColors,
+  spacing,
+  borderRadius,
+  fontSize,
+  fontWeight,
+  shadow,
+  headerControl,
+  headerControlBoxLeading,
+} from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useMotion } from '../../hooks/useMotion';
 import { useCounters } from '../../hooks/useCounters';
@@ -336,7 +345,7 @@ export default function NewCounterScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: themeColors.linen }]}>
       <View style={[styles.header, { borderBottomColor: theme === 'dark' ? applyOpacity(themeColors.inkInverse, 0.08) : themeColors.borderMid }]}>
         <View style={{ width: headerSideWidth }}>
-          <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn}>
             <Text style={[styles.cancelButton, { color: themeColors.inkMid }]}>Cancel</Text>
           </TouchableOpacity>
         </View>
@@ -646,14 +655,18 @@ const styles = StyleSheet.create({
   loadingText: {
     fontSize: fontSize.base,
   },
+  // QC4-K: see theme/tokens headerControl — offset from the safe-area inset,
+  // 44pt Cancel target (was hitSlop 8 on a bare Text).
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
+    paddingTop: headerControl.topGap,
+    paddingBottom: spacing.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
+  headerBtn: { ...headerControlBoxLeading },
   headerTitle: {
     flex: 1,
     fontSize: fontSize.xl,

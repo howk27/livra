@@ -4,7 +4,15 @@ import { ArrowLeft, type Icon as PhosphorIcon } from 'phosphor-react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SvgLogo } from './SvgLogo';
-import { fonts, spacing, themedColors, fontSize } from '../../theme/tokens';
+import {
+  fonts,
+  spacing,
+  themedColors,
+  fontSize,
+  headerControl,
+  headerControlBoxLeading,
+  headerControlBoxTrailing,
+} from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 
 // DrawerContext kept for backward compat — no longer wired to any drawer.
@@ -43,7 +51,6 @@ export function LivraHeader({
     <TouchableOpacity
       style={styles.iconBtn}
       onPress={() => (onBackPress ? onBackPress() : router.back())}
-      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
     >
       <ArrowLeft size={22} color={colors.inkDark} weight="regular" />
     </TouchableOpacity>
@@ -53,17 +60,13 @@ export function LivraHeader({
 
   const right =
     RightIconComponent && onRightPress ? (
-      <TouchableOpacity
-        style={styles.iconBtn}
-        onPress={onRightPress}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-      >
+      <TouchableOpacity style={styles.iconBtnRight} onPress={onRightPress}>
         <RightIconComponent size={20} color={colors.danger} weight="duotone" />
       </TouchableOpacity>
     ) : showAvatar ? (
       <TouchableOpacity
+        style={styles.iconBtnRight}
         onPress={() => router.push('/settings/profile' as any)}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         activeOpacity={0.7}
       >
         <View style={styles.avatarRingWrapper}>
@@ -74,8 +77,16 @@ export function LivraHeader({
       <View style={styles.leftPlaceholder} />
     );
 
+  // QC4-K: the row is offset from the safe-area inset by headerControl.topGap
+  // rather than sitting flush against it, so the back control never lands in the
+  // notch / Dynamic Island / gesture strip.
   return (
-    <View style={[styles.container, { backgroundColor: colors.linen, paddingTop: insets.top }]}>
+    <View
+      style={[
+        styles.container,
+        { backgroundColor: colors.linen, paddingTop: insets.top + headerControl.topGap },
+      ]}
+    >
       <View style={styles.row}>
         {left}
         <View style={styles.center}>
@@ -94,9 +105,10 @@ export function LivraHeader({
 const styles = StyleSheet.create({
   container: {
     paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.sm,
   },
   row: {
-    height: 56,
+    height: headerControl.minTarget,
     flexDirection: 'row',
     alignItems: 'center',
   },
@@ -104,10 +116,10 @@ const styles = StyleSheet.create({
     width: 22,
   },
   iconBtn: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
+    ...headerControlBoxLeading,
+  },
+  iconBtnRight: {
+    ...headerControlBoxTrailing,
   },
   center: {
     flex: 1,

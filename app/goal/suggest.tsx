@@ -20,7 +20,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AIHatchButton } from '../../components/ui/AIHatchButton';
 import { GoalPackageReview } from '../../components/ai/GoalPackageReview';
 import { PillButton } from '../../components/ui/PillButton';
-import { fonts, spacing, radius, themedColors, fontSize } from '../../theme/tokens';
+import {
+  fonts,
+  spacing,
+  radius,
+  themedColors,
+  fontSize,
+  headerControl,
+  headerControlBoxLeading,
+} from '../../theme/tokens';
 import { AI_EXHAUSTED_COPY } from '../../lib/copy';
 import { CONTEXT_MAX_LENGTH } from '../../lib/ai/goalGeneration';
 import { useSuggestGoalFlow } from '../../hooks/useSuggestGoalFlow';
@@ -277,17 +285,19 @@ export default function SuggestGoalScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  // QC4-K: paddingTop = headerControl.topGap so Cancel clears the safe-area
+  // inset; the target itself already met the 44pt minimum.
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingTop: headerControl.topGap,
+    paddingBottom: spacing.sm,
   },
   headerBtn: {
+    ...headerControlBoxLeading,
     minWidth: 60,
-    minHeight: 44,
-    justifyContent: 'center',
   },
   headerTitle: {
     fontFamily: fonts.sansSemibold,

@@ -35,6 +35,9 @@ import {
   radius,
   fonts,
   motion,
+  headerControl,
+  headerControlBoxLeading,
+  headerControlBoxTrailing,
 } from '../../theme/tokens';
 import type { Mark, GoalNote } from '../../types';
 import { useEffectiveTheme } from '../../state/uiSlice';
@@ -730,10 +733,10 @@ export default function GoalDetailScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: c.linen }]}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn}>
           <X size={22} color={c.inkDark} weight="bold" />
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => setEditingTitle(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <TouchableOpacity onPress={() => setEditingTitle(true)} style={styles.headerBtnRight}>
           <PencilSimple size={20} color={c.inkMuted} weight="duotone" />
         </TouchableOpacity>
       </View>
@@ -804,13 +807,18 @@ export default function GoalDetailScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  // QC4-K: close + edit offset from the safe-area inset by headerControl.topGap,
+  // each on a 44pt target (was hitSlop 8 on 20–22pt icons).
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingTop: headerControl.topGap,
+    paddingBottom: spacing.sm,
   },
+  headerBtn: { ...headerControlBoxLeading },
+  headerBtnRight: { ...headerControlBoxTrailing },
   // Screen gutter = spacing.lg, applied ONCE here; cards carry no horizontal margins.
   content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl * 2 },
 

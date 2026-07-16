@@ -126,6 +126,52 @@ export const spacing = {
   '5xl': 48,
 };
 
+/**
+ * QC4-K — screen header chrome geometry. Single source of truth for every
+ * back / close / edit control in the app, so the same control sits at the same
+ * height on every screen and always clears the iOS HIG touch minimum.
+ *
+ * `topGap` is the distance between the safe-area top inset and the header
+ * control row. Flush against the inset (the old behaviour) puts the control in
+ * the hardest-to-reach strip of the screen, right up against the notch /
+ * Dynamic Island and the system gesture area. On a zero-inset device the gap
+ * still applies, so non-notch hardware does not regress.
+ *
+ * Both values come off the existing spacing scale / the HIG minimum — do not
+ * hardcode either at a call site.
+ */
+export const headerControl = {
+  /** iOS Human Interface Guidelines minimum touch target, in pt. */
+  minTarget: 44,
+  /** Gap below the safe-area top inset before the control row. */
+  topGap: spacing.md,
+} as const;
+
+/**
+ * Touch-target box for a header control. Spread into a `StyleSheet.create`
+ * entry rather than re-deriving the numbers:
+ *
+ *   headerBtn: { ...headerControlBoxLeading },
+ *
+ * The box is 44x44 minimum and vertically centres its icon/label. Horizontal
+ * alignment is edge-anchored (not centred) so expanding the target does not
+ * shift the control away from the screen gutter it currently aligns to.
+ */
+export const headerControlBoxLeading = {
+  minWidth: headerControl.minTarget,
+  minHeight: headerControl.minTarget,
+  justifyContent: 'center',
+  alignItems: 'flex-start',
+} as const;
+
+/** Trailing-edge variant of `headerControlBoxLeading`. */
+export const headerControlBoxTrailing = {
+  minWidth: headerControl.minTarget,
+  minHeight: headerControl.minTarget,
+  justifyContent: 'center',
+  alignItems: 'flex-end',
+} as const;
+
 export const radius = {
   sm: 6, md: 12, lg: 20, xl: 28, full: 999
 };

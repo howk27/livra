@@ -12,7 +12,15 @@ import {
 import Animated from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { themedColors, spacing, fontSize, fonts, radius } from '../../theme/tokens';
+import {
+  themedColors,
+  spacing,
+  fontSize,
+  fonts,
+  radius,
+  headerControl,
+  headerControlBoxLeading,
+} from '../../theme/tokens';
 import { applyOpacity } from '../../src/components/icons/color';
 import { GoalCardPreview } from '../../components/creation/GoalCardPreview';
 import { AIHatchButton } from '../../components/ui/AIHatchButton';
@@ -234,7 +242,7 @@ export default function NewGoalScreen() {
           overflow on small devices scrolls instead. */}
       <View style={styles.inner}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} accessibilityRole="button">
+          <TouchableOpacity onPress={() => router.back()} accessibilityRole="button" style={styles.headerBtn}>
             <Text style={[styles.cancel, { color: c.inkMuted }]}>Cancel</Text>
           </TouchableOpacity>
           {/* QC3-A: the header's "Next" is gone — the primary action now lives
@@ -331,14 +339,18 @@ export default function NewGoalScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   inner: { flex: 1 },
+  // QC4-K: paddingTop = headerControl.topGap so the Cancel control clears the
+  // safe-area inset instead of sitting flush against the notch.
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    minHeight: 44,
+    paddingTop: headerControl.topGap,
+    paddingBottom: spacing.sm,
+    minHeight: headerControl.minTarget,
   },
+  headerBtn: { ...headerControlBoxLeading },
   cancel: { fontSize: fontSize.md },
   formScroll: { flex: 1 },
   // Screen gutter = spacing.lg applied ONCE, here on the scroll content
