@@ -19,6 +19,7 @@ import {
   AI_ICON_TO_MARK_ID,
 } from '../../../lib/ai/goalGeneration';
 import { MARK_LIBRARY } from '../../../lib/suggestedCounters';
+import { colorForSuggestedCounter, getCategoryColor } from '../../../lib/markCategory';
 
 // ─── validateAIGoalPackage ────────────────────────────────────────────────────
 
@@ -308,11 +309,17 @@ describe('resolveMarkForAIIcon', () => {
       expect(mark).toBeDefined();
 
       // resolveMarkForAIIcon must return the real library entry, not the
-      // '🎯' / '#4A6A8C' "mark not found" defaults.
+      // '🎯' / custom-accent "mark not found" defaults.
       const result = resolveMarkForAIIcon(icon);
       expect(result.markId).toBe(AI_ICON_TO_MARK_ID[icon]);
       expect(result.emoji).toBe(mark!.emoji);
-      expect(result.color).toBe(mark!.color);
+      // QC4-M: color is category-derived, NOT the library's authored `color`.
+      // That field is unsanctioned and wrong — Fitness marks are authored
+      // '#8A7E6B', which is the *discipline* accent. Asserting against it
+      // pinned the bug. The guard's real subject is "no fallback hits", so the
+      // assertion moves to the sanctioned palette rather than relaxing.
+      expect(result.color).toBe(colorForSuggestedCounter(mark!));
+      expect(result.color).not.toBe(getCategoryColor('custom'));
     }
   });
 });

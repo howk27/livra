@@ -39,6 +39,7 @@ import { getMarksForGoal } from '../../lib/goalMarkSuggestions';
 import { goalPreviewMarks } from '../../lib/creation/creationPreview';
 import { CommitmentScreen, CommitmentSelection } from '../../components/CommitmentScreen';
 import { MarkDefinition } from '../../lib/suggestedCounters';
+import { colorForSuggestedCounter } from '../../lib/markCategory';
 import { useDeferredAutoFocus } from '../../hooks/useDeferredAutoFocus';
 import { useHalfRenderProbe } from '../../hooks/useHalfRenderProbe';
 
@@ -248,7 +249,9 @@ export default function NewGoalScreen() {
         const newMark = await addMark({
           name: sugg.name,
           emoji: sugg.emoji,
-          color: sugg.color,
+          // QC4-M: category-derived, never the library's authored `color` —
+          // that field is unsanctioned and disagrees with what the row renders.
+          color: colorForSuggestedCounter(sugg),
           unit: sugg.unit,
           user_id: user.id,
           goal_period: 'day',

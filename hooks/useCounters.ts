@@ -12,6 +12,7 @@ import { useSync } from './useSync';
 import { useBadges } from './useBadges';
 import { useIapSubscriptions } from './useIapSubscriptions';
 import { logger } from '../lib/utils/logger';
+import { getCategoryColor } from '../lib/markCategory';
 import { getAppDate, getAppDateTime, isDebugAppDateActive } from '../lib/appDate';
 import { useAppDateStore } from '../state/appDateSlice';
 import {
@@ -126,7 +127,8 @@ export const useMarks = () => {
       const mark = await addMarkAction({
         name: data.name,
         emoji: data.emoji,
-        color: data.color || '#3B82F6',
+        // QC4-M: the last raw Tailwind blue. Sanctioned `custom` accent instead.
+        color: data.color || getCategoryColor('custom'),
         unit: data.unit || 'sessions',
         enable_streak: data.enable_streak ?? false,
         sort_index: marks.length,

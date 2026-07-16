@@ -19,6 +19,7 @@
 import { addDays, format } from 'date-fns';
 import { getSupabaseClient } from '../supabase';
 import { MARK_LIBRARY } from '../suggestedCounters';
+import { colorForSuggestedCounter, getCategoryColor } from '../markCategory';
 import { logger } from '../utils/logger';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -140,7 +141,9 @@ export function resolveMarkForAIIcon(icon: string): {
   return {
     markId,
     emoji: mark?.emoji ?? '🎯',
-    color: mark?.color ?? '#4A6A8C',
+    // QC4-M: sanctioned accents only. An unknown markId falls back to the
+    // `custom` accent rather than a hardcoded hex.
+    color: mark ? colorForSuggestedCounter(mark) : getCategoryColor('custom'),
   };
 }
 
