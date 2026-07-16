@@ -8,8 +8,9 @@ import {
   Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { themedColors, spacing, fontSize, fontWeight, borderRadius, fonts } from '../theme/tokens';
+import { themedColors, spacing, fontSize, fontWeight, borderRadius, fonts, headerControl, headerControlBoxLeading } from '../theme/tokens';
 import { applyOpacity } from '../src/components/icons/color';
+import { CATEGORY_MAP } from './ui/MarkRow';
 import { GoalCardPreview } from './creation/GoalCardPreview';
 import { goalPlanMeta } from '../lib/creation/creationPreview';
 import { useEffectiveTheme } from '../state/uiSlice';
@@ -153,14 +154,14 @@ export function CommitmentScreen({
       contentContainerStyle={[styles.container]}
       showsVerticalScrollIndicator={false}
     >
-      <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-        <Text style={[styles.backText, { color: c.inkMuted }]}>← Back</Text>
+      <TouchableOpacity onPress={onBack} style={styles.backBtn} accessibilityRole="button">
+        <Text style={[styles.backText, { color: c.inkMid }]}>← Back</Text>
       </TouchableOpacity>
 
       {isOnboarding ? (
         <>
           <Text style={[styles.heading, { color: c.inkDark }]}>What does this take?</Text>
-          <Text style={[styles.subheading, { color: c.inkMuted }]}>
+          <Text style={[styles.subheading, { color: c.inkMid }]}>
             These are the daily actions that build toward your goal. You can adjust anytime.
           </Text>
         </>
@@ -181,7 +182,7 @@ export function CommitmentScreen({
       )}
 
       {/* ── Marks ── */}
-      <Text style={[styles.sectionLabel, { color: c.inkMuted }]}>Pick the work</Text>
+      <Text style={[styles.sectionLabel, { color: c.inkMid }]}>Pick the work</Text>
       <View style={styles.chipRow}>
         {suggestedMarks.map(s => {
           const owned = findOwnedMark(s, userMarks);
@@ -198,8 +199,16 @@ export function CommitmentScreen({
                 },
               ]}
             >
-              <Text style={{ fontSize: fontSize.md }}>{s.emoji}</Text>
-              <Text style={[styles.markChipText, { color: isSelected ? c.inkDark : c.inkMuted }]}>
+              {/* QC5: the app's icon, not the emoji. The card tiles above
+                  already render s.icon (see selectedForCard) — these chips were
+                  the one place on the screen still speaking emoji, so the same
+                  mark had two faces a few pixels apart. */}
+              {(() => {
+                const cat = CATEGORY_MAP[s.category] ?? CATEGORY_MAP.custom;
+                const Icon = s.icon ?? cat.Icon;
+                return <Icon size={16} color={cat.accent} weight="duotone" />;
+              })()}
+              <Text style={[styles.markChipText, { color: isSelected ? c.inkDark : c.inkMid }]}>
                 {s.name}
               </Text>
               {owned && (
@@ -212,12 +221,12 @@ export function CommitmentScreen({
 
       {/* ── Tier ── */}
       <View style={styles.sectionRow}>
-        <Text style={[styles.sectionLabel, styles.sectionLabelInRow, { color: c.inkMuted }]}>How much</Text>
+        <Text style={[styles.sectionLabel, styles.sectionLabelInRow, { color: c.inkMid }]}>How much</Text>
         <TouchableOpacity
           onPress={() => setExplanationVisible('tier')}
           style={[styles.explainBtn, { borderColor: c.borderMid }]}
         >
-          <Text style={[styles.explainBtnText, { color: c.inkMuted }]}>?</Text>
+          <Text style={[styles.explainBtnText, { color: c.inkMid }]}>?</Text>
         </TouchableOpacity>
       </View>
       <View style={styles.tierRow}>
@@ -233,11 +242,11 @@ export function CommitmentScreen({
               },
             ]}
           >
-            <Text style={[styles.tierLabel, { color: tier === t ? c.inkDark : c.inkMuted }]}>
+            <Text style={[styles.tierLabel, { color: tier === t ? c.inkDark : c.inkMid }]}>
               {TIERS[t].label}
             </Text>
             {isOnboarding && (
-              <Text style={[styles.tierDesc, { color: c.inkMuted }]}>
+              <Text style={[styles.tierDesc, { color: c.inkMid }]}>
                 {TIERS[t].description}
               </Text>
             )}
@@ -247,12 +256,12 @@ export function CommitmentScreen({
 
       {/* ── Frequency ── */}
       <View style={styles.sectionRow}>
-        <Text style={[styles.sectionLabel, styles.sectionLabelInRow, { color: c.inkMuted }]}>How often</Text>
+        <Text style={[styles.sectionLabel, styles.sectionLabelInRow, { color: c.inkMid }]}>How often</Text>
         <TouchableOpacity
           onPress={() => setExplanationVisible('frequency')}
           style={[styles.explainBtn, { borderColor: c.borderMid }]}
         >
-          <Text style={[styles.explainBtnText, { color: c.inkMuted }]}>?</Text>
+          <Text style={[styles.explainBtnText, { color: c.inkMid }]}>?</Text>
         </TouchableOpacity>
       </View>
       <View style={styles.freqRow}>
@@ -273,20 +282,20 @@ export function CommitmentScreen({
                 },
               ]}
             >
-              <Text style={[styles.freqLabel, { color: selected ? c.inkDark : c.inkMuted }]}>
+              <Text style={[styles.freqLabel, { color: selected ? c.inkDark : c.inkMid }]}>
                 {FREQUENCIES[f].label}
               </Text>
-              <Text style={[styles.freqMeta, { color: c.inkMuted }]}>{FREQUENCIES[f].range}</Text>
-              <Text style={[styles.freqMeta, { color: c.inkMuted }]}>{FREQUENCIES[f].restDays}</Text>
+              <Text style={[styles.freqMeta, { color: c.inkMid }]}>{FREQUENCIES[f].range}</Text>
+              <Text style={[styles.freqMeta, { color: c.inkMid }]}>{FREQUENCIES[f].restDays}</Text>
             </TouchableOpacity>
           );
         })}
       </View>
 
       {summary ? (
-        <Text style={[styles.summary, { color: c.inkMuted }]}>{summary}</Text>
+        <Text style={[styles.summary, { color: c.inkMid }]}>{summary}</Text>
       ) : !isOnboarding ? (
-        <Text style={[styles.summary, { color: c.inkMuted }]}>
+        <Text style={[styles.summary, { color: c.inkMid }]}>
           Add marks now or later · your goal is ready either way
         </Text>
       ) : null}
@@ -322,7 +331,7 @@ export function CommitmentScreen({
                 : "Rest days aren't days off. They're when the work actually sticks."}
             </Text>
             <TouchableOpacity onPress={() => setExplanationVisible(null)}>
-              <Text style={[styles.modalClose, { color: c.inkMuted }]}>Got it</Text>
+              <Text style={[styles.modalClose, { color: c.inkMid }]}>Got it</Text>
             </TouchableOpacity>
           </View>
         </TouchableOpacity>
@@ -338,11 +347,18 @@ const styles = StyleSheet.create({
     // Screen gutter = spacing.lg applied once, matching the title step so the
     // live card keeps its exact width across the two steps (same object).
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
+    // QC5: was spacing.sm — half the sanctioned gap, which put the back control
+    // in the strip the founder complained about. headerControl.topGap is the
+    // app's single source; the parent SafeAreaView already supplies the inset.
+    paddingTop: headerControl.topGap,
     paddingBottom: spacing.xxl,
     gap: spacing.xs,
   },
-  backBtn: { marginBottom: spacing.sm },
+  // QC5: was `{ marginBottom: spacing.sm }` — no touch box, so the founder's
+  // "back/edit buttons are way too high and hard to click" note survived QC4-K
+  // on this surface. QC4-K swept app/ screens; this is a component, so both the
+  // sweep and its guard missed it. Same contract as every other header control.
+  backBtn: { ...headerControlBoxLeading, marginBottom: spacing.sm },
   backText: { fontSize: fontSize.sm },
   heading: { fontSize: fontSize.xl, fontWeight: fontWeight.bold, marginBottom: spacing.xs },
   subheading: { fontSize: fontSize.sm, marginBottom: spacing.md, lineHeight: 20 },
