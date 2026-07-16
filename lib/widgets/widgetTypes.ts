@@ -1,15 +1,19 @@
 export interface WidgetMarkData {
   id: string;
   name: string;
-  icon: string;   // emoji string, e.g. "💪" — or empty string if unavailable
-  color: string;  // hex, e.g. "#10B981"
+  /** SF Symbol name for the mark's category icon (never a raw emoji). */
+  symbol: string;
+  /** Category accent hex, e.g. "#4A8C7A". */
+  accent: string;
   completed: boolean;
 }
 
 export interface WidgetData {
   activeGoalTitle: string | null;
-  /** Goal emoji shown at the center of the widget ring. Empty string when unset. */
-  goalIcon: string;
+  /** SF Symbol for the goal's icon — the majority category across its marks. */
+  goalSymbol: string;
+  /** Accent hex for the goal icon + ring. */
+  goalAccent: string;
   /** Linked increment events counted toward the active goal (ring numerator). */
   goalProgress: number;
   /** Unlock threshold for the active goal (ring denominator). Always ≥ 1. */

@@ -42,6 +42,10 @@ struct GoalRingView: View {
     let diameter: CGFloat
     var lineWidth: CGFloat = 6
 
+    private var accent: Color {
+        data.goalAccent.isEmpty ? WidgetPalette.accent : Color(hex: data.goalAccent)
+    }
+
     var body: some View {
         ZStack {
             Circle()
@@ -49,12 +53,13 @@ struct GoalRingView: View {
             Circle()
                 .trim(from: 0, to: max(0.0001, data.progressFraction))
                 .stroke(
-                    WidgetPalette.accent,
+                    accent,
                     style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
                 )
                 .rotationEffect(.degrees(-90))
-            Text(data.goalIcon.isEmpty ? "🎯" : data.goalIcon)
-                .font(.system(size: diameter * 0.42))
+            Image(systemName: data.goalSymbol.isEmpty ? "circle.fill" : data.goalSymbol)
+                .font(.system(size: diameter * 0.34, weight: .medium))
+                .foregroundColor(accent)
         }
         .frame(width: diameter, height: diameter)
     }
@@ -84,12 +89,19 @@ struct LogMarkLabel: View {
     let mark: WidgetMarkData
     var compact: Bool = false
 
+    private var accent: Color {
+        mark.accent.isEmpty ? WidgetPalette.accent : Color(hex: mark.accent)
+    }
+
     var body: some View {
         HStack(spacing: 8) {
-            if !mark.icon.isEmpty {
-                Text(mark.icon)
-                    .font(.system(size: compact ? 14 : 17))
-            }
+            // Category icon tile — mirrors the in-app MarkRow icon tile.
+            Image(systemName: mark.symbol.isEmpty ? "circle.fill" : mark.symbol)
+                .font(.system(size: compact ? 12 : 14, weight: .medium))
+                .foregroundColor(accent)
+                .frame(width: compact ? 22 : 26, height: compact ? 22 : 26)
+                .background(accent.opacity(0.14))
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
             Text(mark.name)
                 .font(.system(size: compact ? 12 : 14, weight: .semibold))
                 .foregroundColor(WidgetPalette.ink)
@@ -98,12 +110,12 @@ struct LogMarkLabel: View {
             Spacer(minLength: 4)
             Image(systemName: "plus.circle.fill")
                 .font(.system(size: compact ? 17 : 21))
-                .foregroundColor(WidgetPalette.accent)
+                .foregroundColor(accent)
         }
-        .padding(.vertical, compact ? 7 : 9)
-        .padding(.horizontal, compact ? 9 : 11)
+        .padding(.vertical, compact ? 6 : 8)
+        .padding(.horizontal, compact ? 8 : 10)
         .frame(maxWidth: .infinity)
-        .background(WidgetPalette.accent.opacity(0.13))
+        .background(accent.opacity(0.10))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 }

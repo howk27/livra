@@ -18,7 +18,7 @@ struct LivraLockScreenView: View {
     // Gauge ring with the goal icon at its center.
     private var circular: some View {
         Gauge(value: data.progressFraction) {
-            Text(data.goalIcon.isEmpty ? "🎯" : data.goalIcon)
+            Image(systemName: data.goalSymbol.isEmpty ? "circle.fill" : data.goalSymbol)
         }
         .gaugeStyle(.accessoryCircularCapacity)
         .widgetURL(URL(string: "livra://home"))
@@ -28,9 +28,8 @@ struct LivraLockScreenView: View {
     private var rectangular: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 4) {
-                if !data.goalIcon.isEmpty {
-                    Text(data.goalIcon).font(.system(size: 12))
-                }
+                Image(systemName: data.goalSymbol.isEmpty ? "circle.fill" : data.goalSymbol)
+                    .font(.system(size: 11))
                 Text(data.activeGoalTitle ?? "No active goal")
                     .font(.system(size: 12, weight: .semibold))
                     .lineLimit(1)

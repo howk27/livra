@@ -4,8 +4,10 @@ import { query } from '../db';
 import { checkProStatus } from '../iap/iap';
 import { useGoalsStore } from '../../state/goalsSlice';
 import { useMarksStore } from '../../state/countersSlice';
+import { resolveMarkCategory, majorityCategory } from '../markCategoryResolve';
 import type { WidgetData, WidgetMarkData } from './widgetTypes';
 import { APP_GROUP_ID, WIDGET_DATA_KEY } from './widgetTypes';
+import { categoryVisual } from './widgetIcons';
 
 export async function buildWidgetData(): Promise<WidgetData> {
   const goalsState = useGoalsStore.getState();
@@ -33,19 +35,37 @@ export async function buildWidgetData(): Promise<WidgetData> {
 
   const activeMarks = marks.filter(m => !m.deleted_at);
 
-  const widgetMarks: WidgetMarkData[] = activeMarks.slice(0, 6).map(mark => ({
-    id: mark.id,
-    name: mark.name,
-    icon: mark.emoji ?? '',
-    color: mark.color ?? '#C47E8A',
-    completed: loggedTodayIds.has(mark.id),
-  }));
+  // The widget is goal-centric: prefer the active goal's marks, falling back to
+  // all active marks when the goal has none (or there is no active goal).
+  const goalMarks = activeGoal
+    ? activeMarks.filter(m => m.goal_id === activeGoal.id)
+    : [];
+  const sourceMarks = goalMarks.length > 0 ? goalMarks : activeMarks;
+
+  // Category icon + accent, mirroring the in-app mark tile (never a raw emoji).
+  const widgetMarks: WidgetMarkData[] = sourceMarks.slice(0, 6).map(mark => {
+    const visual = categoryVisual(resolveMarkCategory({ name: mark.name, emoji: mark.emoji }));
+    return {
+      id: mark.id,
+      name: mark.name,
+      symbol: visual.symbol,
+      accent: visual.accent,
+      completed: loggedTodayIds.has(mark.id),
+    };
+  });
 
   const completedCount = widgetMarks.filter(m => m.completed).length;
 
+  // Goal icon = majority category across the goal's marks (goal-detail hero
+  // medallion parity), rendered as the matching SF Symbol + accent.
+  const goalVisual = categoryVisual(
+    majorityCategory(sourceMarks.map(m => ({ name: m.name, emoji: m.emoji }))),
+  );
+
   return {
     activeGoalTitle: activeGoal?.title ?? null,
-    goalIcon: activeGoal?.icon ?? '',
+    goalSymbol: goalVisual.symbol,
+    goalAccent: goalVisual.accent,
     goalProgress: goalRing.progress,
     goalThreshold: Math.max(1, goalRing.threshold),
     marks: widgetMarks,
