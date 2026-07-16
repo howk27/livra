@@ -33,6 +33,7 @@ import {
   fonts,
   headerControl,
   headerControlBoxTrailing,
+  categoryAccents,
 } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { useIapSubscriptions } from '../hooks/useIapSubscriptions';
@@ -59,13 +60,23 @@ import { SvgLogo } from '../components/ui/SvgLogo';
 // Locked Livra+ split — list only features a subscriber can use today (no dead-ends).
 // Mark reordering and pace projection are built but not yet wired into a screen, so they
 // are intentionally omitted here and added when their entry points ship (Phase 5 audit §5).
-const PRO_FEATURES: { icon: Icon; title: string; description: string }[] = [
-  { icon: Flag,         title: 'Unlimited Goals',      description: 'Run as many goals at once as you want, past the 2 free.' },
-  { icon: InfinityIcon, title: 'Unlimited Marks',      description: 'Add as many marks per goal as you need.' },
-  { icon: Sparkle,      title: 'AI Goal Plans',        description: 'Describe a goal; Livra drafts the marks to get there.' },
-  { icon: ShareNetwork, title: 'Custom Share Cards',    description: 'Restyle your finish. Themes, accent, and layout.' },
-  { icon: Heart,        title: 'Apple Health',         description: 'Sleep, Workout, Steps. Synced automatically.' },
-  { icon: ChartBar,     title: 'CSV Export',           description: 'Your history is yours. Export anytime.' },
+// QC5-D: each point carries its own accent (founder: "add some colors to the
+// icons"). Sanctioned hues only — `categoryAccents` + `ember` from Tokens, no new
+// palette. Four of the six are semantic, not decorative: AI takes 'ember', whose
+// documented role IS the AI voice; Apple Health takes the health accent; share
+// cards creative; export deepWork. 'ember' is a KEY, not a hex, because ember is
+// theme-dependent (#C8913F light / #D8A658 dark) and this list is module-level —
+// it resolves against the live palette at render. The tile is the app's existing
+// chip grammar: an accent glyph on an applyOpacity(accent, .14) wash of itself,
+// the same shape the mark chips already use.
+type FeatureAccent = string | 'ember';
+const PRO_FEATURES: { icon: Icon; title: string; description: string; accent: FeatureAccent }[] = [
+  { icon: Flag,         title: 'Unlimited Goals',      description: 'Run as many goals at once as you want, past the 2 free.', accent: categoryAccents.fitness },
+  { icon: InfinityIcon, title: 'Unlimited Marks',      description: 'Add as many marks per goal as you need.',                 accent: categoryAccents.discipline },
+  { icon: Sparkle,      title: 'AI Goal Plans',        description: 'Describe a goal; Livra drafts the marks to get there.',   accent: 'ember' },
+  { icon: ShareNetwork, title: 'Custom Share Cards',    description: 'Restyle your finish. Themes, accent, and layout.',        accent: categoryAccents.creative },
+  { icon: Heart,        title: 'Apple Health',         description: 'Sleep, Workout, Steps. Synced automatically.',            accent: categoryAccents.health },
+  { icon: ChartBar,     title: 'CSV Export',           description: 'Your history is yours. Export anytime.',                  accent: categoryAccents.deepWork },
 ];
 
 const SHIPPED_PREMIUM_FEATURE_TITLES = [
@@ -1028,7 +1039,12 @@ function PaywallScreenContent() {
             </TouchableOpacity>
           </View>
           <View style={styles.loadingBlock}>
-            <SvgLogo width={48} height={48} />
+            {/* QC5-D: SvgLogo's default is primitiveColors.forest — the LIGHT
+                palette's hex, hardcoded — so on dark this drew dark-green on a
+                dark linen and all but vanished. Every other caller in the app
+                already passes this theme-aware pair; the paywall was the only
+                one leaning on the default. */}
+            <SvgLogo width={48} height={48} color={isDark ? c.inkDark : c.forest} />
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="small" color={c.forest} />
               <Text style={[styles.loadingText, { color: c.inkMid }]}>
@@ -1057,16 +1073,21 @@ function PaywallScreenContent() {
 
         {/* Hero + title — structural match to reference */}
         <View style={styles.titleSection}>
+          {/* QC5-D: founder — "the logo shown there should be white not green."
+              White needs something to sit on: the wrap was `c.surface` (linen),
+              where a white mark would be invisible. So the disc carries it — the
+              app's own forest, with the logomark in inkInverse. Forest is
+              structure, which is exactly what this tile is. */}
           <View
             style={[
               styles.heroIconWrap,
               {
-                backgroundColor: c.surface,
-                borderColor: applyOpacity(c.borderMid, 0.9),
+                backgroundColor: c.forest,
+                borderColor: applyOpacity(c.forest, 0.9),
               },
             ]}
           >
-            <SvgLogo width={48} height={48} />
+            <SvgLogo width={48} height={48} color={c.inkInverse} />
           </View>
           <TouchableOpacity onPress={handleTitleTap} activeOpacity={1}>
             <Text style={[styles.title, { color: c.inkDark }]}>Livra+</Text>
@@ -1095,7 +1116,10 @@ function PaywallScreenContent() {
 
         {/* Features */}
         <View style={styles.featuresList}>
-          {PRO_FEATURES.map((feature, index) => (
+          {PRO_FEATURES.map((feature, index) => {
+            // 'ember' is a key, not a hex — resolve it against the live palette.
+            const accent = feature.accent === 'ember' ? c.ember : feature.accent;
+            return (
             <View
               key={`feature-${index}-${feature.title}`}
               style={[
@@ -1109,10 +1133,10 @@ function PaywallScreenContent() {
               <View
                 style={[
                   styles.featureIcon,
-                  { backgroundColor: applyOpacity(c.inkDark, isDark ? 0.12 : 0.06) },
+                  { backgroundColor: applyOpacity(accent, isDark ? 0.22 : 0.14) },
                 ]}
               >
-                <feature.icon size={26} color={c.inkDark} weight="duotone" />
+                <feature.icon size={26} color={accent} weight="duotone" />
               </View>
               <View style={styles.featureText}>
                 <AppText variant="body" style={[styles.featureTitle, { color: c.inkDark }]}>
@@ -1123,7 +1147,8 @@ function PaywallScreenContent() {
                 </AppText>
               </View>
             </View>
-          ))}
+            );
+          })}
         </View>
 
         {/* Pricing Selection - Only show when products are loaded and connection is ready */}
@@ -1988,7 +2013,9 @@ function PaywallErrorFallback({ onRetry }: { onRetry: () => void }) {
           <X size={28} color={c.inkMid} weight="regular" />
         </View>
         <View style={styles.loadingBlock}>
-          <SvgLogo width={48} height={48} />
+          {/* Same theme-aware pair as every other SvgLogo caller — see the note
+              on the loading block above. */}
+          <SvgLogo width={48} height={48} color={theme === 'dark' ? c.inkDark : c.forest} />
           <AppText variant="headline" style={[styles.title, { color: c.inkDark }]}>
             Unable to load subscription options
           </AppText>
