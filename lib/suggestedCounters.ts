@@ -17,6 +17,8 @@ export type MarkDefinition = {
   name: string;
   icon: React.ComponentType<any>;
   emoji: string;
+  /** One plain sentence: what this mark tracks and what counts as a check-in. */
+  description: string;
   color: string;
   unit: 'sessions' | 'days' | 'items';
   category: string;
@@ -39,6 +41,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   // RECOVERY
   {
     id: 'sleep', name: 'Sleep', icon: MoonStarsIcon, emoji: '🌙', timeAffinity: 'evening',
+    description: 'Nights you get the sleep you planned for; check in the morning after.',
     color: '#7B9EA6', unit: 'days', category: 'Recovery',
     tags: ['sleep', 'recovery', 'energy', 'marathon', 'performance', 'insomnia', 'rest', 'fatigue', 'tired', 'endurance', 'health', 'athlete'],
     healthKitType: 'sleep',
@@ -46,6 +49,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   },
   {
     id: 'stretch', name: 'Stretch', icon: PersonSimpleIcon, emoji: '🧘',
+    description: 'Sessions spent stretching or working on mobility, however short.',
     color: '#7B9EA6', unit: 'sessions', category: 'Recovery',
     tags: ['flexibility', 'mobility', 'recovery', 'injury', 'yoga', 'marathon', 'run', 'athlete', 'posture', 'soreness', 'tightness'],
     healthKitType: null,
@@ -53,6 +57,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   },
   {
     id: 'rest', name: 'Rest Day', icon: BedIcon, emoji: '😴',
+    description: 'Days you deliberately take off from training so your body can recover.',
     color: '#7B9EA6', unit: 'days', category: 'Recovery',
     tags: ['recovery', 'overtraining', 'burnout', 'athlete', 'marathon', 'fatigue', 'rest', 'balance'],
     healthKitType: null,
@@ -62,6 +67,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   // FITNESS
   {
     id: 'workout', name: 'Workout', icon: BarbellIcon, emoji: '🏋️', timeAffinity: 'daytime',
+    description: 'Any training session you set out to do, from a full gym session to a circuit at home.',
     color: '#8A7E6B', unit: 'sessions', category: 'Fitness',
     tags: ['fitness', 'strength', 'muscle', 'gym', 'marathon', 'lose weight', 'bulk', 'tone', 'training', 'athlete', 'body', 'health', 'endurance', 'triathlon'],
     healthKitType: 'workout',
@@ -69,6 +75,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   },
   {
     id: 'steps', name: 'Steps', icon: FootprintsIcon, emoji: '👣', timeAffinity: 'daytime',
+    description: 'Days you reach the step target you set, counted from your phone or watch.',
     color: '#8A7E6B', unit: 'items', category: 'Fitness',
     tags: ['steps', 'walk', 'marathon', '5k', '10k', 'half marathon', 'race', 'cardio', 'active', 'movement', 'walking', 'running', 'weight loss'],
     healthKitType: 'steps',
@@ -76,6 +83,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   },
   {
     id: 'run', name: 'Run', icon: PersonSimpleRunIcon, emoji: '🏃', timeAffinity: 'daytime',
+    description: 'Each run you complete, whatever the distance or pace.',
     color: '#8A7E6B', unit: 'sessions', category: 'Fitness',
     tags: ['running', 'marathon', '5k', '10k', 'half marathon', 'race', 'cardio', 'jogging', 'endurance', 'triathlon', 'speed', 'pace'],
     healthKitType: null,
@@ -83,6 +91,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   },
   {
     id: 'swim', name: 'Swim', icon: WavesIcon, emoji: '🏊', timeAffinity: 'daytime',
+    description: 'Each swim, counted once you are out of the water.',
     color: '#8A7E6B', unit: 'sessions', category: 'Fitness',
     tags: ['swimming', 'triathlon', 'endurance', 'cardio', 'marathon', 'weight loss', 'low impact', 'fitness', 'athlete', 'laps'],
     healthKitType: null,
@@ -90,6 +99,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   },
   {
     id: 'cycling', name: 'Cycling', icon: BicycleIcon, emoji: '🚴', timeAffinity: 'daytime',
+    description: 'Each ride you complete, indoors or out.',
     color: '#8A7E6B', unit: 'sessions', category: 'Fitness',
     tags: ['cycling', 'bike', 'triathlon', 'cardio', 'endurance', 'weight loss', 'commute', 'fitness', 'spin', 'race'],
     healthKitType: null,
@@ -99,6 +109,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   // HEALTH
   {
     id: 'water', name: 'Water', icon: DropIcon, emoji: '💧',
+    description: 'Days you drink the amount of water you were aiming for.',
     color: '#6B9E8A', unit: 'items', category: 'Health',
     tags: ['hydration', 'water', 'health', 'weight loss', 'energy', 'skin', 'detox', 'marathon', 'performance', 'kidney'],
     healthKitType: null,
@@ -106,6 +117,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   },
   {
     id: 'nutrition', name: 'Nutrition', icon: ForkKnifeIcon, emoji: '🥗',
+    description: 'Days you eat the way you intended to eat.',
     color: '#6B9E8A', unit: 'days', category: 'Health',
     tags: ['diet', 'eat clean', 'nutrition', 'weight loss', 'meal prep', 'health', 'muscle', 'performance', 'food', 'body'],
     healthKitType: null,
@@ -113,6 +125,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   },
   {
     id: 'vitamins', name: 'Vitamins', icon: PillIcon, emoji: '💊',
+    description: 'Days you take the supplements you planned to take.',
     color: '#6B9E8A', unit: 'days', category: 'Health',
     tags: ['vitamins', 'supplements', 'health', 'immunity', 'wellness', 'energy', 'nutrition', 'deficiency'],
     healthKitType: null,
@@ -120,6 +133,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   },
   {
     id: 'calories', name: 'Calories', icon: FireIcon, emoji: '🔥',
+    description: 'Days you stay inside the calorie range you set.',
     color: '#6B9E8A', unit: 'items', category: 'Health',
     tags: ['calories', 'weight loss', 'diet', 'cut', 'bulk', 'nutrition', 'food', 'macro', 'fitness', 'body composition'],
     healthKitType: null,
@@ -127,6 +141,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   },
   {
     id: 'no-alcohol', name: 'No Alcohol', icon: ProhibitIcon, emoji: '🚫',
+    description: 'Days you go without alcohol.',
     color: '#6B9E8A', unit: 'days', category: 'Health',
     tags: ['sober', 'sobriety', 'dry january', 'alcohol', 'drinking', 'liver', 'health', 'sleep', 'discipline', 'addiction', 'quit'],
     healthKitType: null,
@@ -134,6 +149,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   },
   {
     id: 'meal-prep', name: 'Meal Prep', icon: BowlFoodIcon, emoji: '🍱',
+    description: 'Each session spent preparing meals ahead of time.',
     color: '#6B9E8A', unit: 'sessions', category: 'Health',
     tags: ['meal prep', 'diet', 'nutrition', 'weight loss', 'cooking', 'food', 'healthy eating', 'discipline', 'budget', 'prep'],
     healthKitType: null,
@@ -143,6 +159,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   // MINDSET
   {
     id: 'meditation', name: 'Meditation', icon: BrainIcon, emoji: '🧠', timeAffinity: 'evening',
+    description: 'Each meditation session, however long you sit.',
     color: '#8A6B7B', unit: 'sessions', category: 'Mindset',
     tags: ['meditation', 'stress', 'anxiety', 'focus', 'mindfulness', 'mental health', 'calm', 'clarity', 'sleep', 'peace', 'breath'],
     healthKitType: null,
@@ -150,6 +167,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   },
   {
     id: 'journaling', name: 'Journaling', icon: NotePencilIcon, emoji: '📓', timeAffinity: 'evening',
+    description: 'Each entry you write, however brief.',
     color: '#8A6B7B', unit: 'sessions', category: 'Mindset',
     tags: ['journaling', 'reflection', 'gratitude', 'clarity', 'mental health', 'anxiety', 'writing', 'self awareness', 'growth', 'therapy'],
     healthKitType: null,
@@ -157,6 +175,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   },
   {
     id: 'gratitude', name: 'Gratitude', icon: HandHeartIcon, emoji: '🙏', timeAffinity: 'evening',
+    description: 'Each time you note down something you are grateful for.',
     color: '#8A6B7B', unit: 'sessions', category: 'Mindset',
     tags: ['gratitude', 'positivity', 'mindset', 'happiness', 'mental health', 'relationships', 'wellbeing', 'perspective'],
     healthKitType: null,
@@ -164,6 +183,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   },
   {
     id: 'breathwork', name: 'Breathwork', icon: WindIcon, emoji: '💨',
+    description: 'Each deliberate breathing session you complete.',
     color: '#8A6B7B', unit: 'sessions', category: 'Mindset',
     tags: ['breathwork', 'anxiety', 'stress', 'panic', 'calm', 'focus', 'meditation', 'energy', 'performance', 'sleep'],
     healthKitType: null,
@@ -171,6 +191,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   },
   {
     id: 'affirmations', name: 'Affirmations', icon: ChatCenteredTextIcon, emoji: '💬',
+    description: 'Each time you say or write your affirmations.',
     color: '#8A6B7B', unit: 'sessions', category: 'Mindset',
     tags: ['affirmations', 'confidence', 'mindset', 'self esteem', 'positivity', 'motivation', 'identity', 'belief'],
     healthKitType: null,
@@ -180,6 +201,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   // DEEP WORK
   {
     id: 'focus', name: 'Focus', icon: TargetIcon, emoji: '🎯',
+    description: 'Each focused block of work you finish without switching tasks.',
     color: '#8A9E8A', unit: 'sessions', category: 'Deep Work',
     tags: ['focus', 'productivity', 'deep work', 'distraction', 'adhd', 'career', 'study', 'startup', 'business', 'writing', 'coding'],
     healthKitType: null,
@@ -187,6 +209,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   },
   {
     id: 'planning', name: 'Planning', icon: CalendarCheckIcon, emoji: '🗓️',
+    description: 'Each time you sit down to plan your day or week.',
     color: '#9E8A6B', unit: 'sessions', category: 'Deep Work',
     tags: ['planning', 'organization', 'productivity', 'career', 'business', 'goals', 'schedule', 'time management', 'project'],
     healthKitType: null,
@@ -194,6 +217,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   },
   {
     id: 'reading', name: 'Reading', icon: BookOpenTextIcon, emoji: '📖', timeAffinity: 'evening',
+    description: 'Each reading session, however many pages you get through.',
     color: '#8A6B7B', unit: 'sessions', category: 'Deep Work',
     tags: ['reading', 'books', 'learning', 'knowledge', 'growth', 'education', 'career', 'skill', 'vocabulary', 'writing'],
     healthKitType: null,
@@ -201,6 +225,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   },
   {
     id: 'practice', name: 'Practice', icon: MetronomeIcon, emoji: '⚡',
+    description: 'Each practice session on the skill you are working on.',
     color: '#7B6B9E', unit: 'sessions', category: 'Deep Work',
     tags: ['practice', 'skill', 'instrument', 'music', 'coding', 'language', 'art', 'sport', 'mastery', 'daily', 'discipline'],
     healthKitType: null,
@@ -208,6 +233,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   },
   {
     id: 'study', name: 'Study', icon: GraduationCapIcon, emoji: '🎓',
+    description: 'Each study session you complete.',
     color: '#8A9E8A', unit: 'sessions', category: 'Deep Work',
     tags: ['study', 'exam', 'school', 'degree', 'certification', 'course', 'learning', 'knowledge', 'career', 'skill'],
     healthKitType: null,
@@ -215,6 +241,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   },
   {
     id: 'deep-work', name: 'Deep Work', icon: HourglassIcon, emoji: '⏳',
+    description: 'Each uninterrupted stretch of deep work you finish.',
     color: '#8A9E8A', unit: 'sessions', category: 'Deep Work',
     tags: ['deep work', 'focus', 'productivity', 'distraction', 'startup', 'career', 'writing', 'coding', 'flow state', 'output'],
     healthKitType: null,
@@ -222,6 +249,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   },
   {
     id: 'no-phone', name: 'No Phone', icon: PhoneSlashIcon, emoji: '📵',
+    description: 'Days you keep to the phone limits you set for yourself.',
     color: '#8A9E8A', unit: 'days', category: 'Deep Work',
     tags: ['phone', 'screen time', 'distraction', 'focus', 'productivity', 'social media', 'addiction', 'dopamine', 'presence'],
     healthKitType: null,
@@ -229,6 +257,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   },
   {
     id: 'writing', name: 'Writing', icon: PenNibIcon, emoji: '✍️',
+    description: 'Each writing session, whatever the word count.',
     color: '#7C3AED', unit: 'sessions', category: 'Deep Work',
     tags: ['writing', 'book', 'blog', 'content', 'author', 'copywriting', 'journal', 'script', 'storytelling', 'career', 'side hustle', 'novel'],
     healthKitType: null,
@@ -236,6 +265,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   },
   {
     id: 'language', name: 'Language', icon: GlobeSimpleIcon, emoji: '🗣️',
+    description: 'Each session spent learning or practicing the language.',
     color: '#059669', unit: 'sessions', category: 'Deep Work',
     tags: ['language', 'spanish', 'french', 'japanese', 'fluent', 'bilingual', 'travel', 'culture', 'learning', 'skill', 'korean', 'italian', 'portuguese'],
     healthKitType: null,
@@ -245,6 +275,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   // FINANCE
   {
     id: 'finance', name: 'Finance', icon: WalletIcon, emoji: '💳',
+    description: 'Days you review your money: balances, bills, or spending.',
     color: '#9E7B6B', unit: 'days', category: 'Finance',
     tags: ['finance', 'budget', 'money', 'spending', 'debt', 'financial freedom', 'wealth', 'income', 'bills'],
     healthKitType: null,
@@ -252,6 +283,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   },
   {
     id: 'saving', name: 'Saving', icon: PiggyBankIcon, emoji: '🐷',
+    description: 'Days you move money into savings or hold to your saving plan.',
     color: '#9E7B6B', unit: 'days', category: 'Finance',
     tags: ['saving', 'savings', 'emergency fund', 'down payment', 'house', 'financial freedom', 'retirement', 'debt', 'wealth'],
     healthKitType: null,
@@ -259,6 +291,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   },
   {
     id: 'no-spend', name: 'No Spend', icon: CurrencyCircleDollarIcon, emoji: '💸',
+    description: 'Days you spend nothing beyond your essentials.',
     color: '#9E7B6B', unit: 'days', category: 'Finance',
     tags: ['no spend', 'spending', 'budget', 'frugal', 'debt', 'savings', 'discipline', 'impulse', 'financial freedom'],
     healthKitType: null,
@@ -266,6 +299,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   },
   {
     id: 'invest', name: 'Invest', icon: TrendUpIcon, emoji: '📈',
+    description: 'Days you invest or review your investments.',
     color: '#9E7B6B', unit: 'days', category: 'Finance',
     tags: ['investing', 'investment', 'stocks', 'wealth', 'retirement', 'financial freedom', 'compound interest', 'passive income'],
     healthKitType: null,
@@ -273,6 +307,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   },
   {
     id: 'side-hustle', name: 'Side Hustle', icon: BriefcaseIcon, emoji: '💼',
+    description: 'Each session of work on your side project or business.',
     color: '#9E7B6B', unit: 'sessions', category: 'Finance',
     tags: ['side hustle', 'income', 'business', 'freelance', 'startup', 'money', 'entrepreneur', 'revenue', 'clients'],
     healthKitType: null,
@@ -282,6 +317,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   // DISCIPLINE
   {
     id: 'cold-shower', name: 'Cold Shower', icon: ShowerIcon, emoji: '🚿',
+    description: 'Days you take a cold shower.',
     color: '#7B9EA6', unit: 'days', category: 'Discipline',
     tags: ['cold shower', 'discipline', 'energy', 'immune', 'willpower', 'mental toughness', 'habit', 'morning', 'recovery'],
     healthKitType: null,
@@ -289,6 +325,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   },
   {
     id: 'wake-early', name: 'Wake Early', icon: SunHorizonIcon, emoji: '🌅',
+    description: 'Days you get up at the time you set.',
     color: '#9E8A6B', unit: 'days', category: 'Discipline',
     tags: ['wake early', 'morning routine', '5am', 'discipline', 'productivity', 'sleep schedule', 'routine', 'schedule'],
     healthKitType: null,
@@ -296,6 +333,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   },
   {
     id: 'no-sugar', name: 'No Sugar', icon: CakeIcon, emoji: '🚫',
+    description: 'Days you go without added sugar.',
     color: '#6B9E8A', unit: 'days', category: 'Discipline',
     tags: ['no sugar', 'diet', 'weight loss', 'diabetes', 'health', 'discipline', 'nutrition', 'clean eating', 'inflammation'],
     healthKitType: null,
@@ -303,6 +341,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   },
   {
     id: 'screen-time', name: 'Screen Time', icon: MonitorIcon, emoji: '📱',
+    description: 'Days you stay within the screen time you set.',
     color: '#8A9E8A', unit: 'days', category: 'Discipline',
     tags: ['screen time', 'phone', 'social media', 'distraction', 'sleep', 'focus', 'addiction', 'productivity', 'presence'],
     healthKitType: null,
@@ -310,6 +349,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   },
   {
     id: 'cooking', name: 'Cooking', icon: CookingPotIcon, emoji: '🍳',
+    description: 'Each meal you cook instead of buying.',
     color: '#6B9E8A', unit: 'sessions', category: 'Discipline',
     tags: ['cooking', 'meal prep', 'nutrition', 'diet', 'health', 'money', 'food', 'eating out', 'skills', 'discipline'],
     healthKitType: null,
@@ -317,6 +357,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   },
   {
     id: 'posture', name: 'Posture', icon: ArrowsVerticalIcon, emoji: '🧍',
+    description: 'Days you keep an eye on your posture.',
     color: '#8A7E6B', unit: 'days', category: 'Discipline',
     tags: ['posture', 'back pain', 'ergonomics', 'health', 'desk', 'alignment', 'neck', 'spine', 'sitting'],
     healthKitType: null,
@@ -326,6 +367,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   // RELATIONSHIPS
   {
     id: 'socialize', name: 'Socialize', icon: UsersThreeIcon, emoji: '👥',
+    description: 'Each time you see or speak to friends.',
     color: '#8A6B7B', unit: 'sessions', category: 'Relationships',
     tags: ['social', 'friends', 'loneliness', 'connection', 'mental health', 'relationships', 'network', 'community'],
     healthKitType: null,
@@ -333,6 +375,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   },
   {
     id: 'family', name: 'Family Time', icon: HouseIcon, emoji: '🏠',
+    description: 'Each stretch of time you spend with family, phone away.',
     color: '#8A6B7B', unit: 'sessions', category: 'Relationships',
     tags: ['family', 'kids', 'marriage', 'partner', 'parents', 'relationships', 'presence', 'work life balance', 'connection'],
     healthKitType: null,
@@ -340,6 +383,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   },
   {
     id: 'networking', name: 'Networking', icon: HandshakeIcon, emoji: '🤝',
+    description: 'Each conversation with someone new in your field.',
     color: '#9E8A6B', unit: 'sessions', category: 'Relationships',
     tags: ['networking', 'career', 'business', 'connections', 'job', 'clients', 'professional', 'relationships', 'growth'],
     healthKitType: null,
@@ -347,6 +391,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   },
   {
     id: 'volunteer', name: 'Volunteer', icon: HeartIcon, emoji: '❤️',
+    description: 'Each time you give time to a cause or your community.',
     color: '#8A6B7B', unit: 'sessions', category: 'Relationships',
     tags: ['volunteer', 'community', 'purpose', 'giving', 'social', 'relationships', 'fulfilment', 'impact', 'charity'],
     healthKitType: null,
@@ -356,6 +401,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   // CREATIVE
   {
     id: 'creative', name: 'Creative', icon: PaintBrushIcon, emoji: '🎨',
+    description: 'Each session spent making something.',
     color: '#7B6B9E', unit: 'sessions', category: 'Creative',
     tags: ['creative', 'art', 'drawing', 'painting', 'design', 'music', 'writing', 'expression', 'hobby', 'skill', 'side hustle'],
     healthKitType: null,
