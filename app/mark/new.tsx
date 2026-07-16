@@ -149,7 +149,8 @@ export default function NewCounterScreen() {
 
   const iconCellSize = useMemo(() => {
     const scrollPad = spacing.lg;
-    const cardPad = spacing.lg;
+    // The icon grid lives inside styles.card, whose padding is spacing.md.
+    const cardPad = spacing.md;
     const rowInner = SCREEN_WIDTH - scrollPad * 2 - cardPad * 2;
     const gap = spacing.sm;
     return (rowInner - gap * (ICON_GRID_COLUMNS - 1)) / ICON_GRID_COLUMNS;
@@ -236,6 +237,19 @@ export default function NewCounterScreen() {
     }
   };
 
+  // QC3 cleanup: the success epilogue shared by both create paths — link the
+  // new mark to its goal (fire-and-forget), toast, then pop back after the
+  // toast is visible. Callers pass their own success copy.
+  const finishMarkCreation = (savedMark: { id?: string } | null | undefined, successMessage: string) => {
+    if (linkToGoal && targetGoalId && savedMark?.id) {
+      linkMarkToGoal(targetGoalId, savedMark.id).catch(() => {});
+    }
+    showSuccess(successMessage);
+    setTimeout(() => {
+      router.back();
+    }, 300);
+  };
+
   const handleConfirmSuggestedCounter = async () => {
     if (!pendingSuggestedCounter) return;
 
@@ -254,14 +268,8 @@ export default function NewCounterScreen() {
         weekly_target: pendingSuggestedCounter.frequency_recommended ?? 3,
         ...(linkToGoal && targetGoalId ? { goal_id: targetGoalId } : {}),
       } as any);
-      if (linkToGoal && targetGoalId && savedMark?.id) {
-        linkMarkToGoal(targetGoalId, savedMark.id).catch(() => {});
-      }
-      showSuccess('Mark added');
       setPendingSuggestedCounter(null);
-      setTimeout(() => {
-        router.back();
-      }, 300);
+      finishMarkCreation(savedMark, 'Mark added');
     } catch (error) {
       setLoading(false);
       handleCreateMarkError(error);
@@ -302,13 +310,7 @@ export default function NewCounterScreen() {
         ...(linkToGoal && targetGoalId ? { goal_id: targetGoalId } : {}),
       } as any);
 
-      if (linkToGoal && targetGoalId && savedMark?.id) {
-        linkMarkToGoal(targetGoalId, savedMark.id).catch(() => {});
-      }
-      showSuccess('Mark created');
-      setTimeout(() => {
-        router.back();
-      }, 300);
+      finishMarkCreation(savedMark, 'Mark created');
     } catch (error) {
       setLoading(false);
       handleCreateMarkError(error);
@@ -808,9 +810,10 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
   },
   dayChip: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 44,
+    height: 44,
+    minHeight: 44, // QC3 wave2: tap-target floor
+    borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,7 @@ import {
   Alert,
   Keyboard,
 } from 'react-native';
-import Animated, { useSharedValue, useAnimatedStyle } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { themedColors, spacing, fontSize, fonts, radius } from '../../theme/tokens';
@@ -22,7 +22,7 @@ import { useEffectiveTheme } from '../../state/uiSlice';
 import { useGoalsStore, GoalLimitError } from '../../state/goalsSlice';
 import { useMarksStore } from '../../state/countersSlice';
 import { useAuth } from '../../hooks/useAuth';
-import { useMotion } from '../../hooks/useMotion';
+import { useSettleEntrance } from '../../hooks/useSettleEntrance';
 import { checkProStatus } from '../../lib/iap/iap';
 import { GOAL_LIMIT_MESSAGE } from '@/lib/copy';
 import { getMarksForGoal } from '../../lib/goalMarkSuggestions';
@@ -48,19 +48,8 @@ const EXAMPLE_GOALS = ['Run a 5k', 'Read nightly', 'Meditate daily', 'Save $5k']
  * ember spark and never a loud selection.
  */
 function MarkPreviewChip({ mark, labelColor }: { mark: MarkDefinition; labelColor: string }) {
-  const { reduced, spring } = useMotion();
-  const entered = useSharedValue(reduced ? 1 : 0);
-
-  useEffect(() => {
-    entered.value = spring(1, 'settle');
-    // Mount-only entrance; the chip remounts (replaying) when a new mark matches.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const style = useAnimatedStyle(() => ({
-    opacity: entered.value,
-    transform: [{ translateY: (1 - entered.value) * 6 }],
-  }));
+  // Mount-only entrance; the chip remounts (replaying) when a new mark matches.
+  const style = useSettleEntrance(6);
 
   const cat = CATEGORY_MAP[mark.category] ?? CATEGORY_MAP.custom;
   const Icon = mark.icon ?? cat.Icon;

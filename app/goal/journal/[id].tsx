@@ -14,7 +14,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { format, parseISO } from 'date-fns';
 import * as Haptics from 'expo-haptics';
-import { X, PencilSimple, Trash, Check, Plus } from 'phosphor-react-native';
+import { X, PencilSimple, Trash, Check } from 'phosphor-react-native';
 import {
   themedColors,
   spacing,
@@ -30,6 +30,7 @@ import { useAuth } from '../../../hooks/useAuth';
 import { getAppDate } from '../../../lib/appDate';
 import { formatDate } from '../../../lib/date';
 import { applyOpacity } from '../../../src/components/icons/color';
+import { JournalComposer } from '../../../components/journal/JournalComposer';
 
 type ThemeColors = ReturnType<typeof themedColors>;
 
@@ -52,65 +53,6 @@ function entryTime(createdAt: string): string {
   } catch {
     return '';
   }
-}
-
-/** Compose a new entry. Add is disabled until there is real text. */
-function JournalComposer({
-  c,
-  onAdd,
-}: {
-  c: ThemeColors;
-  onAdd: (text: string) => Promise<void>;
-}) {
-  const [draft, setDraft] = useState('');
-  const [saving, setSaving] = useState(false);
-  const trimmed = draft.trim();
-  const canAdd = trimmed.length > 0 && !saving;
-
-  const handleAdd = async () => {
-    if (!canAdd) return;
-    setSaving(true);
-    try {
-      await onAdd(trimmed);
-      setDraft('');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <View style={[styles.composer, { backgroundColor: c.surface, borderColor: c.borderLight }]}>
-      <TextInput
-        value={draft}
-        onChangeText={(t) => setDraft(t.slice(0, ENTRY_MAX_LEN))}
-        placeholder="What did you do, what's working, what's not?"
-        placeholderTextColor={c.inkMuted}
-        multiline
-        style={[styles.composerInput, { color: c.inkDark, borderColor: c.borderMid, backgroundColor: c.surface }]}
-        textAlignVertical="top"
-      />
-      <View style={styles.composerActions}>
-        <Text style={[styles.charCount, { color: c.inkMid }]}>
-          {draft.length}/{ENTRY_MAX_LEN}
-        </Text>
-        <TouchableOpacity
-          style={[
-            styles.addBtn,
-            { backgroundColor: canAdd ? c.forest : c.surfaceAlt },
-          ]}
-          onPress={handleAdd}
-          disabled={!canAdd}
-          activeOpacity={0.85}
-          accessibilityLabel="Add journal entry"
-        >
-          <Plus size={14} color={canAdd ? c.inkInverse : c.inkMuted} weight="bold" />
-          <Text style={[styles.addBtnText, { color: canAdd ? c.inkInverse : c.inkMuted }]}>
-            {saving ? 'Adding…' : 'Add entry'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
 }
 
 /** One entry: read view with edit/delete affordances, or an inline edit field. */
@@ -307,7 +249,7 @@ export default function GoalJournalScreen() {
             {goal.title}
           </Text>
 
-          <JournalComposer c={c} onAdd={handleAdd} />
+          <JournalComposer c={c} onAdd={handleAdd} showCharCount inputMinHeight={84} maxLen={ENTRY_MAX_LEN} />
 
           {cloudError ? (
             <View style={[styles.cloudRow, { borderColor: c.borderLight }]}>
@@ -379,40 +321,6 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     marginBottom: spacing.md,
   },
-
-  // Composer
-  composer: {
-    borderWidth: 1,
-    borderRadius: borderRadius.lg,
-    padding: spacing.md,
-    gap: spacing.sm,
-  },
-  composerInput: {
-    borderWidth: 1,
-    borderRadius: borderRadius.md,
-    padding: spacing.md,
-    minHeight: 84,
-    fontSize: fontSize.md,
-    fontFamily: fonts.sans,
-    lineHeight: 22,
-  },
-  composerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  charCount: { fontSize: fontSize.xs, fontFamily: fonts.sans },
-  addBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    minHeight: 44, // QC3 wave2: tap-target floor
-    borderRadius: borderRadius.md,
-  },
-  addBtnText: { fontSize: fontSize.sm, fontFamily: fonts.sansSemibold },
 
   // Cloud error
   cloudRow: {

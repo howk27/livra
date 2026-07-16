@@ -23,11 +23,13 @@ function styleBlock(src: string, name: string): string {
 }
 
 // (file, styleName) touchables that must carry an explicit 44px minimum.
+// The journal compose "Add entry" button now lives in the shared composer that
+// both the detail preview and the full journal screen consume (QC3 cleanup).
 const MIN_HEIGHT_TARGETS: Array<[string, string]> = [
   ['app/mark/new.tsx', 'popularChip'],
-  ['app/goal/journal/[id].tsx', 'addBtn'],
+  ['app/mark/new.tsx', 'dayChip'],
+  ['components/journal/JournalComposer.tsx', 'addBtn'],
   ['app/goal/journal/[id].tsx', 'entrySaveBtn'],
-  ['app/goal/[id].tsx', 'journalAddBtn'],
 ];
 
 describe('journal / mark-create tap targets reach 44px (QC3 wave2)', () => {

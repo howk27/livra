@@ -1,8 +1,7 @@
 import { Platform } from 'react-native';
 import * as SQLite from 'expo-sqlite';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { MarkNote } from '../../types';
-import { logger } from '../utils/logger';
+import { migrateNotesFromAsyncStorage } from './notesMigration';
 
 const DB_NAME = 'livra_mark_notes.db';
 const MIGRATION_FLAG_KEY = '@livra_notes_sqlite_migrated_v1';
@@ -43,40 +42,27 @@ export async function getMarkNotesDb(): Promise<SQLite.SQLiteDatabase> {
 
 /** One-time copy from legacy AsyncStorage list into SQLite, then clear the legacy key. */
 export async function migrateMarkNotesFromAsyncStorage(notesStorageKey: string): Promise<void> {
-  if (!markNotesSqliteSupported()) return;
-  try {
-    const done = await AsyncStorage.getItem(MIGRATION_FLAG_KEY);
-    if (done === '1') return;
-
-    const raw = await AsyncStorage.getItem(notesStorageKey);
-    const legacy: MarkNote[] = raw ? JSON.parse(raw) : [];
-    if (legacy.length === 0) {
-      await AsyncStorage.setItem(MIGRATION_FLAG_KEY, '1');
-      return;
-    }
-
-    const db = await getMarkNotesDb();
-    await db.withTransactionAsync(async () => {
-      for (const n of legacy) {
-        if (!n?.mark_id || !n?.date) continue;
-        await db.runAsync(
-          `INSERT INTO mark_notes (id, mark_id, user_id, date, text, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(mark_id, date) DO UPDATE SET
-             id = excluded.id,
-             text = excluded.text,
-             updated_at = excluded.updated_at,
-             user_id = excluded.user_id`,
-          [n.id, n.mark_id, n.user_id, n.date, n.text ?? '', n.created_at, n.updated_at],
-        );
-      }
-    });
-    await AsyncStorage.removeItem(notesStorageKey);
-    await AsyncStorage.setItem(MIGRATION_FLAG_KEY, '1');
-    logger.log(`[MarkNotesSQLite] Migrated ${legacy.length} note(s) from AsyncStorage`);
-  } catch (e) {
-    logger.error('[MarkNotesSQLite] Migration failed:', e);
-  }
+  await migrateNotesFromAsyncStorage<MarkNote>({
+    supported: markNotesSqliteSupported(),
+    flagKey: MIGRATION_FLAG_KEY,
+    storageKey: notesStorageKey,
+    getDb: getMarkNotesDb,
+    logLabel: 'MarkNotesSQLite',
+    unit: 'note(s)',
+    migrateRow: async (n, db) => {
+      if (!n?.mark_id || !n?.date) return;
+      await db.runAsync(
+        `INSERT INTO mark_notes (id, mark_id, user_id, date, text, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(mark_id, date) DO UPDATE SET
+           id = excluded.id,
+           text = excluded.text,
+           updated_at = excluded.updated_at,
+           user_id = excluded.user_id`,
+        [n.id, n.mark_id, n.user_id, n.date, n.text ?? '', n.created_at, n.updated_at],
+      );
+    },
+  });
 }
 
 export async function loadAllMarkNotes(): Promise<MarkNote[]> {

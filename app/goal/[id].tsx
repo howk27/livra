@@ -71,6 +71,7 @@ import {
 import { logger } from '../../lib/utils/logger';
 import { ringFraction } from '../../lib/goalRingProgress';
 import { applyOpacity } from '../../src/components/icons/color';
+import { JournalComposer } from '../../components/journal/JournalComposer';
 
 // QC2-C (founder reversal of VD-4): the ring is the hero again — centered at
 // the top, sweeping 0 -> current fraction once per screen open (ProgressArc
@@ -446,53 +447,19 @@ function GoalJournalPreview({
   const clearCloudError = useGoalNotesStore((s) => s.clearGoalNotesCloudError);
   const addGoalNote = useGoalNotesStore((s) => s.addGoalNote);
 
-  const [draft, setDraft] = useState('');
-  const [saving, setSaving] = useState(false);
-  const trimmed = draft.trim();
-  const canAdd = trimmed.length > 0 && !saving;
-
-  const handleAdd = async () => {
-    if (!canAdd) return;
+  const handleAddNote = async (text: string) => {
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     }
-    setSaving(true);
-    try {
-      const localDate = formatDate(getAppDate());
-      await addGoalNote(goalId, userId, localDate, trimmed);
-      setDraft('');
-    } finally {
-      setSaving(false);
-    }
+    const localDate = formatDate(getAppDate());
+    await addGoalNote(goalId, userId, localDate, text);
   };
 
   return (
     <View style={styles.section}>
       <Text style={[styles.sectionLabel, { color: c.inkMid }]}>JOURNAL</Text>
 
-      <View style={[styles.journalCompose, { backgroundColor: c.surface, borderColor: c.borderLight }]}>
-        <TextInput
-          value={draft}
-          onChangeText={(t) => setDraft(t.slice(0, 1000))}
-          placeholder="What did you do, what's working, what's not?"
-          placeholderTextColor={c.inkMuted}
-          multiline
-          style={[styles.journalInput, { color: c.inkDark, borderColor: c.borderMid, backgroundColor: c.surface }]}
-          textAlignVertical="top"
-        />
-        <TouchableOpacity
-          style={[styles.journalAddBtn, { backgroundColor: canAdd ? c.forest : c.surfaceAlt }]}
-          onPress={handleAdd}
-          disabled={!canAdd}
-          activeOpacity={0.85}
-          accessibilityLabel="Add journal entry"
-        >
-          <Plus size={14} color={canAdd ? c.inkInverse : c.inkMuted} weight="bold" />
-          <Text style={[styles.journalAddText, { color: canAdd ? c.inkInverse : c.inkMuted }]}>
-            {saving ? 'Adding…' : 'Add entry'}
-          </Text>
-        </TouchableOpacity>
-      </View>
+      <JournalComposer c={c} onAdd={handleAddNote} inputMinHeight={72} />
 
       {cloudError ? (
         <View style={styles.journalCloudRow}>
@@ -990,33 +957,6 @@ const styles = StyleSheet.create({
   addMarkBtnText: { fontSize: fontSize.sm, fontFamily: fonts.sansSemibold },
 
   // Journal preview (QC3-D)
-  journalCompose: {
-    borderWidth: 1,
-    borderRadius: borderRadius.lg,
-    padding: spacing.md,
-    gap: spacing.sm,
-  },
-  journalInput: {
-    borderWidth: 1,
-    borderRadius: borderRadius.md,
-    padding: spacing.md,
-    minHeight: 72,
-    fontSize: fontSize.md,
-    fontFamily: fonts.sans,
-    lineHeight: 22,
-  },
-  journalAddBtn: {
-    alignSelf: 'flex-end',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    minHeight: 44, // QC3 wave2: tap-target floor
-    borderRadius: borderRadius.md,
-  },
-  journalAddText: { fontSize: fontSize.sm, fontFamily: fonts.sansSemibold },
   journalCloudRow: {
     marginTop: spacing.xs,
     gap: spacing.xs,

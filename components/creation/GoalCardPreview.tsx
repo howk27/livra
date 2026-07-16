@@ -12,6 +12,7 @@ import Animated, { useSharedValue, useAnimatedStyle } from 'react-native-reanima
 import { fonts, spacing, radius, themedColors, fontSize } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useMotion } from '../../hooks/useMotion';
+import { useSettleEntrance } from '../../hooks/useSettleEntrance';
 import { applyOpacity } from '../../src/components/icons/color';
 import { GoalTitle } from '../ui/GoalTitle';
 import { CATEGORY_MAP } from '../ui/MarkRow';
@@ -40,24 +41,6 @@ interface GoalCardPreviewProps {
   /** "Plan: 2 marks · 4–5 days/week" — see lib/creation/creationPreview. */
   planMeta?: string | null;
   testID?: string;
-}
-
-/**
- * The motion-baseline settle entrance (opacity + rise), one per artifact.
- * Reduced motion renders statically in place — useMotion is the single source.
- */
-function useSettleEntrance(rise = 12) {
-  const { reduced, spring } = useMotion();
-  const entered = useSharedValue(reduced ? 1 : 0);
-  useEffect(() => {
-    entered.value = spring(1, 'settle');
-    // Mount-only entrance by design.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  return useAnimatedStyle(() => ({
-    opacity: entered.value,
-    transform: [{ translateY: (1 - entered.value) * rise }],
-  }));
 }
 
 /** One mark tile settling onto the card's meta strip. */

@@ -42,7 +42,7 @@ const SMALL_TEXT_FLOOR = 18;
 
 // (file, styleName) small-text labels that must use inkMid, never inkMuted.
 const GUARDED: Array<[string, string]> = [
-  ['app/goal/journal/[id].tsx', 'charCount'],
+  ['components/journal/JournalComposer.tsx', 'charCount'],
   ['app/goal/journal/[id].tsx', 'cloudHint'],
   ['app/goal/journal/[id].tsx', 'entryTime'],
   ['app/goal/journal/[id].tsx', 'dayHeader'],

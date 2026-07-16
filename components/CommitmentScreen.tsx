@@ -295,6 +295,8 @@ export function CommitmentScreen({
         style={[styles.cta, { backgroundColor: c.forest, opacity: canProceed ? 1 : 0.4 }]}
         onPress={handleConfirm}
         disabled={!canProceed}
+        accessibilityRole="button"
+        accessibilityState={{ disabled: !canProceed }}
       >
         <Text style={[styles.ctaText, { color: c.inkInverse }]}>
           {isOnboarding ? "Let's go" : 'Create goal'}

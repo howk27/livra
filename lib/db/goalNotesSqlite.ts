@@ -7,9 +7,8 @@
 
 import { Platform } from 'react-native';
 import * as SQLite from 'expo-sqlite';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { GoalNote } from '../../types';
-import { logger } from '../utils/logger';
+import { migrateNotesFromAsyncStorage } from './notesMigration';
 
 const DB_NAME = 'livra_goal_notes.db';
 const MIGRATION_FLAG_KEY = '@livra_goal_notes_sqlite_migrated_v1';
@@ -54,31 +53,18 @@ export async function getGoalNotesDb(): Promise<SQLite.SQLiteDatabase> {
  * on the web (no-SQLite) path, so on native this is effectively a flag-set no-op.
  */
 export async function migrateGoalNotesFromAsyncStorage(notesStorageKey: string): Promise<void> {
-  if (!goalNotesSqliteSupported()) return;
-  try {
-    const done = await AsyncStorage.getItem(MIGRATION_FLAG_KEY);
-    if (done === '1') return;
-
-    const raw = await AsyncStorage.getItem(notesStorageKey);
-    const legacy: GoalNote[] = raw ? JSON.parse(raw) : [];
-    if (legacy.length === 0) {
-      await AsyncStorage.setItem(MIGRATION_FLAG_KEY, '1');
-      return;
-    }
-
-    const db = await getGoalNotesDb();
-    await db.withTransactionAsync(async () => {
-      for (const n of legacy) {
-        if (!n?.id || !n?.goal_id) continue;
-        await sqliteUpsertGoalNote(n, db);
-      }
-    });
-    await AsyncStorage.removeItem(notesStorageKey);
-    await AsyncStorage.setItem(MIGRATION_FLAG_KEY, '1');
-    logger.log(`[GoalNotesSQLite] Migrated ${legacy.length} entr(ies) from AsyncStorage`);
-  } catch (e) {
-    logger.error('[GoalNotesSQLite] Migration failed:', e);
-  }
+  await migrateNotesFromAsyncStorage<GoalNote>({
+    supported: goalNotesSqliteSupported(),
+    flagKey: MIGRATION_FLAG_KEY,
+    storageKey: notesStorageKey,
+    getDb: getGoalNotesDb,
+    logLabel: 'GoalNotesSQLite',
+    unit: 'entr(ies)',
+    migrateRow: async (n, db) => {
+      if (!n?.id || !n?.goal_id) return;
+      await sqliteUpsertGoalNote(n, db);
+    },
+  });
 }
 
 export async function loadAllGoalNotes(): Promise<GoalNote[]> {
