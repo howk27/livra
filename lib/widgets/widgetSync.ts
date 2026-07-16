@@ -48,7 +48,7 @@ export async function buildWidgetData(): Promise<WidgetData> {
     return {
       id: mark.id,
       name: mark.name,
-      symbol: visual.symbol,
+      icon: visual.icon,
       accent: visual.accent,
       completed: loggedTodayIds.has(mark.id),
     };
@@ -64,7 +64,7 @@ export async function buildWidgetData(): Promise<WidgetData> {
 
   return {
     activeGoalTitle: activeGoal?.title ?? null,
-    goalSymbol: goalVisual.symbol,
+    goalIcon: goalVisual.icon,
     goalAccent: goalVisual.accent,
     goalProgress: goalRing.progress,
     goalThreshold: Math.max(1, goalRing.threshold),

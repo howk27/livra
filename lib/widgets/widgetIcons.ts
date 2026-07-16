@@ -1,50 +1,51 @@
 import { categoryAccents } from '../../theme/tokens';
 
 /**
- * Native (SF Symbol) mirror of the app's mark/goal icon system.
+ * Widget icon system — the app's OWN mark/goal icons, not raw emoji.
  *
- * In-app, a mark's icon tile and a goal's hero medallion are rendered from the
- * mark *category* — never the raw emoji ("The app's own icons, never raw emoji
- * in UI chrome", markCategoryResolve.ts). The RN UI uses Phosphor glyphs keyed
- * by CATEGORY_MAP (components/ui/MarkRow.tsx); the widget is native SwiftUI and
- * cannot use those, so each category maps to the closest SF Symbol plus the
- * same category accent color.
+ * In-app, a mark's tile and a goal's hero medallion render a Phosphor duotone
+ * glyph keyed by mark category (components/ui/MarkRow.tsx CATEGORY_MAP), tinted
+ * with the category accent. The widget is native SwiftUI and can't use Phosphor,
+ * so each category maps to a bundled imageset that IS the exact Phosphor duotone
+ * glyph with the accent baked in (see targets/LivraWidget/icons, generated from
+ * phosphor-react-native's duotone path data). `icon` is the asset name rendered
+ * via Image(...) in the widget; `accent` still drives the ring + tile background.
  *
- * Keys here MUST stay in lockstep with CATEGORY_MAP in MarkRow. Unknown keys
- * fall back to `custom`, exactly as MarkRow does (`CATEGORY_MAP[k] ?? custom`).
+ * Keys MUST stay in lockstep with CATEGORY_MAP in MarkRow; unknown keys fall
+ * back to `custom` (the circle glyph), exactly as MarkRow does.
  */
 export interface CategoryVisual {
-  /** SF Symbol name rendered via Image(systemName:) in the widget. */
-  symbol: string;
+  /** Bundled imageset name (the Phosphor duotone glyph, accent baked in). */
+  icon: string;
   /** Category accent hex — matches theme categoryAccents. */
   accent: string;
 }
 
 const CATEGORY_VISUALS: Record<string, CategoryVisual> = {
-  // Phosphor icon → nearest SF Symbol; accent → theme categoryAccents.
-  Recovery: { symbol: 'moon.fill', accent: categoryAccents.recovery },
-  Fitness: { symbol: 'waveform.path.ecg', accent: categoryAccents.fitness },
-  Health: { symbol: 'drop.fill', accent: categoryAccents.health },
-  Mindset: { symbol: 'heart.fill', accent: categoryAccents.mindset },
-  'Deep Work': { symbol: 'briefcase.fill', accent: categoryAccents.deepWork },
-  Creative: { symbol: 'pencil', accent: categoryAccents.creative },
-  Discipline: { symbol: 'shield.fill', accent: categoryAccents.discipline },
-  Relationships: { symbol: 'person.2.fill', accent: categoryAccents.relationships },
-  Finance: { symbol: 'dollarsign.circle.fill', accent: categoryAccents.finance },
-  email: { symbol: 'envelope.fill', accent: categoryAccents.email },
+  // Phosphor glyph → bundled asset; accent → theme categoryAccents.
+  Recovery: { icon: 'livra_moon', accent: categoryAccents.recovery },
+  Fitness: { icon: 'livra_pulse', accent: categoryAccents.fitness },
+  Health: { icon: 'livra_drop', accent: categoryAccents.health },
+  Mindset: { icon: 'livra_heart', accent: categoryAccents.mindset },
+  'Deep Work': { icon: 'livra_briefcase', accent: categoryAccents.deepWork },
+  Creative: { icon: 'livra_pencil', accent: categoryAccents.creative },
+  Discipline: { icon: 'livra_shield', accent: categoryAccents.discipline },
+  Relationships: { icon: 'livra_users', accent: categoryAccents.relationships },
+  Finance: { icon: 'livra_currency', accent: categoryAccents.finance },
+  email: { icon: 'livra_envelope', accent: categoryAccents.email },
   // Legacy lowercase keys (mirror MarkRow's legacy rows)
-  sleep: { symbol: 'moon.fill', accent: categoryAccents.recovery },
-  workout: { symbol: 'waveform.path.ecg', accent: categoryAccents.fitness },
-  water: { symbol: 'drop.fill', accent: categoryAccents.health },
-  planning: { symbol: 'calendar', accent: categoryAccents.planning },
-  reading: { symbol: 'book.fill', accent: categoryAccents.creative },
-  work: { symbol: 'briefcase.fill', accent: categoryAccents.deepWork },
-  custom: { symbol: 'circle.fill', accent: categoryAccents.custom },
+  sleep: { icon: 'livra_moon', accent: categoryAccents.recovery },
+  workout: { icon: 'livra_pulse', accent: categoryAccents.fitness },
+  water: { icon: 'livra_drop', accent: categoryAccents.health },
+  planning: { icon: 'livra_calendar', accent: categoryAccents.planning },
+  reading: { icon: 'livra_book', accent: categoryAccents.creative },
+  work: { icon: 'livra_briefcase', accent: categoryAccents.deepWork },
+  custom: { icon: 'livra_circle', accent: categoryAccents.custom },
 };
 
 const CUSTOM_VISUAL: CategoryVisual = CATEGORY_VISUALS.custom;
 
-/** Category key → { SF Symbol, accent }. Unknown keys resolve to `custom`. */
+/** Category key → { imageset name, accent }. Unknown keys resolve to `custom`. */
 export function categoryVisual(category: string | undefined | null): CategoryVisual {
   if (!category) return CUSTOM_VISUAL;
   return CATEGORY_VISUALS[category] ?? CUSTOM_VISUAL;

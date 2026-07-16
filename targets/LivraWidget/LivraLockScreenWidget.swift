@@ -15,10 +15,14 @@ struct LivraLockScreenView: View {
         }
     }
 
-    // Gauge ring with the goal icon at its center.
+    // Ring gauge with the goal's progress count at its center. Lock-screen
+    // accessories are rendered monochrome by the system, so the full-color
+    // category glyph lives only on the home-screen widget; here we show the ring.
     private var circular: some View {
         Gauge(value: data.progressFraction) {
-            Image(systemName: data.goalSymbol.isEmpty ? "circle.fill" : data.goalSymbol)
+            Text("Goal")
+        } currentValueLabel: {
+            Text("\(data.goalProgress)")
         }
         .gaugeStyle(.accessoryCircularCapacity)
         .widgetURL(URL(string: "livra://home"))
@@ -27,14 +31,10 @@ struct LivraLockScreenView: View {
     // Goal + the next mark waiting to be logged.
     private var rectangular: some View {
         VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 4) {
-                Image(systemName: data.goalSymbol.isEmpty ? "circle.fill" : data.goalSymbol)
-                    .font(.system(size: 11))
-                Text(data.activeGoalTitle ?? "No active goal")
-                    .font(.system(size: 12, weight: .semibold))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-            }
+            Text(data.activeGoalTitle ?? "No active goal")
+                .font(.system(size: 12, weight: .semibold))
+                .lineLimit(1)
+                .truncationMode(.tail)
             if let mark = data.nextQueuedMark {
                 Text("Next: \(mark.name)")
                     .font(.system(size: 11))

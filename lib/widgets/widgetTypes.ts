@@ -1,8 +1,8 @@
 export interface WidgetMarkData {
   id: string;
   name: string;
-  /** SF Symbol name for the mark's category icon (never a raw emoji). */
-  symbol: string;
+  /** Bundled imageset name for the mark's category glyph (never a raw emoji). */
+  icon: string;
   /** Category accent hex, e.g. "#4A8C7A". */
   accent: string;
   completed: boolean;
@@ -10,8 +10,8 @@ export interface WidgetMarkData {
 
 export interface WidgetData {
   activeGoalTitle: string | null;
-  /** SF Symbol for the goal's icon — the majority category across its marks. */
-  goalSymbol: string;
+  /** Imageset name for the goal glyph — the majority category across its marks. */
+  goalIcon: string;
   /** Accent hex for the goal icon + ring. */
   goalAccent: string;
   /** Linked increment events counted toward the active goal (ring numerator). */

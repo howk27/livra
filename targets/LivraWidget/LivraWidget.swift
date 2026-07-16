@@ -57,9 +57,11 @@ struct GoalRingView: View {
                     style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
                 )
                 .rotationEffect(.degrees(-90))
-            Image(systemName: data.goalSymbol.isEmpty ? "circle.fill" : data.goalSymbol)
-                .font(.system(size: diameter * 0.34, weight: .medium))
-                .foregroundColor(accent)
+            // The app's own Phosphor duotone glyph (accent baked into the asset).
+            Image(data.goalIcon.isEmpty ? "livra_circle" : data.goalIcon)
+                .resizable()
+                .scaledToFit()
+                .frame(width: diameter * 0.5, height: diameter * 0.5)
         }
         .frame(width: diameter, height: diameter)
     }
@@ -95,11 +97,13 @@ struct LogMarkLabel: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            // Category icon tile — mirrors the in-app MarkRow icon tile.
-            Image(systemName: mark.symbol.isEmpty ? "circle.fill" : mark.symbol)
-                .font(.system(size: compact ? 12 : 14, weight: .medium))
-                .foregroundColor(accent)
-                .frame(width: compact ? 22 : 26, height: compact ? 22 : 26)
+            // Category icon tile — mirrors the in-app MarkRow icon tile
+            // (Phosphor duotone glyph on an accent-tinted rounded tile).
+            Image(mark.icon.isEmpty ? "livra_circle" : mark.icon)
+                .resizable()
+                .scaledToFit()
+                .frame(width: compact ? 15 : 17, height: compact ? 15 : 17)
+                .frame(width: compact ? 24 : 28, height: compact ? 24 : 28)
                 .background(accent.opacity(0.14))
                 .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
             Text(mark.name)

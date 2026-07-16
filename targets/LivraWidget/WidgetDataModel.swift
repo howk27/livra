@@ -8,14 +8,14 @@ let LIVRA_PENDING_LOGS_KEY = "livra_pending_logs"
 struct WidgetMarkData: Codable, Identifiable {
     let id: String
     let name: String
-    let symbol: String   // SF Symbol name for the mark's category icon
+    let icon: String     // bundled imageset name for the category glyph
     let accent: String   // category accent hex
     let completed: Bool
 }
 
 struct WidgetData: Codable {
     let activeGoalTitle: String?
-    let goalSymbol: String
+    let goalIcon: String
     let goalAccent: String
     let goalProgress: Int
     let goalThreshold: Int
@@ -28,13 +28,13 @@ struct WidgetData: Codable {
     // Older snapshots (written before the icon/ring fields existed) decode with
     // these defaults so the widget never crashes on an app-update boundary.
     enum CodingKeys: String, CodingKey {
-        case activeGoalTitle, goalSymbol, goalAccent, goalProgress, goalThreshold
+        case activeGoalTitle, goalIcon, goalAccent, goalProgress, goalThreshold
         case marks, completedCount, totalCount, lastUpdated, isPro
     }
 
     init(
         activeGoalTitle: String?,
-        goalSymbol: String,
+        goalIcon: String,
         goalAccent: String,
         goalProgress: Int,
         goalThreshold: Int,
@@ -45,7 +45,7 @@ struct WidgetData: Codable {
         isPro: Bool
     ) {
         self.activeGoalTitle = activeGoalTitle
-        self.goalSymbol = goalSymbol
+        self.goalIcon = goalIcon
         self.goalAccent = goalAccent
         self.goalProgress = goalProgress
         self.goalThreshold = goalThreshold
@@ -59,7 +59,7 @@ struct WidgetData: Codable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         activeGoalTitle = try c.decodeIfPresent(String.self, forKey: .activeGoalTitle)
-        goalSymbol = (try? c.decode(String.self, forKey: .goalSymbol)) ?? "circle.fill"
+        goalIcon = (try? c.decode(String.self, forKey: .goalIcon)) ?? "livra_circle"
         goalAccent = (try? c.decode(String.self, forKey: .goalAccent)) ?? "#6B7A6B"
         goalProgress = (try? c.decode(Int.self, forKey: .goalProgress)) ?? 0
         goalThreshold = max(1, (try? c.decode(Int.self, forKey: .goalThreshold)) ?? 7)
@@ -72,12 +72,12 @@ struct WidgetData: Codable {
 
     static let placeholder = WidgetData(
         activeGoalTitle: "Your active goal",
-        goalSymbol: "waveform.path.ecg",
+        goalIcon: "livra_pulse",
         goalAccent: "#A0614A",
         goalProgress: 3,
         goalThreshold: 7,
         marks: [
-            WidgetMarkData(id: "p1", name: "Move today", symbol: "waveform.path.ecg", accent: "#A0614A", completed: false),
+            WidgetMarkData(id: "p1", name: "Move today", icon: "livra_pulse", accent: "#A0614A", completed: false),
         ],
         completedCount: 0,
         totalCount: 1,
@@ -165,7 +165,7 @@ enum WidgetLogQueue {
         let updatedMarks = current.marks.map { mark -> WidgetMarkData in
             guard mark.id == markId, !mark.completed else { return mark }
             return WidgetMarkData(
-                id: mark.id, name: mark.name, symbol: mark.symbol,
+                id: mark.id, name: mark.name, icon: mark.icon,
                 accent: mark.accent, completed: true
             )
         }
@@ -173,7 +173,7 @@ enum WidgetLogQueue {
 
         let updated = WidgetData(
             activeGoalTitle: current.activeGoalTitle,
-            goalSymbol: current.goalSymbol,
+            goalIcon: current.goalIcon,
             goalAccent: current.goalAccent,
             goalProgress: current.goalProgress + (newlyCompleted ? 1 : 0),
             goalThreshold: current.goalThreshold,

@@ -57,20 +57,20 @@ describe('buildWidgetData', () => {
     expect(data.isPro).toBe(true);
   });
 
-  it('renders category SF Symbols + accents (never raw emoji) for marks and goal', async () => {
+  it('renders category glyph assets + accents (never raw emoji) for marks and goal', async () => {
     const data = await buildWidgetData();
 
     const sleep = data.marks.find(m => m.id === 'mark-1');
-    expect(sleep?.symbol).toBe('moon.fill');
+    expect(sleep?.icon).toBe('livra_moon');
     expect(sleep?.accent).toBe('#6B8FA6'); // categoryAccents.recovery
 
     const water = data.marks.find(m => m.id === 'mark-2');
-    expect(water?.symbol).toBe('drop.fill');
+    expect(water?.icon).toBe('livra_drop');
     expect(water?.accent).toBe('#4A8C7A'); // categoryAccents.health
 
     // Goal icon = majority category across the goal's marks; the tie resolves to
     // the first category in mark order ('sleep').
-    expect(data.goalSymbol).toBe('moon.fill');
+    expect(data.goalIcon).toBe('livra_moon');
     expect(data.goalAccent).toBe('#6B8FA6');
 
     // No raw emoji leaks into the widget payload.
@@ -84,9 +84,8 @@ describe('buildWidgetData', () => {
     expect(data.activeGoalTitle).toBeNull();
     expect(data.goalProgress).toBe(0);
     expect(data.goalThreshold).toBe(7);
-    // Falls back to a category symbol (from remaining marks), never empty/emoji.
-    expect(typeof data.goalSymbol).toBe('string');
-    expect(data.goalSymbol.length).toBeGreaterThan(0);
+    // Falls back to a category glyph asset (from remaining marks), never emoji.
+    expect(data.goalIcon).toMatch(/^livra_/);
     expect(data.goalAccent).toMatch(/^#[0-9A-Fa-f]{6}$/);
   });
 });
