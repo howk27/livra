@@ -20,6 +20,12 @@ const CREATION_SURFACES = [
   'app/mark/[id]/edit.tsx',
   'app/goal/new.tsx',
   'components/CommitmentScreen.tsx',
+  // QC4-M: the guard only ever scanned the four SCREENS, so lib/markCategory.ts
+  // sat outside it holding five bright hex literals of its own — and it is the
+  // module every one of those screens asks for a color. The screens were clean
+  // and the color was not. A module that hands color to a creation surface is a
+  // creation surface.
+  'lib/markCategory.ts',
 ];
 
 // Hex color literal in a string: '#FFF', '#FFFFFF', '#FFFFFF80'
