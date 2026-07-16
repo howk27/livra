@@ -690,6 +690,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     paddingHorizontal: 14,
     paddingVertical: spacing.sm,
+    minHeight: 44, // QC3 wave2: tap-target floor (content stays centered)
     borderRadius: borderRadius.full,
     borderWidth: 1.5,
   },

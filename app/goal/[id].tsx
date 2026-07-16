@@ -468,7 +468,7 @@ function GoalJournalPreview({
 
   return (
     <View style={styles.section}>
-      <Text style={[styles.sectionLabel, { color: c.inkMuted }]}>JOURNAL</Text>
+      <Text style={[styles.sectionLabel, { color: c.inkMid }]}>JOURNAL</Text>
 
       <View style={[styles.journalCompose, { backgroundColor: c.surface, borderColor: c.borderLight }]}>
         <TextInput
@@ -496,7 +496,7 @@ function GoalJournalPreview({
 
       {cloudError ? (
         <View style={styles.journalCloudRow}>
-          <Text style={[styles.journalCloudHint, { color: c.inkMuted }]}>{cloudError}</Text>
+          <Text style={[styles.journalCloudHint, { color: c.inkMid }]}>{cloudError}</Text>
           <TouchableOpacity onPress={() => clearCloudError()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
             <Text style={[styles.journalCloudDismiss, { color: c.accent }]}>Dismiss</Text>
           </TouchableOpacity>
@@ -517,7 +517,7 @@ function GoalJournalPreview({
             <View key={entry.id}>
               {i > 0 && <View style={[styles.journalSeparator, { backgroundColor: c.borderLight }]} />}
               <View style={styles.journalEntry}>
-                <Text style={[styles.journalEntryDate, { color: c.inkMuted }]}>
+                <Text style={[styles.journalEntryDate, { color: c.inkMid }]}>
                   {format(parseISO(entry.created_at), 'MMM d')}
                 </Text>
                 <Text style={[styles.journalEntryText, { color: c.inkDark }]} numberOfLines={3}>
@@ -1009,9 +1009,11 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
+    minHeight: 44, // QC3 wave2: tap-target floor
     borderRadius: borderRadius.md,
   },
   journalAddText: { fontSize: fontSize.sm, fontFamily: fonts.sansSemibold },

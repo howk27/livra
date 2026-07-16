@@ -90,7 +90,7 @@ function JournalComposer({
         textAlignVertical="top"
       />
       <View style={styles.composerActions}>
-        <Text style={[styles.charCount, { color: c.inkMuted }]}>
+        <Text style={[styles.charCount, { color: c.inkMid }]}>
           {draft.length}/{ENTRY_MAX_LEN}
         </Text>
         <TouchableOpacity
@@ -181,12 +181,12 @@ function JournalEntryRow({
   return (
     <View style={styles.entryRow}>
       <View style={styles.entryHeader}>
-        <Text style={[styles.entryTime, { color: c.inkMuted }]}>{entryTime(entry.created_at)}</Text>
+        <Text style={[styles.entryTime, { color: c.inkMid }]}>{entryTime(entry.created_at)}</Text>
         <View style={styles.entryHeaderActions}>
-          <TouchableOpacity onPress={beginEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+          <TouchableOpacity onPress={beginEdit} hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }} activeOpacity={0.7}>
             <PencilSimple size={16} color={c.inkMuted} weight="duotone" />
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => onDelete(entry.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+          <TouchableOpacity onPress={() => onDelete(entry.id)} hitSlop={{ top: 14, bottom: 14, left: 14, right: 14 }} activeOpacity={0.7}>
             <Trash size={16} color={c.inkMuted} weight="duotone" />
           </TouchableOpacity>
         </View>
@@ -311,7 +311,7 @@ export default function GoalJournalScreen() {
 
           {cloudError ? (
             <View style={[styles.cloudRow, { borderColor: c.borderLight }]}>
-              <Text style={[styles.cloudHint, { color: c.inkMuted }]}>{cloudError}</Text>
+              <Text style={[styles.cloudHint, { color: c.inkMid }]}>{cloudError}</Text>
               <TouchableOpacity onPress={() => clearCloudError()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
                 <Text style={[styles.cloudDismiss, { color: c.accent }]}>Dismiss</Text>
               </TouchableOpacity>
@@ -336,7 +336,7 @@ export default function GoalJournalScreen() {
           ) : (
             dayGroups.map((group) => (
               <View key={group.date} style={styles.dayGroup}>
-                <Text style={[styles.dayHeader, { color: c.inkMuted }]}>{dayLabel(group.date)}</Text>
+                <Text style={[styles.dayHeader, { color: c.inkMid }]}>{dayLabel(group.date)}</Text>
                 <View style={[styles.dayCard, { backgroundColor: c.surface, borderColor: c.borderLight }]}>
                   {group.entries.map((entry, i) => (
                     <View key={entry.id}>
@@ -405,9 +405,11 @@ const styles = StyleSheet.create({
   addBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
+    minHeight: 44, // QC3 wave2: tap-target floor
     borderRadius: borderRadius.md,
   },
   addBtnText: { fontSize: fontSize.sm, fontFamily: fonts.sansSemibold },
@@ -434,11 +436,11 @@ const styles = StyleSheet.create({
 
   // Day groups
   dayGroup: { marginTop: spacing.lg, gap: spacing.xs },
+  // QC3 wave2: sentence-case date label as authored by dayLabel() — no tracked
+  // uppercase kicker (design-system ban).
   dayHeader: {
     fontSize: fontSize.xs,
     fontFamily: fonts.sansSemibold,
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
     marginBottom: spacing.xs,
   },
   dayCard: {
@@ -477,9 +479,11 @@ const styles = StyleSheet.create({
   entrySaveBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
+    minHeight: 44, // QC3 wave2: tap-target floor
     borderRadius: borderRadius.md,
   },
   entrySaveText: { fontSize: fontSize.sm, fontFamily: fonts.sansSemibold },
