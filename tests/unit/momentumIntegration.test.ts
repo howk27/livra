@@ -7,6 +7,16 @@ import { yyyyMmDd } from '../../lib/date';
 import { seedBrokenMomentum } from '../../lib/db/devTools';
 import { useMomentumStore } from '../../state/momentumSlice';
 
+// M6-B moved goals + links from AsyncStorage to SQLite. This suite does real
+// goalsDb round-trips (linkMarkToGoal → getLinksForMark), and the repo-wide
+// expo-sqlite mock (jest.setup.js) reads back nothing, so route goalsDb through
+// its AsyncStorage backend — the same one the web build uses, and the same
+// determinism trick goalNotesSync.test.ts applies to the notes SQLite mirror.
+jest.mock('../../lib/db/goalsSqlite', () => ({
+  ...jest.requireActual('../../lib/db/goalsSqlite'),
+  goalsSqliteSupported: () => false,
+}));
+
 const USER = 'u-mom';
 const TODAY = yyyyMmDd(new Date());
 

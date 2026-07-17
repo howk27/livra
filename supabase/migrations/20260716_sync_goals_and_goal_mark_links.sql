@@ -1,5 +1,9 @@
 -- M6-A (2026-07-16) — Make public.goals and public.goal_mark_links syncable
--- STATUS: PENDING — not yet applied. Founder applies (deploy is a hard human gate).
+-- STATUS: APPLIED 2026-07-16 (founder). goals + goal_mark_links now carry the sync
+--   columns (tier, frequency, banked_momentum_days, deleted_at / updated_at,
+--   deleted_at, user_id) and the corrected livra_count_other_active_goals is live.
+--   NOTE: the "max 2 active goals" RESTRICTIVE policy (20260613) is NO LONGER
+--   dormant from the moment the client starts inserting goals.
 --
 -- WHY: goals + goal_mark_links exist (20260602, applied + verified live) but are
 -- DEAD TABLES — the client (lib/db/goalsDb.ts) is AsyncStorage-only and has never

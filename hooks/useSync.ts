@@ -37,6 +37,8 @@ interface RetryQueueItem {
 }
 import { cleanupDuplicateCounters, cleanupOrphanedStreaksAndBadges, cleanupOrphanedEvents } from '../lib/db/cleanup';
 import { mapStreaksToSupabase, mapBadgesToSupabase, mapEventsToSupabase } from '../lib/sync/mappers';
+import { pushGoalsAndLinks, pullGoalsAndLinks } from '../lib/sync/goalsSync';
+import { GOAL_LIMIT_MESSAGE } from '../lib/copy';
 import { logger } from '../lib/utils/logger';
 import { formatDate } from '../lib/date';
 import { normalizeDailyTargetInput, resolveDailyTarget } from '../lib/markDailyTarget';
@@ -673,6 +675,15 @@ export const useSync = () => {
       });
 
       await useCountersStore.getState().loadMarks(userId);
+
+      // Goals + links (M6-B). Tombstones come back from the server and are
+      // applied here — that is how a goal deleted on another device disappears
+      // from this one.
+      const goalsPull = await pullGoalsAndLinks(userId, lastPulledAt);
+      if (goalsPull.mergedGoals > 0 || goalsPull.mergedLinks > 0) {
+        const { useGoalsStore } = await import('../state/goalsSlice');
+        await useGoalsStore.getState().fetchGoals(userId);
+      }
 
       // Pull cursor only — never advances push cursor (split-cursor model).
       await writePullCursor(new Date().toISOString());
@@ -1423,6 +1434,24 @@ export const useSync = () => {
 
       if (pushPromises.length > 0) {
         await Promise.all(pushPromises);
+      }
+
+      // Goals + links (M6-B). Runs after marks so a goal failure cannot strand a
+      // mark push, and inside the same cursor window: a throw here (network) skips
+      // writePushCursor below, so goals retry on the next connection.
+      const goalsPush = await pushGoalsAndLinks(userId, timestamp);
+      if (goalsPush.pushedGoals > 0 || goalsPush.pushedLinks > 0) {
+        logger.log('[SYNC] ✅ Pushed goals to Supabase', {
+          goals: goalsPush.pushedGoals,
+          links: goalsPush.pushedLinks,
+        });
+      }
+      if (goalsPush.capBlockedGoalIds.length > 0) {
+        // The free-tier cap is a paywall, not a fault: surface the SAME copy the
+        // in-app limit uses, keep the goal on the device, and let the cursor
+        // advance so marks keep syncing. goalCapBlocked.ts re-attempts these on
+        // every later push, so an upgrade needs no further user action.
+        setSyncState((prev) => ({ ...prev, error: GOAL_LIMIT_MESSAGE }));
       }
 
       await writePushCursor(new Date().toISOString());
