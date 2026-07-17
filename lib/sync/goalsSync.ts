@@ -28,6 +28,11 @@ import {
   fetchGoalMarkLinksForUser,
   isGoalCapRejection,
 } from '../db/goalsSupabase';
+import {
+  isGoalsBackfillPending,
+  markGoalsBackfillDone,
+  BACKFILL_EPOCH_ISO,
+} from './goalsBackfill';
 import { readGoalCapBlockedIds, addGoalCapBlockedIds, clearGoalCapBlockedIds } from './goalCapBlocked';
 import { logger } from '../utils/logger';
 
@@ -59,11 +64,21 @@ export async function pushGoalsAndLinks(userId: string, sinceIso: string): Promi
   const result: GoalsPushResult = { pushedGoals: 0, pushedLinks: 0, capBlockedGoalIds: [] };
   if (!userId || !UUID_RE.test(userId)) return result;
 
+  // Goals have never been pushed before this milestone, so "everything since the
+  // cursor" is the wrong question until they have been pushed ONCE. Migrated
+  // goals keep their real (old) updated_at, and the push cursor is the SHARED one
+  // marks already advance — so for any user who has ever synced, every migrated
+  // goal is older than the cursor and would be excluded from every push forever.
+  // That is the founder's original "goals lost on reinstall" bug, reproduced by
+  // the very milestone meant to fix it. See goalsBackfill.ts.
+  const backfilling = await isGoalsBackfillPending();
+  const effectiveSince = backfilling ? BACKFILL_EPOCH_ISO : sinceIso;
+
   // Cap-blocked goals are re-attempted every run, INDEPENDENT of the cursor:
   // their updated_at is old, so a cursor query would never find them again.
   const blockedIds = await readGoalCapBlockedIds();
   const [dirty, retries] = await Promise.all([
-    loadDirtyGoals(userId, sinceIso),
+    loadDirtyGoals(userId, effectiveSince),
     loadGoalsByIds(userId, blockedIds),
   ]);
 
@@ -110,7 +125,8 @@ export async function pushGoalsAndLinks(userId: string, sinceIso: string): Promi
     });
   }
 
-  const dirtyLinks = await loadDirtyLinks(userId, sinceIso);
+  // Links carry migrated timestamps too — same cursor exclusion, same fix.
+  const dirtyLinks = await loadDirtyLinks(userId, effectiveSince);
   const pushableLinks = dirtyLinks.filter((l) => {
     if (!l.user_id || !UUID_RE.test(l.user_id)) {
       // RLS REQUIRES auth.uid() = user_id; an unstamped link is silently rejected.
@@ -123,6 +139,20 @@ export async function pushGoalsAndLinks(userId: string, sinceIso: string): Promi
   if (pushableLinks.length > 0) {
     await pushGoalMarkLinks(pushableLinks);
     result.pushedLinks = pushableLinks.length;
+  }
+
+  // Only here — every push above either succeeded or threw. A throw skips this,
+  // so the next sync backfills again rather than stranding the goals. Reaching
+  // this line with nothing pushed is also a real success: a user with no goals
+  // has nothing to backfill, and repeating an epoch-wide query forever is waste.
+  // Cap-refused goals are safe to leave behind: goalCapBlocked re-attempts them
+  // every run independently of the cursor, which is exactly what they need.
+  if (backfilling) {
+    await markGoalsBackfillDone();
+    logger.info('[SYNC] Goals backfill complete', {
+      goals: result.pushedGoals,
+      links: result.pushedLinks,
+    });
   }
 
   return result;

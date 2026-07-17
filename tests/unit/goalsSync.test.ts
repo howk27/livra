@@ -283,3 +283,90 @@ describe('pull — tombstones travel', () => {
     expect(result.mergedGoals).toBe(0);
   });
 });
+
+/**
+ * M6 review blocker — migrated goals must survive the SHARED push cursor.
+ *
+ * The bug: a migrated goal keeps its real (old) updated_at, but the push is a
+ * cursor query against the cursor MARKS already advance. Any user who has ever
+ * synced has a cursor newer than their goals, so every migrated goal was silently
+ * excluded from every push, forever — reproducing the founder's original "goals
+ * lost on reinstall" bug inside the milestone built to fix it.
+ *
+ * Every test above passes EPOCH, the one cursor value where `updated_at > cursor`
+ * is trivially true, which is exactly why they all missed it. These use a REAL,
+ * non-epoch cursor.
+ */
+describe('backfill — a migrated goal is older than the push cursor', () => {
+  // A goal last touched a week ago; the shared cursor advanced yesterday.
+  const OLD_GOAL_UPDATED = '2026-07-09T00:00:00.000Z';
+  const LATER_CURSOR = '2026-07-15T00:00:00.000Z';
+
+  it('pushes a goal whose updated_at predates the cursor', async () => {
+    mockLocalGoals = [makeGoal({ id: 'g-migrated', updated_at: OLD_GOAL_UPDATED })];
+
+    const result = await pushGoalsAndLinks(USER, LATER_CURSOR);
+
+    expect(result.pushedGoals).toBe(1);
+    expect(mockPushGoals).toHaveBeenCalledTimes(1);
+    expect(mockPushGoals.mock.calls[0][0]).toHaveLength(1);
+  });
+
+  it('pushes migrated LINKS too — they carry migrated timestamps as well', async () => {
+    mockLocalGoals = [makeGoal({ id: 'g-migrated', updated_at: OLD_GOAL_UPDATED })];
+    mockLocalLinks = [
+      { id: 'l1', goal_id: 'g-migrated', mark_id: 'm1', user_id: USER, updated_at: OLD_GOAL_UPDATED, deleted_at: null },
+    ];
+
+    const result = await pushGoalsAndLinks(USER, LATER_CURSOR);
+
+    expect(result.pushedLinks).toBe(1);
+  });
+
+  it('reverts to incremental once the backfill has succeeded', async () => {
+    mockLocalGoals = [makeGoal({ id: 'g-migrated', updated_at: OLD_GOAL_UPDATED })];
+
+    await pushGoalsAndLinks(USER, LATER_CURSOR);      // backfill run
+    mockPushGoals.mockClear();
+    const second = await pushGoalsAndLinks(USER, LATER_CURSOR);
+
+    // Nothing changed locally, so the cursor legitimately excludes it now.
+    expect(second.pushedGoals).toBe(0);
+    expect(mockPushGoals).not.toHaveBeenCalled();
+  });
+
+  it('does NOT mark the backfill done when the push throws — it retries', async () => {
+    mockLocalGoals = [makeGoal({ id: 'g-migrated', updated_at: OLD_GOAL_UPDATED })];
+    mockPushGoals.mockImplementationOnce(async () => {
+      throw new Error('network down');
+    });
+
+    await expect(pushGoalsAndLinks(USER, LATER_CURSOR)).rejects.toThrow('network down');
+
+    // Next sync must still backfill, or the goals are stranded forever.
+    mockPushGoals.mockImplementation(async () => {});
+    const retry = await pushGoalsAndLinks(USER, LATER_CURSOR);
+    expect(retry.pushedGoals).toBe(1);
+  });
+
+  it('self-heals a user who already installed M6 before this fix', async () => {
+    // No migration re-runs; their goals are simply sitting local and un-pushed.
+    mockLocalGoals = [
+      makeGoal({ id: 'g-stranded-1', updated_at: OLD_GOAL_UPDATED }),
+      makeGoal({ id: 'g-stranded-2', updated_at: OLD_GOAL_UPDATED }),
+    ];
+
+    const result = await pushGoalsAndLinks(USER, LATER_CURSOR);
+    expect(result.pushedGoals).toBe(2);
+  });
+
+  it('a user with no goals still settles — no epoch query every sync', async () => {
+    mockLocalGoals = [];
+    await pushGoalsAndLinks(USER, LATER_CURSOR);
+    mockLocalGoals = [makeGoal({ id: 'g-new', updated_at: OLD_GOAL_UPDATED })];
+
+    // Backfill already settled, so an OLD goal appearing later is not swept up.
+    const second = await pushGoalsAndLinks(USER, LATER_CURSOR);
+    expect(second.pushedGoals).toBe(0);
+  });
+});
