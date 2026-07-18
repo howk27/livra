@@ -1,4 +1,4 @@
-import { getMarksForGoal, calculateUnlockThreshold } from '../../lib/goalMarkSuggestions';
+﻿import { getMarksForGoal, calculateCommitmentTarget } from '../../lib/goalMarkSuggestions';
 import { MARK_LIBRARY } from '../../lib/suggestedCounters';
 
 const ids = (title: string) => getMarksForGoal(title).map(m => m.id);
@@ -38,9 +38,9 @@ describe('getMarksForGoal', () => {
   });
 });
 
-// ─── QC4-A: domain-aware matching ─────────────────────────────────────────────
+// â”€â”€â”€ QC4-A: domain-aware matching â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-describe('getMarksForGoal — the founder-reported blocker: "Save $5k"', () => {
+describe('getMarksForGoal â€” the founder-reported blocker: "Save $5k"', () => {
   it('suggests saving, never steps/run', () => {
     const result = ids('Save $5k');
     expect(result).toContain('saving');
@@ -70,10 +70,10 @@ describe('getMarksForGoal — the founder-reported blocker: "Save $5k"', () => {
   });
 });
 
-// The founder wrote "Save 5k" WITHOUT the dollar sign — the `$` fix missed this,
+// The founder wrote "Save 5k" WITHOUT the dollar sign â€” the `$` fix missed this,
 // and the bare-5k test above was too weak to catch it: it asserted only that
 // `saving` ranked first, while run/steps still filled slots 2-4.
-describe('getMarksForGoal — bare magnitude, no currency symbol', () => {
+describe('getMarksForGoal â€” bare magnitude, no currency symbol', () => {
   it('"Save 5k" suggests no fitness marks at all', () => {
     const result = ids('Save 5k');
     expect(result).toContain('saving');
@@ -102,7 +102,7 @@ describe('getMarksForGoal — bare magnitude, no currency symbol', () => {
   });
 });
 
-describe('getMarksForGoal — no regression on race goals', () => {
+describe('getMarksForGoal â€” no regression on race goals', () => {
   it('"Run a 5k" still returns run and steps', () => {
     const result = ids('Run a 5k');
     expect(result[0]).toBe('run');
@@ -118,7 +118,7 @@ describe('getMarksForGoal — no regression on race goals', () => {
   });
 });
 
-describe('getMarksForGoal — plain single-domain goals', () => {
+describe('getMarksForGoal â€” plain single-domain goals', () => {
   it('"Read nightly" ranks reading first', () => {
     expect(ids('Read nightly')[0]).toBe('reading');
   });
@@ -132,7 +132,7 @@ describe('getMarksForGoal — plain single-domain goals', () => {
   });
 });
 
-describe('getMarksForGoal — cross-domain guard', () => {
+describe('getMarksForGoal â€” cross-domain guard', () => {
   it('never ranks a cross-domain mark above a scoring in-domain mark', () => {
     // `5k` is a race distance in the fitness tags; the goal is financial.
     const firstCrossDomain = getMarksForGoal('Save $5k').findIndex(m => m.category !== 'Finance');
@@ -155,7 +155,7 @@ describe('getMarksForGoal — cross-domain guard', () => {
   });
 });
 
-describe('getMarksForGoal — contract preserved', () => {
+describe('getMarksForGoal â€” contract preserved', () => {
   it('returns at most MAX_SUGGESTIONS (5)', () => {
     for (const title of ['Save $5k', 'Run a 5k', 'Read nightly', 'Get fit and healthy']) {
       expect(getMarksForGoal(title).length).toBeLessThanOrEqual(5);
@@ -187,7 +187,7 @@ describe('getMarksForGoal — contract preserved', () => {
   });
 });
 
-// ─── QC4-B-data: mark descriptions ────────────────────────────────────────────
+// â”€â”€â”€ QC4-B-data: mark descriptions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 describe('MARK_LIBRARY descriptions', () => {
   it('every mark has a non-empty description', () => {
@@ -215,26 +215,26 @@ describe('MARK_LIBRARY descriptions', () => {
   });
 });
 
-describe('calculateUnlockThreshold', () => {
+describe('calculateCommitmentTarget', () => {
   it('scales with mark count', () => {
-    expect(calculateUnlockThreshold('building', 'steady', 3)).toBeGreaterThan(
-      calculateUnlockThreshold('building', 'steady', 1)
+    expect(calculateCommitmentTarget('building', 'steady', 3)).toBeGreaterThan(
+      calculateCommitmentTarget('building', 'steady', 1)
     );
   });
 
   it('all-in pushing produces highest threshold', () => {
-    expect(calculateUnlockThreshold('all-in', 'pushing', 3)).toBeGreaterThan(
-      calculateUnlockThreshold('starting', 'light', 3)
+    expect(calculateCommitmentTarget('all-in', 'pushing', 3)).toBeGreaterThan(
+      calculateCommitmentTarget('starting', 'light', 3)
     );
   });
 
   it('returns a positive integer', () => {
-    const result = calculateUnlockThreshold('leveling', 'steady', 2);
+    const result = calculateCommitmentTarget('leveling', 'steady', 2);
     expect(result).toBeGreaterThan(0);
     expect(Number.isInteger(result)).toBe(true);
   });
 
   it('returns 0 for 0 marks', () => {
-    expect(calculateUnlockThreshold('building', 'steady', 0)).toBe(0);
+    expect(calculateCommitmentTarget('building', 'steady', 0)).toBe(0);
   });
 });
