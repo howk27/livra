@@ -208,7 +208,11 @@ export default function NewCounterScreen() {
     const cardPad = spacing.md;
     const rowInner = SCREEN_WIDTH - scrollPad * 2 - cardPad * 2;
     const gap = spacing.sm;
-    const cell = (rowInner - gap * (ICON_GRID_COLUMNS - 1)) / ICON_GRID_COLUMNS;
+    // Math.floor so all 4 tiles fit on one row (founder device QC: the grid kept
+    // wrapping to 3). An exact-fill fractional cell (e.g. 71.5) rounds UP under
+    // Yoga on-device, so 4*cell + 3*gap exceeds the row and the 4th tile wraps.
+    // Flooring leaves sub-pixel slack that also absorbs the card's hairline border.
+    const cell = Math.floor((rowInner - gap * (ICON_GRID_COLUMNS - 1)) / ICON_GRID_COLUMNS);
     // QC4-F: never let the derived cell fall under the HIG touch minimum. The
     // 44pt floor is headerControl.minTarget — the app's single source for it —
     // rather than a fresh literal. (At 320pt the derived cell is ~54, so this

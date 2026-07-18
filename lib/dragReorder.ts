@@ -34,9 +34,12 @@ export interface ResolveDragSlotParams {
  * The slot the dragged row should occupy for a given pan translation, with
  * hysteresis so it never flip-flops at a boundary.
  *
- * Pure and deterministic: same inputs → same output, no side effects. Marked
- * `'worklet'` so the Reanimated pan handler can call it on the UI thread; the
- * directive is an inert string under Jest, so it is callable from tests too.
+ * Pure and deterministic: same inputs → same output, no side effects. This is
+ * the unit-tested REFERENCE for the algorithm; the Goals pan gesture in
+ * app/(tabs)/goals.tsx INLINES this same math inside its `onUpdate` worklet.
+ * Do NOT call this from a worklet: a cross-file `'worklet'` call is not reliably
+ * linked into the UI runtime under Reanimated 4 / react-native-worklets and
+ * threw a ReferenceError on every drag frame (founder device QC 2026-07-18).
  */
 export function resolveDragSlot({
   translationY,
@@ -46,7 +49,6 @@ export function resolveDragSlot({
   count,
   hysteresis = SLOT_HYSTERESIS,
 }: ResolveDragSlotParams): number {
-  'worklet';
   if (slotHeight <= 0 || count <= 1) return currentSlot;
 
   // Continuous position of the finger, in slot units.
