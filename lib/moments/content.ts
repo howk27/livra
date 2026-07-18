@@ -95,7 +95,7 @@ export const MOMENT_CONTENT: Record<MomentType, Record<string, readonly string[]
     'goals.firstRun.title': ['Room for one goal.'],
     'goals.firstRun.body': ['Name the thing you keep meaning to do. One is plenty.'],
     'goals.returnedEmpty.title': ['A clear field.'],
-    'goals.returnedEmpty.body': ['The old goals are gone. The next one gets a clean start.'],
+    'goals.returnedEmpty.body': ['A clean page. The next goal gets your full attention.'],
     'goals.completedAll.title': ['You finished everything.'],
     'goals.completedAll.body': [
       'Take the win. The next goal can wait until it matters enough to name.',
@@ -176,7 +176,7 @@ export const MOMENT_CONTENT: Record<MomentType, Record<string, readonly string[]
   greetingDefault: {
     default: [
       '{name}, one step is enough.',
-      '{name}, nothing dramatic today. One mark will do.',
+      '{name}, one mark today keeps the goal in motion.',
       '{name}, quiet days count too.',
       '{name}, pick one thing. That is the whole plan.',
       '{name}, start small. It tends to hold.',
