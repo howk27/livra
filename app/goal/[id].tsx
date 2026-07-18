@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo, createElement } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import type { ComponentType } from 'react';
 import {
   View,
@@ -62,6 +62,7 @@ import { useNotification } from '../../contexts/NotificationContext';
 import { CATEGORY_MAP } from '../../components/ui/MarkRow';
 import { GoalTitle } from '../../components/ui/GoalTitle';
 import { ProgressArc } from '../../components/ui/ProgressArc';
+import { RingIconFill } from '../../components/ui/RingIconFill';
 import { VoiceLine } from '../../components/ui/VoiceLine';
 import {
   currentWeekDates,
@@ -109,9 +110,10 @@ type GoalEvents = Parameters<typeof buildWeeklyCountsMap>[1];
  *  is pushed per open), never on re-render: the arc sweeps from ProgressArc
  *  mounting at from=0, the icon fill from `fillFrac` (0 → final fraction), the
  *  story from `storyOpacity`. Reduced motion lands each at its final value via
- *  useMotion's reduced-safe `timing` (duration 0). The icon fill is a
- *  bottom-anchored, overflow-clipped copy of the base glyph — the clip height
- *  = fraction × icon size, the RN equivalent of a ClipPath rect. */
+ *  useMotion's reduced-safe `timing` (duration 0). The icon fill lives in
+ *  <RingIconFill>: a native react-native-svg `<ClipPath>` + animated `<Rect>`
+ *  clips the amber glyph bottom→top (RN `overflow:'hidden'` does not reliably
+ *  clip SVG on iOS — the reason the old copy never filled). */
 function RingHero({
   c,
   progress,
@@ -130,19 +132,11 @@ function RingHero({
   const { timing } = useMotion();
   const frac = ringFraction(progress, threshold);
   const storyOpacity = useSharedValue(0);
-  const fillFrac = useSharedValue(0);
   useEffect(() => {
     storyOpacity.value = timing(1, motion.gentle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  // Founder bug 5 (2026-07-18): the fill must track later logs made while the
-  // screen is open, exactly like the arc (ProgressArc re-animates on `to`).
-  useEffect(() => {
-    fillFrac.value = timing(frac, motion.moment);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [frac]);
   const storyStyle = useAnimatedStyle(() => ({ opacity: storyOpacity.value }));
-  const fillStyle = useAnimatedStyle(() => ({ height: RING_ICON_SIZE * fillFrac.value }));
 
   // The centered icon: the goal's own dominant-mark glyph, category/custom
   // fallback for empty goals — same resolution the medallion used before it
@@ -165,12 +159,14 @@ function RingHero({
           gradientId="goalRingGradient"
         />
         <View style={styles.ringIconBox} pointerEvents="none">
-          {createElement(heroIcon, { size: RING_ICON_SIZE, color: c.inkMuted, weight: 'duotone' })}
-          <Animated.View style={[styles.ringIconFill, fillStyle]} pointerEvents="none">
-            <View style={styles.ringIconFillInner}>
-              {createElement(heroIcon, { size: RING_ICON_SIZE, color: fillColor, weight: 'duotone' })}
-            </View>
-          </Animated.View>
+          <RingIconFill
+            icon={heroIcon}
+            size={RING_ICON_SIZE}
+            baseColor={c.inkMuted}
+            fillColor={fillColor}
+            frac={frac}
+            clipId="goalRingIconFillClip"
+          />
         </View>
       </View>
       <Animated.View style={[styles.progressStory, storyStyle]}>
@@ -1139,24 +1135,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: RING_ICON_OFFSET,
     left: RING_ICON_OFFSET,
-    width: RING_ICON_SIZE,
-    height: RING_ICON_SIZE,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  // The amber fill copy: bottom-anchored + overflow-clipped, height driven by
-  // the animated fraction — a rising clip that reveals the glyph bottom-to-top.
-  ringIconFill: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    width: RING_ICON_SIZE,
-    overflow: 'hidden',
-  },
-  ringIconFillInner: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
     width: RING_ICON_SIZE,
     height: RING_ICON_SIZE,
     alignItems: 'center',
