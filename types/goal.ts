@@ -30,10 +30,32 @@ export type Goal = {
   tier?: TierId;
   /** Check-in frequency selected at goal creation (e.g. 'steady'). */
   frequency?: FrequencyId;
+  /**
+   * Tombstone (M6-B). A deleted goal is UPDATEd with a timestamp, never removed:
+   * a hard delete cannot propagate, so the next pull would resurrect the goal.
+   * Every reader filters `!deleted_at`; the sync pull deliberately does NOT —
+   * returning the tombstone is how the deletion travels to the other device.
+   */
+  deleted_at?: string | null;
 };
 
+/**
+ * One mark feeding one goal. Sync-carrying columns added in M6-B
+ * (20260716_sync_goals_and_goal_mark_links.sql):
+ *   * `user_id` is denormalised off the owning goal so the pull uses the same
+ *     (user_id, updated_at DESC) cursor as every other table. RLS REQUIRES it —
+ *     a link without it is rejected server-side.
+ *   * `updated_at` is client-supplied (no moddatetime trigger) and drives
+ *     last-write-wins, exactly like marks.
+ *   * `deleted_at` tombstones an unlink. `unique(goal_id, mark_id)` survives the
+ *     tombstone, so re-linking must UPSERT on that pair, never INSERT.
+ */
 export type GoalMarkLink = {
   id: string;
   goal_id: string;
   mark_id: string;
+  user_id: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at?: string | null;
 };

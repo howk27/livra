@@ -408,7 +408,7 @@ export default function NewGoalScreen() {
                 styles.whyInputInCard,
                 { backgroundColor: c.linen, color: c.inkDark, borderColor: c.borderMid },
               ]}
-              placeholder="Why it matters · optional"
+              placeholder="Why this goal matters to you?"
               placeholderTextColor={c.inkMuted}
               value={description}
               onChangeText={setDescription}

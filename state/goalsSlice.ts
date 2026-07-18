@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 import { InteractionManager } from 'react-native';
-import type { Goal, GoalMarkLink } from '../types/goal';
+import type { Goal } from '../types/goal';
 import type { TierId, FrequencyId } from '../lib/goalMarkSuggestions';
 import {
   loadGoalsForUser,
@@ -122,11 +122,12 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
 
     await upsertGoal(goal);
 
-    // Persist mark links
+    // Persist mark links. user_id is REQUIRED — RLS rejects a link whose user_id
+    // is not auth.uid(), silently, at push time (M6-B).
     if (goal.linked_mark_ids?.length) {
       await Promise.all(
         goal.linked_mark_ids.map(markId =>
-          addGoalMarkLink({ id: uuidv4(), goal_id: goal.id, mark_id: markId })
+          addGoalMarkLink({ goal_id: goal.id, mark_id: markId, user_id: userId })
         )
       );
     }
@@ -165,7 +166,9 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
       const toAdd = [...next].filter(id => !prev.has(id));
       const toRemove = [...prev].filter(id => !next.has(id));
       await Promise.all([
-        ...toAdd.map(markId => addGoalMarkLink({ id: uuidv4(), goal_id: id, mark_id: markId })),
+        ...toAdd.map(markId =>
+          addGoalMarkLink({ goal_id: id, mark_id: markId, user_id: goal.user_id })
+        ),
         ...toRemove.map(markId => removeGoalMarkLink(id, markId)),
       ]);
     }
@@ -239,7 +242,12 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
   },
 
   linkMarkToGoal: async (goalId, markId) => {
-    await addGoalMarkLink({ id: uuidv4(), goal_id: goalId, mark_id: markId });
+    // The link's owner is the goal's owner — the same rule the RLS policy uses.
+    // Without a known owner the row would be rejected server-side, so refuse here
+    // rather than write a link that can never sync.
+    const owner = get().goals.find(g => g.id === goalId)?.user_id;
+    if (!owner) return;
+    await addGoalMarkLink({ goal_id: goalId, mark_id: markId, user_id: owner });
     set(s => ({
       goals: s.goals.map(g =>
         g.id === goalId
