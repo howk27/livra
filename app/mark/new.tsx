@@ -573,7 +573,12 @@ export default function NewCounterScreen() {
                     {
                       width: iconCellSize,
                       height: iconCellSize,
-                      backgroundColor: applyOpacity(accent, isSelected ? 0.18 : 0.08),
+                      // M7-QC3: wash capped at 0.12 (was 0.18) — a same-hue
+                      // wash + same-hue glyph past ~0.12 drops the icon under
+                      // the 3:1 legibility floor on the dark surface. Selection
+                      // now reads off the full-strength accent border + deeper
+                      // wash, not an over-tinted fill.
+                      backgroundColor: applyOpacity(accent, isSelected ? 0.12 : 0.08),
                       borderColor: isSelected ? accent : themeColors.borderMid,
                     },
                   ]}
