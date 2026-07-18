@@ -369,4 +369,37 @@ describe('backfill — a migrated goal is older than the push cursor', () => {
     const second = await pushGoalsAndLinks(USER, LATER_CURSOR);
     expect(second.pushedGoals).toBe(0);
   });
+
+  /**
+   * QC1 §2 — the strand-hole the settled backfill flag leaves open.
+   *
+   * Once the goals-backfill flag is set, the push reverts to a plain cursor query.
+   * A link the QC1 reconcile DERIVES later (from a surviving mark.goal_id after a
+   * reinstall) must still reach the server. It does — precisely because reconcile
+   * stamps updated_at = now(), so it is NEWER than the push cursor and the normal
+   * incremental push catches it with no dependency on the backfill flag. This is
+   * why the fix does NOT touch migrated updated_at wholesale (that would break LWW).
+   */
+  it('a derivable link appearing AFTER the backfill settled is not stranded — fresh updated_at is pushed incrementally', async () => {
+    // Settle the backfill with nothing to send.
+    mockLocalGoals = [];
+    mockLocalLinks = [];
+    await pushGoalsAndLinks(USER, LATER_CURSOR);
+    mockPushLinks.mockClear();
+
+    // The reconcile has since derived a link with a FRESH (post-cursor) updated_at.
+    const FRESH = '2026-07-18T12:00:00.000Z'; // > LATER_CURSOR
+    mockLocalGoals = [makeGoal({ id: 'g-healed', updated_at: OLD_GOAL_UPDATED })];
+    mockLocalLinks = [
+      { id: 'l-derived', goal_id: 'g-healed', mark_id: 'm1', user_id: USER, updated_at: FRESH, deleted_at: null },
+    ];
+
+    const result = await pushGoalsAndLinks(USER, LATER_CURSOR);
+
+    // The old goal is legitimately NOT swept (LWW intact), but the fresh derived
+    // link IS pushed — it is not stranded by the settled backfill flag.
+    expect(result.pushedGoals).toBe(0);
+    expect(result.pushedLinks).toBe(1);
+    expect(mockPushLinks).toHaveBeenCalledTimes(1);
+  });
 });
