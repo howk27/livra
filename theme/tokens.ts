@@ -117,33 +117,44 @@ export const categoryAccents = {
  * categoryAccents (moderate saturation, ~45-60% lightness), every value
  * distinct, all theme-constant data like the table above. Category accents stay
  * for category-level chrome (hero ring fallback, bands, pickers).
+ *
+ * M7-QC3 legibility pass (founder device QC 2026-07-18, "barely visible on any
+ * mode"): a mark tile is `applyOpacity(accent, α)` background + the SAME accent
+ * as glyph, so the only contrast is the α gap. The B2-A hues sat outside the
+ * band that survives BOTH a near-white light wash and a near-black dark wash —
+ * ~14 of 23 fell under WCAG 1.4.11's 3:1 non-text floor in one theme. Each hue
+ * here is re-seated in that shared band (hue preserved, lightness/saturation
+ * nudged) so every accent clears 3:1 against the real (wash × surface) combos
+ * the app uses (0.08–0.15 over surface/linen, light AND dark). Locked by the
+ * contrast test in tests/unit/markColorContract.test.ts — do not hand-edit a
+ * value without re-running it.
  */
 export const iconAccents = {
-  gym: '#A0614A',
-  steps: '#5C8C4A',
-  calories: '#B07D4A',
-  water: '#4A7A8C',
-  no_sugar: '#8C4A5C',
-  no_beer: '#8C7A3A',
-  no_smoking: '#8A7E6B',
-  soda_free: '#4A8C8C',
-  sleep: '#6B8FA6',
-  rest: '#9E7B6B',
-  meditation: '#8A6B7B',
+  gym: '#AC6850',
+  steps: '#588647',
+  calories: '#9F7143',
+  water: '#4F8295',
+  no_sugar: '#AD6478',
+  no_beer: '#8B793A',
+  no_smoking: '#857967',
+  soda_free: '#468484',
+  sleep: '#5A7F96',
+  rest: '#967363',
+  meditation: '#917282',
   mood: '#9E6B8A',
-  journaling: '#4A8C7A',
-  gratitude: '#A6746B',
-  reading: '#4A6A8C',
-  study: '#7A4A8C',
-  language: '#6B5C8C',
-  focus: '#8C6B4A',
-  tasks: '#4A8C5C',
-  planning: '#5C7A9E',
+  journaling: '#478574',
+  gratitude: '#A26D64',
+  reading: '#577DA5',
+  study: '#9B66AE',
+  language: '#8273A3',
+  focus: '#977350',
+  tasks: '#488759',
+  planning: '#5E7DA2',
   // Not #6B7A6B: that is categoryAccents.custom, the "fallback hit" sentinel —
   // a legitimate per-icon hue must never be mistakable for the fallback.
-  email: '#4A7A6B',
-  screen_free: '#7A8C4A',
-  no_spending: '#9E8A6B',
+  email: '#508574',
+  screen_free: '#708144',
+  no_spending: '#8B785B',
 } as const;
 
 const colorsByTheme = { light: colors, dark: colorsDark } as const;
