@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 
@@ -71,6 +72,7 @@ const MAX_MARKS_PER_CARD = 4;
 export default function FocusScreen() {
   const theme = useEffectiveTheme();
   const c = themedColors(theme);
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useAuth();
   const { counters, loading, error, incrementCounter, deleteCounter } = useCounters();
@@ -627,8 +629,10 @@ export default function FocusScreen() {
       <SpeedDialFAB />
 
       {/* PL-4 (M5): post-log voice line — overlay, never shifts rows.
-          Offset clears the SpeedDialFAB's zone at the screen bottom. */}
-      <VoiceLine bottomOffset={spacing.xxl + spacing.xl} />
+          Founder bug 2 (2026-07-18): the tab bar is absolute at 64 + inset, so a
+          fixed 80pt offset rendered the pill BEHIND it on notched phones. Offset
+          from the real tab-bar + FAB zone (same 64 + insets.bottom the FAB uses). */}
+      <VoiceLine bottomOffset={64 + insets.bottom + 16 + 56 + spacing.sm} />
     </View>
   );
 }
