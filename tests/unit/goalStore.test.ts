@@ -200,6 +200,46 @@ test('fetchGoals normalizes legacy queued goals to active', async () => {
   expect(useGoalsStore.getState().goals.every(g => g.status !== 'queued')).toBe(true);
 });
 
+test('checkGoalCompletion never auto-completes on mark count (founder 2026-07-18: user declares)', async () => {
+  const s = useGoalsStore.getState();
+  const a = await s.createGoal({
+    userId: STORE_USER, isPro: false, title: 'Counted', target_mark_count: 1,
+  });
+  useGoalsStore.setState(st => ({
+    goals: st.goals.map(g => (g.id === a.id ? { ...g, current_mark_count: 5 } : g)),
+  }));
+  await useGoalsStore.getState().checkGoalCompletion(a.id);
+  expect(useGoalsStore.getState().goals.find(g => g.id === a.id)?.status).toBe('active');
+});
+
+test('getGoalProgress reports readyToClaim at the commitment target, from day-based progress', async () => {
+  const { useEventsStore } = require('../../state/eventsSlice');
+  const s = useGoalsStore.getState();
+  const a = await s.createGoal({
+    userId: STORE_USER, isPro: false, title: 'Claimable', target_mark_count: 2,
+    linked_mark_ids: [],
+  });
+  useGoalsStore.setState(st => ({
+    goals: st.goals.map(g => (g.id === a.id ? { ...g, linked_mark_ids: ['m1'] } : g)),
+  }));
+  const ev = (d: string, id: string) => ({
+    id, user_id: STORE_USER, mark_id: 'm1', event_type: 'increment', amount: 1,
+    occurred_at: `${d}T10:00:00Z`, occurred_local_date: d,
+    created_at: `${d}T10:00:00Z`, updated_at: `${d}T10:00:00Z`,
+  });
+  // 5 taps across 2 days: progress must be 2 (days), not 5 (taps).
+  useEventsStore.setState({
+    events: [
+      ev('2026-07-01', 'e1'), ev('2026-07-01', 'e2'), ev('2026-07-01', 'e3'),
+      ev('2026-07-02', 'e4'), ev('2026-07-02', 'e5'),
+    ],
+  });
+  const p = useGoalsStore.getState().getGoalProgress(a.id);
+  expect(p.progress).toBe(2);
+  expect(p.readyToClaim).toBe(true);
+  useEventsStore.setState({ events: [] });
+});
+
 test('completing one goal leaves other active goals active (no auto-activation)', async () => {
   const s = useGoalsStore.getState();
   const a = await s.createGoal({ userId: STORE_USER, isPro: false, title: 'A' });

@@ -76,6 +76,7 @@ import {
   dominantMark,
 } from '../../lib/markCategoryResolve';
 import { logger } from '../../lib/utils/logger';
+import { goalWeekFraming } from '../../lib/goalLogic';
 import { ringFraction } from '../../lib/goalRingProgress';
 import { applyOpacity } from '../../src/components/icons/color';
 import { JournalComposer } from '../../components/journal/JournalComposer';
@@ -114,12 +115,14 @@ function RingHero({
   c,
   progress,
   threshold,
+  weekLabel,
   heroMark,
   fallbackIcon,
 }: {
   c: ThemeColors;
   progress: number;
   threshold: number;
+  weekLabel: string | null;
   heroMark: Mark | null;
   fallbackIcon: ComponentType<any>;
 }) {
@@ -129,9 +132,14 @@ function RingHero({
   const fillFrac = useSharedValue(0);
   useEffect(() => {
     storyOpacity.value = timing(1, motion.gentle);
-    fillFrac.value = timing(frac, motion.moment);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // Founder bug 5 (2026-07-18): the fill must track later logs made while the
+  // screen is open, exactly like the arc (ProgressArc re-animates on `to`).
+  useEffect(() => {
+    fillFrac.value = timing(frac, motion.moment);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [frac]);
   const storyStyle = useAnimatedStyle(() => ({ opacity: storyOpacity.value }));
   const fillStyle = useAnimatedStyle(() => ({ height: RING_ICON_SIZE * fillFrac.value }));
 
@@ -167,7 +175,7 @@ function RingHero({
       <Animated.View style={[styles.progressStory, storyStyle]}>
         <Text style={[styles.progressNumber, { color: c.inkDark }]}>{progress}</Text>
         <Text style={[styles.progressCaption, { color: c.inkMid }]}>
-          of {threshold} check-ins
+          {weekLabel ? `of ${threshold} check-in days · ${weekLabel}` : `of ${threshold} check-ins`}
         </Text>
       </Animated.View>
     </View>
@@ -218,6 +226,28 @@ function GoalIdentity({
       {!!description && (
         <Text style={[styles.why, { color: c.inkMid }]}>{description}</Text>
       )}
+    </View>
+  );
+}
+
+/** Founder 2026-07-18: finishing the check-ins never auto-completes a goal —
+ *  marks are a guide, the outcome is the user's to call. When the whole
+ *  commitment is in, this card is the loud invitation to call it. */
+function ClaimGoalCard({ c, onClaim }: { c: ThemeColors; onClaim: () => void }) {
+  return (
+    <View style={[styles.claimCard, { backgroundColor: applyOpacity(c.ember, 0.1), borderColor: applyOpacity(c.ember, 0.45) }]}>
+      <Text style={[styles.claimLine, { color: c.inkDark }]}>
+        Every check-in is in. The marks carried you here. Did you reach it?
+      </Text>
+      <TouchableOpacity
+        style={[styles.claimBtn, { backgroundColor: c.forest }]}
+        onPress={onClaim}
+        activeOpacity={0.85}
+        accessibilityRole="button"
+        testID="goal-claim"
+      >
+        <Text style={[styles.claimBtnText, { color: c.inkInverse }]}>Claim this goal</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -954,7 +984,16 @@ export default function GoalDetailScreen() {
     );
   }
 
-  const { progress, threshold, canComplete } = getGoalProgress(id!);
+  const { progress, threshold, canComplete, readyToClaim } = getGoalProgress(id!);
+  const framing = goalWeekFraming(goal);
+  const weekLabel = framing ? `week ${framing.week} of ${framing.totalWeeks}` : null;
+
+  // Completing is a moment, not a list move: run the confirm, then land on the
+  // celebration screen (which nothing navigated to before M7).
+  const handleComplete = () =>
+    confirmCompleteGoal(goal.title, () => completeGoal(id!), () =>
+      router.replace({ pathname: '/goal/complete', params: { goalTitle: goal.title, goalId: id! } } as any)
+    );
 
   const handleOpenDatePicker = () => {
     const initial = goal.target_date ? parseISO(goal.target_date) : new Date();
@@ -984,9 +1023,12 @@ export default function GoalDetailScreen() {
           c={c}
           progress={progress}
           threshold={threshold}
+          weekLabel={weekLabel}
           heroMark={heroMark}
           fallbackIcon={heroCat.Icon}
         />
+
+        {readyToClaim && <ClaimGoalCard c={c} onClaim={handleComplete} />}
 
         <GoalIdentity
           c={c}
@@ -1027,7 +1069,7 @@ export default function GoalDetailScreen() {
           targetDate={goal.target_date}
           canComplete={canComplete}
           onOpenDatePicker={handleOpenDatePicker}
-          onComplete={() => confirmCompleteGoal(goal.title, () => completeGoal(id!), () => router.back())}
+          onComplete={handleComplete}
           onDelete={() => confirmRemoveGoal(goal.title, () => deleteGoal(id!), () => router.back())}
         />
       </ScrollView>
@@ -1146,6 +1188,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
   },
+
+  // Claim card (M7): ember-tinted like other warm status surfaces; the button
+  // is the same forest primary the footer complete button uses.
+  claimCard: {
+    marginTop: spacing.lg,
+    borderWidth: 1,
+    borderRadius: borderRadius.lg,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  claimLine: {
+    fontFamily: fonts.serifItalic,
+    fontSize: fontSize.lg,
+    lineHeight: 22,
+    textAlign: 'center',
+  },
+  claimBtn: {
+    borderRadius: borderRadius.md,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    minHeight: headerControl.minTarget,
+    justifyContent: 'center',
+  },
+  claimBtnText: { fontSize: fontSize.md, fontFamily: fonts.sansSemibold },
 
   // Week sentence
   weekSentence: {

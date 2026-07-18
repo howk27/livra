@@ -263,7 +263,7 @@ export default function NewGoalScreen() {
         userId: user.id,
         isPro: proStatus.effectiveUnlocked,
         linked_mark_ids: [...selection.alreadyOwnedMarkIds],
-        target_mark_count: selection.unlockThreshold > 0 ? selection.unlockThreshold : null,
+        target_mark_count: selection.commitmentTarget > 0 ? selection.commitmentTarget : null,
         tier: selection.tier,
         frequency: selection.frequency,
         method: 'manual',
