@@ -292,7 +292,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     marginBottom: spacing.md,
   },
   tagline: {
-    fontFamily: fonts.serifItalic,
+    fontFamily: fonts.sansItalic,
     fontSize: fontSize[22],
     color: c.inkMid,
     textAlign: 'center',
@@ -340,7 +340,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     color: c.inkMuted,
   },
   reflectPrompt: {
-    fontFamily: fonts.serifSemibold,
+    fontFamily: fonts.sansSemibold,
     fontSize: fontSize.lg,
     color: c.inkDark,
     textAlign: 'center',

@@ -695,7 +695,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   allDoneText: {
-    fontFamily: fonts.serifItalic,
+    fontFamily: fonts.sansItalic,
     fontSize: fontSize.md,
     textAlign: 'center',
   },
@@ -781,10 +781,10 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     ...shadow.card,
   },
-  // Mentor voice line (PL-5): serifItalic like the greeting; inkMid, not
-  // inkMuted — serif italics need the extra contrast step on light linen.
+  // Mentor voice line (PL-5 / MED-A): DM Sans italic — the app-voice italic cue
+  // without Cormorant; inkMid for the contrast step italics need on light linen.
   emptyMarksText: {
-    fontFamily: fonts.serifItalic,
+    fontFamily: fonts.sansItalic,
     fontSize: fontSize.lg,
     lineHeight: 22,
     textAlign: 'center',

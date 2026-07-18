@@ -1157,7 +1157,7 @@ const styles = StyleSheet.create({
   // Type lives in <GoalTitle>; layout spacing only.
   title: { marginTop: 0 },
   why: {
-    fontFamily: fonts.serifItalic,
+    fontFamily: fonts.sansItalic,
     fontSize: fontSize.lg,
     lineHeight: 22,
     marginTop: spacing.sm,
@@ -1183,7 +1183,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   claimLine: {
-    fontFamily: fonts.serifItalic,
+    fontFamily: fonts.sansItalic,
     fontSize: fontSize.lg,
     lineHeight: 22,
     textAlign: 'center',
@@ -1255,7 +1255,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   // Mentor voice line (PL-5): serifItalic + inkMid, matching the other empty invitations.
-  emptyMarksText: { fontSize: fontSize.md, lineHeight: 20, fontFamily: fonts.serifItalic, textAlign: 'center' },
+  emptyMarksText: { fontSize: fontSize.md, lineHeight: 20, fontFamily: fonts.sansItalic, textAlign: 'center' },
   addMarkBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1312,7 +1312,7 @@ const styles = StyleSheet.create({
   },
   pickerRowHint: { fontSize: fontSize.xs, fontFamily: fonts.sans },
   pickerEmpty: {
-    fontFamily: fonts.serifItalic,
+    fontFamily: fonts.sansItalic,
     fontSize: fontSize.lg,
     lineHeight: 22,
     paddingVertical: spacing.md,
@@ -1331,7 +1331,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   journalEmpty: {
-    fontFamily: fonts.serifItalic,
+    fontFamily: fonts.sansItalic,
     fontSize: fontSize.lg,
     lineHeight: 22,
     marginTop: spacing.sm,

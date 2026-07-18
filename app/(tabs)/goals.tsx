@@ -681,15 +681,15 @@ const styles = StyleSheet.create({
     paddingTop: spacing.xxl,
   },
   emptyTitle: {
-    fontFamily: fonts.serifSemibold,
+    fontFamily: fonts.sansSemibold,
     fontSize: fontSize[22],
     textAlign: 'center',
     marginTop: spacing.md,
   },
-  // Mentor voice line (PL-5): serifItalic; inkMid for the contrast step serif
-  // italics need on light linen (FU-5 precedent).
+  // Mentor voice line (PL-5 / MED-A): DM Sans italic; inkMid for the contrast
+  // step italics need on light linen (FU-5 precedent).
   emptySubtitle: {
-    fontFamily: fonts.serifItalic,
+    fontFamily: fonts.sansItalic,
     fontSize: fontSize.lg,
     lineHeight: 22,
     textAlign: 'center',

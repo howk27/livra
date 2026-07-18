@@ -739,7 +739,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     alignItems: 'center',
   },
   allDoneBannerText: {
-    fontFamily: fonts.serifItalic,
+    fontFamily: fonts.sansItalic,
     fontSize: fontSize.xl,
     color: c.inkInverse,
   },
@@ -759,7 +759,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     justifyContent: 'center',
   },
   heroTitle: {
-    fontFamily: fonts.serif,
+    fontFamily: fonts.sansBold,
     fontSize: fontSize['3xl'],
     color: c.inkDark,
     lineHeight: 36,
@@ -824,7 +824,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     borderColor: c.borderMid,
   },
   logBtnText: {
-    fontFamily: fonts.serif,
+    fontFamily: fonts.sansBold,
     fontSize: fontSize[18],
     color: c.inkInverse,
   },
@@ -920,7 +920,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
   },
   // Mentor voice line (PL-5): serifItalic + inkMid, matching the other empty invitations.
   noHistoryText: {
-    fontFamily: fonts.serifItalic,
+    fontFamily: fonts.sansItalic,
     fontSize: fontSize.lg,
     lineHeight: 22,
     color: c.inkMid,
