@@ -75,6 +75,7 @@ import {
   resolveMarkIcon,
   dominantMark,
 } from '../../lib/markCategoryResolve';
+import { getCategoryColorForMark } from '../../lib/markCategory';
 import { logger } from '../../lib/utils/logger';
 import { goalWeekFraming } from '../../lib/goalLogic';
 import { ringFraction } from '../../lib/goalRingProgress';
@@ -291,6 +292,9 @@ function LinkMarkSheet({
               {candidates.map((mark) => {
                 const catData = CATEGORY_MAP[resolveMarkCategory(mark)] ?? CATEGORY_MAP.custom;
                 const MarkIcon = resolveMarkIcon(mark) ?? catData.Icon;
+                // Batch 2: the mark's own accent (unique per icon), not the
+                // category's — five marks in a goal must be tellable apart.
+                const accent = getCategoryColorForMark(mark);
                 const heldBy = goalTitleById(mark.goal_id);
                 return (
                   <TouchableOpacity
@@ -301,8 +305,8 @@ function LinkMarkSheet({
                     accessibilityRole="button"
                     accessibilityLabel={`Link ${mark.name} to this goal`}
                   >
-                    <View style={[styles.markIconTile, { backgroundColor: applyOpacity(catData.accent, 0.12) }]}>
-                      <MarkIcon size={18} color={catData.accent} weight="duotone" />
+                    <View style={[styles.markIconTile, { backgroundColor: applyOpacity(accent, 0.12) }]}>
+                      <MarkIcon size={18} color={accent} weight="duotone" />
                     </View>
                     <View style={styles.markBody}>
                       <Text style={[styles.markName, { color: c.inkDark }]} numberOfLines={1}>
@@ -405,6 +409,8 @@ function LinkedMarkRows({
         marks.map(mark => {
           const catData = CATEGORY_MAP[resolveMarkCategory(mark)] ?? CATEGORY_MAP.custom;
           const MarkIcon = resolveMarkIcon(mark) ?? catData.Icon;
+          // Batch 2: per-mark accent — see LinkMarkSheet note.
+          const accent = getCategoryColorForMark(mark);
           const weeklyCount = weeklyCountsMap.get(mark.id) ?? 0;
           const weeklyTarget = mark.weekly_target ?? 3;
           const weekPct = weeklyTarget > 0 ? Math.min(1, weeklyCount / weeklyTarget) : 0;
@@ -415,8 +421,8 @@ function LinkedMarkRows({
               onPress={() => onOpenMark(mark.id)}
               activeOpacity={0.8}
             >
-              <View style={[styles.markIconTile, { backgroundColor: applyOpacity(catData.accent, 0.12) }]}>
-                <MarkIcon size={18} color={catData.accent} weight="duotone" />
+              <View style={[styles.markIconTile, { backgroundColor: applyOpacity(accent, 0.12) }]}>
+                <MarkIcon size={18} color={accent} weight="duotone" />
               </View>
               <View style={styles.markBody}>
                 <Text style={[styles.markName, { color: c.inkDark }]} numberOfLines={1}>

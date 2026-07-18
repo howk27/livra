@@ -15,7 +15,7 @@ import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 
 import { fonts, fontSize, spacing, radius, shadow, themedColors } from '../../theme/tokens';
-import { useEffectiveTheme } from '../../state/uiSlice';
+import { useEffectiveTheme, useUIStore } from '../../state/uiSlice';
 import { LivraHeader } from '../../components/ui/LivraHeader';
 import { MarkRow } from '../../components/ui/MarkRow';
 import { Breathing } from '../../components/ui/Breathing';
@@ -59,6 +59,7 @@ import {
   markWeeklyState,
 } from '../../lib/features';
 import { resolveMarkCategory, resolveMarkIcon } from '../../lib/markCategoryResolve';
+import { getCategoryColorForMark } from '../../lib/markCategory';
 import { resolveFirstName } from '../../lib/profile/displayName';
 import { computeWeek } from '../../lib/consistency';
 import { logger } from '../../lib/utils/logger';
@@ -216,7 +217,10 @@ export default function FocusScreen() {
   // ── Expander state (per-goal "X more" collapse) ───────────────────────────
 
   const [expandedGoalIds, setExpandedGoalIds] = useState<Set<string>>(new Set());
-  const [dailyHabitsExpanded, setDailyHabitsExpanded] = useState(false);
+  // Batch 2 (founder): Daily habits is OPEN by default; hiding it is a choice
+  // the app remembers. Persistent preference, so it lives in the UI slice.
+  const dailyHabitsOpen = useUIStore((s) => s.dailyHabitsOpen);
+  const setDailyHabitsOpen = useUIStore((s) => s.setDailyHabitsOpen);
 
   const toggleGoalExpand = useCallback((goalId: string) => {
     setExpandedGoalIds((prev) => {
@@ -440,6 +444,7 @@ export default function FocusScreen() {
                 title={mark.name}
                 category={category}
                 icon={resolveMarkIcon(mark) ?? undefined}
+                accent={getCategoryColorForMark(mark)}
                 loggedToday={(todayCountsMap.get(mark.id) ?? 0) > 0}
                 done={isDoneForWeek}
                 onPress={() => router.push(`/mark/${mark.id}` as any)}
@@ -589,16 +594,18 @@ export default function FocusScreen() {
           <View style={styles.dailyHabitsSection}>
             <TouchableOpacity
               style={styles.dailyHabitsHeader}
-              onPress={() => setDailyHabitsExpanded((v) => !v)}
+              onPress={() => { void setDailyHabitsOpen(!dailyHabitsOpen); }}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: dailyHabitsOpen }}
             >
               <SectionLabel style={styles.sectionLabel}>DAILY HABITS</SectionLabel>
               <Text style={[styles.dailyHabitsToggle, { color: c.accent }]}>
-                {dailyHabitsExpanded ? 'Hide' : `Show ${goallessMarks.length + maintenanceMarks.length}`}
+                {dailyHabitsOpen ? 'Hide' : `Show ${goallessMarks.length + maintenanceMarks.length}`}
               </Text>
             </TouchableOpacity>
 
-            {dailyHabitsExpanded && (
+            {dailyHabitsOpen && (
               <View style={[styles.marksList, { backgroundColor: c.surface }]}>
                 {goallessMarks.map((mark, idx) =>
                   renderMarkRow(mark, maintenanceMarks.length === 0 && idx === goallessMarks.length - 1, false, false, idx)
