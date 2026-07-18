@@ -28,6 +28,13 @@ interface LivraHeaderProps {
   showAvatar?: boolean;
   centerLogo?: boolean;
   title?: string;
+  /**
+   * QC-FAIL-5: a left-aligned line that shares the header row with the avatar
+   * (founder: "same level as the avatar"), mirroring Focus's greeting+avatar
+   * grammar. Serif-italic mentor voice. Ignored when `showBack` or `centerLogo`
+   * claim the row.
+   */
+  subtitle?: string;
   avatarUri?: string | null;
   rightIcon?: PhosphorIcon;
   onRightPress?: () => void;
@@ -39,6 +46,7 @@ export function LivraHeader({
   showAvatar,
   centerLogo,
   title,
+  subtitle,
   avatarUri: avatarUriProp,
   rightIcon: RightIconComponent,
   onRightPress,
@@ -53,6 +61,10 @@ export function LivraHeader({
   const loadedAvatarUri = useProfileAvatar(!!showAvatar && !avatarUriProp);
   const avatarUri = avatarUriProp ?? loadedAvatarUri;
 
+  // QC-FAIL-5: the subtitle owns the row's leading space, flush to the gutter,
+  // so it reads as a line beside the avatar rather than a centered title.
+  const showLead = !!subtitle && !showBack && !centerLogo;
+
   const left = showBack ? (
     <TouchableOpacity
       style={styles.iconBtn}
@@ -60,7 +72,7 @@ export function LivraHeader({
     >
       <ArrowLeft size={22} color={colors.inkDark} weight="regular" />
     </TouchableOpacity>
-  ) : (
+  ) : showLead ? null : (
     <View style={styles.leftPlaceholder} />
   );
 
@@ -103,10 +115,14 @@ export function LivraHeader({
     >
       <View style={styles.row}>
         {left}
-        <View style={styles.center}>
+        <View style={[styles.center, showLead && styles.centerLead]}>
           {centerLogo ? (
             // Batch 2 (founder UI-3): slightly bigger on Focus (was 32x16).
             <SvgLogo color={theme === 'dark' ? colors.inkDark : colors.forest} width={40} height={20} />
+          ) : showLead ? (
+            <Text style={[styles.subtitle, { color: colors.inkMuted }]} numberOfLines={1}>
+              {subtitle}
+            </Text>
           ) : title ? (
             <Text style={[styles.title, { color: colors.inkDark }]}>{title}</Text>
           ) : null}
@@ -141,8 +157,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // QC-FAIL-5: the leading line hugs the start of the row, not the middle.
+  centerLead: {
+    alignItems: 'flex-start',
+  },
   title: {
     fontFamily: fonts.sansMedium,
+    fontSize: fontSize.lg,
+  },
+  // QC-FAIL-5: matches the goals subtitle it replaces — serif-italic mentor
+  // voice, one size up from body, quiet inkMuted.
+  subtitle: {
+    fontFamily: fonts.serifItalic,
     fontSize: fontSize.lg,
   },
   avatarRingWrapper: {

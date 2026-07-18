@@ -421,17 +421,16 @@ export default function GoalsScreen() {
     <View style={[styles.screen, { backgroundColor: c.linen }]}>
       {/* Batch 2 (founder): the wordmark and the "+ Goal" CTA are gone — the
           header is the avatar, same grammar as Focus. Creation moves to the
-          SpeedDialFAB below, one consistent add-door on both tabs. */}
-      <LivraHeader showAvatar />
+          SpeedDialFAB below, one consistent add-door on both tabs.
+          QC-FAIL-5 (founder): the subtitle moves ONTO the avatar row (left text,
+          avatar right), so it sits "at the same level as the avatar" instead of
+          below the header. */}
+      <LivraHeader showAvatar subtitle="Your goals, one at a time." />
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.topBlock}>
-          <Text style={[styles.subtitle, { color: c.inkMuted }]}>Your goals, one at a time.</Text>
-        </View>
-
         {/* Error banner */}
         {error ? (
           <View style={[styles.errorBanner, { backgroundColor: applyOpacity(c.danger, 0.13) }]}>
@@ -500,15 +499,10 @@ export default function GoalsScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   scroll: { flex: 1 },
-  content: { flexGrow: 1, paddingBottom: 120 },
+  // QC-FAIL-5: the subtitle's old 24pt marginBottom moves here as top breathing
+  // room, now that the line lives in the header row above.
+  content: { flexGrow: 1, paddingTop: spacing.md, paddingBottom: 120 },
 
-  topBlock: { paddingHorizontal: spacing.lg },
-  subtitle: {
-    fontFamily: fonts.serifItalic,
-    fontSize: fontSize.lg,
-    marginTop: 4,
-    marginBottom: 24,
-  },
   sectionLabel: {
     marginBottom: 12,
     paddingHorizontal: spacing.lg,
