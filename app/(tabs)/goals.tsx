@@ -21,7 +21,7 @@ import Animated, {
   runOnJS,
   type SharedValue,
 } from 'react-native-reanimated';
-import { fonts, spacing, radius, themedColors, fontSize } from '../../theme/tokens';
+import { fonts, spacing, radius, themedColors, fontSize, motion } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { LivraHeader } from '../../components/ui/LivraHeader';
 import { SpeedDialFAB } from '../../components/ui/SpeedDialFAB';
@@ -36,21 +36,24 @@ import { useEventsStore } from '../../state/eventsSlice';
 import { currentWeekDates, computeCompletionsThisWeek } from '../../lib/features';
 import { deriveGoalsEmptyKind, getEmptyStateCopy } from '../../lib/moments/emptyState';
 import { applyOpacity } from '../../src/components/icons/color';
+import { useMotion } from '../../hooks/useMotion';
+import { GoalCardMedallion } from '../../components/goals/GoalCardMedallion';
+import { resolveDragSlot } from '../../lib/dragReorder';
 import type { Goal } from '../../types/goal';
+import type { Mark } from '../../types';
 
 // ── Drag-to-reorder constants ─────────────────────────────────────────────────
 const CARD_GAP = spacing.md;
 const ACTIVE_SCALE = 1.03;
-
-function clamp(value: number, lower: number, upper: number): number {
-  'worklet';
-  return Math.max(lower, Math.min(value, upper));
-}
+/** Stable empty-marks reference so a goal with no marks keeps prop identity. */
+const EMPTY_MARKS: Mark[] = [];
 
 // ── Active goal progress card ─────────────────────────────────────────────────
 
 interface ActiveGoalCardProps {
   goal: Goal;
+  /** The goal's live linked marks — resolves the leading medallion (M7-QC b). */
+  marks: Mark[];
   progress: number;
   threshold: number;
   canComplete: boolean;
@@ -65,7 +68,7 @@ interface ActiveGoalCardProps {
   onPress: () => void;
 }
 
-function ActiveGoalCard({ goal, progress, threshold, canComplete, readyToClaim = false, hasCommitment = false, weeklyDone = 0, weeklyTarget = 0, onPress }: ActiveGoalCardProps) {
+function ActiveGoalCard({ goal, marks, progress, threshold, canComplete, readyToClaim = false, hasCommitment = false, weeklyDone = 0, weeklyTarget = 0, onPress }: ActiveGoalCardProps) {
   const theme = useEffectiveTheme();
   const c = themedColors(theme);
   const pct = threshold > 0 ? Math.min(100, (progress / threshold) * 100) : 0;
@@ -85,7 +88,10 @@ function ActiveGoalCard({ goal, progress, threshold, canComplete, readyToClaim =
       activeOpacity={0.85}
     >
       <View style={styles.activeTopRow}>
-        <View style={[styles.activeDot, { backgroundColor: c.accent }]} />
+        {/* M7-QC (b): a calm leading medallion tinted with the goal's dominant
+            mark's own accent, so the list reads as more than text and each goal
+            wears the same face it shows on its detail hero. */}
+        <GoalCardMedallion marks={marks} testID={`goal-medallion-${goal.id}`} />
         {!canComplete && <CaretRight size={18} color={c.inkMid} weight="bold" />}
       </View>
 
@@ -149,6 +155,7 @@ function ActiveGoalCard({ goal, progress, threshold, canComplete, readyToClaim =
 
 interface DraggableRowProps {
   goal: Goal;
+  marks: Mark[];
   index: number;
   count: number;
   slotHeight: SharedValue<number>;
@@ -162,6 +169,7 @@ interface DraggableRowProps {
 
 function DraggableRow({
   goal,
+  marks,
   index,
   count,
   slotHeight,
@@ -174,11 +182,18 @@ function DraggableRow({
 }: DraggableRowProps) {
   const theme = useEffectiveTheme();
   const c = themedColors(theme);
+  const { reduced } = useMotion();
   const getGoalProgress = useGoalsStore((s) => s.getGoalProgress);
   const progress = getGoalProgress(goal.id);
   const translateY = useSharedValue(0);
   const isActive = useSharedValue(false);
+  // True from drop until the settle animation lands — keeps the row sourced from
+  // the continuous `translateY` across the data reorder so it never jumps (c-2).
+  const settling = useSharedValue(false);
   const startSlot = useSharedValue(index);
+  // Settle/lift durations collapse to instant under Reduce Motion (motion skill).
+  const settleDuration = reduced ? 0 : motion.standard;
+  const liftDuration = reduced ? 0 : 120;
 
   const triggerHaptic = useCallback(() => {
     if (Platform.OS !== 'web') {
@@ -202,8 +217,15 @@ function DraggableRow({
       if (slotHeight.value <= 0) return;
       translateY.value = e.translationY;
       const currentSlot = positions.value[goal.id] ?? index;
-      const shift = Math.round(e.translationY / slotHeight.value);
-      const targetSlot = clamp(startSlot.value + shift, 0, count - 1);
+      // c-1: hysteresis-guarded slot resolution — no Math.round flip-flop at the
+      // ±0.5-slot boundary, so the passive row no longer bounces between slots.
+      const targetSlot = resolveDragSlot({
+        translationY: e.translationY,
+        slotHeight: slotHeight.value,
+        startSlot: startSlot.value,
+        currentSlot,
+        count,
+      });
       if (targetSlot !== currentSlot) {
         const next = { ...positions.value };
         for (const id in next) {
@@ -221,16 +243,34 @@ function DraggableRow({
     })
     .onEnd(() => {
       const finalSlot = positions.value[goal.id] ?? index;
-      translateY.value = withTiming(0, { duration: 220 });
       isActive.value = false;
       activeId.value = null;
-      if (finalSlot !== startSlot.value) {
+      if (finalSlot !== index) {
+        // c-2: continuous drop. Committing the reorder shifts this row's layout
+        // origin from `index` to `finalSlot`; compensate `translateY` by the same
+        // amount FIRST (so the row stays exactly under the finger), then settle
+        // the compensated value to 0 in one animation. `settling` keeps the row
+        // sourced from this continuous value across the commit — no snap.
+        settling.value = true;
+        translateY.value = translateY.value + (index - finalSlot) * slotHeight.value;
+        translateY.value = withTiming(0, { duration: settleDuration }, (finished) => {
+          if (finished) settling.value = false;
+        });
         runOnJS(commitReorder)();
+      } else {
+        settling.value = true;
+        translateY.value = withTiming(0, { duration: settleDuration }, (finished) => {
+          if (finished) settling.value = false;
+        });
       }
     })
     .onFinalize(() => {
+      // Safety net if the gesture is cancelled without onEnd (e.g. interrupted).
       if (isActive.value) {
-        translateY.value = withTiming(0, { duration: 220 });
+        settling.value = true;
+        translateY.value = withTiming(0, { duration: settleDuration }, (finished) => {
+          if (finished) settling.value = false;
+        });
         isActive.value = false;
         if (activeId.value === goal.id) activeId.value = null;
       }
@@ -239,19 +279,32 @@ function DraggableRow({
   const animatedStyle = useAnimatedStyle(() => {
     const slot = positions.value[goal.id] ?? index;
     const dragging = isActive.value;
+    const anyActive = activeId.value !== null;
     const restingOffset = (slot - index) * slotHeight.value;
-    const y = dragging
-      ? translateY.value
-      : withTiming(restingOffset, { duration: 220 });
+    // Source of translateY:
+    //  • dragging → follow the finger.
+    //  • settling → the continuous compensated drop value (survives the reorder).
+    //  • a sibling is dragging → animate this passive row into its previewed slot.
+    //  • idle/committed → snap to restingOffset. Snapping here is what kills the
+    //    settle bounce: at the reorder frame the origin and restingOffset change
+    //    together, and a snap lands the row in place with zero visible travel.
+    let y: number;
+    if (dragging || settling.value) {
+      y = translateY.value;
+    } else if (anyActive) {
+      y = withTiming(restingOffset, { duration: settleDuration });
+    } else {
+      y = restingOffset;
+    }
     return {
       transform: [
         { translateY: y },
-        { scale: dragging ? withTiming(ACTIVE_SCALE, { duration: 120 }) : withTiming(1, { duration: 120 }) },
+        { scale: dragging ? withTiming(ACTIVE_SCALE, { duration: liftDuration }) : withTiming(1, { duration: liftDuration }) },
       ],
       zIndex: dragging ? 100 : 1,
       shadowColor: '#1C3830',
       shadowOffset: { width: 0, height: dragging ? 8 : 0 },
-      shadowOpacity: withTiming(dragging ? 0.18 : 0, { duration: 120 }),
+      shadowOpacity: withTiming(dragging ? 0.18 : 0, { duration: liftDuration }),
       shadowRadius: dragging ? 16 : 0,
       elevation: dragging ? 12 : 0,
     };
@@ -271,6 +324,7 @@ function DraggableRow({
     >
       <ActiveGoalCard
         goal={goal}
+        marks={marks}
         progress={progress.progress}
         threshold={progress.threshold}
         canComplete={progress.canComplete}
@@ -296,10 +350,11 @@ function DraggableRow({
 interface DraggableGoalListProps {
   goals: Goal[];
   weeklyByGoal: Map<string, { done: number; target: number }>;
+  marksByGoal: Map<string, Mark[]>;
   onPressGoal: (goalId: string) => void;
 }
 
-function DraggableGoalList({ goals, weeklyByGoal, onPressGoal }: DraggableGoalListProps) {
+function DraggableGoalList({ goals, weeklyByGoal, marksByGoal, onPressGoal }: DraggableGoalListProps) {
   const reorderGoals = useGoalsStore((s) => s.reorderGoals);
 
   const slotHeight = useSharedValue(0);
@@ -334,6 +389,7 @@ function DraggableGoalList({ goals, weeklyByGoal, onPressGoal }: DraggableGoalLi
         <DraggableRow
           key={goal.id}
           goal={goal}
+          marks={marksByGoal.get(goal.id) ?? EMPTY_MARKS}
           index={index}
           count={goals.length}
           slotHeight={slotHeight}
@@ -386,6 +442,19 @@ export default function GoalsScreen() {
     }
     return map;
   }, [active, marks, allEvents]);
+
+  // M7-QC (b): the goal's live linked marks, so each card resolves its own
+  // dominant-mark medallion (same resolution as the goal-detail hero).
+  const marksByGoal = useMemo(() => {
+    const map = new Map<string, Mark[]>();
+    for (const goal of active) {
+      map.set(
+        goal.id,
+        marks.filter((m) => m.goal_id === goal.id && !m.deleted_at),
+      );
+    }
+    return map;
+  }, [active, marks]);
 
   const isEmpty = !isLoading && active.length === 0;
 
@@ -476,6 +545,7 @@ export default function GoalsScreen() {
             <DraggableGoalList
               goals={active}
               weeklyByGoal={weeklyByGoal}
+              marksByGoal={marksByGoal}
               onPressGoal={handleOpenGoal}
             />
           </>
@@ -520,11 +590,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: spacing.sm,
-  },
-  activeDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
   },
   activeDescription: {
     fontFamily: fonts.sans,
