@@ -124,7 +124,7 @@ const styles = StyleSheet.create({
     ...shadow.card,
   },
   text: {
-    fontFamily: fonts.serifItalic,
+    fontFamily: fonts.sansItalic,
     fontSize: fontSize.lg,
     lineHeight: 21,
     textAlign: 'center',

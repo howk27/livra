@@ -25,7 +25,10 @@ export function LivraWordmark({
 
 const styles = StyleSheet.create({
   wordmark: {
-    fontFamily: fonts.serif,
+    // MED-A: the LIVRA wordmark is a brand mark, not a goal title or greeting,
+    // so it comes off Cormorant under the "reduce to titles + greetings" rule.
+    // FLAGGED for founder review — a logo may warrant a carve-out.
+    fontFamily: fonts.sansBold,
     textTransform: 'uppercase',
   },
 });

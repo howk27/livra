@@ -58,8 +58,7 @@ import {
   buildWeeklyCountsMap,
   markWeeklyState,
 } from '../../lib/features';
-import { resolveMarkCategory, resolveMarkIcon } from '../../lib/markCategoryResolve';
-import { getCategoryColorForMark } from '../../lib/markCategory';
+import { resolveMarkCategory, resolveMarkIcon, resolveMarkAccent } from '../../lib/markCategoryResolve';
 import { resolveFirstName } from '../../lib/profile/displayName';
 import { computeWeek } from '../../lib/consistency';
 import { logger } from '../../lib/utils/logger';
@@ -444,7 +443,7 @@ export default function FocusScreen() {
                 title={mark.name}
                 category={category}
                 icon={resolveMarkIcon(mark) ?? undefined}
-                accent={getCategoryColorForMark(mark)}
+                accent={resolveMarkAccent(mark)}
                 loggedToday={(todayCountsMap.get(mark.id) ?? 0) > 0}
                 done={isDoneForWeek}
                 onPress={() => router.push(`/mark/${mark.id}` as any)}
@@ -696,7 +695,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   allDoneText: {
-    fontFamily: fonts.serifItalic,
+    fontFamily: fonts.sansItalic,
     fontSize: fontSize.md,
     textAlign: 'center',
   },
@@ -782,10 +781,10 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     ...shadow.card,
   },
-  // Mentor voice line (PL-5): serifItalic like the greeting; inkMid, not
-  // inkMuted — serif italics need the extra contrast step on light linen.
+  // Mentor voice line (PL-5 / MED-A): DM Sans italic — the app-voice italic cue
+  // without Cormorant; inkMid for the contrast step italics need on light linen.
   emptyMarksText: {
-    fontFamily: fonts.serifItalic,
+    fontFamily: fonts.sansItalic,
     fontSize: fontSize.lg,
     lineHeight: 22,
     textAlign: 'center',

@@ -8,6 +8,7 @@
 import type { ComponentType } from 'react';
 import { MARK_LIBRARY, type MarkDefinition } from './suggestedCounters';
 import { resolveCounterIconType } from '../src/components/icons/IconResolver';
+import { colorForSuggestedCounter, getCategoryColorForMark } from './markCategory';
 
 export type MarkCategoryInput = { name: string; emoji?: string | null };
 
@@ -39,6 +40,34 @@ export function resolveLibraryMark(mark: MarkCategoryInput): MarkDefinition | un
  */
 export function resolveMarkIcon(mark: MarkCategoryInput): ComponentType<any> | null {
   return resolveLibraryMark(mark)?.icon ?? null;
+}
+
+/**
+ * M7-QC3 (founder device QC 2026-07-18): a mark's tint is its OWN per-icon
+ * accent (`iconAccents`), the same value on every surface that renders it — the
+ * Focus row, the mark-detail hero, the create grid. Before this, the hero used
+ * `CATEGORY_MAP[cat].accent` and Focus used `getCategoryColorForMark`, both
+ * category-level: a mark landed on one of 12 category hues, several of which are
+ * warm tan/amber (fitness, discipline, finance, planning, relationships) — so
+ * marks read "amber", not their own color, and a goal's marks were
+ * indistinguishable. There is NO ember/`c.ember` leak; the amber IS the warm
+ * categoryAccents family surfacing because per-icon accents were never wired in.
+ *
+ * Resolution order:
+ *  1. A LIBRARY mark carries its icon's accent (`colorForSuggestedCounter`),
+ *     exactly the hue the mark was created with — library ids with a picker
+ *     twin map straight to `iconAccents`, the rest hash to a stable one.
+ *  2. Otherwise honour a sanctioned STORED color (a hand-built mark saved its
+ *     picked icon's accent), else heal a legacy/empty color to the category
+ *     accent — genuine custom/unresolved marks alone reach the neutral fallback.
+ *
+ * Read-only, deterministic, sanctioned-palette in / sanctioned-palette out;
+ * nothing is written, matching `getCategoryColorForMark`'s heal-on-read rule.
+ */
+export function resolveMarkAccent(mark: MarkCategoryInput & { color?: string | null }): string {
+  const lib = resolveLibraryMark(mark);
+  if (lib) return colorForSuggestedCounter(lib);
+  return getCategoryColorForMark({ name: mark.name, color: mark.color ?? undefined });
 }
 
 /**

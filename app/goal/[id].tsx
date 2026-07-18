@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo, createElement } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import type { ComponentType } from 'react';
 import {
   View,
@@ -62,6 +62,7 @@ import { useNotification } from '../../contexts/NotificationContext';
 import { CATEGORY_MAP } from '../../components/ui/MarkRow';
 import { GoalTitle } from '../../components/ui/GoalTitle';
 import { ProgressArc } from '../../components/ui/ProgressArc';
+import { RingIconFill } from '../../components/ui/RingIconFill';
 import { VoiceLine } from '../../components/ui/VoiceLine';
 import {
   currentWeekDates,
@@ -74,8 +75,8 @@ import {
   majorityCategory,
   resolveMarkIcon,
   dominantMark,
+  resolveMarkAccent,
 } from '../../lib/markCategoryResolve';
-import { getCategoryColorForMark } from '../../lib/markCategory';
 import { logger } from '../../lib/utils/logger';
 import { goalWeekFraming } from '../../lib/goalLogic';
 import { ringFraction } from '../../lib/goalRingProgress';
@@ -109,9 +110,10 @@ type GoalEvents = Parameters<typeof buildWeeklyCountsMap>[1];
  *  is pushed per open), never on re-render: the arc sweeps from ProgressArc
  *  mounting at from=0, the icon fill from `fillFrac` (0 → final fraction), the
  *  story from `storyOpacity`. Reduced motion lands each at its final value via
- *  useMotion's reduced-safe `timing` (duration 0). The icon fill is a
- *  bottom-anchored, overflow-clipped copy of the base glyph — the clip height
- *  = fraction × icon size, the RN equivalent of a ClipPath rect. */
+ *  useMotion's reduced-safe `timing` (duration 0). The icon fill lives in
+ *  <RingIconFill>: a native react-native-svg `<ClipPath>` + animated `<Rect>`
+ *  clips the amber glyph bottom→top (RN `overflow:'hidden'` does not reliably
+ *  clip SVG on iOS — the reason the old copy never filled). */
 function RingHero({
   c,
   progress,
@@ -130,19 +132,11 @@ function RingHero({
   const { timing } = useMotion();
   const frac = ringFraction(progress, threshold);
   const storyOpacity = useSharedValue(0);
-  const fillFrac = useSharedValue(0);
   useEffect(() => {
     storyOpacity.value = timing(1, motion.gentle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  // Founder bug 5 (2026-07-18): the fill must track later logs made while the
-  // screen is open, exactly like the arc (ProgressArc re-animates on `to`).
-  useEffect(() => {
-    fillFrac.value = timing(frac, motion.moment);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [frac]);
   const storyStyle = useAnimatedStyle(() => ({ opacity: storyOpacity.value }));
-  const fillStyle = useAnimatedStyle(() => ({ height: RING_ICON_SIZE * fillFrac.value }));
 
   // The centered icon: the goal's own dominant-mark glyph, category/custom
   // fallback for empty goals — same resolution the medallion used before it
@@ -165,12 +159,14 @@ function RingHero({
           gradientId="goalRingGradient"
         />
         <View style={styles.ringIconBox} pointerEvents="none">
-          {createElement(heroIcon, { size: RING_ICON_SIZE, color: c.inkMuted, weight: 'duotone' })}
-          <Animated.View style={[styles.ringIconFill, fillStyle]} pointerEvents="none">
-            <View style={styles.ringIconFillInner}>
-              {createElement(heroIcon, { size: RING_ICON_SIZE, color: fillColor, weight: 'duotone' })}
-            </View>
-          </Animated.View>
+          <RingIconFill
+            icon={heroIcon}
+            size={RING_ICON_SIZE}
+            baseColor={c.inkMuted}
+            fillColor={fillColor}
+            frac={frac}
+            clipId="goalRingIconFillClip"
+          />
         </View>
       </View>
       <Animated.View style={[styles.progressStory, storyStyle]}>
@@ -294,7 +290,7 @@ function LinkMarkSheet({
                 const MarkIcon = resolveMarkIcon(mark) ?? catData.Icon;
                 // Batch 2: the mark's own accent (unique per icon), not the
                 // category's — five marks in a goal must be tellable apart.
-                const accent = getCategoryColorForMark(mark);
+                const accent = resolveMarkAccent({ name: mark.name, emoji: mark.emoji, color: mark.color });
                 const heldBy = goalTitleById(mark.goal_id);
                 return (
                   <TouchableOpacity
@@ -410,7 +406,7 @@ function LinkedMarkRows({
           const catData = CATEGORY_MAP[resolveMarkCategory(mark)] ?? CATEGORY_MAP.custom;
           const MarkIcon = resolveMarkIcon(mark) ?? catData.Icon;
           // Batch 2: per-mark accent — see LinkMarkSheet note.
-          const accent = getCategoryColorForMark(mark);
+          const accent = resolveMarkAccent({ name: mark.name, emoji: mark.emoji, color: mark.color });
           const weeklyCount = weeklyCountsMap.get(mark.id) ?? 0;
           const weeklyTarget = mark.weekly_target ?? 3;
           const weekPct = weeklyTarget > 0 ? Math.min(1, weeklyCount / weeklyTarget) : 0;
@@ -1144,24 +1140,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // The amber fill copy: bottom-anchored + overflow-clipped, height driven by
-  // the animated fraction — a rising clip that reveals the glyph bottom-to-top.
-  ringIconFill: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    width: RING_ICON_SIZE,
-    overflow: 'hidden',
-  },
-  ringIconFillInner: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    width: RING_ICON_SIZE,
-    height: RING_ICON_SIZE,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   progressStory: { alignItems: 'center', marginTop: spacing.sm },
   progressNumber: {
     fontFamily: fonts.sansBold,
@@ -1179,7 +1157,7 @@ const styles = StyleSheet.create({
   // Type lives in <GoalTitle>; layout spacing only.
   title: { marginTop: 0 },
   why: {
-    fontFamily: fonts.serifItalic,
+    fontFamily: fonts.sansItalic,
     fontSize: fontSize.lg,
     lineHeight: 22,
     marginTop: spacing.sm,
@@ -1205,7 +1183,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   claimLine: {
-    fontFamily: fonts.serifItalic,
+    fontFamily: fonts.sansItalic,
     fontSize: fontSize.lg,
     lineHeight: 22,
     textAlign: 'center',
@@ -1277,7 +1255,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   // Mentor voice line (PL-5): serifItalic + inkMid, matching the other empty invitations.
-  emptyMarksText: { fontSize: fontSize.md, lineHeight: 20, fontFamily: fonts.serifItalic, textAlign: 'center' },
+  emptyMarksText: { fontSize: fontSize.md, lineHeight: 20, fontFamily: fonts.sansItalic, textAlign: 'center' },
   addMarkBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1334,7 +1312,7 @@ const styles = StyleSheet.create({
   },
   pickerRowHint: { fontSize: fontSize.xs, fontFamily: fonts.sans },
   pickerEmpty: {
-    fontFamily: fonts.serifItalic,
+    fontFamily: fonts.sansItalic,
     fontSize: fontSize.lg,
     lineHeight: 22,
     paddingVertical: spacing.md,
@@ -1353,7 +1331,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   journalEmpty: {
-    fontFamily: fonts.serifItalic,
+    fontFamily: fonts.sansItalic,
     fontSize: fontSize.lg,
     lineHeight: 22,
     marginTop: spacing.sm,

@@ -559,7 +559,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
       paddingBottom: 80,
     },
     tagline: {
-      fontFamily: fonts.serifItalic,
+      fontFamily: fonts.sansItalic,
       fontSize: fontSize[26],
       lineHeight: 34,
       color: c.inkDark,
@@ -593,7 +593,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
       paddingBottom: 100,
     },
     stepTitle: {
-      fontFamily: fonts.serif,
+      fontFamily: fonts.sansBold,
       fontSize: fontSize['2xl'],
       color: c.inkDark,
       marginTop: spacing.xl,

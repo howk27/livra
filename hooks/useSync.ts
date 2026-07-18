@@ -685,6 +685,25 @@ export const useSync = () => {
         await useGoalsStore.getState().fetchGoals(userId);
       }
 
+      // QC1: heal the reinstall asymmetry. Marks (with goal_id) survive a reinstall
+      // but goal_mark_links did not, so Focus/Goals showed the goal with no marks.
+      // Derive the missing links from each live mark's surviving goal_id; the
+      // derived links carry a fresh updated_at, so the next push repairs the server
+      // too. Idempotent, respects intentional unlinks (tombstoned pairs untouched),
+      // and a cheap no-op when everything is already consistent. Non-fatal.
+      try {
+        const marks = useCountersStore.getState().marks;
+        const { reconcileGoalMarkLinks } = await import('../lib/sync/goalsReconcile');
+        const { derivedLinks } = await reconcileGoalMarkLinks(userId, marks);
+        if (derivedLinks > 0) {
+          logger.log(`[SYNC] Reconciled ${derivedLinks} goal_mark_link(s) from surviving mark.goal_id`);
+          const { useGoalsStore } = await import('../state/goalsSlice');
+          await useGoalsStore.getState().fetchGoals(userId);
+        }
+      } catch (reconcileError) {
+        logger.warn('[SYNC] goal_mark_links reconcile failed (non-fatal)', reconcileError);
+      }
+
       // Pull cursor only — never advances push cursor (split-cursor model).
       await writePullCursor(new Date().toISOString());
     } catch (error) {

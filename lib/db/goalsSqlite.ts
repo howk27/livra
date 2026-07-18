@@ -347,6 +347,28 @@ export async function sqliteLoadLinksForMark(markId: string): Promise<GoalMarkLi
   return rows ?? [];
 }
 
+/**
+ * One link for a (goal_id, mark_id) pair INCLUDING tombstones, or null.
+ *
+ * The reconcile (QC1) uses this to decide whether it may DERIVE a link from a
+ * surviving mark.goal_id: a live row means already-consistent, a TOMBSTONED row
+ * means the user intentionally unlinked the pair. Either way there is a row, so
+ * reconcile must NOT resurrect it. Only a genuine absence is derivable. Mirrors
+ * the merge-time `sqliteLoadLinksForMarkIncludingDeleted` shape — the unique
+ * pair index guarantees at most one row.
+ */
+export async function sqliteLoadLinkForPairIncludingDeleted(
+  goalId: string,
+  markId: string,
+): Promise<GoalMarkLink | null> {
+  const db = await getGoalsDb();
+  const rows = await db.getAllAsync<GoalMarkLink>(
+    `SELECT ${LINK_COLUMNS} FROM goal_mark_links WHERE goal_id = ? AND mark_id = ?`,
+    [goalId, markId],
+  );
+  return rows && rows.length > 0 ? rows[0] : null;
+}
+
 /** Tombstone one link. An unlink must survive as a row, not vanish from it. */
 export async function sqliteSoftDeleteGoalMarkLink(
   goalId: string,

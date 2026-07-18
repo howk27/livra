@@ -92,7 +92,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
   },
   markName: {
-    fontFamily: fonts.serifSemibold,
+    fontFamily: fonts.sansSemibold,
     fontSize: fontSize.lg,
     marginTop: 1,
   },
@@ -102,7 +102,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
   },
   quietText: {
-    fontFamily: fonts.serifItalic,
+    fontFamily: fonts.sansItalic,
     fontSize: fontSize.md,
   },
 });

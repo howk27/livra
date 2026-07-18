@@ -9,6 +9,7 @@ import {
 } from '@expo-google-fonts/cormorant-garamond';
 import {
   DMSans_400Regular,
+  DMSans_400Regular_Italic,
   DMSans_500Medium,
   DMSans_600SemiBold,
   DMSans_700Bold,
@@ -130,6 +131,7 @@ export default function RootLayout() {
     CormorantGaramond_600SemiBold,
     CormorantGaramond_700Bold,
     DMSans_400Regular,
+    DMSans_400Regular_Italic,
     DMSans_500Medium,
     DMSans_600SemiBold,
     DMSans_700Bold,

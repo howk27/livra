@@ -28,6 +28,7 @@ import {
   sqliteUpsertGoalMarkLinkById,
   sqliteLoadLinksForUser,
   sqliteLoadLinksForMark,
+  sqliteLoadLinkForPairIncludingDeleted,
   sqliteSoftDeleteGoalMarkLink,
   sqliteLoadDirtyLinks,
 } from './goalsSqlite';
@@ -274,6 +275,28 @@ export async function removeGoalMarkLink(
         : l,
     ),
   );
+}
+
+/**
+ * One link for a (goal_id, mark_id) pair INCLUDING tombstones, or null.
+ *
+ * The QC1 reconcile calls this before deriving a link from a surviving
+ * mark.goal_id: a live OR tombstoned row means "leave it alone" (already linked,
+ * or intentionally unlinked), only a genuine absence is derivable. Web backend
+ * mirror of sqliteLoadLinkForPairIncludingDeleted.
+ */
+export async function loadLinkForPairIncludingDeleted(
+  goalId: string,
+  markId: string,
+): Promise<GoalMarkLink | null> {
+  await ensureMigrated();
+
+  if (goalsSqliteSupported()) {
+    return sqliteLoadLinkForPairIncludingDeleted(goalId, markId);
+  }
+
+  const links = await readAllLinks();
+  return links.find((l) => l.goal_id === goalId && l.mark_id === markId) ?? null;
 }
 
 /** Live links for one mark, across every goal. Tombstones excluded. */

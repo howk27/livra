@@ -28,6 +28,7 @@ import { applyOpacity } from '../../src/components/icons/color';
 import { GoalCardPreview } from '../../components/creation/GoalCardPreview';
 import { AIHatchButton } from '../../components/ui/AIHatchButton';
 import { PillButton } from '../../components/ui/PillButton';
+import { GoalLimitDialog } from '../../components/ui/GoalLimitDialog';
 import { CATEGORY_MAP } from '../../components/ui/MarkRow';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useGoalsStore, GoalLimitError } from '../../state/goalsSlice';
@@ -35,7 +36,6 @@ import { useMarksStore } from '../../state/countersSlice';
 import { useAuth } from '../../hooks/useAuth';
 import { useSettleEntrance } from '../../hooks/useSettleEntrance';
 import { checkProStatus } from '../../lib/iap/iap';
-import { GOAL_LIMIT_MESSAGE } from '@/lib/copy';
 import { getMarksForGoal } from '../../lib/goalMarkSuggestions';
 import { goalPreviewMarks } from '../../lib/creation/creationPreview';
 import { CommitmentScreen, CommitmentSelection } from '../../components/CommitmentScreen';
@@ -212,6 +212,9 @@ export default function NewGoalScreen() {
   // Batch 2: bin disclosure — transient view state, same call as the icon grid.
   const [examplesExpanded, setExamplesExpanded] = useState(false);
   const [saving, setSaving] = useState(false);
+  // QC-FAIL-4: the free-goal cap now surfaces in Livra's own popup, not the
+  // iOS-native Alert.alert (founder). Transient view state, so useState is right.
+  const [capVisible, setCapVisible] = useState(false);
   const [suggestedMarks, setSuggestedMarks] = useState<MarkDefinition[]>([]);
   // VD-6/QC2-D: focus only after the pageSheet transition settles so the
   // keyboard animation never overlaps the sheet presentation (calm entrance).
@@ -314,14 +317,8 @@ export default function NewGoalScreen() {
       router.back();
     } catch (err) {
       if (err instanceof GoalLimitError) {
-        Alert.alert(
-          'Two goals at a time',
-          GOAL_LIMIT_MESSAGE,
-          [
-            { text: 'Not now', style: 'cancel' },
-            { text: 'See Livra+', onPress: () => router.push('/paywall') },
-          ],
-        );
+        // Livra's own in-app popup (GoalLimitDialog), not the iOS-native prompt.
+        setCapVisible(true);
       } else {
         Alert.alert('Error', 'Could not save goal. Please try again.');
       }
@@ -340,6 +337,16 @@ export default function NewGoalScreen() {
           userMarks={marks}
           onConfirm={handleConfirm}
           onBack={() => setStep('title')}
+        />
+        {/* QC-FAIL-4: the cap fires from handleConfirm on this step, so the
+            popup lives here rather than on the title step. */}
+        <GoalLimitDialog
+          visible={capVisible}
+          onClose={() => setCapVisible(false)}
+          onSeePlus={() => {
+            setCapVisible(false);
+            router.push('/paywall');
+          }}
         />
       </SafeAreaView>
     );

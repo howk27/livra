@@ -302,7 +302,7 @@ const styles = StyleSheet.create({
     marginVertical: spacing.xl,
   },
   completionCopy: {
-    fontFamily: fonts.serifItalic,
+    fontFamily: fonts.sansItalic,
     fontSize: fontSize[22],
     textAlign: 'center',
   },

@@ -54,7 +54,7 @@ import { useEventsStore } from '../../../state/eventsSlice';
 import { LoadingScreen } from '../../../components/LoadingScreen';
 import { useAuth } from '../../../hooks/useAuth';
 import { logger } from '../../../lib/utils/logger';
-import { resolveLibraryMark } from '@/lib/markCategoryResolve';
+import { resolveLibraryMark, resolveMarkAccent } from '@/lib/markCategoryResolve';
 import { resolveDailyTarget } from '../../../lib/markDailyTarget';
 import { getEmptyStateCopy } from '../../../lib/moments/emptyState';
 import { currentWeekDates, markWeeklyState, computeCompletionsThisWeek } from '../../../lib/features';
@@ -251,7 +251,10 @@ function MarkDetailContent() {
   const resolvedIconKey = resolveCounterIconType({ name: counter.name, emoji: counter.emoji });
   const catKey = libraryMark?.category ?? resolvedIconKey ?? 'custom';
   const catData = CATEGORY_MAP[catKey] ?? CATEGORY_MAP.custom;
-  const accent = catData.accent;
+  // M7-QC3: the hero tint is the mark's OWN per-icon accent, the same hue its
+  // Focus row and create-grid tile show — not the category accent (catData),
+  // which collapsed warm-category marks onto a shared amber/tan.
+  const accent = resolveMarkAccent({ name: counter.name, emoji: counter.emoji, color: counter.color });
   // QC2-A: the mark's OWN library icon; category icon only for custom marks.
   const CatIcon = libraryMark?.icon ?? catData.Icon;
 
@@ -736,7 +739,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     alignItems: 'center',
   },
   allDoneBannerText: {
-    fontFamily: fonts.serifItalic,
+    fontFamily: fonts.sansItalic,
     fontSize: fontSize.xl,
     color: c.inkInverse,
   },
@@ -756,7 +759,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     justifyContent: 'center',
   },
   heroTitle: {
-    fontFamily: fonts.serif,
+    fontFamily: fonts.sansBold,
     fontSize: fontSize['3xl'],
     color: c.inkDark,
     lineHeight: 36,
@@ -821,7 +824,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     borderColor: c.borderMid,
   },
   logBtnText: {
-    fontFamily: fonts.serif,
+    fontFamily: fonts.sansBold,
     fontSize: fontSize[18],
     color: c.inkInverse,
   },
@@ -917,7 +920,7 @@ function createStyles(c: ReturnType<typeof themedColors>) {
   },
   // Mentor voice line (PL-5): serifItalic + inkMid, matching the other empty invitations.
   noHistoryText: {
-    fontFamily: fonts.serifItalic,
+    fontFamily: fonts.sansItalic,
     fontSize: fontSize.lg,
     lineHeight: 22,
     color: c.inkMid,

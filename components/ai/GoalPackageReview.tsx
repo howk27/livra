@@ -214,7 +214,7 @@ const styles = StyleSheet.create({
     paddingBottom: 100,
   },
   title: {
-    fontFamily: fonts.serif,
+    fontFamily: fonts.sansBold,
     fontSize: fontSize['2xl'],
     marginTop: spacing.xl,
   },

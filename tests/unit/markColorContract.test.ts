@@ -1,7 +1,8 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { categoryAccents, iconAccents } from '../../theme/tokens';
+import { categoryAccents, iconAccents, themedColors } from '../../theme/tokens';
 import { MARK_LIBRARY } from '../../lib/suggestedCounters';
+import { resolveMarkAccent } from '../../lib/markCategoryResolve';
 import {
   CATEGORY_LABELS,
   colorForSuggestedCounter,
@@ -119,6 +120,130 @@ describe('mark color comes only from the sanctioned palette (QC4-M)', () => {
     for (const key of Object.keys(categoryAccents)) {
       expect(CATEGORY_LABELS[key as keyof typeof categoryAccents]).toBeTruthy();
     }
+  });
+});
+
+/**
+ * M7-QC3 — the mark's OWN icon accent, legible in both modes, never amber.
+ *
+ * Founder device QC (2026-07-18): "the marks screen shows the icons in
+ * amber-color not the color of the Icon" + "barely visible on any mode". Root
+ * cause: the mark-detail hero and Focus tiles resolved tint at the CATEGORY
+ * level, so warm-category marks (fitness/discipline/finance/planning) collapsed
+ * onto tan/amber category accents, and the B2-A per-icon hues that DID render
+ * sat outside the contrast band that survives both a light and a dark same-hue
+ * wash. These lock the fix.
+ */
+describe('M7-QC3 — per-icon accent, legible + not amber', () => {
+  // WCAG relative luminance + contrast ratio over an alpha-composited backdrop.
+  const toRgb = (hex: string): [number, number, number] => {
+    const h = hex.replace('#', '');
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+  };
+  const composite = (fg: string, bg: string, alpha: number): [number, number, number] => {
+    const f = toRgb(fg), b = toRgb(bg);
+    return [0, 1, 2].map((i) => f[i] * alpha + b[i] * (1 - alpha)) as [number, number, number];
+  };
+  const relLum = ([r, g, b]: [number, number, number]) => {
+    const lin = [r, g, b].map((v) => {
+      const c = v / 255;
+      return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    });
+    return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+  };
+  const contrast = (a: string, bg: [number, number, number]) => {
+    const l1 = relLum(toRgb(a)), l2 = relLum(bg);
+    const [hi, lo] = l1 > l2 ? [l1, l2] : [l2, l1];
+    return (hi + 0.05) / (lo + 0.05);
+  };
+
+  const light = themedColors('light');
+  const dark = themedColors('dark');
+  // The real (wash × surface) pairs the mark tiles actually paint with:
+  //  Focus row tile / create grid — applyOpacity(accent, 0.08–0.12) over surface
+  //  mark-detail hero — hexToRgba(accent, 0.15) over linen
+  const SURFACES: Array<{ bg: string; alpha: number }> = [
+    { bg: light.surface, alpha: 0.08 }, { bg: light.surface, alpha: 0.12 },
+    { bg: light.linen, alpha: 0.12 },   { bg: light.linen, alpha: 0.15 },
+    { bg: dark.surface, alpha: 0.08 },  { bg: dark.surface, alpha: 0.12 },
+    { bg: dark.linen, alpha: 0.12 },    { bg: dark.linen, alpha: 0.15 },
+  ];
+  // WCAG 1.4.11 non-text (graphical object) contrast minimum.
+  const MIN_CONTRAST = 3.0;
+
+  it('every icon accent clears 3:1 against its own wash, light AND dark', () => {
+    const failures: string[] = [];
+    for (const [name, hex] of Object.entries(iconAccents)) {
+      for (const { bg, alpha } of SURFACES) {
+        const ratio = contrast(hex, composite(hex, bg, alpha));
+        if (ratio < MIN_CONTRAST) {
+          failures.push(`${name} ${hex} @${alpha} over ${bg}: ${ratio.toFixed(2)}`);
+        }
+      }
+    }
+    expect(failures).toEqual([]);
+  });
+
+  it('no icon accent is the amber/ember spark color (that is never a mark tint)', () => {
+    const ambers = new Set(
+      [light.ember, dark.ember, light.momentumAmber, dark.momentumAmber, ...light.progressGradient, ...dark.progressGradient]
+        .map((h) => h.toLowerCase()),
+    );
+    for (const hex of Object.values(iconAccents)) {
+      expect(ambers.has(hex.toLowerCase())).toBe(false);
+    }
+  });
+
+  it('a mark resolves to its OWN per-icon accent, not the category tint', () => {
+    // A library mark carries its icon's accent — the same hue on every surface.
+    const steps = MARK_LIBRARY.find((m) => m.id === 'steps')!;
+    expect(resolveMarkAccent({ name: steps.name, emoji: steps.emoji })).toBe(iconAccents.steps);
+    const water = MARK_LIBRARY.find((m) => m.id === 'water')!;
+    expect(resolveMarkAccent({ name: water.name, emoji: water.emoji })).toBe(iconAccents.water);
+  });
+
+  it('the marks a real goal shows resolve to DISTINCT accents (the "4 greens" bug)', () => {
+    // The founder saw a goal whose marks were all one green. resolveMarkAccent
+    // is what those Focus rows and the goal detail read, so it — not just the
+    // save path — must give a typical goal's marks distinct hues.
+    for (const goal of ['Run a 5k', 'Fix my sleep', 'Get my stress under control']) {
+      const marks = getMarksForGoal(goal).slice(0, 5);
+      const hues = marks.map((m) => resolveMarkAccent({ name: m.name, emoji: m.emoji }));
+      expect(new Set(hues).size).toBe(hues.length);
+      // None collapses onto a single category tint.
+      expect(new Set(hues).size).toBeGreaterThan(1);
+    }
+  });
+
+  it('a genuinely custom, unresolved mark alone reaches the neutral fallback', () => {
+    const accent = resolveMarkAccent({ name: 'Zxqw nonsense', emoji: '❓', color: null });
+    // Sanctioned palette in / out, never a raw or amber hex.
+    const sanctioned = new Set([...Object.values(categoryAccents), ...Object.values(iconAccents)]);
+    expect(sanctioned.has(accent)).toBe(true);
+  });
+});
+
+/**
+ * M7-QC3 — the create-mark icon grid is 4 per row (founder: "The Icons are on a
+ * 3 per row grid which makes it look bad. Do 4 icons per row.").
+ */
+describe('M7-QC3 — create-mark icon grid is 4 columns', () => {
+  const src = readFileSync(join(ROOT, 'app/mark/new.tsx'), 'utf8');
+
+  it('declares a 4-column grid', () => {
+    expect(src).toMatch(/const ICON_GRID_COLUMNS = 4\b/);
+  });
+
+  it('derives the cell width by dividing the row across ICON_GRID_COLUMNS', () => {
+    // The cell math must reference the constant, so the layout follows it and
+    // cannot silently drift back to a hardcoded 3.
+    expect(src).toMatch(/\/ ICON_GRID_COLUMNS/);
+    expect(src).toMatch(/ICON_GRID_COLUMNS - 1/);
+  });
+
+  it('caps the selected tile wash so the glyph stays legible (no 0.18 same-hue fill)', () => {
+    expect(src).toMatch(/isSelected \? 0\.12 : 0\.08/);
+    expect(src).not.toMatch(/isSelected \? 0\.18 : 0\.08/);
   });
 });
 

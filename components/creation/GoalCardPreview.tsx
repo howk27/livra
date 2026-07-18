@@ -174,7 +174,7 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   why: {
-    fontFamily: fonts.serifItalic,
+    fontFamily: fonts.sansItalic,
     fontSize: fontSize.lg,
     lineHeight: 22,
     marginTop: spacing.xs,

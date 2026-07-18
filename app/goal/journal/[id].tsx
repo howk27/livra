@@ -321,8 +321,11 @@ const styles = StyleSheet.create({
   // Matches headerBtn's width so the title stays optically centred.
   headerSpacer: { width: headerControl.minTarget },
   content: { paddingHorizontal: spacing.lg },
+  // MED-A: the goal name renders here as a small italic context line under the
+  // "Journal" header, not as a hero/title, so it comes off Cormorant. FLAGGED
+  // for founder review (borderline goal-title vs. context label).
   goalName: {
-    fontFamily: fonts.serifItalic,
+    fontFamily: fonts.sansItalic,
     fontSize: fontSize.lg,
     lineHeight: 22,
     marginTop: spacing.xs,
@@ -342,7 +345,7 @@ const styles = StyleSheet.create({
   // States
   stateBlock: { marginTop: spacing.xl, gap: spacing.sm },
   emptyLine: {
-    fontFamily: fonts.serifItalic,
+    fontFamily: fonts.sansItalic,
     fontSize: fontSize.lg,
     lineHeight: 24,
     textAlign: 'center',

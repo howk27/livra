@@ -115,11 +115,13 @@ const styles = StyleSheet.create({
   headerTextWrap: { flex: 1 },
   // Matches headerBtn's width so the title block stays optically centred.
   headerSpacer: { width: headerControl.minTarget },
-  headerTitle: { fontSize: fontSize['2xl'], fontWeight: fontWeight.bold, lineHeight: 32 },
+  // MED-A fallback-fix: was bare fontWeight with no family (iOS system-font
+  // fallback). Screen heading, not a goal title, so it takes DM Sans bold.
+  headerTitle: { fontFamily: fonts.sansBold, fontSize: fontSize['2xl'], fontWeight: fontWeight.bold, lineHeight: 32 },
   headerSubtitle: { fontSize: fontSize.sm, marginTop: spacing.xxs },
   emptyState: { flex: 1, justifyContent: 'center', paddingHorizontal: spacing.xl },
   // Mentor voice line (PL-5): serifItalic + inkMid, matching the other empty invitations.
-  emptyText: { fontFamily: fonts.serifItalic, fontSize: fontSize.lg, textAlign: 'center', lineHeight: 22 },
+  emptyText: { fontFamily: fonts.sansItalic, fontSize: fontSize.lg, textAlign: 'center', lineHeight: 22 },
   list: {
     paddingHorizontal: spacing.md,
     paddingTop: spacing.md,
@@ -132,7 +134,9 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: spacing.xs,
   },
-  goalTitle: { fontSize: fontSize.md, fontWeight: fontWeight.semibold },
+  // MED-A fallback-fix: was bare fontWeight, no family. This renders the goal's
+  // own name (rule 1 goal-title-keep), so it takes Cormorant semibold like GoalTitle.
+  goalTitle: { fontFamily: fonts.serifSemibold, fontSize: fontSize.md, fontWeight: fontWeight.semibold },
   meta: { flexDirection: 'row', flexWrap: 'wrap' },
   metaText: { fontSize: fontSize.sm },
 });

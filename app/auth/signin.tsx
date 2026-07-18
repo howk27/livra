@@ -638,7 +638,9 @@ const styles = StyleSheet.create({
   },
   wordmark: {
     fontSize: fontSize.xl,
-    fontFamily: fonts.serif,
+    // MED-A: brand wordmark off Cormorant (not a goal title/greeting). FLAGGED
+    // for founder review alongside LivraWordmark — a logo may warrant a carve-out.
+    fontFamily: fonts.sansBold,
     fontWeight: fontWeight.bold,
     letterSpacing: 6,
   },
@@ -648,7 +650,7 @@ const styles = StyleSheet.create({
   },
   headline: {
     fontSize: fontSize['3xl'],
-    fontFamily: fonts.serif,
+    fontFamily: fonts.sansBold,
     fontWeight: fontWeight.bold,
     letterSpacing: -0.5,
     lineHeight: 38,
