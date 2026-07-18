@@ -12,6 +12,7 @@ import {
 import Animated from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { CaretDown, CaretUp, Info } from 'phosphor-react-native';
 import {
   themedColors,
   spacing,
@@ -88,6 +89,11 @@ const EXAMPLE_GOAL_PARTS = EXAMPLE_GOALS.map((title) => {
   return { title, accent: cat.accent, Icon: top?.icon ?? cat.Icon };
 });
 
+// Batch 2 (founder 2026-07-18): the bin opens as two tidy rows (2-3 pills per
+// line at phone widths), with the rest behind "More goals" — ten at once read
+// as a wall. Five visible keeps the breadth signal without the sprawl.
+const VISIBLE_EXAMPLE_COUNT = 5;
+
 /**
  * One mark tile in the live "what this takes" strip. Settles in on mount
  * (useMotion, reduced-motion static) so newly-matched marks materialize as the
@@ -137,6 +143,9 @@ function MarkPreviewChip({
         <Text style={[styles.previewChipLabel, { color: labelColor }]} numberOfLines={1}>
           {mark.name}
         </Text>
+        {/* Batch 2 (founder): the explanation is announced, not discovered —
+            the "i" says "tap me and I'll tell you what this expects of you". */}
+        <Info size={14} color={cat.accent} weight="bold" />
       </TouchableOpacity>
     </Animated.View>
   );
@@ -200,6 +209,8 @@ export default function NewGoalScreen() {
   const [step, setStep] = useState<Step>('title');
   const [title, setTitle] = useState(typeof params.title === 'string' ? params.title : '');
   const [description, setDescription] = useState('');
+  // Batch 2: bin disclosure — transient view state, same call as the icon grid.
+  const [examplesExpanded, setExamplesExpanded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [suggestedMarks, setSuggestedMarks] = useState<MarkDefinition[]>([]);
   // VD-6/QC2-D: focus only after the pageSheet transition settles so the
@@ -457,8 +468,19 @@ export default function NewGoalScreen() {
             <Text style={[styles.exampleHint, { color: c.inkMid }]}>
               Tap one to start, or write your own above.
             </Text>
+            {/* Batch 2: a picked pill in the hidden tail forces the bin open —
+                a selection you cannot see is worse than a taller bin (the
+                QC4-F icon-grid rule, applied here). */}
+            {(() => {
+              const selectedIdx = EXAMPLE_GOAL_PARTS.findIndex(p => p.title === title.trim());
+              const showAll = examplesExpanded || selectedIdx >= VISIBLE_EXAMPLE_COUNT;
+              const visibleParts = showAll
+                ? EXAMPLE_GOAL_PARTS
+                : EXAMPLE_GOAL_PARTS.slice(0, VISIBLE_EXAMPLE_COUNT);
+              return (
+                <>
             <View style={styles.exampleRow}>
-              {EXAMPLE_GOAL_PARTS.map(({ title: example, accent, Icon }) => {
+              {visibleParts.map(({ title: example, accent, Icon }) => {
                 const selected = title.trim() === example;
                 return (
                   <TouchableOpacity
@@ -487,6 +509,27 @@ export default function NewGoalScreen() {
                 );
               })}
             </View>
+                  {/* Hidden while a hidden-tail pick forces the bin open. */}
+                  {selectedIdx < VISIBLE_EXAMPLE_COUNT ? (
+                    <TouchableOpacity
+                      style={styles.exampleDisclosure}
+                      onPress={() => setExamplesExpanded((v) => !v)}
+                      activeOpacity={0.7}
+                      accessibilityRole="button"
+                      accessibilityState={{ expanded: showAll }}
+                      testID="goal-examples-disclosure"
+                    >
+                      <Text style={[styles.exampleDisclosureText, { color: c.inkMid }]}>
+                        {showAll ? 'Show fewer' : `More goals · ${EXAMPLE_GOAL_PARTS.length - VISIBLE_EXAMPLE_COUNT}`}
+                      </Text>
+                      {showAll
+                        ? <CaretUp size={14} color={c.inkMid} weight="bold" />
+                        : <CaretDown size={14} color={c.inkMid} weight="bold" />}
+                    </TouchableOpacity>
+                  ) : null}
+                </>
+              );
+            })()}
           </View>
         </ScrollView>
       </View>
@@ -584,12 +627,29 @@ const styles = StyleSheet.create({
   exampleChip: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    // Batch 2 (founder): pills fill each line edge to edge — 2-3 per row,
+    // neatly stacked, no ragged right side. flexGrow spends the leftover width.
+    flexGrow: 1,
     gap: spacing.xs,
     borderWidth: 1.5,
     borderRadius: radius.full,
     paddingHorizontal: 14,
     paddingVertical: spacing.sm,
     minHeight: headerControl.minTarget,
+  },
+  // Batch 2: quiet disclosure under the bin, same voice as the icon grid's.
+  exampleDisclosure: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    minHeight: headerControl.minTarget,
+    marginTop: spacing.xs,
+  },
+  exampleDisclosureText: {
+    fontFamily: fonts.sansMedium,
+    fontSize: fontSize.sm,
   },
   exampleChipText: {
     fontFamily: fonts.sansMedium,
