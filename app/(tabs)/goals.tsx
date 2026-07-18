@@ -38,7 +38,6 @@ import { deriveGoalsEmptyKind, getEmptyStateCopy } from '../../lib/moments/empty
 import { applyOpacity } from '../../src/components/icons/color';
 import { useMotion } from '../../hooks/useMotion';
 import { GoalCardMedallion } from '../../components/goals/GoalCardMedallion';
-import { resolveDragSlot } from '../../lib/dragReorder';
 import type { Goal } from '../../types/goal';
 import type { Mark } from '../../types';
 
@@ -219,13 +218,19 @@ function DraggableRow({
       const currentSlot = positions.value[goal.id] ?? index;
       // c-1: hysteresis-guarded slot resolution — no Math.round flip-flop at the
       // ±0.5-slot boundary, so the passive row no longer bounces between slots.
-      const targetSlot = resolveDragSlot({
-        translationY: e.translationY,
-        slotHeight: slotHeight.value,
-        startSlot: startSlot.value,
-        currentSlot,
-        count,
-      });
+      // INLINED on purpose (device crash fix): this runs on the UI/worklet
+      // thread, and a cross-file `'worklet'` call (lib/dragReorder.ts
+      // resolveDragSlot) is not reliably linked into the worklet runtime under
+      // Reanimated 4 / react-native-worklets — it threw a ReferenceError on every
+      // drag frame. The math below mirrors resolveDragSlot exactly, which stays as
+      // the unit-tested reference (SLOT_HYSTERESIS 0.2 → threshold 0.7).
+      let targetSlot = currentSlot;
+      if (count > 1) {
+        const pos = startSlot.value + e.translationY / slotHeight.value;
+        const threshold = 0.7; // 0.5 + SLOT_HYSTERESIS(0.2)
+        while (targetSlot < count - 1 && pos > targetSlot + threshold) targetSlot += 1;
+        while (targetSlot > 0 && pos < targetSlot - threshold) targetSlot -= 1;
+      }
       if (targetSlot !== currentSlot) {
         const next = { ...positions.value };
         for (const id in next) {
