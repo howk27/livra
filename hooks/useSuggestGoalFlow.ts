@@ -16,7 +16,7 @@ import { useAuth } from './useAuth';
 import { GoalLimitError } from '../state/goalsSlice';
 import { checkProStatus } from '../lib/iap/iap';
 import { applyOpacity } from '../src/components/icons/color';
-import { GOAL_LIMIT_MESSAGE, GENERATION_ERROR_COPY } from '../lib/copy';
+import { GENERATION_ERROR_COPY } from '../lib/copy';
 import { createFromAIPackage } from '../lib/goals/createFromAIPackage';
 import {
   generateGoalPackage,
@@ -52,6 +52,9 @@ export function useSuggestGoalFlow() {
   const [exhausted, setExhausted] = useState(false);
   const [pkg, setPkg] = useState<AIGoalPackage | null>(null);
   const [confirming, setConfirming] = useState(false);
+  // QC-FAIL-4: the free-goal cap surfaces as Livra's own GoalLimitDialog, never
+  // the iOS-native Alert (the manual goal-create path was fixed the same way).
+  const [goalLimitVisible, setGoalLimitVisible] = useState(false);
 
   // Authed-screen guard: bounce a signed-out session like other authed screens.
   useEffect(() => {
@@ -141,11 +144,8 @@ export function useSuggestGoalFlow() {
         router.back();
       } catch (err) {
         if (err instanceof GoalLimitError) {
-          // Soft cap surface — never a hard wall.
-          Alert.alert('Two goals at a time', GOAL_LIMIT_MESSAGE, [
-            { text: 'Not now', style: 'cancel' },
-            { text: 'See Livra+', onPress: () => router.push('/paywall') },
-          ]);
+          // Soft cap surface — Livra's own popup, never the iOS-native Alert.
+          setGoalLimitVisible(true);
         } else {
           Alert.alert('Error', 'Could not save goal. Please try again.');
         }
@@ -173,6 +173,8 @@ export function useSuggestGoalFlow() {
     panelWash,
     panelBorder,
     tooShort,
+    goalLimitVisible,
+    dismissGoalLimit: () => setGoalLimitVisible(false),
     handleGenerate,
     handleManualInstead,
     handleDismissReview,

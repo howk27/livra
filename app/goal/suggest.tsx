@@ -19,6 +19,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AIHatchButton } from '../../components/ui/AIHatchButton';
 import { GoalPackageReview } from '../../components/ai/GoalPackageReview';
+import { GoalLimitDialog } from '../../components/ui/GoalLimitDialog';
 import { PillButton } from '../../components/ui/PillButton';
 import {
   fonts,
@@ -228,11 +229,27 @@ export default function SuggestGoalScreen() {
     panelWash,
     panelBorder,
     tooShort,
+    goalLimitVisible,
+    dismissGoalLimit,
     handleGenerate,
     handleManualInstead,
     handleDismissReview,
     handleConfirm,
   } = useSuggestGoalFlow();
+
+  // QC-FAIL-4: the free-goal cap (thrown by handleConfirm) shows Livra's own
+  // dialog, not the iOS-native Alert. Confirm happens in the review phase, so
+  // the dialog is mounted there.
+  const goalLimitDialog = (
+    <GoalLimitDialog
+      visible={goalLimitVisible}
+      onClose={dismissGoalLimit}
+      onSeePlus={() => {
+        dismissGoalLimit();
+        router.push('/paywall');
+      }}
+    />
+  );
 
   // ── Phase 2: review ────────────────────────────────────────────────────────
   if (pkg) {
@@ -246,6 +263,7 @@ export default function SuggestGoalScreen() {
           dismissLabel="Start over"
           confirming={confirming}
         />
+        {goalLimitDialog}
       </SafeAreaView>
     );
   }

@@ -24,8 +24,10 @@ describe('GOAL_LIMIT_MESSAGE centralization', () => {
   });
 
   it('is centralized through the GOAL_LIMIT_MESSAGE constant where the copy is shown', () => {
-    // The message renders from the dialog (#4) and the suggest-flow cap alert.
-    const usageSites = ['components/ui/GoalLimitDialog.tsx', 'hooks/useSuggestGoalFlow.ts'];
+    // M7-QC45 fold-in: both cap paths (manual goal/new and the AI suggest flow)
+    // now delegate to GoalLimitDialog, so the copy is rendered from the one
+    // dialog. The suggest hook no longer references the message directly.
+    const usageSites = ['components/ui/GoalLimitDialog.tsx'];
     for (const rel of usageSites) {
       const src = readFileSync(join(__dirname, '../../', rel), 'utf8');
       expect(src).toContain('GOAL_LIMIT_MESSAGE');
