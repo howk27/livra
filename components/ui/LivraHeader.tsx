@@ -105,7 +105,8 @@ export function LivraHeader({
         {left}
         <View style={styles.center}>
           {centerLogo ? (
-            <SvgLogo color={theme === 'dark' ? colors.inkDark : colors.forest} width={32} height={16} />
+            // Batch 2 (founder UI-3): slightly bigger on Focus (was 32x16).
+            <SvgLogo color={theme === 'dark' ? colors.inkDark : colors.forest} width={40} height={20} />
           ) : title ? (
             <Text style={[styles.title, { color: colors.inkDark }]}>{title}</Text>
           ) : null}
