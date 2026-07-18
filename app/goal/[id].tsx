@@ -75,8 +75,8 @@ import {
   majorityCategory,
   resolveMarkIcon,
   dominantMark,
+  resolveMarkAccent,
 } from '../../lib/markCategoryResolve';
-import { getCategoryColorForMark } from '../../lib/markCategory';
 import { logger } from '../../lib/utils/logger';
 import { goalWeekFraming } from '../../lib/goalLogic';
 import { ringFraction } from '../../lib/goalRingProgress';
@@ -290,7 +290,7 @@ function LinkMarkSheet({
                 const MarkIcon = resolveMarkIcon(mark) ?? catData.Icon;
                 // Batch 2: the mark's own accent (unique per icon), not the
                 // category's — five marks in a goal must be tellable apart.
-                const accent = getCategoryColorForMark(mark);
+                const accent = resolveMarkAccent({ name: mark.name, emoji: mark.emoji, color: mark.color });
                 const heldBy = goalTitleById(mark.goal_id);
                 return (
                   <TouchableOpacity
@@ -406,7 +406,7 @@ function LinkedMarkRows({
           const catData = CATEGORY_MAP[resolveMarkCategory(mark)] ?? CATEGORY_MAP.custom;
           const MarkIcon = resolveMarkIcon(mark) ?? catData.Icon;
           // Batch 2: per-mark accent — see LinkMarkSheet note.
-          const accent = getCategoryColorForMark(mark);
+          const accent = resolveMarkAccent({ name: mark.name, emoji: mark.emoji, color: mark.color });
           const weeklyCount = weeklyCountsMap.get(mark.id) ?? 0;
           const weeklyTarget = mark.weekly_target ?? 3;
           const weekPct = weeklyTarget > 0 ? Math.min(1, weeklyCount / weeklyTarget) : 0;
