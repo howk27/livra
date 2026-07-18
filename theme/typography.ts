@@ -8,21 +8,21 @@ type TypographyScale = Record<string, TextStyle>;
 
 export const typography: TypographyScale = StyleSheet.create({
   display: {
-    fontFamily: fonts.heading,
+    fontFamily: fonts.sansBold,
     fontSize: fontSize['2xl'],
     fontWeight: fontWeight.bold,
     lineHeight: roundLineHeight(fontSize['2xl'], lineHeight.snug),
     letterSpacing: letterSpacing.tight,
   },
   headline: {
-    fontFamily: fonts.heading,
+    fontFamily: fonts.sansBold,
     fontSize: fontSize.display,
     fontWeight: fontWeight.bold,
     lineHeight: roundLineHeight(fontSize.display, lineHeight.snug),
     letterSpacing: letterSpacing.tight,
   },
   title: {
-    fontFamily: fonts.heading,
+    fontFamily: fonts.sansSemibold,
     fontSize: fontSize.xl,
     fontWeight: fontWeight.semibold,
     lineHeight: roundLineHeight(fontSize.xl, lineHeight.default),
@@ -69,14 +69,14 @@ export const typography: TypographyScale = StyleSheet.create({
   // original 8 presets don't cover. Serif heroes above 2xl, italic greeting,
   // and the common sans body/meta weights (non-uppercase, unlike `caption`).
   hero: {
-    fontFamily: fonts.serif,
+    fontFamily: fonts.sansBold,
     fontSize: fontSize['4xl'],
     fontWeight: fontWeight.bold,
     lineHeight: roundLineHeight(fontSize['4xl'], lineHeight.snug),
     letterSpacing: letterSpacing.tight,
   },
   display2: {
-    fontFamily: fonts.serif,
+    fontFamily: fonts.sansBold,
     fontSize: fontSize['3xl'],
     fontWeight: fontWeight.bold,
     lineHeight: roundLineHeight(fontSize['3xl'], lineHeight.snug),

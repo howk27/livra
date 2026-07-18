@@ -267,6 +267,10 @@ export const fonts = {
   serifSemibold: 'CormorantGaramond_600SemiBold',
   serifItalic: 'CormorantGaramond_400Regular_Italic',
   sans: 'DMSans_400Regular',
+  // Mentor-voice italic. RN does NOT synthesize italic for a custom family, so
+  // the app-voice italic cue must come from this real italic face — never from
+  // `fontStyle:'italic'` over `sans`. Loaded in app/_layout.tsx.
+  sansItalic: 'DMSans_400Regular_Italic',
   sansMedium: 'DMSans_500Medium',
   sansSemibold: 'DMSans_600SemiBold',
   sansBold: 'DMSans_700Bold',
