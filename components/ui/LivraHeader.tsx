@@ -1,8 +1,9 @@
 import React from 'react';
-import { View, TouchableOpacity, StyleSheet, Text } from 'react-native';
+import { View, TouchableOpacity, StyleSheet, Text, Image } from 'react-native';
 import { ArrowLeft, type Icon as PhosphorIcon } from 'phosphor-react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useProfileAvatar } from '../../hooks/useProfileAvatar';
 import { SvgLogo } from './SvgLogo';
 import {
   fonts,
@@ -38,7 +39,7 @@ export function LivraHeader({
   showAvatar,
   centerLogo,
   title,
-  avatarUri: _avatarUri,
+  avatarUri: avatarUriProp,
   rightIcon: RightIconComponent,
   onRightPress,
 }: LivraHeaderProps) {
@@ -46,6 +47,11 @@ export function LivraHeader({
   const insets = useSafeAreaInsets();
   const theme = useEffectiveTheme();
   const colors = themedColors(theme);
+  // Founder bug 1 (2026-07-18): the circle used to render empty forever — the
+  // prop was discarded and nothing loaded the picture. Self-load unless a
+  // caller supplies one.
+  const loadedAvatarUri = useProfileAvatar(!!showAvatar && !avatarUriProp);
+  const avatarUri = avatarUriProp ?? loadedAvatarUri;
 
   const left = showBack ? (
     <TouchableOpacity
@@ -70,7 +76,15 @@ export function LivraHeader({
         activeOpacity={0.7}
       >
         <View style={styles.avatarRingWrapper}>
-          <View style={[styles.avatarCircle, { backgroundColor: colors.surfaceAlt, borderColor: colors.forest }]} />
+          {avatarUri ? (
+            <Image
+              source={{ uri: avatarUri }}
+              style={[styles.avatarCircle, { borderColor: colors.forest }]}
+              accessibilityLabel="Profile picture"
+            />
+          ) : (
+            <View style={[styles.avatarCircle, { backgroundColor: colors.surfaceAlt, borderColor: colors.forest }]} />
+          )}
         </View>
       </TouchableOpacity>
     ) : (
