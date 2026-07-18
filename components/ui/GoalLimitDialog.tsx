@@ -132,7 +132,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   title: {
-    fontFamily: fonts.serif,
+    fontFamily: fonts.sansBold,
     fontSize: fontSize['2xl'],
     textAlign: 'center',
   },

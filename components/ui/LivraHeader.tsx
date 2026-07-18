@@ -165,10 +165,11 @@ const styles = StyleSheet.create({
     fontFamily: fonts.sansMedium,
     fontSize: fontSize.lg,
   },
-  // QC-FAIL-5: matches the goals subtitle it replaces — serif-italic mentor
-  // voice, one size up from body, quiet inkMuted.
+  // MED-A: the "Your goals, one at a time." tagline is neither a goal title nor
+  // a greeting, so it comes off Cormorant. Keeps the italic app-voice cue via
+  // the real DM Sans italic face. FLAGGED for founder device review.
   subtitle: {
-    fontFamily: fonts.serifItalic,
+    fontFamily: fonts.sansItalic,
     fontSize: fontSize.lg,
   },
   avatarRingWrapper: {
