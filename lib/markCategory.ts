@@ -1,4 +1,4 @@
-import { categoryAccents } from '../theme/tokens';
+import { categoryAccents, iconAccents } from '../theme/tokens';
 import type { SuggestedCounter } from './suggestedCounters';
 import type { Mark } from '../types';
 import type { MarkType } from '@/src/types/counters';
@@ -137,6 +137,24 @@ export function getCategoryColor(category: MarkCategory): string {
   return categoryAccents[category];
 }
 
+/**
+ * Batch 2 (founder 2026-07-18): mark color is unique PER ICON — category color
+ * painted a goal's five marks in the same green. The per-icon table lives in
+ * theme/tokens.ts (`iconAccents`), same sanctioned-palette rule as ever.
+ */
+export function getIconAccent(iconType: Exclude<MarkType, 'custom'>): string {
+  return iconAccents[iconType] ?? getCategoryColor(getCategoryForIcon(iconType));
+}
+
+const ICON_ACCENT_VALUES = Object.values(iconAccents);
+
+/** Deterministic, sanctioned hue for a library id with no picker-icon twin. */
+function hashedIconAccent(id: string): string {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return ICON_ACCENT_VALUES[h % ICON_ACCENT_VALUES.length];
+}
+
 export function getCategoryForIcon(iconType: Exclude<MarkType, 'custom'>): MarkCategory {
   return ICON_CATEGORY_MAP[iconType] ?? 'custom';
 }
@@ -154,9 +172,16 @@ export function getCategoryForSuggestedCounter(counter: SuggestedCounter): MarkC
  * QC4-M: THE contract between preview and save for a library mark. Both the
  * popular chip in app/mark/new.tsx and the record it writes call this — one
  * function, so they cannot drift apart again.
+ *
+ * Batch 2: the value is now per-mark, not per-category. A library id that
+ * matches a picker icon uses that icon's accent; the rest hash to a stable hue
+ * from the same table. Sanctioned palette in, sanctioned palette out.
  */
 export function colorForSuggestedCounter(counter: SuggestedCounter): string {
-  return getCategoryColor(getCategoryForSuggestedCounter(counter));
+  if (counter.id in iconAccents) {
+    return iconAccents[counter.id as keyof typeof iconAccents];
+  }
+  return hashedIconAccent(counter.id);
 }
 
 export function getCategoryForMark(mark: Pick<Mark, 'name' | 'color'>): MarkCategory {
@@ -164,7 +189,7 @@ export function getCategoryForMark(mark: Pick<Mark, 'name' | 'color'>): MarkCate
 }
 
 const SANCTIONED_COLORS: ReadonlySet<string> = new Set(
-  Object.values(categoryAccents).map(hex => hex.toLowerCase())
+  [...Object.values(categoryAccents), ...Object.values(iconAccents)].map(hex => hex.toLowerCase())
 );
 
 /**

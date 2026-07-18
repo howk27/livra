@@ -30,10 +30,14 @@ interface UIState {
   /** True when user has completed onboarding (same as `hasCompletedOnboarding` in product copy). */
   isOnboarded: boolean;
   uiStateLoaded: boolean; // Track if UI state has been loaded from storage
-  
+  /** Batch 2 (founder 2026-07-18): the Focus "Daily habits" section is OPEN by
+   *  default and only hides when the user says so — remembered locally. */
+  dailyHabitsOpen: boolean;
+
   // Actions
   setThemeMode: (mode: ThemeMode) => Promise<void>;
   setAccentColor: (color: AccentColor) => Promise<void>;
+  setDailyHabitsOpen: (open: boolean) => Promise<void>;
   setSortBy: (sort: SortOption) => void;
   setSearchQuery: (query: string) => void;
   /** Returns false if logged-in cloud update failed (local completion still applied). */
@@ -54,10 +58,16 @@ export const useUIStore = create<UIState>((set, get) => ({
   searchQuery: '',
   isOnboarded: false,
   uiStateLoaded: false,
+  dailyHabitsOpen: true,
 
   setThemeMode: async (mode) => {
     set({ themeMode: mode });
     await AsyncStorage.setItem('theme_mode', mode);
+  },
+
+  setDailyHabitsOpen: async (open) => {
+    set({ dailyHabitsOpen: open });
+    await AsyncStorage.setItem('daily_habits_open', open ? 'true' : 'false');
   },
 
   setAccentColor: async (color) => {
@@ -152,12 +162,15 @@ export const useUIStore = create<UIState>((set, get) => ({
   loadUIState: async (userId?: string) => {
     const tokenAtStart = onboardingResetToken;
     const supabase = getSupabaseClient();
-    const [themeMode, accentColor, completedModern, completedLegacy] = await Promise.all([
+    const [themeMode, accentColor, completedModern, completedLegacy, dailyHabitsStored] = await Promise.all([
       AsyncStorage.getItem('theme_mode'),
       AsyncStorage.getItem('accent_color'),
       AsyncStorage.getItem(ONBOARDING_COMPLETED_STORAGE_KEY),
       AsyncStorage.getItem(ONBOARDING_COMPLETED_LEGACY_KEY),
+      AsyncStorage.getItem('daily_habits_open'),
     ]);
+    // Open unless the user explicitly hid it (founder: always open by default).
+    const dailyHabitsOpen = dailyHabitsStored !== 'false';
 
     let isOnboarded = completedModern === 'true' || completedLegacy === 'true';
     
@@ -247,6 +260,7 @@ export const useUIStore = create<UIState>((set, get) => ({
       set({
         themeMode: (themeMode as ThemeMode) || 'system',
         accentColor: (accentColor as AccentColor) || 'blue',
+        dailyHabitsOpen,
         uiStateLoaded: true,
       });
       return;
@@ -256,6 +270,7 @@ export const useUIStore = create<UIState>((set, get) => ({
       themeMode: (themeMode as ThemeMode) || 'system',
       accentColor: (accentColor as AccentColor) || 'blue',
       isOnboarded,
+      dailyHabitsOpen,
       uiStateLoaded: true,
     });
   },

@@ -24,10 +24,10 @@ import {
   getActiveGoal,
   getActiveGoals,
   getCompletedGoals,
-  isMarkCountComplete,
   isDeadlineExpired,
   calculateGoalProgress,
   calculateUnlockThreshold,
+  goalCommitmentTarget,
 } from '../lib/goalLogic';
 
 export class GoalLimitError extends Error {
@@ -50,7 +50,9 @@ export interface GoalsState {
   reorderGoals: (orderedIds: string[]) => Promise<void>;
   linkMarkToGoal: (goalId: string, markId: string) => Promise<void>;
   unlinkMarkFromGoal: (goalId: string, markId: string) => Promise<void>;
-  /** Called after a mark is logged. Increments currentMarkCount for all linked goals, then checks completion. Non-blocking by convention. */
+  /** Called after a mark is logged. Credits linked goals at most once per mark
+   *  per local day (extra reps stay on the mark), evaluates Momentum, and checks
+   *  deadline expiry. Never auto-completes on count. Non-blocking by convention. */
   creditMarkToGoals: (markId: string) => Promise<void>;
   checkGoalCompletion: (goalId: string) => Promise<void>;
   updateGoalTargetDate: (id: string, date: string | null) => Promise<void>;
@@ -59,7 +61,18 @@ export interface GoalsState {
   getActiveGoal: () => Goal | undefined;
   getActiveGoals: () => Goal[];
   getCompletedGoals: () => Goal[];
-  getGoalProgress: (goalId: string) => { progress: number; threshold: number; canComplete: boolean };
+  getGoalProgress: (goalId: string) => {
+    /** Check-in DAYS earned (one per linked mark per day, daily target met). */
+    progress: number;
+    /** What the ring/bar fills against: the commitment target, or the early-unlock floor for pre-commitment goals. */
+    threshold: number;
+    /** The full creation-time commitment, when the goal has one. */
+    target: number | null;
+    /** Early manual completion is unlocked (footer path). */
+    canComplete: boolean;
+    /** The whole commitment is in — prompt the user to claim the goal. */
+    readyToClaim: boolean;
+  };
 
   /** Checks all active goals for deadline expiry. Non-blocking; call on app foreground. */
   checkAllGoalExpiry: () => void;
@@ -276,17 +289,51 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
     const goals = get().goals;
     const toUpdate: Goal[] = [];
 
+    // One credit per mark per local day: the just-logged event is already in the
+    // events store, so a second increment today means this log earns no credit.
+    // Extra reps still land on the mark itself (counters, streaks, bests).
+    const { useEventsStore } = require('../state/eventsSlice');
+    const events: { mark_id: string; event_type: string; occurred_local_date: string; deleted_at?: string | null }[] =
+      useEventsStore.getState().events ?? [];
+    const todayIncrements = events.filter(
+      e => e.mark_id === markId && e.event_type === 'increment' && !e.deleted_at
+    );
+    const latestDay = todayIncrements.reduce(
+      (max, e) => (e.occurred_local_date > max ? e.occurred_local_date : max),
+      ''
+    );
+    const alreadyCreditedToday =
+      todayIncrements.filter(e => e.occurred_local_date === latestDay).length > 1;
+
     for (const link of links) {
       const goal = goals.find(g => g.id === link.goal_id && g.status === 'active');
       if (!goal) continue;
-      toUpdate.push({
-        ...goal,
-        current_mark_count: goal.current_mark_count + 1,
-        updated_at: now,
-      });
+      toUpdate.push(
+        alreadyCreditedToday
+          ? { ...goal }
+          : { ...goal, current_mark_count: goal.current_mark_count + 1, updated_at: now }
+      );
     }
 
     if (!toUpdate.length) return;
+
+    if (alreadyCreditedToday) {
+      // No count credit and nothing to persist, but the day still counts for
+      // Momentum — evaluate and return without touching the goals.
+      const todayEval = yyyyMmDd(new Date());
+      const marksNow = useMarksStore.getState().marks;
+      await Promise.all(
+        toUpdate.map(async (g) => {
+          const ids = new Set(g.linked_mark_ids ?? []);
+          const goalMarks = marksNow
+            .filter((m) => !m.deleted_at && ids.has(m.id))
+            .map((m) => ({ id: m.id, weekly_target: m.weekly_target, last_activity_date: m.last_activity_date }));
+          const snap = await evaluateGoalMomentum(g.id, goalMarks, todayEval);
+          useMomentumStore.getState().setSnapshot(g.id, snap, todayEval);
+        }),
+      );
+      return;
+    }
 
     await upsertGoals(toUpdate);
     const map = new Map(toUpdate.map(g => [g.id, g]));
@@ -316,11 +363,9 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
     const goal = get().goals.find(g => g.id === goalId);
     if (!goal || goal.status !== 'active') return;
 
-    if (isMarkCountComplete(goal)) {
-      await get().completeGoal(goalId);
-      return;
-    }
-
+    // Founder 2026-07-18: hitting the check-in target never auto-completes a
+    // goal — marks are a guide, the user declares the outcome. Readiness is
+    // surfaced via getGoalProgress().readyToClaim; only deadlines act here.
     if (isDeadlineExpired(goal)) {
       const expired: Goal = { ...goal, status: 'expired', updated_at: now };
       await upsertGoal(expired);
@@ -365,12 +410,19 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
 
   getGoalProgress: (goalId) => {
     const goal = get().goals.find(g => g.id === goalId);
-    if (!goal) return { progress: 0, threshold: 7, canComplete: false };
+    if (!goal) return { progress: 0, threshold: 7, target: null, canComplete: false, readyToClaim: false };
     const { useEventsStore } = require('../state/eventsSlice');
     const events = useEventsStore.getState().events ?? [];
-    const progress = calculateGoalProgress(goal, events);
-    const threshold = calculateUnlockThreshold(goal);
-    return { progress, threshold, canComplete: progress >= threshold };
+    const progress = calculateGoalProgress(goal, events, useMarksStore.getState().marks);
+    const unlock = calculateUnlockThreshold(goal);
+    const target = goalCommitmentTarget(goal);
+    return {
+      progress,
+      threshold: target ?? unlock,
+      target,
+      canComplete: progress >= unlock,
+      readyToClaim: target !== null && progress >= target,
+    };
   },
 
   checkAllGoalExpiry: () => {

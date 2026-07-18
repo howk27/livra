@@ -110,6 +110,42 @@ export const categoryAccents = {
   custom: '#6B7A6B',
 } as const;
 
+/**
+ * Per-ICON accent palette (Batch 2, founder 2026-07-18): "the goal has 4 greens
+ * and one red" — category color made a goal's marks indistinguishable, so each
+ * pickable icon now carries its own hue. Same muted, mid-tone family as
+ * categoryAccents (moderate saturation, ~45-60% lightness), every value
+ * distinct, all theme-constant data like the table above. Category accents stay
+ * for category-level chrome (hero ring fallback, bands, pickers).
+ */
+export const iconAccents = {
+  gym: '#A0614A',
+  steps: '#5C8C4A',
+  calories: '#B07D4A',
+  water: '#4A7A8C',
+  no_sugar: '#8C4A5C',
+  no_beer: '#8C7A3A',
+  no_smoking: '#8A7E6B',
+  soda_free: '#4A8C8C',
+  sleep: '#6B8FA6',
+  rest: '#9E7B6B',
+  meditation: '#8A6B7B',
+  mood: '#9E6B8A',
+  journaling: '#4A8C7A',
+  gratitude: '#A6746B',
+  reading: '#4A6A8C',
+  study: '#7A4A8C',
+  language: '#6B5C8C',
+  focus: '#8C6B4A',
+  tasks: '#4A8C5C',
+  planning: '#5C7A9E',
+  // Not #6B7A6B: that is categoryAccents.custom, the "fallback hit" sentinel —
+  // a legitimate per-icon hue must never be mistakable for the fallback.
+  email: '#4A7A6B',
+  screen_free: '#7A8C4A',
+  no_spending: '#9E8A6B',
+} as const;
+
 const colorsByTheme = { light: colors, dark: colorsDark } as const;
 
 /** Resolve the Livra 2.0 semantic palette for the effective theme. */

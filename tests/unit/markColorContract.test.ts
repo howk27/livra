@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { categoryAccents } from '../../theme/tokens';
+import { categoryAccents, iconAccents } from '../../theme/tokens';
 import { MARK_LIBRARY } from '../../lib/suggestedCounters';
 import {
   CATEGORY_LABELS,
@@ -9,8 +9,10 @@ import {
   getCategoryForIcon,
   getCategoryForSuggestedCounter,
   getCategoryColorForMark,
+  getIconAccent,
 } from '../../lib/markCategory';
 import { MARK_ICON_OPTIONS } from '../../lib/markIcons';
+import { getMarksForGoal } from '../../lib/goalMarkSuggestions';
 
 /**
  * QC4-M — "the thing you built is the thing you get."
@@ -22,22 +24,44 @@ import { MARK_ICON_OPTIONS } from '../../lib/markIcons';
  */
 
 const ROOT = join(__dirname, '../../');
-const SANCTIONED = new Set<string>(Object.values(categoryAccents));
+// Batch 2 (founder 2026-07-18): the sanctioned palette is now two tables —
+// category accents for category-level chrome, per-icon accents for mark color.
+const SANCTIONED = new Set<string>([
+  ...Object.values(categoryAccents),
+  ...Object.values(iconAccents),
+]);
 
 function stripComments(src: string): string {
   return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
 }
 
 describe('mark color comes only from the sanctioned palette (QC4-M)', () => {
-  it('every library mark saves a categoryAccents color', () => {
+  it('every library mark saves a sanctioned color', () => {
     for (const mark of MARK_LIBRARY) {
       expect(SANCTIONED.has(colorForSuggestedCounter(mark))).toBe(true);
     }
   });
 
-  it('every picker icon derives a categoryAccents color — the custom path never regresses', () => {
+  it('every picker icon has its own sanctioned accent — the custom path never regresses', () => {
     for (const iconType of MARK_ICON_OPTIONS) {
+      expect(SANCTIONED.has(getIconAccent(iconType))).toBe(true);
+      // Category derivation stays sanctioned too (category-level chrome).
       expect(SANCTIONED.has(getCategoryColor(getCategoryForIcon(iconType)))).toBe(true);
+    }
+  });
+
+  // Batch 2 (founder): "the goal has 4 greens and one red" — per-icon accents
+  // exist so a goal's marks are tellable apart. Every icon accent is distinct.
+  it('per-icon accents are pairwise unique', () => {
+    const values = Object.values(iconAccents);
+    expect(new Set(values).size).toBe(values.length);
+  });
+
+  it('the marks a typical goal suggests do not share a color', () => {
+    for (const goal of ['Run a 5k', 'Fix my sleep', 'Get my stress under control']) {
+      const suggested = getMarksForGoal(goal).slice(0, 5);
+      const hues = suggested.map((m) => colorForSuggestedCounter(m));
+      expect(new Set(hues).size).toBe(hues.length);
     }
   });
 
@@ -52,22 +76,24 @@ describe('mark color comes only from the sanctioned palette (QC4-M)', () => {
     }
   });
 
-  it('resolves a library mark off its own category, not a guess at its name', () => {
-    // "Steps" used to hit the Fitness KEYWORD bucket and save orange-500.
-    expect(getCategoryForSuggestedCounter(MARK_LIBRARY.find(m => m.id === 'steps')!)).toBe('fitness');
-    expect(colorForSuggestedCounter(MARK_LIBRARY.find(m => m.id === 'steps')!)).toBe(categoryAccents.fitness);
-    // Library Sleep is Recovery — the old taxonomy called it "Wellness".
+  it('resolves a library mark off its own identity, deterministically', () => {
+    // Batch 2: a library id that matches a picker icon carries that icon's
+    // accent — the exact same hue the manual path would save.
+    expect(colorForSuggestedCounter(MARK_LIBRARY.find(m => m.id === 'steps')!)).toBe(iconAccents.steps);
+    expect(colorForSuggestedCounter(MARK_LIBRARY.find(m => m.id === 'water')!)).toBe(iconAccents.water);
+    // Category resolution itself is unchanged (chrome still reads it).
     expect(getCategoryForSuggestedCounter(MARK_LIBRARY.find(m => m.id === 'sleep')!)).toBe('recovery');
-    // Reading is Deep Work in the real taxonomy, not "Learning".
     expect(getCategoryForSuggestedCounter(MARK_LIBRARY.find(m => m.id === 'reading')!)).toBe('deepWork');
-    // The founder's yellow: Finance marks land on the warm gold accent.
-    expect(colorForSuggestedCounter(MARK_LIBRARY.find(m => m.id === 'saving')!)).toBe(categoryAccents.finance);
+    // Ids with no picker twin hash to a stable sanctioned hue.
+    const saving = MARK_LIBRARY.find(m => m.id === 'saving')!;
+    expect(colorForSuggestedCounter(saving)).toBe(colorForSuggestedCounter(saving));
+    expect(SANCTIONED.has(colorForSuggestedCounter(saving))).toBe(true);
   });
 
-  it('an unknown category falls back to the custom accent rather than inventing hex', () => {
+  it('an unknown category still yields a sanctioned color, never invented hex', () => {
     const alien = { ...MARK_LIBRARY[0], category: 'Astrology' };
     expect(getCategoryForSuggestedCounter(alien)).toBe('custom');
-    expect(colorForSuggestedCounter(alien)).toBe(categoryAccents.custom);
+    expect(SANCTIONED.has(colorForSuggestedCounter(alien))).toBe(true);
   });
 
   // SUPERSEDED (founder call, 2026-07-16, on device after the QC4 merge): this

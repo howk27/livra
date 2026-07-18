@@ -24,7 +24,7 @@ import type { MarkType } from '@/src/types/counters';
 import { logger } from '../../../lib/utils/logger';
 import { DailyTargetStepper } from '../../../components/DailyTargetStepper';
 import { resolveDailyTarget } from '../../../lib/markDailyTarget';
-import { getCategoryColor, getCategoryForIcon } from '../../../lib/markCategory';
+import { getIconAccent } from '../../../lib/markCategory';
 import { ICON_TYPE_TO_EMOJI, MARK_ICON_OPTIONS } from '../../../lib/markIcons';
 
 // VD-7 retry #1: the icon emoji map + selectable list live in lib/markIcons.ts,
@@ -62,15 +62,14 @@ export default function EditCounterScreen() {
       }
     }
   }, [counter]);
-  // VD-7 (polish sweep): the manual color ("Vibe") grid is gone — color is
-  // category-derived from the selected icon, same as mark/new.tsx. A stored
-  // custom color is preserved untouched unless the user changes the icon;
-  // changing the icon re-derives the color from its category.
-  const selectedCategory = useMemo(() => getCategoryForIcon(selectedIconType), [selectedIconType]);
+  // Batch 2 (founder 2026-07-18): color is the ICON's own accent, same rule as
+  // mark/new.tsx — unique per icon so a goal's marks stay tellable apart. A
+  // stored color is preserved untouched unless the user changes the icon;
+  // changing the icon re-derives from the new icon's accent.
   const color =
     selectedIconType !== currentIconType
-      ? getCategoryColor(selectedCategory)
-      : counter?.color || getCategoryColor(selectedCategory);
+      ? getIconAccent(selectedIconType)
+      : counter?.color || getIconAccent(selectedIconType);
   const [unit, setUnit] = useState<'sessions' | 'days' | 'items'>(
     (counter?.unit as 'sessions' | 'days' | 'items') || 'sessions'
   );
@@ -156,19 +155,21 @@ export default function EditCounterScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
             <Text style={[styles.label, styles.labelInRow, { color: themeColors.inkDark }]}>Icon</Text>
-            <Text style={[styles.sectionKickerRight, { color: themeColors.inkMuted }]}>{selectedCategory}</Text>
           </View>
+          {/* Batch 2: same per-icon accents as mark/new — each tile shows its
+              own hue; no category kicker to print. */}
           <View style={styles.iconGrid}>
             {ALL_ICON_TYPES.map((iconType) => {
               const isSelected = iconType === selectedIconType;
+              const accent = getIconAccent(iconType);
               return (
                 <TouchableOpacity
                   key={iconType}
                   style={[
                     styles.iconButton,
                     {
-                      backgroundColor: isSelected ? applyOpacity(color, 0.14) : themeColors.surface,
-                      borderColor: isSelected ? color : themeColors.borderMid,
+                      backgroundColor: applyOpacity(accent, isSelected ? 0.18 : 0.08),
+                      borderColor: isSelected ? accent : themeColors.borderMid,
                     },
                   ]}
                   onPress={() => setSelectedIconType(iconType)}
@@ -176,7 +177,7 @@ export default function EditCounterScreen() {
                   <CounterIcon
                     type={iconType as any}
                     size={28}
-                    color={isSelected ? color : themeColors.inkMid}
+                    color={accent}
                     variant="symbol"
                   />
                 </TouchableOpacity>

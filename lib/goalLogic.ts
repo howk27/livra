@@ -1,5 +1,7 @@
 import type { Goal } from '../types/goal';
-import type { MarkEvent } from '../types';
+import type { Mark, MarkEvent } from '../types';
+import { resolveDailyTarget } from './markDailyTarget';
+import { TIERS } from './goalMarkSuggestions';
 
 export { FREE_GOAL_LIMIT, canAddGoal } from './gating';
 
@@ -43,17 +45,62 @@ export function progressPercent(goal: Goal): number {
   return Math.min(100, Math.round((goal.current_mark_count / goal.target_mark_count) * 100));
 }
 
-/** Count of increment events (not deleted) whose mark_id is in goal.linked_mark_ids. */
-export function calculateGoalProgress(goal: Goal, events: MarkEvent[]): number {
+/**
+ * Goal progress in check-in DAYS, never raw taps (founder 2026-07-18: spamming +
+ * must not move the ring; extra reps live on the mark, not the goal).
+ * A linked mark contributes at most one check-in per local day, and only once
+ * the day's summed amount meets the mark's daily target — the same day rule
+ * computeCompletionsThisWeek uses, so weekly and lifetime progress agree.
+ * `marks` is optional: an unknown mark falls back to a daily target of 1.
+ */
+export function calculateGoalProgress(
+  goal: Goal,
+  events: MarkEvent[],
+  marks?: Pick<Mark, 'id' | 'dailyTarget'>[]
+): number {
   const linked = goal.linked_mark_ids;
   if (!linked || linked.length === 0) return 0;
   const linkedSet = new Set(linked);
-  return events.filter(
-    e => !e.deleted_at && e.event_type === 'increment' && linkedSet.has(e.mark_id)
-  ).length;
+  const barByMark = new Map<string, number>();
+  for (const m of marks ?? []) barByMark.set(m.id, resolveDailyTarget(m));
+
+  const dayTotals = new Map<string, number>();
+  for (const e of events) {
+    if (e.deleted_at || e.event_type !== 'increment' || !linkedSet.has(e.mark_id)) continue;
+    const key = `${e.mark_id}|${e.occurred_local_date}`;
+    dayTotals.set(key, (dayTotals.get(key) ?? 0) + (e.amount ?? 1));
+  }
+
+  let days = 0;
+  for (const [key, total] of dayTotals) {
+    const markId = key.slice(0, key.indexOf('|'));
+    if (total >= (barByMark.get(markId) ?? 1)) days++;
+  }
+  return days;
 }
 
-/** Minimum progress needed to unlock the Complete button. */
+/** The commitment chosen at creation (tier × frequency × marks): the goal's real
+ *  check-in target. Null on goals created before the commitment flow. */
+export function goalCommitmentTarget(goal: Goal): number | null {
+  return goal.target_mark_count && goal.target_mark_count > 0 ? goal.target_mark_count : null;
+}
+
+/** Weekly framing for progress copy: which week of the tier's duration the goal
+ *  is in. Null when the goal has no tier (pre-commitment goals). */
+export function goalWeekFraming(
+  goal: Goal,
+  now: number = Date.now()
+): { week: number; totalWeeks: number } | null {
+  if (!goal.tier) return null;
+  const totalWeeks = TIERS[goal.tier]?.durationWeeks;
+  if (!totalWeeks) return null;
+  const days = Math.max(0, Math.floor((now - new Date(goal.created_at).getTime()) / 86_400_000));
+  return { week: Math.min(totalWeeks, Math.floor(days / 7) + 1), totalWeeks };
+}
+
+/** Minimum effort (in check-in days) to unlock EARLY manual completion — the
+ *  quiet footer path. Distinct from goalCommitmentTarget, which is the full
+ *  commitment that triggers the ready-to-claim prompt. */
 export function calculateUnlockThreshold(goal: Goal): number {
   const daysSinceCreated = Math.max(
     0,

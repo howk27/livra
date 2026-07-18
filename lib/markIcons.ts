@@ -1,5 +1,4 @@
 import type { MarkType } from '@/src/types/counters';
-import { CATEGORY_LABELS, getCategoryForIcon, type MarkCategory } from './markCategory';
 
 /**
  * Single source of truth for the manual mark-icon picker (creation + edit).
@@ -123,49 +122,6 @@ export const MARK_ICON_OPTIONS: SelectableMarkType[] = [
   ...MARK_ICON_SECONDARY,
 ];
 
-/** One rendered band of the picker: a category and the icons that resolve to it. */
-export type MarkIconGroup = {
-  category: MarkCategory;
-  /** Display name from CATEGORY_LABELS — never a second, invented name. */
-  label: string;
-  icons: SelectableMarkType[];
-};
-
-/**
- * QC5-A — the grid itself says the category, so nothing has to reserve a slot to
- * name it.
- *
- * Founder: "What happened with the 4x4 grid on new marks, If you are leaving that
- * space for the category, dont. Just add a break in between the 4x4 cards to mark
- * the following category of Icons."
- *
- * Category comes from `getCategoryForIcon` (lib/markCategory.ts) — the same
- * resolver that decides the mark's saved COLOR. There is no second mapping here,
- * by construction: the break the user sees and the color the mark gets are the
- * same answer to the same question.
- *
- * Order is first-appearance in the passed list, and an icon joins the group that
- * is already open rather than starting a duplicate one. That is what makes the
- * "Show more" disclosure extend the visible groups instead of appending an
- * ungrouped tail: the collapsed call passes PRIMARY, the expanded call passes
- * PRIMARY + SECONDARY, and every secondary icon whose category is already on
- * screen lands inside that existing band.
- */
-export function groupMarkIcons(icons: readonly SelectableMarkType[]): MarkIconGroup[] {
-  const groups: MarkIconGroup[] = [];
-  const byCategory = new Map<MarkCategory, MarkIconGroup>();
-
-  for (const iconType of icons) {
-    const category = getCategoryForIcon(iconType);
-    const existing = byCategory.get(category);
-    if (existing) {
-      existing.icons.push(iconType);
-      continue;
-    }
-    const group: MarkIconGroup = { category, label: CATEGORY_LABELS[category], icons: [iconType] };
-    byCategory.set(category, group);
-    groups.push(group);
-  }
-
-  return groups;
-}
+// Batch 2 (founder 2026-07-18): the QC5-A category bands (`groupMarkIcons`) are
+// gone — the picker is one flat grid and each icon carries its own accent
+// (`iconAccents`, theme/tokens.ts), so color does what the bands used to.

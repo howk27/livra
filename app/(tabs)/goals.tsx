@@ -8,7 +8,6 @@ import {
   ActivityIndicator,
   TouchableOpacity,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { format, parseISO } from 'date-fns';
@@ -24,7 +23,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import { fonts, spacing, radius, themedColors, fontSize } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
-import { LivraWordmark } from '../../components/ui/LivraWordmark';
+import { LivraHeader } from '../../components/ui/LivraHeader';
+import { SpeedDialFAB } from '../../components/ui/SpeedDialFAB';
 import { SvgLogo } from '../../components/ui/SvgLogo';
 import { Breathing } from '../../components/ui/Breathing';
 import { SectionLabel } from '../../components/ui/SectionLabel';
@@ -54,6 +54,10 @@ interface ActiveGoalCardProps {
   progress: number;
   threshold: number;
   canComplete: boolean;
+  /** M7: the full commitment is in — the card invites the claim. */
+  readyToClaim?: boolean;
+  /** True when threshold is the creation-time commitment (day-based copy). */
+  hasCommitment?: boolean;
   /** Check-ins completed this week across the goal's marks. */
   weeklyDone?: number;
   /** Sum of this week's targets across the goal's marks. */
@@ -61,7 +65,7 @@ interface ActiveGoalCardProps {
   onPress: () => void;
 }
 
-function ActiveGoalCard({ goal, progress, threshold, canComplete, weeklyDone = 0, weeklyTarget = 0, onPress }: ActiveGoalCardProps) {
+function ActiveGoalCard({ goal, progress, threshold, canComplete, readyToClaim = false, hasCommitment = false, weeklyDone = 0, weeklyTarget = 0, onPress }: ActiveGoalCardProps) {
   const theme = useEffectiveTheme();
   const c = themedColors(theme);
   const pct = threshold > 0 ? Math.min(100, (progress / threshold) * 100) : 0;
@@ -107,7 +111,7 @@ function ActiveGoalCard({ goal, progress, threshold, canComplete, weeklyDone = 0
             />
           </View>
           <Text style={[styles.progressLabel, { color: c.inkMid }]}>
-            {progress} / {threshold} check-ins
+            {hasCommitment ? `${progress} / ${threshold} check-in days` : `${progress} / ${threshold} check-ins`}
           </Text>
         </View>
       )}
@@ -128,11 +132,11 @@ function ActiveGoalCard({ goal, progress, threshold, canComplete, weeklyDone = 0
         </Text>
       ) : null}
 
-      {/* Ready to complete */}
-      {canComplete && (
+      {/* Ready to complete / claim (M7: user declares, so claim leads) */}
+      {(readyToClaim || canComplete) && (
         <View style={[styles.completeCta, { backgroundColor: applyOpacity(c.accent, 0.12) }]}>
           <Text style={[styles.completeCtaText, { color: c.accent }]}>
-            Ready to complete
+            {readyToClaim ? 'All check-ins in. Claim it' : 'Ready to complete'}
           </Text>
           <CaretRight size={14} color={c.accent} weight="bold" />
         </View>
@@ -270,6 +274,8 @@ function DraggableRow({
         progress={progress.progress}
         threshold={progress.threshold}
         canComplete={progress.canComplete}
+        readyToClaim={progress.readyToClaim}
+        hasCommitment={progress.target !== null}
         weeklyDone={weekly?.done}
         weeklyTarget={weekly?.target}
         onPress={onPress}
@@ -348,7 +354,6 @@ function DraggableGoalList({ goals, weeklyByGoal, onPressGoal }: DraggableGoalLi
 export default function GoalsScreen() {
   const theme = useEffectiveTheme();
   const c = themedColors(theme);
-  const insets = useSafeAreaInsets();
   const router = useRouter();
 
   const goals = useGoalsStore((s) => s.goals);
@@ -414,23 +419,16 @@ export default function GoalsScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor: c.linen }]}>
+      {/* Batch 2 (founder): the wordmark and the "+ Goal" CTA are gone — the
+          header is the avatar, same grammar as Focus. Creation moves to the
+          SpeedDialFAB below, one consistent add-door on both tabs. */}
+      <LivraHeader showAvatar />
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
-        <View style={[styles.topBlock, { paddingTop: insets.top + 8 }]}>
-          <View style={styles.topRow}>
-            <LivraWordmark fontSize={28} letterSpacing={5} color={c.inkDark} />
-            <TouchableOpacity
-              style={[styles.addBtn, { backgroundColor: c.forest }]}
-              onPress={handleAddGoal}
-              activeOpacity={0.85}
-            >
-              <Text style={[styles.addBtnText, { color: c.inkInverse }]}>+ Goal</Text>
-            </TouchableOpacity>
-          </View>
+        <View style={styles.topBlock}>
           <Text style={[styles.subtitle, { color: c.inkMuted }]}>Your goals, one at a time.</Text>
         </View>
 
@@ -490,6 +488,9 @@ export default function GoalsScreen() {
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      {/* Batch 2: the add-door, since the header CTA is gone. */}
+      <SpeedDialFAB />
     </View>
   );
 }
@@ -502,27 +503,12 @@ const styles = StyleSheet.create({
   content: { flexGrow: 1, paddingBottom: 120 },
 
   topBlock: { paddingHorizontal: spacing.lg },
-  topRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
   subtitle: {
     fontFamily: fonts.serifItalic,
     fontSize: fontSize.lg,
     marginTop: 4,
     marginBottom: 24,
   },
-  addBtn: {
-    borderRadius: radius.full,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  addBtnText: {
-    fontFamily: fonts.sansMedium,
-    fontSize: fontSize[13],
-  },
-
   sectionLabel: {
     marginBottom: 12,
     paddingHorizontal: spacing.lg,

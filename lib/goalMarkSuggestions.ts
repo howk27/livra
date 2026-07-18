@@ -29,8 +29,10 @@ export const FREQUENCIES: Record<FrequencyId, {
   'pushing': { label: 'Pushing past', daysPerWeekMid: 5.5, range: '5–6 days/week', restDays: '1–2 rest days' },
 };
 
-/** Minimum check-ins required to unlock goal completion. */
-export function calculateUnlockThreshold(tier: TierId, frequency: FrequencyId, associatedMarkCount: number): number {
+/** The goal's full check-in commitment (stored as goal.target_mark_count).
+ *  NOT the same as lib/goalLogic's calculateUnlockThreshold, which gates early
+ *  manual completion — the old shared name hid a real bug (M7). */
+export function calculateCommitmentTarget(tier: TierId, frequency: FrequencyId, associatedMarkCount: number): number {
   const { durationWeeks } = TIERS[tier];
   const { daysPerWeekMid } = FREQUENCIES[frequency];
   return Math.floor(durationWeeks * daysPerWeekMid * associatedMarkCount * 0.80);
@@ -38,7 +40,7 @@ export function calculateUnlockThreshold(tier: TierId, frequency: FrequencyId, a
 
 /** Human-readable commitment summary, e.g. "~180 check-ins over 16 weeks". */
 export function commitmentSummary(tier: TierId, frequency: FrequencyId, associatedMarkCount: number): string {
-  const threshold = calculateUnlockThreshold(tier, frequency, associatedMarkCount);
+  const threshold = calculateCommitmentTarget(tier, frequency, associatedMarkCount);
   const weeks = TIERS[tier].durationWeeks;
   return `~${threshold} check-ins over ${weeks} weeks`;
 }

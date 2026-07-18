@@ -56,6 +56,9 @@ interface MarkRowProps {
   category?: string;
   /** Per-mark library icon (QC2-A); falls back to the category icon. */
   icon?: PhosphorIcon | React.ComponentType<any>;
+  /** Batch 2: the mark's own accent (unique per icon); falls back to the
+   *  category accent when the caller has no mark record to resolve from. */
+  accent?: string;
   loggedToday?: boolean;
   done?: boolean;
   onPress?: () => void;
@@ -77,6 +80,7 @@ export function MarkRow({
   subtitle,
   category,
   icon: iconOverride,
+  accent: accentOverride,
   loggedToday,
   done,
   onPress,
@@ -95,7 +99,7 @@ export function MarkRow({
   const { reduced } = useMotion();
   const catKey = category ?? 'custom';
   const catData = CATEGORY_MAP[catKey] ?? CATEGORY_MAP.custom;
-  const accent = catData.accent;
+  const accent = accentOverride ?? catData.accent;
   const CatIcon = iconOverride ?? catData.Icon;
 
   const celebrateOpacity = useSharedValue(0);

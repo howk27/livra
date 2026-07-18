@@ -1188,7 +1188,7 @@ function PaywallScreenContent() {
                 </Text>
               ) : (
                 <Text style={[styles.planPrice, { color: c.inkMid }]}>
-                  — <Text style={styles.planPeriod}>/ month</Text>
+                  Price unavailable <Text style={styles.planPeriod}>/ month</Text>
                 </Text>
               )}
             </TouchableOpacity>
@@ -1239,7 +1239,7 @@ function PaywallScreenContent() {
                 </Text>
               ) : (
                 <Text style={[styles.planPrice, { color: c.inkMid }]}>
-                  — <Text style={styles.planPeriod}>/ year</Text>
+                  Price unavailable <Text style={styles.planPeriod}>/ year</Text>
                 </Text>
               )}
             </TouchableOpacity>
@@ -1325,7 +1325,7 @@ function PaywallScreenContent() {
             ) : (
               <AppText variant="button" style={{ color: c.inkInverse, fontWeight: fontWeight.bold }}>
                 Start Livra+
-                {selectedPrice && selectedPrice.trim() !== '' ? ` — ${selectedPrice}` : ''}
+                {selectedPrice && selectedPrice.trim() !== '' ? ` · ${selectedPrice}` : ''}
               </AppText>
             )}
           </PrimaryButton>

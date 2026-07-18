@@ -37,11 +37,8 @@ import { logger } from '../../lib/utils/logger';
 import CounterIcon from '@/src/components/icons/CounterIcon';
 import { applyOpacity, foregroundForHexBackground } from '@/src/components/icons/color';
 import type { MarkType } from '@/src/types/counters';
-import {
-  colorForSuggestedCounter,
-  getCategoryColor,
-  getCategoryForIcon,
-} from '../../lib/markCategory';
+import { colorForSuggestedCounter, getIconAccent } from '../../lib/markCategory';
+import { Info } from 'phosphor-react-native';
 import {
   FrequencyPreset,
   DEFAULT_FREQUENCY_PRESET,
@@ -49,7 +46,7 @@ import {
   weeklyTargetForPreset,
   scheduleForPreset,
 } from '../../lib/markFrequencyPreset';
-import { ICON_TYPE_TO_EMOJI, MARK_ICON_OPTIONS, MARK_ICON_PRIMARY, groupMarkIcons } from '../../lib/markIcons';
+import { ICON_TYPE_TO_EMOJI, MARK_ICON_OPTIONS, MARK_ICON_PRIMARY } from '../../lib/markIcons';
 import { MarkRowPreview } from '../../components/creation/MarkRowPreview';
 import { cadenceLabel, suggestedCadenceLabel } from '../../lib/creation/creationPreview';
 
@@ -116,6 +113,17 @@ function StagedConfirmZone({
 
   return (
     <Animated.View style={[styles.stagedZone, animatedStyle]}>
+      {/* Batch 2 (founder): what's expected from this mark, said before it is
+          created — the "i" makes the explanation an announced feature, not a
+          hidden tap. Straight from the library entry, one plain sentence. */}
+      {counter.description ? (
+        <View style={styles.stagedDescriptionRow}>
+          <Info size={16} color={themeColors.inkMid} weight="duotone" />
+          <Text style={[styles.stagedDescription, { color: themeColors.inkMid }]}>
+            {counter.description}
+          </Text>
+        </View>
+      ) : null}
       <Text style={[styles.stagedHint, { color: themeColors.inkMid }]}>
         Set today’s target, then add it.
       </Text>
@@ -213,10 +221,10 @@ export default function NewCounterScreen() {
   // than a taller grid.
   const selectedIconIsPrimary = MARK_ICON_PRIMARY.includes(selectedIconType);
   const iconsShowingAll = iconsExpanded || !selectedIconIsPrimary;
+  // Batch 2 (founder 2026-07-18): the category bands and their labels are gone —
+  // "remove the section naming and just leave the Icons". One continuous 4-wide
+  // grid; each tile carries its own per-icon accent, so color does the telling.
   const visibleIconOptions = iconsShowingAll ? ICON_OPTIONS : MARK_ICON_PRIMARY;
-  // QC5-A: the grid carries the category itself — grouped bands with a break
-  // between them — so no slot is reserved to print the category's name.
-  const visibleIconGroups = useMemo(() => groupMarkIcons(visibleIconOptions), [visibleIconOptions]);
 
   // QC4-H: two full-width columns inside the scroll gutter. The popular grid
   // sits directly in scrollContent (not inside styles.card), so only the
@@ -225,13 +233,10 @@ export default function NewCounterScreen() {
     const rowInner = SCREEN_WIDTH - spacing.lg * 2;
     return (rowInner - spacing.sm * (POPULAR_GRID_COLUMNS - 1)) / POPULAR_GRID_COLUMNS;
   }, []);
-  const selectedCategory = useMemo(() => getCategoryForIcon(selectedIconType), [selectedIconType]);
-  // VD-7: color is always the category-derived color — the manual hex palette
-  // ("Vibe" grid) is gone. QC5-A removed the reserved category-name slot but NOT
-  // this derivation: `selectedCategory` still resolves the mark's color, and the
-  // identity feedback moved into the grid — the band your pick sits in names its
-  // category, and that band's category is what paints it.
-  const color = getCategoryColor(selectedCategory);
+  // Batch 2: color is the ICON's own accent (iconAccents, theme/tokens.ts) —
+  // unique per icon, so a goal's marks never read as five of the same green.
+  // Still sanctioned-palette-only; the Vibe grid stays gone.
+  const color = getIconAccent(selectedIconType);
 
   const scheduleDaysForDisplay =
     scheduleType === 'daily' ? ALL_SCHEDULE_DAYS : scheduleDays.length > 0 ? scheduleDays : [1, 2, 3, 4, 5];
@@ -549,50 +554,44 @@ export default function NewCounterScreen() {
             placeholder="e.g. Morning run"
             placeholderTextColor={themeColors.inkMuted}
           />
-          {/* QC5-A: no reserved category slot beside the label — the grid below
-              says the category by grouping, not by printing a name into a gap. */}
           <Text style={[styles.groupLabel, styles.groupLabelFace, { color: themeColors.inkMid }]}>
             Give it a face
           </Text>
-          {visibleIconGroups.map((group, groupIndex) => (
-            <View
-              key={group.category}
-              style={[styles.iconGroup, groupIndex === 0 ? styles.iconGroupFirst : null]}
-              testID={`icon-group-${group.category}`}
-            >
-              <Text style={[styles.iconGroupLabel, { color: themeColors.inkMid }]}>{group.label}</Text>
-              <View style={styles.iconGrid}>
-                {group.icons.map((iconType) => {
-                  const isSelected = iconType === selectedIconType;
-                  return (
-                    <TouchableOpacity
-                      key={iconType}
-                      style={[
-                        styles.iconButton,
-                        {
-                          width: iconCellSize,
-                          height: iconCellSize,
-                          backgroundColor: isSelected ? applyOpacity(color, 0.14) : themeColors.linen,
-                          borderColor: isSelected ? color : themeColors.borderMid,
-                        },
-                      ]}
-                      onPress={() => setSelectedIconType(iconType)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`${group.label} · ${iconType.replace(/_/g, ' ')}`}
-                      accessibilityState={{ selected: isSelected }}
-                    >
-                      <CounterIcon
-                        type={iconType as any}
-                        size={Math.min(28, Math.floor(iconCellSize * 0.45))}
-                        color={isSelected ? color : themeColors.inkMid}
-                        variant="symbol"
-                      />
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-          ))}
+          {/* Batch 2 (founder): one continuous 4-wide grid, no section names,
+              no band breaks — the icons carry their own accents, so each tile
+              already says what it is. Selection = full-strength accent border
+              on a deeper wash of the SAME hue. */}
+          <View style={styles.iconGrid} testID="icon-grid">
+            {visibleIconOptions.map((iconType) => {
+              const isSelected = iconType === selectedIconType;
+              const accent = getIconAccent(iconType);
+              return (
+                <TouchableOpacity
+                  key={iconType}
+                  style={[
+                    styles.iconButton,
+                    {
+                      width: iconCellSize,
+                      height: iconCellSize,
+                      backgroundColor: applyOpacity(accent, isSelected ? 0.18 : 0.08),
+                      borderColor: isSelected ? accent : themeColors.borderMid,
+                    },
+                  ]}
+                  onPress={() => setSelectedIconType(iconType)}
+                  accessibilityRole="button"
+                  accessibilityLabel={iconType.replace(/_/g, ' ')}
+                  accessibilityState={{ selected: isSelected }}
+                >
+                  <CounterIcon
+                    type={iconType as any}
+                    size={Math.min(28, Math.floor(iconCellSize * 0.45))}
+                    color={accent}
+                    variant="symbol"
+                  />
+                </TouchableOpacity>
+              );
+            })}
+          </View>
           {/* QC4-F: the disclosure. Hidden while the grid is forced open by a
               secondary selection — collapsing would hide the user's own pick. */}
           {selectedIconIsPrimary ? (
@@ -947,35 +946,23 @@ const styles = StyleSheet.create({
   groupLabelSpaced: {
     marginTop: spacing.lg,
   },
-  // QC5-A: "Give it a face" keeps the card's centered group-label voice. It used
-  // to sit in a space-between row whose other half was the reserved category
-  // slot; with the slot gone there is no row, so the label stands on its own.
+  // "Give it a face" keeps the card's centered group-label voice; the grid sits
+  // directly under it now that the category bands are gone (Batch 2).
   groupLabelFace: {
     marginTop: spacing.lg,
-    marginBottom: 0,
-  },
-  // QC5-A: the break the founder asked for. Vertical only — spacing.lg between
-  // bands against the spacing.sm gap inside a band, so the gap that separates
-  // two categories reads as 3x the gap that separates two icons and the grouping
-  // is legible before any label is read. No horizontal inset: iconCellSize is
-  // derived from the card's real available width and a nested gutter here would
-  // silently invalidate it.
-  iconGroup: {
-    marginTop: spacing.lg,
-  },
-  // The first band answers "Give it a face" directly, so it sits closer to that
-  // label than two bands sit to each other — proximity carries the hierarchy.
-  iconGroupFirst: {
-    marginTop: spacing.md,
-  },
-  // QC5-A: a quiet band label, not a kicker. Sentence-case from CATEGORY_LABELS,
-  // sm/medium in inkMid — no uppercase, no letterSpacing (design-system ban, see
-  // CommitmentScreen `sectionLabel` + the QC3 kicker ban). It names the band; the
-  // break does the separating.
-  iconGroupLabel: {
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
     marginBottom: spacing.sm,
+  },
+  // Batch 2: the "i" line — what a staged mark expects from you, before Add.
+  stagedDescriptionRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+  },
+  stagedDescription: {
+    flex: 1,
+    fontSize: fontSize.sm,
+    lineHeight: fontSize.sm * 1.4,
   },
   cardHint: {
     fontSize: fontSize.sm,

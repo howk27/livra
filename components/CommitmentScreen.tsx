@@ -19,7 +19,7 @@ import {
   FrequencyId,
   TIERS,
   FREQUENCIES,
-  calculateUnlockThreshold,
+  calculateCommitmentTarget,
   commitmentSummary,
 } from '../lib/goalMarkSuggestions';
 import { MARK_LIBRARY_BY_ID, MarkDefinition } from '../lib/suggestedCounters';
@@ -35,7 +35,8 @@ export type CommitmentSelection = {
   alreadyOwnedMarkIds: string[];
   tier: TierId;
   frequency: FrequencyId;
-  unlockThreshold: number;
+  /** Full check-in commitment for the goal (stored as target_mark_count). */
+  commitmentTarget: number;
 };
 
 type Props = {
@@ -121,14 +122,14 @@ export function CommitmentScreen({
       .map(m => m!.id);
 
     const totalAssociated = alreadyOwnedMarkIds.length + selectedNewIds.size;
-    const unlockThreshold = calculateUnlockThreshold(tier, frequency, totalAssociated);
+    const commitmentTarget = calculateCommitmentTarget(tier, frequency, totalAssociated);
 
     onConfirm({
       selectedNewMarkIds: Array.from(selectedNewIds),
       alreadyOwnedMarkIds,
       tier,
       frequency,
-      unlockThreshold,
+      commitmentTarget,
     });
   };
 
