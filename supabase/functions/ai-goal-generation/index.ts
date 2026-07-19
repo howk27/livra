@@ -168,6 +168,7 @@ Rules:
   - "sleep better" → high
   - "be better" → low (no plannable goal)
 - marks: 3–4 items; frequency is times per week (integer 1–7); icon MUST be one of the listed values
+- Recommend ONLY marks that directly advance THIS goal. Never add a generic discipline, morning-routine, or wellness mark as filler. If a mark would not visibly move this specific goal forward, leave it out. (e.g. do NOT put cold-shower, screen-time, or gratitude on a goal that is not about that.)
 - name: the plain, human label for the chosen mark (e.g. "Run", "Workout", "Meditation"). Do NOT include emoji, punctuation runs, or decoration. The app displays the library's own label, so keep the name simple and literal.
 - Each mark must be a separate real-world effort. Never suggest two marks that one single activity would satisfy. In particular, pick at most ONE mark from each of these overlap groups:
   - eating: nutrition, meal-prep, calories
