@@ -10,6 +10,7 @@ import {
   HouseIcon, HandshakeIcon, HeartIcon, PaintBrushIcon,
   CurrencyCircleDollarIcon,
   PenNibIcon, GlobeSimpleIcon, BowlFoodIcon,
+  CigaretteIcon, CoffeeIcon, SparkleIcon,
 } from 'phosphor-react-native';
 
 export type MarkDefinition = {
@@ -138,6 +139,30 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     tags: ['meal prep', 'diet', 'nutrition', 'weight loss', 'cooking', 'food', 'healthy eating', 'discipline', 'budget', 'prep'],
     healthKitType: null,
     frequency_min: 1, frequency_recommended: 2, frequency_max: 3, frequencyKind: 'variable',
+  },
+  {
+    id: 'no-nicotine', name: 'No Nicotine', icon: CigaretteIcon, emoji: '🚭',
+    description: 'Days you go without nicotine, whether cigarettes, vapes, or pouches.',
+    color: '#6B9E8A', unit: 'days', category: 'Health',
+    tags: ['smoking', 'vaping', 'quit', 'cigarettes', 'nicotine', 'tobacco', 'vape', 'sober', 'cravings', 'lungs'],
+    healthKitType: null,
+    frequency_min: 7, frequency_recommended: 7, frequency_max: 7, frequencyKind: 'abstinence',
+  },
+  {
+    id: 'no-caffeine', name: 'Cut Caffeine', icon: CoffeeIcon, emoji: '☕',
+    description: 'Days you kept caffeine to the limit you set for yourself.',
+    color: '#6B9E8A', unit: 'days', category: 'Health',
+    tags: ['caffeine', 'coffee', 'energy drink', 'cut', 'reduce', 'jitters', 'sleep', 'anxiety', 'quit'],
+    healthKitType: null,
+    frequency_min: 3, frequency_recommended: 5, frequency_max: 7, frequencyKind: 'variable',
+  },
+  {
+    id: 'skincare', name: 'Skincare', icon: SparkleIcon, emoji: '🧴',
+    description: 'Days you did the skincare routine you planned.',
+    color: '#6B9E8A', unit: 'days', category: 'Health',
+    tags: ['skin', 'skincare', 'acne', 'routine', 'face', 'complexion', 'glow', 'moisturize', 'clear skin'],
+    healthKitType: null,
+    frequency_min: 3, frequency_recommended: 5, frequency_max: 7, frequencyKind: 'variable',
   },
 
   // MINDSET

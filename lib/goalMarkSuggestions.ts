@@ -92,6 +92,8 @@ const DOMAIN_SIGNALS: Record<string, string[]> = {
     'weight', 'diet', 'eat', 'eating', 'nutrition', 'calories', 'water',
     'hydration', 'hydrate', 'sugar', 'alcohol', 'sober', 'sobriety', 'vitamins',
     'supplements', 'health', 'healthy', 'lose', 'fat', 'food', 'meal', 'meals',
+    'smoking', 'vaping', 'nicotine', 'cigarette', 'caffeine', 'coffee', 'skin',
+    'skincare', 'acne',
   ],
   'Recovery': [
     'sleep', 'rest', 'recovery', 'recover', 'stretch', 'mobility', 'flexibility',

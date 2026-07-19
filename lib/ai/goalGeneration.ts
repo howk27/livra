@@ -73,14 +73,15 @@ export type GenerationFailReason =
  * Mirrors the same list in the Edge Function system prompt.
  */
 // Prune 2026-07-19 (founder decision): VALID_ICONS now covers EVERY surviving
-// library mark (38 ids, identity-mapped) — no more subset. Two legacy aliases
+// library mark (41 ids, identity-mapped) — no more subset. Two legacy aliases
 // (`gym`, `tasks`) are kept so cached packages and the model's older vocabulary
 // still resolve; they map to `workout`/`planning`. The 6 hollow marks
 // (wake-early, posture, affirmations, no-phone, vitamins, rest) are gone.
 export const VALID_ICONS = [
-  // 38 surviving library ids (identity mapping)
+  // 41 surviving library ids (identity mapping)
   'sleep', 'stretch', 'workout', 'steps', 'run', 'swim', 'cycling',
   'water', 'nutrition', 'calories', 'no-alcohol', 'meal-prep',
+  'no-nicotine', 'no-caffeine', 'skincare',
   'meditation', 'journaling', 'gratitude', 'breathwork',
   'focus', 'planning', 'reading', 'practice', 'study', 'deep-work',
   'writing', 'language',
@@ -95,7 +96,7 @@ export type ValidIcon = typeof VALID_ICONS[number];
 
 const FALLBACK_ICON: ValidIcon = 'focus';
 
-/** Maps each AI icon key to the closest MARK_LIBRARY id. Identity for the 38
+/** Maps each AI icon key to the closest MARK_LIBRARY id. Identity for the 41
  * survivors; `gym`/`tasks` are legacy aliases onto `workout`/`planning`. */
 export const AI_ICON_TO_MARK_ID: Record<ValidIcon, string> = {
   sleep:         'sleep',
@@ -110,6 +111,9 @@ export const AI_ICON_TO_MARK_ID: Record<ValidIcon, string> = {
   calories:      'calories',
   'no-alcohol':  'no-alcohol',
   'meal-prep':   'meal-prep',
+  'no-nicotine': 'no-nicotine',
+  'no-caffeine': 'no-caffeine',
+  skincare:      'skincare',
   meditation:    'meditation',
   journaling:    'journaling',
   gratitude:     'gratitude',

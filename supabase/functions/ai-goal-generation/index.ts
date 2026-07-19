@@ -24,14 +24,15 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 // ─── Constants (kept in sync with lib/ai/goalGeneration.ts) ────────────────────
 
 // Prune 2026-07-19 (founder decision): mirrors lib/ai/goalGeneration.ts exactly.
-// Covers every surviving library mark (38 ids) plus two legacy aliases
+// Covers every surviving library mark (41 ids) plus two legacy aliases
 // (gym, tasks). Kept byte-identical to the client list — a drift guard test
 // (tests/unit/onboarding/goalGeneration.test.ts) parses this array and fails CI
 // if the two lists diverge.
 const VALID_ICONS = [
-  // 38 surviving library ids (identity mapping)
+  // 41 surviving library ids (identity mapping)
   'sleep', 'stretch', 'workout', 'steps', 'run', 'swim', 'cycling',
   'water', 'nutrition', 'calories', 'no-alcohol', 'meal-prep',
+  'no-nicotine', 'no-caffeine', 'skincare',
   'meditation', 'journaling', 'gratitude', 'breathwork',
   'focus', 'planning', 'reading', 'practice', 'study', 'deep-work',
   'writing', 'language',

@@ -9,8 +9,8 @@ describe('mark legitimacy prune', () => {
     const ids = MARK_LIBRARY.map((m) => m.id);
     for (const p of PRUNED) expect(ids).not.toContain(p);
   });
-  it('library is exactly the 38 survivors', () => {
-    expect(MARK_LIBRARY).toHaveLength(38);
+  it('library is exactly the 41 survivors', () => {
+    expect(MARK_LIBRARY).toHaveLength(41);
   });
   it('VALID_ICONS reaches every surviving library mark (no coverage gap)', () => {
     const reachable = new Set((VALID_ICONS as readonly string[]).map((i) => AI_ICON_TO_MARK_ID[i as keyof typeof AI_ICON_TO_MARK_ID]));

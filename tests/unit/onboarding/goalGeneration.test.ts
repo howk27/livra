@@ -382,10 +382,11 @@ describe('VALID_ICONS client/server drift guard', () => {
     expect(readServerValidIcons()).toEqual([...VALID_ICONS]);
   });
 
-  test('client list contains exactly 40 icons with no duplicates', () => {
-    // 38 surviving library ids + 2 legacy aliases (gym, tasks). Prune 2026-07-19.
-    expect(VALID_ICONS).toHaveLength(40);
-    expect(new Set(VALID_ICONS).size).toBe(40);
+  test('client list contains exactly 43 icons with no duplicates', () => {
+    // 41 surviving library ids + 2 legacy aliases (gym, tasks). Prune 2026-07-19;
+    // +3 marks (no-nicotine, no-caffeine, skincare) added 2026-07-19 (wave4).
+    expect(VALID_ICONS).toHaveLength(43);
+    expect(new Set(VALID_ICONS).size).toBe(43);
   });
 });
 
