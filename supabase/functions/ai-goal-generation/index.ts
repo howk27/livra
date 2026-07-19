@@ -157,6 +157,7 @@ Rules:
   - "sleep better" → high
   - "be better" → low (no plannable goal)
 - marks: 3–4 items; frequency is times per week (integer 1–7); icon MUST be one of the listed values
+- name: the plain, human label for the chosen mark (e.g. "Run", "Workout", "Meditation"). Do NOT include emoji, punctuation runs, or decoration. The app displays the library's own label, so keep the name simple and literal.
 - Each mark must be a separate real-world effort. Never suggest two marks that one single activity would satisfy. In particular, pick at most ONE mark from each of these overlap groups:
   - eating: nutrition, meal-prep, calories
   - calm: meditation, breathwork
@@ -164,7 +165,7 @@ Rules:
   - focused work: focus, study, deep-work
   - a run already covers steps — never pair run with steps
 - Prefer 3 distinct marks over 4 overlapping ones
-- why: one concrete sentence per mark
+- why: one concrete sentence per mark, written about that mark's real-world action
 - For genuinely ambiguous or unsafe input: set confidence:"low" and still return a plausible package
 - If multiple goals are given: scope to one; use "low" confidence`;
 }
