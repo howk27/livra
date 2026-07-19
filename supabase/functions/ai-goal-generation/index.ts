@@ -157,7 +157,12 @@ Rules:
   - "sleep better" → high
   - "be better" → low (no plannable goal)
 - marks: 3–4 items; frequency is times per week (integer 1–7); icon MUST be one of the listed values
-- Each mark must be a separate real-world effort. Never suggest two marks that one single activity would satisfy (a run must not appear as both a running mark and a steps mark)
+- Each mark must be a separate real-world effort. Never suggest two marks that one single activity would satisfy. In particular, pick at most ONE mark from each of these overlap groups:
+  - eating: nutrition, meal-prep, calories
+  - calm: meditation, breathwork
+  - reflection: journaling, gratitude
+  - focused work: focus, study, deep-work
+  - a run already covers steps — never pair run with steps
 - Prefer 3 distinct marks over 4 overlapping ones
 - why: one concrete sentence per mark
 - For genuinely ambiguous or unsafe input: set confidence:"low" and still return a plausible package
@@ -274,25 +279,45 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  // 2. Read entitlement + usage.
+  // 2. Entitlement. ai_uses_count is NOT read here — reading it, checking the
+  //    gate, then incrementing later is a TOCTOU race (concurrent requests all
+  //    read 0 and all pass). The count is reserved atomically in step 4 instead.
   const { data: profile } = await admin
     .from('profiles')
-    .select('pro_unlocked, ai_uses_count')
+    .select('pro_unlocked')
     .eq('id', user.id)
     .single();
   const isPro = !!(profile as { pro_unlocked?: boolean } | null)?.pro_unlocked;
-  const usesCount = (profile as { ai_uses_count?: number } | null)?.ai_uses_count ?? 0;
 
-  // 3. Free-use gate (server-enforced). Pro bypasses; "1 free ever" otherwise.
-  if (!isPro && usesCount >= 1) {
-    return json(200, { ok: false, reason: 'free_use_exhausted' });
-  }
-
-  // 4. Misconfiguration guard — soft failure → client offers manual fallback.
+  // 3. Misconfiguration guard — soft failure → client offers manual fallback.
   if (!OPENAI_API_KEY) {
     console.error('[ai-goal-generation] OPENAI_API_KEY not set');
     return json(200, { ok: false, reason: 'network_error' });
   }
+
+  // 4. Reserve one free use up front (non-Pro only). consume_free_ai_use runs
+  //    `UPDATE ... WHERE ai_uses_count < 1` atomically, so exactly one of N
+  //    concurrent requests wins the "1 free ever" slot. Refunded below if the
+  //    generation does not produce a usable package, so an error never costs the
+  //    user their free generation.
+  let consumedFreeUse = false;
+  if (!isPro) {
+    const { data: allowed, error: consumeErr } = await admin.rpc('consume_free_ai_use', {
+      p_user_id: user.id,
+    });
+    if (consumeErr) {
+      console.error('[ai-goal-generation] consume_free_ai_use failed:', consumeErr.message);
+      return json(200, { ok: false, reason: 'network_error' });
+    }
+    if (!allowed) return json(200, { ok: false, reason: 'free_use_exhausted' });
+    consumedFreeUse = true;
+  }
+
+  const refundIfConsumed = async () => {
+    if (consumedFreeUse) {
+      await admin.rpc('refund_free_ai_use', { p_user_id: user.id });
+    }
+  };
 
   // 5. OpenAI call with one silent retry on any error.
   let raw: unknown;
@@ -302,28 +327,24 @@ Deno.serve(async (req: Request) => {
     try {
       raw = await callOpenAI(goalText, context, OPENAI_API_KEY);
     } catch {
+      await refundIfConsumed();
       return json(200, { ok: false, reason: 'network_error' });
     }
   }
 
   // 6. Validate contract.
   const pkg = validateAIGoalPackage(raw);
-  if (!pkg) return json(200, { ok: false, reason: 'invalid_output' });
+  if (!pkg) {
+    await refundIfConsumed();
+    return json(200, { ok: false, reason: 'invalid_output' });
+  }
 
-  // Low confidence → manual fallback. Free use is NOT consumed (user can retry).
+  // Low confidence → manual fallback. Free use is refunded (user can retry).
   if (pkg.confidence === 'low') {
+    await refundIfConsumed();
     return json(200, { ok: false, reason: 'low_confidence' });
   }
 
-  // 7. Consume one free use (non-Pro only) via service-role.
-  //    Prefer the atomic RPC; fall back to a direct update. Both run as
-  //    service_role, so the Task 1 profiles trigger guard permits the write.
-  if (!isPro) {
-    const { error: rpcErr } = await admin.rpc('increment_ai_uses_count', { p_user_id: user.id });
-    if (rpcErr) {
-      await admin.from('profiles').update({ ai_uses_count: usesCount + 1 }).eq('id', user.id);
-    }
-  }
-
+  // Success — the reservation stands.
   return json(200, { ok: true, package: pkg, source: 'api' });
 });

@@ -28,6 +28,30 @@ describe('validateAIGoalPackage overlap collapse', () => {
     expect(pkg?.marks.map((m) => m.name)).toEqual(['Deep work', 'Sleep']);
   });
 
+  it('collapses nutrition+meal-prep to the first eating mark', () => {
+    const pkg = validateAIGoalPackage({
+      ...base,
+      marks: [mark('Eat clean', 'nutrition'), mark('Meal prep', 'meal-prep'), mark('Sleep', 'sleep')],
+    });
+    expect(pkg?.marks.map((m) => m.name)).toEqual(['Eat clean', 'Sleep']);
+  });
+
+  it('collapses meditation+breathwork to the first calm mark', () => {
+    const pkg = validateAIGoalPackage({
+      ...base,
+      marks: [mark('Meditate', 'meditation'), mark('Breathe', 'breathwork'), mark('Sleep', 'sleep')],
+    });
+    expect(pkg?.marks.map((m) => m.name)).toEqual(['Meditate', 'Sleep']);
+  });
+
+  it('does not hard-collapse run+steps (left to the prose distinctness rule)', () => {
+    const pkg = validateAIGoalPackage({
+      ...base,
+      marks: [mark('Run', 'run'), mark('Steps', 'steps'), mark('Sleep', 'sleep')],
+    });
+    expect(pkg?.marks).toHaveLength(3);
+  });
+
   it('leaves distinct efforts untouched', () => {
     const pkg = validateAIGoalPackage({
       ...base,

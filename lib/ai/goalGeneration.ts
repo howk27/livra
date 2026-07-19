@@ -128,6 +128,16 @@ export const AI_ICON_EFFORT_CATEGORY: Partial<Record<ValidIcon, string>> = {
   journaling: 'reflection',
   focus: 'deep-work',
   study: 'deep-work',
+  // One sit satisfies both — a breathing session is a meditation.
+  meditation: 'calm',
+  breathwork: 'calm',
+  // "Eat the way I intended" and "prep meals ahead" are the same eating
+  // discipline; the model kept surfacing both in one goal.
+  nutrition: 'nutrition',
+  'meal-prep': 'nutrition',
+  // NOTE deliberately NOT collapsed: run/steps/swim/cycling (a triathlon needs
+  // them distinct) and finance/saving/invest/no-spend (distinct money efforts).
+  // Those softer overlaps are left to the system prompt's prose distinctness rule.
 };
 
 /** Resolves an AI icon string to the matching MARK_LIBRARY entry (emoji, color, id). */
