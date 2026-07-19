@@ -117,7 +117,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   },
   {
     id: 'nutrition', name: 'Nutrition', icon: ForkKnifeIcon, emoji: '🥗',
-    description: 'Days you eat the way you intended to eat.',
+    description: 'Days your meals went the way you planned. Check in at the end of the day.',
     color: '#6B9E8A', unit: 'days', category: 'Health',
     tags: ['diet', 'eat clean', 'nutrition', 'weight loss', 'meal prep', 'health', 'muscle', 'performance', 'food', 'body'],
     healthKitType: null,
@@ -357,7 +357,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   },
   {
     id: 'posture', name: 'Posture', icon: ArrowsVerticalIcon, emoji: '🧍',
-    description: 'Days you keep an eye on your posture.',
+    description: 'Days you caught your posture slipping and straightened up.',
     color: '#8A7E6B', unit: 'days', category: 'Discipline',
     tags: ['posture', 'back pain', 'ergonomics', 'health', 'desk', 'alignment', 'neck', 'spine', 'sitting'],
     healthKitType: null,
