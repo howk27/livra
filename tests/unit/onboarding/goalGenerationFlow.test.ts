@@ -44,7 +44,7 @@ const VALID_AI_RESPONSE: AIGoalPackage = {
   confidence: 'high',
   marks: [
     { name: 'Morning run', icon: 'gym', frequency: 4, why: 'Builds endurance' },
-    { name: 'Rest day stretch', icon: 'rest', frequency: 2, why: 'Prevents injury' },
+    { name: 'Rest day stretch', icon: 'stretch', frequency: 2, why: 'Prevents injury' },
   ],
 };
 
@@ -154,6 +154,61 @@ describe('generateGoalPackage (Edge Function proxy)', () => {
   test('no API key reference exists in the client module', () => {
     // The key must never ship in the bundle (Phase 6 Task 2 acceptance).
     expect(process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY).toBeUndefined();
+  });
+
+  // ── Client-side relevance gate (2026-07-19): a restricted mark the model
+  //    returns for an off-domain goal must be filtered out before the package
+  //    reaches the UI; on-domain it survives. Domain is inferred from the goal
+  //    TEXT (the arg), not the package.
+  test('drops a restricted mark when the goal is off its domain', async () => {
+    invokeReturns({
+      ok: true,
+      source: 'api',
+      package: {
+        goalTitle: 'Save 10k',
+        timeframeWeeks: 24,
+        confidence: 'high',
+        marks: [
+          { name: 'Put money aside', icon: 'saving', frequency: 5, why: 'Grows the fund' },
+          { name: 'Cold plunge', icon: 'cold-shower', frequency: 3, why: 'Filler discipline' },
+        ],
+      },
+    });
+
+    const result = await generateGoalPackage('save 10k');
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const names = result.package.marks.map((m) => m.name);
+      // cold-shower is restricted to Discipline; a Finance goal must not carry it.
+      expect(names).not.toContain('Cold Shower');
+      expect(names).toContain('Saving');
+    }
+  });
+
+  test('keeps a restricted mark when the goal is on its domain', async () => {
+    invokeReturns({
+      ok: true,
+      source: 'api',
+      package: {
+        goalTitle: 'Build discipline',
+        timeframeWeeks: 12,
+        confidence: 'high',
+        marks: [
+          { name: 'Cold plunge', icon: 'cold-shower', frequency: 5, why: 'Trains willpower' },
+          { name: 'Plan the day', icon: 'planning', frequency: 5, why: 'Structure' },
+        ],
+      },
+    });
+
+    const result = await generateGoalPackage('build discipline');
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const names = result.package.marks.map((m) => m.name);
+      // 'discipline' infers the Discipline domain, which unlocks cold-shower.
+      expect(names).toContain('Cold Shower');
+    }
   });
 });
 
