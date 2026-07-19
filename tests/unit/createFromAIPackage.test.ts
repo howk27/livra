@@ -46,6 +46,11 @@ jest.mock('../../lib/ai/goalGeneration', () => {
   };
 });
 
+const mockRpc = jest.fn().mockResolvedValue({ data: null, error: null });
+jest.mock('../../lib/supabase', () => ({
+  getSupabaseClient: () => ({ rpc: mockRpc }),
+}));
+
 import { createFromAIPackage } from '../../lib/goals/createFromAIPackage';
 
 const SAMPLE_PACKAGE: AIGoalPackage = {
@@ -215,5 +220,48 @@ describe('createFromAIPackage — confirm path', () => {
     expect(mockLinkMarkToGoal).toHaveBeenCalledWith('goal-1', 'mark-rest');
     // Cache write still happens — confirm still succeeds overall.
     expect(mockWriteGoalPackageCache).toHaveBeenCalled();
+  });
+});
+
+describe('createFromAIPackage — free use spent on create (2026-07-19)', () => {
+  test('non-Pro user consumes the free AI use on goal creation', async () => {
+    await createFromAIPackage({
+      userId: 'user-1',
+      isPro: false,
+      goalText: 'run a half marathon',
+      pkg: SAMPLE_PACKAGE,
+      title: 'Half marathon',
+      marks: SAMPLE_PACKAGE.marks,
+    });
+
+    expect(mockRpc).toHaveBeenCalledWith('increment_ai_uses_count', { p_user_id: 'user-1' });
+  });
+
+  test('Pro user does NOT consume a free use (unlimited)', async () => {
+    await createFromAIPackage({
+      userId: 'user-1',
+      isPro: true,
+      goalText: 'run a half marathon',
+      pkg: SAMPLE_PACKAGE,
+      title: 'Half marathon',
+      marks: SAMPLE_PACKAGE.marks,
+    });
+
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  test('a failed increment does not abort the goal (goal already exists)', async () => {
+    mockRpc.mockRejectedValueOnce(new Error('rpc down'));
+
+    const goal = await createFromAIPackage({
+      userId: 'user-1',
+      isPro: false,
+      goalText: 'run a half marathon',
+      pkg: SAMPLE_PACKAGE,
+      title: 'Half marathon',
+      marks: SAMPLE_PACKAGE.marks,
+    });
+
+    expect(goal.id).toBe('goal-1');
   });
 });

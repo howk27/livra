@@ -13,6 +13,7 @@
  */
 import { useGoalsStore } from '../../state/goalsSlice';
 import { useMarksStore } from '../../state/countersSlice';
+import { getSupabaseClient } from '../supabase';
 import { MARK_LIBRARY } from '../suggestedCounters';
 import { colorForSuggestedCounter } from '../markCategory';
 import { defaultDailyTargetForMarkId } from '../markQuantitative';
@@ -96,9 +97,21 @@ export async function createFromAIPackage(args: CreateFromAIPackageArgs): Promis
     }
   }
 
-  // 4. Confirm-time cache write. The free-use counter was already incremented
-  // server-side at generation time; this only marks the package confirmed.
+  // 4. Confirm-time cache write (marks the package confirmed for the free cache).
   await writeGoalPackageCache(userId, goalText, pkg);
+
+  // 5. Spend the free AI use — ONLY now that a goal actually exists (2026-07-19).
+  //    Generation no longer consumes it (the edge fn gates read-only), so a
+  //    dismissed or low-confidence plan costs nothing; the one free use is spent
+  //    here, on create. Best-effort: the goal is already the user's, so a failed
+  //    increment must never surface as an error or undo the goal. Pro is unlimited.
+  if (!isPro) {
+    try {
+      await getSupabaseClient().rpc('increment_ai_uses_count', { p_user_id: userId });
+    } catch (err) {
+      logger.error('[createFromAIPackage] free-use increment failed:', err);
+    }
+  }
 
   return goal;
 }

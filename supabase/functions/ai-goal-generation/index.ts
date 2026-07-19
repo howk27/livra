@@ -162,12 +162,14 @@ Rules:
   - If no context is given, assume a typical motivated beginner and stay conservative.
   - Only shorten the estimate when the context gives concrete evidence of experience, prior progress, or heavy time commitment.
   - Never inflate confidence or shorten the timeframe just to be motivating. A realistic longer timeframe is more useful than an encouraging wrong one.
-- confidence: default to "high". Use "high" for any goal a coach could plan 3 or 4 weekly marks for, even if phrased loosely. Use "low" ONLY when the input is genuinely ambiguous (no plannable goal at all), unsafe, or contains multiple goals
+- confidence: the user gets ONE free plan, so a wrong plan is costly — calibrate HONESTLY and do NOT default to "high". Use "high" ONLY when the goal is concrete enough that you can confidently pick 3-4 marks that clearly advance it. Use "low" when the goal is vague or overly broad, spans multiple goals, is internally contradictory, unsafe, or you are not confident the marks you would pick genuinely move it forward. When in doubt, prefer "low" — the user keeps their free plan and can rephrase — over a shaky "high".
 - Confidence anchors:
-  - "I want to get stronger" → high
-  - "run a 10k" → high
-  - "sleep better" → high
+  - "run a 10k" → high (concrete, plannable)
+  - "quit smoking" → high (concrete)
+  - "save 5k" → high (concrete)
+  - "get healthy" → low (too broad to plan well)
   - "be better" → low (no plannable goal)
+  - "get fit and rich and learn guitar" → low (multiple goals)
 - marks: 3–4 items; frequency is times per week (integer 1–7); icon MUST be one of the listed values
 - Recommend ONLY marks that directly advance THIS goal. Never add a generic discipline, morning-routine, or wellness mark as filler. If a mark would not visibly move this specific goal forward, leave it out. (e.g. do NOT put cold-shower, screen-time, or gratitude on a goal that is not about that.)
 - name: the plain, human label for the chosen mark (e.g. "Run", "Workout", "Meditation"). Do NOT include emoji, punctuation runs, or decoration. The app displays the library's own label, so keep the name simple and literal.
@@ -293,15 +295,22 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  // 2. Entitlement. ai_uses_count is NOT read here — reading it, checking the
-  //    gate, then incrementing later is a TOCTOU race (concurrent requests all
-  //    read 0 and all pass). The count is reserved atomically in step 4 instead.
+  // 2. Entitlement (READ-ONLY, 2026-07-19). The free use is NOT spent at
+  //    generation anymore — a wrong or dismissed plan must never cost the user
+  //    their one free AI goal. The use is consumed on the CLIENT at goal-CREATE
+  //    time (createFromAIPackage -> increment_ai_uses_count). Here we only READ:
+  //    a non-Pro user who has already created their free AI goal
+  //    (ai_uses_count >= 1) is blocked from generating another.
   const { data: profile } = await admin
     .from('profiles')
-    .select('pro_unlocked')
+    .select('pro_unlocked, ai_uses_count')
     .eq('id', user.id)
     .single();
   const isPro = !!(profile as { pro_unlocked?: boolean } | null)?.pro_unlocked;
+  const aiUsesCount = (profile as { ai_uses_count?: number } | null)?.ai_uses_count ?? 0;
+  if (!isPro && aiUsesCount >= 1) {
+    return json(200, { ok: false, reason: 'free_use_exhausted' });
+  }
 
   // 3. Misconfiguration guard — soft failure → client offers manual fallback.
   if (!OPENAI_API_KEY) {
@@ -309,31 +318,8 @@ Deno.serve(async (req: Request) => {
     return json(200, { ok: false, reason: 'network_error' });
   }
 
-  // 4. Reserve one free use up front (non-Pro only). consume_free_ai_use runs
-  //    `UPDATE ... WHERE ai_uses_count < 1` atomically, so exactly one of N
-  //    concurrent requests wins the "1 free ever" slot. Refunded below if the
-  //    generation does not produce a usable package, so an error never costs the
-  //    user their free generation.
-  let consumedFreeUse = false;
-  if (!isPro) {
-    const { data: allowed, error: consumeErr } = await admin.rpc('consume_free_ai_use', {
-      p_user_id: user.id,
-    });
-    if (consumeErr) {
-      console.error('[ai-goal-generation] consume_free_ai_use failed:', consumeErr.message);
-      return json(200, { ok: false, reason: 'network_error' });
-    }
-    if (!allowed) return json(200, { ok: false, reason: 'free_use_exhausted' });
-    consumedFreeUse = true;
-  }
-
-  const refundIfConsumed = async () => {
-    if (consumedFreeUse) {
-      await admin.rpc('refund_free_ai_use', { p_user_id: user.id });
-    }
-  };
-
-  // 5. OpenAI call with one silent retry on any error.
+  // 4. OpenAI call with one silent retry on any error. Nothing to refund — the
+  //    generation path never spends the free use, so an error simply returns.
   let raw: unknown;
   try {
     raw = await callOpenAI(goalText, context, OPENAI_API_KEY);
@@ -341,24 +327,22 @@ Deno.serve(async (req: Request) => {
     try {
       raw = await callOpenAI(goalText, context, OPENAI_API_KEY);
     } catch {
-      await refundIfConsumed();
       return json(200, { ok: false, reason: 'network_error' });
     }
   }
 
-  // 6. Validate contract.
+  // 5. Validate contract.
   const pkg = validateAIGoalPackage(raw);
   if (!pkg) {
-    await refundIfConsumed();
     return json(200, { ok: false, reason: 'invalid_output' });
   }
 
-  // Low confidence → manual fallback. Free use is refunded (user can retry).
+  // Low confidence → manual fallback. Costs nothing (nothing was spent).
   if (pkg.confidence === 'low') {
-    await refundIfConsumed();
     return json(200, { ok: false, reason: 'low_confidence' });
   }
 
-  // Success — the reservation stands.
+  // Success. The free use is spent later, on the client, only if the user
+  // actually creates a goal from this package.
   return json(200, { ok: true, package: pkg, source: 'api' });
 });
