@@ -53,6 +53,7 @@ import { deriveIsNewBest, goalAgeDays } from '../../lib/moments/context';
 import { deriveGoalDetailEmptyVariant, getEmptyStateCopy } from '../../lib/moments/emptyState';
 import { getAppDate } from '../../lib/appDate';
 import { formatDate } from '../../lib/date';
+import { resolveDailyTarget } from '../../lib/markDailyTarget';
 import { useCounters } from '../../hooks/useCounters';
 import { useAuth } from '../../hooks/useAuth';
 import { useIapSubscriptions } from '../../hooks/useIapSubscriptions';
@@ -340,6 +341,7 @@ function LinkedMarkRows({
   c,
   marks,
   weeklyCountsMap,
+  todayCountsMap,
   emptyLine,
   managing,
   onToggleManaging,
@@ -353,6 +355,7 @@ function LinkedMarkRows({
   c: ThemeColors;
   marks: Mark[];
   weeklyCountsMap: Map<string, number>;
+  todayCountsMap: Map<string, number>;
   emptyLine: string;
   managing: boolean;
   onToggleManaging: () => void;
@@ -444,17 +447,33 @@ function LinkedMarkRows({
                 >
                   <LinkBreak size={16} color={c.inkMid} weight="bold" />
                 </TouchableOpacity>
-              ) : (
-                <TouchableOpacity
-                  style={[styles.logBtn, { backgroundColor: applyOpacity(c.accent, 0.12) }]}
-                  onPress={() => onQuickLog(mark.id)}
-                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                  activeOpacity={0.7}
-                  accessibilityLabel={`Log ${mark.name}`}
-                >
-                  <Plus size={16} color={c.accent} weight="bold" />
-                </TouchableOpacity>
-              )}
+              ) : (() => {
+                // Lock once the day's target is met — one tap for a binary mark,
+                // the full count for a quantitative one (water). Logging never
+                // reopens the same day, matching every other log surface.
+                const completedToday =
+                  (todayCountsMap.get(mark.id) ?? 0) >= resolveDailyTarget(mark);
+                return (
+                  <TouchableOpacity
+                    style={[
+                      styles.logBtn,
+                      { backgroundColor: applyOpacity(completedToday ? c.forest : c.accent, completedToday ? 0.16 : 0.12) },
+                    ]}
+                    onPress={completedToday ? undefined : () => onQuickLog(mark.id)}
+                    disabled={completedToday}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    activeOpacity={0.7}
+                    accessibilityLabel={completedToday ? `${mark.name} logged today` : `Log ${mark.name}`}
+                    accessibilityState={completedToday ? { disabled: true } : undefined}
+                  >
+                    {completedToday ? (
+                      <Check size={16} color={c.forest} weight="bold" />
+                    ) : (
+                      <Plus size={16} color={c.accent} weight="bold" />
+                    )}
+                  </TouchableOpacity>
+                );
+              })()}
             </TouchableOpacity>
           );
         })
@@ -713,6 +732,19 @@ function useGoalWeekStory({
     () => buildWeeklyCountsMap(linkedMarks, allEvents, weekDates),
     [linkedMarks, allEvents, weekDates],
   );
+
+  // Today's increment total per mark — drives the quick-log completion lock so a
+  // binary mark (dailyTarget 1) can't be tapped past once a day here, matching
+  // Focus, the mark detail, and MarkCard. Quantitative marks (water) stay open
+  // until their daily target is met.
+  const todayCountsMap = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const e of allEvents) {
+      if (e.event_type !== 'increment' || e.deleted_at || e.occurred_local_date !== todayStr) continue;
+      map.set(e.mark_id, (map.get(e.mark_id) ?? 0) + (e.amount ?? 1));
+    }
+    return map;
+  }, [allEvents, todayStr]);
 
   const dueCount = useMemo(
     () =>
@@ -1048,6 +1080,7 @@ export default function GoalDetailScreen() {
           c={c}
           marks={linkedMarks}
           weeklyCountsMap={weeklyCountsMap}
+          todayCountsMap={todayCountsMap}
           emptyLine={emptyMarksLine}
           managing={managingMarks}
           onToggleManaging={() => setManagingMarks(v => !v)}

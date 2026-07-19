@@ -41,6 +41,7 @@ import { goalPreviewMarks } from '../../lib/creation/creationPreview';
 import { CommitmentScreen, CommitmentSelection } from '../../components/CommitmentScreen';
 import { MarkDefinition } from '../../lib/suggestedCounters';
 import { colorForSuggestedCounter } from '../../lib/markCategory';
+import { defaultDailyTargetForMarkId } from '../../lib/markQuantitative';
 import { useDeferredAutoFocus } from '../../hooks/useDeferredAutoFocus';
 import { useHalfRenderProbe } from '../../hooks/useHalfRenderProbe';
 
@@ -298,7 +299,9 @@ export default function NewGoalScreen() {
           user_id: user.id,
           goal_period: 'day',
           schedule_type: 'daily',
-          dailyTarget: 1,
+          // Binary by default (1 = one tap completes the day); quantitative
+          // marks like water start at their count-up target.
+          dailyTarget: defaultDailyTargetForMarkId(sugg.id),
           total: 0,
           enable_streak: false,
           sort_index: 0,

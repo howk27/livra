@@ -26,6 +26,7 @@ import { useMarksStore } from '../state/countersSlice';
 import { useAuth } from '../hooks/useAuth';
 import { MARK_LIBRARY } from '../lib/suggestedCounters';
 import { colorForSuggestedCounter } from '../lib/markCategory';
+import { defaultDailyTargetForMarkId } from '../lib/markQuantitative';
 import { getMarksForCommitment, CommitmentMarkSelection } from '../lib/onboarding/commitmentEngine';
 import { frequencyLabel } from '../components/ui/MarkFrequencyPicker';
 import { logger } from '../lib/utils/logger';
@@ -275,7 +276,9 @@ export default function OnboardingScreen() {
           user_id: userId,
           goal_period: 'day',
           schedule_type: 'daily',
-          dailyTarget: 1,
+          // Binary by default (1 = one tap completes the day); quantitative
+          // marks like water start at their count-up target.
+          dailyTarget: defaultDailyTargetForMarkId(sugg.id),
           total: 0,
           enable_streak: false,
           sort_index: 0,

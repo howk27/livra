@@ -15,6 +15,7 @@ import { useGoalsStore } from '../../state/goalsSlice';
 import { useMarksStore } from '../../state/countersSlice';
 import { MARK_LIBRARY } from '../suggestedCounters';
 import { colorForSuggestedCounter } from '../markCategory';
+import { defaultDailyTargetForMarkId } from '../markQuantitative';
 import {
   resolveMarkForAIIcon,
   writeGoalPackageCache,
@@ -75,7 +76,9 @@ export async function createFromAIPackage(args: CreateFromAIPackageArgs): Promis
         user_id: userId,
         goal_period: 'day',
         schedule_type: 'daily',
-        dailyTarget: 1,
+        // Binary by default (1 = one tap completes the day); water and other
+        // quantitative marks start at their count-up target.
+        dailyTarget: defaultDailyTargetForMarkId(libraryMark.id),
         total: 0,
         enable_streak: false,
         sort_index: 0,

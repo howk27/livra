@@ -550,15 +550,8 @@ function MarkDetailContent() {
           {weeklyState === 'doneForWeek' && counter?.frequency_kind === 'variable' && completedToday && (
             <View style={styles.doneForWeekWrap}>
               <Text style={[styles.doneForWeekText, { color: c.inkMuted }]}>
-                {`You've hit your ${counter.weekly_target ?? 3} this week. Rest is part of it, but if you want one more, go for it.`}
+                {`You've hit your ${counter.weekly_target ?? 3} this week. Rest is part of it.`}
               </Text>
-              <TouchableOpacity
-                onPress={handleLog}
-                activeOpacity={0.75}
-                style={styles.bonusLogBtn}
-              >
-                <Text style={[styles.bonusLogBtnText, { color: c.inkMuted }]}>One more this week</Text>
-              </TouchableOpacity>
             </View>
           )}
 
@@ -866,14 +859,6 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     fontFamily: fonts.sans,
     textAlign: 'center',
     lineHeight: 19,
-  },
-  bonusLogBtn: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-  },
-  bonusLogBtnText: {
-    fontSize: fontSize[13],
-    fontFamily: fonts.sans,
   },
 
   // Linked goals
