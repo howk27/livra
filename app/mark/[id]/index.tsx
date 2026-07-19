@@ -56,6 +56,8 @@ import { LoadingScreen } from '../../../components/LoadingScreen';
 import { useAuth } from '../../../hooks/useAuth';
 import { logger } from '../../../lib/utils/logger';
 import { resolveLibraryMark, resolveMarkAccent } from '@/lib/markCategoryResolve';
+import { resolveMarkDefinition } from '../../../lib/markDefinition';
+import { MarkDefinitionBlock } from '../../../components/mark/MarkDefinitionBlock';
 import { resolveDailyTarget } from '../../../lib/markDailyTarget';
 import { getEmptyStateCopy } from '../../../lib/moments/emptyState';
 import { currentWeekDates, markWeeklyState, computeCompletionsThisWeek } from '../../../lib/features';
@@ -486,6 +488,11 @@ function MarkDetailContent() {
                 </Text>
               </TouchableOpacity>
             ) : null}
+          </View>
+
+          {/* ── What this measures ─────────────────────────────────────────── */}
+          <View style={styles.section}>
+            <MarkDefinitionBlock definition={resolveMarkDefinition(counter)} />
           </View>
 
           {/* ── Compact Stat Row ── */}
