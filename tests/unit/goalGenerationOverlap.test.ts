@@ -9,7 +9,8 @@ describe('validateAIGoalPackage overlap collapse', () => {
       ...base,
       marks: [mark('Run', 'gym'), mark('Steps', 'steps'), mark('Sleep', 'sleep')],
     });
-    expect(pkg?.marks.map((m) => m.name)).toEqual(['Run', 'Steps', 'Sleep']);
+    // Names are the library canonical labels now (2026-07-19): gym → Workout.
+    expect(pkg?.marks.map((m) => m.name)).toEqual(['Workout', 'Steps', 'Sleep']);
   });
 
   it('collapses gratitude+journaling to the first reflection mark', () => {
@@ -25,7 +26,7 @@ describe('validateAIGoalPackage overlap collapse', () => {
       ...base,
       marks: [mark('Deep work', 'focus'), mark('Study', 'study'), mark('Sleep', 'sleep')],
     });
-    expect(pkg?.marks.map((m) => m.name)).toEqual(['Deep work', 'Sleep']);
+    expect(pkg?.marks.map((m) => m.name)).toEqual(['Focus', 'Sleep']);
   });
 
   it('collapses nutrition+meal-prep to the first eating mark', () => {
@@ -33,7 +34,7 @@ describe('validateAIGoalPackage overlap collapse', () => {
       ...base,
       marks: [mark('Eat clean', 'nutrition'), mark('Meal prep', 'meal-prep'), mark('Sleep', 'sleep')],
     });
-    expect(pkg?.marks.map((m) => m.name)).toEqual(['Eat clean', 'Sleep']);
+    expect(pkg?.marks.map((m) => m.name)).toEqual(['Nutrition', 'Sleep']);
   });
 
   it('collapses meditation+breathwork to the first calm mark', () => {
@@ -41,7 +42,7 @@ describe('validateAIGoalPackage overlap collapse', () => {
       ...base,
       marks: [mark('Meditate', 'meditation'), mark('Breathe', 'breathwork'), mark('Sleep', 'sleep')],
     });
-    expect(pkg?.marks.map((m) => m.name)).toEqual(['Meditate', 'Sleep']);
+    expect(pkg?.marks.map((m) => m.name)).toEqual(['Meditation', 'Sleep']);
   });
 
   it('does not hard-collapse run+steps (left to the prose distinctness rule)', () => {
@@ -68,12 +69,15 @@ describe('validateAIGoalPackage overlap collapse', () => {
     expect(pkg?.marks.map((m) => m.name)).toEqual(['Gratitude']);
   });
 
-  it('does not collapse marks whose icon was repaired to the fallback', () => {
-    // 'focus' is FALLBACK_ICON: a repaired junk icon must not knock out a genuine deep-work mark
+  it('a repaired junk icon does not knock out a genuine mark of a different library id', () => {
+    // 'not-an-icon' repairs to FALLBACK_ICON ('focus' → Focus). A genuine mark of
+    // a DIFFERENT library id (study → Study) must survive alongside it. (Two marks
+    // that resolve to the SAME id are deduped instead — see goalGeneration.test.ts.)
     const pkg = validateAIGoalPackage({
       ...base,
-      marks: [mark('Deep work', 'focus'), mark('Weird', 'not-an-icon')],
+      marks: [mark('Study', 'study'), mark('Weird', 'not-an-icon')],
     });
     expect(pkg?.marks).toHaveLength(2);
+    expect(pkg?.marks.map((m) => m.name)).toEqual(['Study', 'Focus']);
   });
 });

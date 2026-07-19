@@ -117,7 +117,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   },
   {
     id: 'nutrition', name: 'Nutrition', icon: ForkKnifeIcon, emoji: '🥗',
-    description: 'Days your meals went the way you planned. Check in at the end of the day.',
+    description: 'Days your eating went the way you planned, checked at the day\'s end.',
     color: '#6B9E8A', unit: 'days', category: 'Health',
     tags: ['diet', 'eat clean', 'nutrition', 'weight loss', 'meal prep', 'health', 'muscle', 'performance', 'food', 'body'],
     healthKitType: null,
