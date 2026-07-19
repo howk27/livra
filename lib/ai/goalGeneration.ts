@@ -140,11 +140,14 @@ export const AI_ICON_EFFORT_CATEGORY: Partial<Record<ValidIcon, string>> = {
   // Those softer overlaps are left to the system prompt's prose distinctness rule.
 };
 
-/** Resolves an AI icon string to the matching MARK_LIBRARY entry (emoji, color, id). */
+/** Resolves an AI icon string to the matching MARK_LIBRARY entry (emoji, color, id, name). */
 export function resolveMarkForAIIcon(icon: string): {
   markId: string;
   emoji: string;
   color: string;
+  /** The library's canonical name (2026-07-19 founder decision: AI marks show
+   * the library name, not the model's free-text — see validateAIGoalPackage). */
+  name: string;
 } {
   const markId = AI_ICON_TO_MARK_ID[icon as ValidIcon] ?? AI_ICON_TO_MARK_ID[FALLBACK_ICON];
   const mark = MARK_LIBRARY.find((m) => m.id === markId);
@@ -154,6 +157,7 @@ export function resolveMarkForAIIcon(icon: string): {
     // QC4-M: sanctioned accents only. An unknown markId falls back to the
     // `custom` accent rather than a hardcoded hex.
     color: mark ? colorForSuggestedCounter(mark) : getCategoryColor('custom'),
+    name: mark?.name ?? 'Focus',
   };
 }
 
@@ -218,19 +222,25 @@ export function validateAIGoalPackage(raw: unknown): AIGoalPackage | null {
     });
   }
 
-  // Effort-category collapse: keep the first mark per category so one real-world
-  // activity never appears as two marks. Repaired icons are exempt — a junk icon
-  // repaired to the fallback must not knock out a genuine mark in that category.
+  // Effort-category collapse: one real-world activity never appears as two marks.
+  // Then canonicalize each mark to its library name and dedupe by library id, so
+  // AI free-text names (and any junk/emoji) never reach the UI or persistence
+  // (founder decision 2026-07-19: AI marks show the library's canonical name).
   const seenCategories = new Set<string>();
-  const distinctMarks: AIGoalMark[] = validMarks
-    .filter((m) => {
-      const category = m.__repaired ? undefined : AI_ICON_EFFORT_CATEGORY[m.icon as ValidIcon];
-      if (!category) return true;
-      if (seenCategories.has(category)) return false;
+  const seenMarkIds = new Set<string>();
+  const distinctMarks: AIGoalMark[] = [];
+  for (const m of validMarks) {
+    const category = m.__repaired ? undefined : AI_ICON_EFFORT_CATEGORY[m.icon as ValidIcon];
+    if (category) {
+      if (seenCategories.has(category)) continue;
       seenCategories.add(category);
-      return true;
-    })
-    .map(({ __repaired: _repaired, ...m }) => m);
+    }
+    const resolved = resolveMarkForAIIcon(m.icon);
+    if (seenMarkIds.has(resolved.markId)) continue;
+    seenMarkIds.add(resolved.markId);
+    const { __repaired: _repaired, ...rest } = m;
+    distinctMarks.push({ ...rest, name: resolved.name });
+  }
 
   if (distinctMarks.length === 0) return null;
 

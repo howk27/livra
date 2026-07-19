@@ -68,7 +68,7 @@ export async function createFromAIPackage(args: CreateFromAIPackageArgs): Promis
 
     try {
       const newMark = await addMark({
-        name: m.name,
+        name: libraryMark.name,
         emoji: libraryMark.emoji,
         // QC4-M: category-derived, matching every other creation path.
         color: colorForSuggestedCounter(libraryMark),

@@ -50,7 +50,9 @@ describe('validateAIGoalPackage', () => {
       marks: [{ name: '  Morning run  ', icon: 'gym', frequency: 3, why: '  Builds base  ' }],
     });
     expect(result!.goalTitle).toBe('Run a marathon');
-    expect(result!.marks[0].name).toBe('Morning run');
+    // Name is canonicalized to the library name (2026-07-19 founder decision),
+    // not the free-text AI name — trimming is still exercised via `why`.
+    expect(result!.marks[0].name).toBe('Workout');
     expect(result!.marks[0].why).toBe('Builds base');
   });
 
@@ -87,7 +89,7 @@ describe('validateAIGoalPackage', () => {
       ],
     });
     expect(result!.marks).toHaveLength(1);
-    expect(result!.marks[0].name).toBe('Valid mark');
+    expect(result!.marks[0].name).toBe('Workout');
   });
 
   test('drops mark with frequency 0 (too low)', () => {
@@ -115,7 +117,7 @@ describe('validateAIGoalPackage', () => {
       ],
     });
     expect(result!.marks).toHaveLength(1);
-    expect(result!.marks[0].name).toBe('Valid');
+    expect(result!.marks[0].name).toBe('Sleep');
   });
 
   test('accepts a 4-mark package intact (QC2-G: server suggests 3–4)', () => {
@@ -129,7 +131,7 @@ describe('validateAIGoalPackage', () => {
       ],
     });
     expect(result!.marks).toHaveLength(4);
-    expect(result!.marks.map((m) => m.name)).toEqual(['M1', 'M2', 'M3', 'M4']);
+    expect(result!.marks.map((m) => m.name)).toEqual(['Workout', 'Sleep', 'Reading', 'Water']);
   });
 
   test('accepts a 3-mark package intact', () => {
@@ -162,7 +164,7 @@ describe('validateAIGoalPackage', () => {
       ],
     });
     expect(result!.marks).toHaveLength(4);
-    expect(result!.marks.map((m) => m.name)).toEqual(['M1', 'M2', 'M3', 'M4']);
+    expect(result!.marks.map((m) => m.name)).toEqual(['Workout', 'Sleep', 'Reading', 'Water']);
   });
 
   test('returns null when no valid marks remain', () => {
@@ -222,6 +224,39 @@ describe('validateAIGoalPackage', () => {
       });
       expect(result!.marks[0].icon).toBe(icon);
     }
+  });
+});
+
+// ─── AI guardrail: canonical library names ────────────────────────────────────
+
+describe('AI guardrail: canonical library names', () => {
+  it('overwrites a junk/emoji AI name with the library canonical name', () => {
+    const pkg = validateAIGoalPackage({
+      goalTitle: 'Run a 10k',
+      timeframeWeeks: 12,
+      confidence: 'high',
+      marks: [{ name: '🏃 morning jog!!!', icon: 'run', frequency: 3, why: 'Builds your base.' }],
+    });
+    expect(pkg).not.toBeNull();
+    expect(pkg!.marks[0].name).toBe('Run');
+  });
+
+  it('dedupes two AI marks that resolve to the same library mark', () => {
+    const pkg = validateAIGoalPackage({
+      goalTitle: 'Run a 10k',
+      timeframeWeeks: 12,
+      confidence: 'high',
+      marks: [
+        { name: 'Morning run', icon: 'run', frequency: 3, why: 'Base miles.' },
+        { name: 'Evening run', icon: 'run', frequency: 2, why: 'More miles.' },
+      ],
+    });
+    expect(pkg!.marks).toHaveLength(1);
+    expect(pkg!.marks[0].name).toBe('Run');
+  });
+
+  it('resolveMarkForAIIcon returns the library name', () => {
+    expect(resolveMarkForAIIcon('gym').name).toBe('Workout');
   });
 });
 

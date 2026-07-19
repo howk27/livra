@@ -133,11 +133,14 @@ describe('createFromAIPackage — confirm path', () => {
     });
 
     expect(mockAddMark).toHaveBeenCalledTimes(2);
+    // Name is canonicalized to the library name (2026-07-19 founder decision):
+    // 'Morning run' (icon: gym) persists as 'Workout', 'Rest day' (icon: rest)
+    // persists as 'Rest Day' — not the AI's free-text names.
     expect(mockAddMark).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'Morning run', weekly_target: 4, goal_id: 'goal-1' }),
+      expect.objectContaining({ name: 'Workout', weekly_target: 4, goal_id: 'goal-1' }),
     );
     expect(mockAddMark).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'Rest day', weekly_target: 2, goal_id: 'goal-1' }),
+      expect.objectContaining({ name: 'Rest Day', weekly_target: 2, goal_id: 'goal-1' }),
     );
     expect(mockLinkMarkToGoal).toHaveBeenCalledTimes(2);
   });
@@ -153,7 +156,7 @@ describe('createFromAIPackage — confirm path', () => {
     });
 
     expect(mockAddMark).toHaveBeenCalledTimes(1);
-    expect(mockAddMark).toHaveBeenCalledWith(expect.objectContaining({ name: 'Morning run' }));
+    expect(mockAddMark).toHaveBeenCalledWith(expect.objectContaining({ name: 'Workout' }));
   });
 
   test('writes the goal package cache keyed by the raw goal text, not the edited title', async () => {
