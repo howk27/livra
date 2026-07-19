@@ -28,6 +28,8 @@ import {
   type AIGoalPackage,
   type AIGoalMark,
 } from '../../lib/ai/goalGeneration';
+import { applyOpacity } from '../../src/components/icons/color';
+import { MARK_LIBRARY_BY_ID } from '../../lib/suggestedCounters';
 
 export type GoalPackageReviewSelection = {
   /** Edited (or original) goal title, trimmed; falls back to the package title. */
@@ -141,6 +143,7 @@ export function GoalPackageReview({
             {pkg.marks.map((m, i) => {
               const isSelected = selected.has(i);
               const resolved = resolveMarkForAIIcon(m.icon);
+              const MarkIcon = MARK_LIBRARY_BY_ID[resolved.markId]?.icon;
               return (
                 <TouchableOpacity
                   key={i}
@@ -164,7 +167,9 @@ export function GoalPackageReview({
                     });
                   }}
                 >
-                  <Text style={styles.markEmoji}>{resolved.emoji}</Text>
+                  <View style={[styles.markIconTile, { backgroundColor: applyOpacity(resolved.color, 0.12) }]}>
+                    {MarkIcon ? <MarkIcon size={18} color={resolved.color} weight="duotone" /> : null}
+                  </View>
                   <View style={styles.markInfo}>
                     <Text style={[styles.markName, { color: isSelected ? c.inkDark : c.inkMuted }]}>
                       {m.name} · {m.frequency}×/wk
@@ -278,9 +283,12 @@ const styles = StyleSheet.create({
   markRowDeselected: {
     opacity: 0.45,
   },
-  markEmoji: {
-    fontSize: fontSize.display,
-    lineHeight: 28,
+  markIconTile: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   markInfo: {
     flex: 1,

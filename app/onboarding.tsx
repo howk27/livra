@@ -24,6 +24,8 @@ import { useGoalsStore } from '../state/goalsSlice';
 import { useMarksStore } from '../state/countersSlice';
 import { useAuth } from '../hooks/useAuth';
 import { MARK_LIBRARY } from '../lib/suggestedCounters';
+import { applyOpacity } from '../src/components/icons/color';
+import { resolveMarkAccent, resolveMarkIcon } from '../lib/markCategoryResolve';
 import { colorForSuggestedCounter } from '../lib/markCategory';
 import { defaultDailyTargetForMarkId } from '../lib/markQuantitative';
 import { getMarksForCommitment, CommitmentMarkSelection } from '../lib/onboarding/commitmentEngine';
@@ -468,6 +470,8 @@ export default function OnboardingScreen() {
         <View style={styles.marksList}>
           {marksForScreen.map(({ mark, weeklyTarget }) => {
             const selected = marksSelected.has(mark.id);
+            const MarkIcon = resolveMarkIcon(mark) ?? mark.icon;
+            const accent = resolveMarkAccent(mark);
             return (
               <TouchableOpacity
                 key={mark.id}
@@ -485,7 +489,9 @@ export default function OnboardingScreen() {
                   });
                 }}
               >
-                <Text style={styles.markEmoji}>{mark.emoji}</Text>
+                <View style={[styles.markIconTile, { backgroundColor: applyOpacity(accent, 0.12) }]}>
+                  {MarkIcon ? <MarkIcon size={18} color={accent} weight="duotone" /> : null}
+                </View>
                 <View style={styles.markInfo}>
                   <Text style={[styles.markName, !selected && { color: c.inkMuted }]}>
                     {mark.name}
@@ -684,9 +690,12 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     markRowDeselected: {
       opacity: 0.45,
     },
-    markEmoji: {
-      fontSize: fontSize.display,
-      lineHeight: 28,
+    markIconTile: {
+      width: 40,
+      height: 40,
+      borderRadius: radius.md,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     markInfo: {
       flex: 1,
