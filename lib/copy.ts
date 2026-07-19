@@ -87,7 +87,7 @@ export function getMomentumBannerCopy(lastTemplate?: string): MomentumCopy {
 
 export const TERMS = {
   goal: "A goal is something you're working toward. Pick one or two that matter and give them the time.",
-  mark: "A mark is one action you'll repeat toward your goal. Small, yours. Log it each time you show up.",
+  mark: "A mark is one small action you repeat toward your goal. You log it each time you do it.",
   momentum: "Momentum is how your effort adds up over time. Miss a day and it bends, it does not break.",
   dailyHabit: "A daily habit is a mark you keep on its own, not tied to any goal.",
 } as const;

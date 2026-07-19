@@ -13,4 +13,13 @@ describe('TERMS canonical definitions', () => {
       expect(TERMS[key]).not.toMatch(/[—–]/);
     }
   });
+
+  it('mark definition names the action and the log moment, without vague filler', () => {
+    // Concrete, not vague: mentions repeating an action and logging it, and drops
+    // the vague "show up" the current copy uses.
+    expect(TERMS.mark.toLowerCase()).toMatch(/repeat/);
+    expect(TERMS.mark.toLowerCase()).toMatch(/log/);
+    expect(TERMS.mark.toLowerCase()).not.toMatch(/show up/);
+    expect(TERMS.mark).not.toMatch(/ - /);
+  });
 });
