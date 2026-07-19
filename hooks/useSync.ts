@@ -365,8 +365,13 @@ export const useSync = () => {
     const lastPulledAt = await readPullCursor();
 
     try {
+      // goal_id (marks.goal_id, migration 20260609) MUST be pulled: it is the
+      // durable survivor goalsReconcile rebuilds goal_mark_links from after a
+      // reinstall. Omitting it here is exactly why the reinstall link-heal never
+      // worked — marks came back with a null goal_id, so the reconcile had no
+      // source (founder device QC, delete+reinstall shows goals with no marks).
       const counterSelect =
-        'id, user_id, name, emoji, color, unit, enable_streak, sort_index, total, last_activity_date, deleted_at, created_at, updated_at';
+        'id, user_id, name, emoji, color, unit, enable_streak, sort_index, total, last_activity_date, deleted_at, created_at, updated_at, goal_id';
 
       let remoteCounterRows: any[] = [];
 
@@ -1021,6 +1026,10 @@ export const useSync = () => {
             updated_at: c.updated_at,
             deleted_at: isDeleted ? (c.deleted_at || new Date().toISOString()) : null,
             dailyTarget: normalizeDailyTargetInput((c as Counter & { dailyTarget?: number | null }).dailyTarget),
+            // Push goal_id so the mark→goal link survives a reinstall (the
+            // server column has existed since 20260609 but was never sent, so
+            // it was always NULL — see counterSelect above).
+            goal_id: (c as Counter & { goal_id?: string | null }).goal_id ?? null,
           };
         });
         
@@ -1986,8 +1995,8 @@ const mergeCounter = async (counter: Counter, existingCountersMap?: Map<string, 
     await execute(
       `INSERT INTO lc_counters (
         id, user_id, name, emoji, color, unit, enable_streak,
-        sort_index, total, last_activity_date, deleted_at, created_at, updated_at, dailyTarget
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        sort_index, total, last_activity_date, deleted_at, created_at, updated_at, dailyTarget, goal_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         counter.id,
         counter.user_id,
@@ -2003,6 +2012,7 @@ const mergeCounter = async (counter: Counter, existingCountersMap?: Map<string, 
         counter.created_at,
         counter.updated_at,
         normalizeDailyTargetInput((counter as any).dailyTarget),
+        (counter as any).goal_id ?? null,
       ]
     );
     return true; // Counter was inserted
@@ -2109,9 +2119,9 @@ const mergeCounter = async (counter: Counter, existingCountersMap?: Map<string, 
           : resolveDailyTarget(existing as Counter);
 
       await execute(
-        `UPDATE lc_counters SET 
+        `UPDATE lc_counters SET
           name = ?, emoji = ?, color = ?, unit = ?, enable_streak = ?,
-          sort_index = ?, total = ?, last_activity_date = ?, deleted_at = ?, dailyTarget = ?, updated_at = ?
+          sort_index = ?, total = ?, last_activity_date = ?, deleted_at = ?, dailyTarget = ?, goal_id = ?, updated_at = ?
         WHERE id = ?`,
         [
           counter.name,
@@ -2124,6 +2134,9 @@ const mergeCounter = async (counter: Counter, existingCountersMap?: Map<string, 
           counter.last_activity_date,
           counter.deleted_at,
           preservedDaily,
+          // This branch runs only when remote is the newer write, so LWW says
+          // take the remote goal_id (link/unlink/graduate all bump updated_at).
+          (counter as any).goal_id ?? null,
           counter.updated_at,
           counter.id,
         ]

@@ -63,7 +63,6 @@ import { confirm } from '../../components/ui/overlays';
 import { CATEGORY_MAP } from '../../components/ui/MarkRow';
 import { GoalTitle } from '../../components/ui/GoalTitle';
 import { ProgressArc } from '../../components/ui/ProgressArc';
-import { RingIconFill } from '../../components/ui/RingIconFill';
 import { VoiceLine } from '../../components/ui/VoiceLine';
 import {
   currentWeekDates,
@@ -104,17 +103,15 @@ type GoalEvents = Parameters<typeof buildWeeklyCountsMap>[1];
 
 /** Hero ring + centered category icon + check-in story (QC3-E "the ring is a
  *  star"). The ring stroke is the sanctioned `progressGradient` (amber→ember);
- *  the category icon sits centered INSIDE the ring and fills bottom-to-top in
- *  the deeper amber as the arc sweeps, so ring and icon are one warming gesture.
+ *  the category icon sits centered INSIDE the ring in the same warm accent, so
+ *  ring and icon read as one warming gesture. Progress is carried by the arc
+ *  sweep and the "N of M check-ins" story (see the render for why the icon is a
+ *  static glyph rather than a bottom→top fill).
  *
- *  Owns its entrance motion — all three fire once per screen open (goal detail
- *  is pushed per open), never on re-render: the arc sweeps from ProgressArc
- *  mounting at from=0, the icon fill from `fillFrac` (0 → final fraction), the
- *  story from `storyOpacity`. Reduced motion lands each at its final value via
- *  useMotion's reduced-safe `timing` (duration 0). The icon fill lives in
- *  <RingIconFill>: a native react-native-svg `<ClipPath>` + animated `<Rect>`
- *  clips the amber glyph bottom→top (RN `overflow:'hidden'` does not reliably
- *  clip SVG on iOS — the reason the old copy never filled). */
+ *  Owns its entrance motion — the arc sweeps from ProgressArc mounting at
+ *  from=0 and the story fades via `storyOpacity`, once per screen open (goal
+ *  detail is pushed per open), never on re-render. Reduced motion lands each at
+ *  its final value via useMotion's reduced-safe `timing` (duration 0). */
 function RingHero({
   c,
   progress,
@@ -141,10 +138,20 @@ function RingHero({
 
   // The centered icon: the goal's own dominant-mark glyph, category/custom
   // fallback for empty goals — same resolution the medallion used before it
-  // moved into the ring. Base = faint inkMuted, fill = deeper amber (the ember
-  // stop of progressGradient) so it reads as the same warmth as the arc.
-  const heroIcon = (heroMark ? resolveMarkIcon(heroMark) : null) ?? fallbackIcon;
-  const fillColor = c.progressGradient[1];
+  // moved into the ring.
+  //
+  // Rendering: a SOLID glyph in the ring's warm accent (the ember stop of
+  // progressGradient), always fully visible. Progress is carried by the arc
+  // sweep + the "N of M check-ins" story below. This replaces an animated
+  // bottom→top glyph fill that failed device QA three times on this old-arch
+  // stack (RN overflow-clip, then a nested react-native-svg <ClipPath> around
+  // the Phosphor icon — a Phosphor icon is its own <Svg> root, and nesting it
+  // inside another <Svg>'s clipped <G> does not render on iOS). The animated
+  // fill needs a real mask primitive (@react-native-masked-view/masked-view);
+  // RingIconFill.tsx is kept for that future restore. Static-but-visible beats
+  // fancy-but-blank.
+  const HeroIcon = (heroMark ? resolveMarkIcon(heroMark) : null) ?? fallbackIcon;
+  const iconColor = c.progressGradient[1];
 
   return (
     <View style={styles.ringHero}>
@@ -160,14 +167,7 @@ function RingHero({
           gradientId="goalRingGradient"
         />
         <View style={styles.ringIconBox} pointerEvents="none">
-          <RingIconFill
-            icon={heroIcon}
-            size={RING_ICON_SIZE}
-            baseColor={c.inkMuted}
-            fillColor={fillColor}
-            frac={frac}
-            clipId="goalRingIconFillClip"
-          />
+          <HeroIcon size={RING_ICON_SIZE} color={iconColor} weight="duotone" />
         </View>
       </View>
       <Animated.View style={[styles.progressStory, storyStyle]}>

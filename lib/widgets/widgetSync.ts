@@ -57,6 +57,18 @@ export async function syncWidgetData(): Promise<void> {
     const SharedGroupPreferences = require('react-native-shared-group-preferences').default;
     const data = await buildWidgetData();
     await SharedGroupPreferences.setItem(WIDGET_DATA_KEY, JSON.stringify(data), APP_GROUP_ID);
+    // Nudge WidgetKit to rebuild the timeline NOW. Without this the widget only
+    // refreshes on its own ≤30-min schedule (getTimeline policy) — and on a
+    // fresh install it sits on `.placeholder` until iOS first decides to load
+    // it, which reads on-device as "the widget never loads". `reloadWidget`
+    // targets the Swift widget `kind` ("LivraWidget") and is a safe no-op when
+    // the native module isn't present, so it can never regress the data write.
+    try {
+      const { ExtensionStorage } = require('@bacons/apple-targets');
+      ExtensionStorage.reloadWidget('LivraWidget');
+    } catch {
+      // Best-effort reload; the data above was still written.
+    }
   } catch {
     // Widget sync is non-critical — never propagate errors
   }

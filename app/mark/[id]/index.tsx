@@ -320,34 +320,6 @@ function MarkDetailContent() {
       });
   };
 
-  const handleReset = async () => {
-    if (!id || !user?.id || todayCount === 0 || !counter) return;
-    const ok = await confirm({
-      title: "Reset today's progress",
-      message: `Remove today's ${todayCount} log${todayCount === 1 ? '' : 's'} for "${counter.name}"?`,
-      confirmLabel: 'Reset',
-      cancelLabel: 'Cancel',
-      destructive: true,
-    });
-    if (!ok) return;
-    try {
-      const freshEvents = useEventsStore.getState().events;
-      const todayIncrements = freshEvents.filter(
-        (e) =>
-          e.mark_id === id &&
-          e.event_type === 'increment' &&
-          e.occurred_local_date === todayStr &&
-          !e.deleted_at,
-      );
-      for (const event of todayIncrements) {
-        await useEventsStore.getState().deleteEvent(event.id);
-      }
-    } catch (error) {
-      logger.error('reset today failed:', error);
-      showError('Could not reset progress for today');
-    }
-  };
-
   const handleDeleteMark = async () => {
     if (!id) return;
     const first = await confirm({
@@ -536,10 +508,6 @@ function MarkDetailContent() {
             <View style={styles.secondaryRow}>
               <TouchableOpacity onPress={handleDecrement} hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }} style={styles.secondaryBtn}>
                 <Text style={styles.secondaryText}>Undo</Text>
-              </TouchableOpacity>
-              <View style={styles.secondarySep} />
-              <TouchableOpacity onPress={handleReset} hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }} style={styles.secondaryBtn}>
-                <Text style={styles.secondaryText}>Reset today</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -838,11 +806,6 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     fontSize: fontSize[13],
     fontFamily: fonts.sansMedium,
     color: c.inkMuted,
-  },
-  secondarySep: {
-    width: 1,
-    height: 14,
-    backgroundColor: c.borderMid,
   },
 
   // Done for week

@@ -24,14 +24,31 @@ export function resolveInitialDisplayName(
 }
 
 /**
+ * Apple "Hide My Email" hands us a relay address whose local part is an opaque
+ * token (e.g. a1b2c3d4@privaterelay.appleid.com) — it is not a name and must
+ * never surface as one. Such users are treated as name-less: the greeting drops
+ * the {name} slot gracefully, and they can set a real name in Settings.
+ */
+function isPrivateRelayEmail(email?: string | null): boolean {
+  return (
+    typeof email === 'string' &&
+    email.trim().toLowerCase().endsWith('@privaterelay.appleid.com')
+  );
+}
+
+/**
  * First name for voice/greeting {name} slots (PL-4): first word of the
  * resolved display name, falling back to the email prefix. Null when no name
- * exists anywhere — the moment engine drops the slot gracefully.
+ * exists anywhere — the moment engine drops the slot gracefully. Apple
+ * hide-my-email relay tokens are never used as a name.
  */
 export function resolveFirstName(
   userMetadata: Record<string, unknown> | null | undefined,
   email?: string | null
 ): string | null {
-  const full = resolveInitialDisplayName(null, userMetadata) || email?.split('@')[0] || '';
-  return full.split(' ')[0] || null;
+  const named = resolveInitialDisplayName(null, userMetadata);
+  if (named) return named.split(' ')[0] || null;
+  if (isPrivateRelayEmail(email)) return null;
+  const prefix = email?.split('@')[0] || '';
+  return prefix.split(' ')[0] || null;
 }

@@ -33,11 +33,17 @@ interface UIState {
   /** Batch 2 (founder 2026-07-18): the Focus "Daily habits" section is OPEN by
    *  default and only hides when the user says so — remembered locally. */
   dailyHabitsOpen: boolean;
+  /** User connected Apple Health from Integrations. iOS never reports HealthKit
+   *  grant state (see healthPermissions.hasPermissions), so we remember the
+   *  user's own connect action to drive the Integrations badge. Device-level,
+   *  not per-account. */
+  healthConnected: boolean;
 
   // Actions
   setThemeMode: (mode: ThemeMode) => Promise<void>;
   setAccentColor: (color: AccentColor) => Promise<void>;
   setDailyHabitsOpen: (open: boolean) => Promise<void>;
+  setHealthConnected: (connected: boolean) => Promise<void>;
   setSortBy: (sort: SortOption) => void;
   setSearchQuery: (query: string) => void;
   /** Returns false if logged-in cloud update failed (local completion still applied). */
@@ -59,6 +65,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   isOnboarded: false,
   uiStateLoaded: false,
   dailyHabitsOpen: true,
+  healthConnected: false,
 
   setThemeMode: async (mode) => {
     set({ themeMode: mode });
@@ -68,6 +75,11 @@ export const useUIStore = create<UIState>((set, get) => ({
   setDailyHabitsOpen: async (open) => {
     set({ dailyHabitsOpen: open });
     await AsyncStorage.setItem('daily_habits_open', open ? 'true' : 'false');
+  },
+
+  setHealthConnected: async (connected) => {
+    set({ healthConnected: connected });
+    await AsyncStorage.setItem('health_connected', connected ? 'true' : 'false');
   },
 
   setAccentColor: async (color) => {
@@ -162,15 +174,17 @@ export const useUIStore = create<UIState>((set, get) => ({
   loadUIState: async (userId?: string) => {
     const tokenAtStart = onboardingResetToken;
     const supabase = getSupabaseClient();
-    const [themeMode, accentColor, completedModern, completedLegacy, dailyHabitsStored] = await Promise.all([
+    const [themeMode, accentColor, completedModern, completedLegacy, dailyHabitsStored, healthConnectedStored] = await Promise.all([
       AsyncStorage.getItem('theme_mode'),
       AsyncStorage.getItem('accent_color'),
       AsyncStorage.getItem(ONBOARDING_COMPLETED_STORAGE_KEY),
       AsyncStorage.getItem(ONBOARDING_COMPLETED_LEGACY_KEY),
       AsyncStorage.getItem('daily_habits_open'),
+      AsyncStorage.getItem('health_connected'),
     ]);
     // Open unless the user explicitly hid it (founder: always open by default).
     const dailyHabitsOpen = dailyHabitsStored !== 'false';
+    const healthConnected = healthConnectedStored === 'true';
 
     let isOnboarded = completedModern === 'true' || completedLegacy === 'true';
     
@@ -261,6 +275,7 @@ export const useUIStore = create<UIState>((set, get) => ({
         themeMode: (themeMode as ThemeMode) || 'system',
         accentColor: (accentColor as AccentColor) || 'blue',
         dailyHabitsOpen,
+        healthConnected,
         uiStateLoaded: true,
       });
       return;
@@ -271,6 +286,7 @@ export const useUIStore = create<UIState>((set, get) => ({
       accentColor: (accentColor as AccentColor) || 'blue',
       isOnboarded,
       dailyHabitsOpen,
+      healthConnected,
       uiStateLoaded: true,
     });
   },
