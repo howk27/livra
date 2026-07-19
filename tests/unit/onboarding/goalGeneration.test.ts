@@ -30,7 +30,7 @@ describe('validateAIGoalPackage', () => {
     confidence: 'high',
     marks: [
       { name: 'Morning run', icon: 'gym', frequency: 4, why: 'Builds endurance' },
-      { name: 'Stretching', icon: 'rest', frequency: 3, why: 'Prevents injury' },
+      { name: 'Stretching', icon: 'stretch', frequency: 3, why: 'Prevents injury' },
     ],
   };
 
@@ -382,9 +382,10 @@ describe('VALID_ICONS client/server drift guard', () => {
     expect(readServerValidIcons()).toEqual([...VALID_ICONS]);
   });
 
-  test('client list contains exactly 29 icons with no duplicates', () => {
-    expect(VALID_ICONS).toHaveLength(29);
-    expect(new Set(VALID_ICONS).size).toBe(29);
+  test('client list contains exactly 40 icons with no duplicates', () => {
+    // 38 surviving library ids + 2 legacy aliases (gym, tasks). Prune 2026-07-19.
+    expect(VALID_ICONS).toHaveLength(40);
+    expect(new Set(VALID_ICONS).size).toBe(40);
   });
 });
 

@@ -54,7 +54,7 @@ const SAMPLE_PACKAGE: AIGoalPackage = {
   confidence: 'high',
   marks: [
     { name: 'Morning run', icon: 'gym', frequency: 4, why: 'Builds endurance over time' },
-    { name: 'Rest day', icon: 'rest', frequency: 2, why: 'Prevents overtraining' },
+    { name: 'Mobility', icon: 'stretch', frequency: 2, why: 'Prevents overtraining' },
   ],
 };
 
@@ -134,13 +134,13 @@ describe('createFromAIPackage — confirm path', () => {
 
     expect(mockAddMark).toHaveBeenCalledTimes(2);
     // Name is canonicalized to the library name (2026-07-19 founder decision):
-    // 'Morning run' (icon: gym) persists as 'Workout', 'Rest day' (icon: rest)
-    // persists as 'Rest Day' — not the AI's free-text names.
+    // 'Morning run' (icon: gym) persists as 'Workout', 'Mobility' (icon: stretch)
+    // persists as 'Stretch' — not the AI's free-text names.
     expect(mockAddMark).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'Workout', weekly_target: 4, goal_id: 'goal-1' }),
     );
     expect(mockAddMark).toHaveBeenCalledWith(
-      expect.objectContaining({ name: 'Rest Day', weekly_target: 2, goal_id: 'goal-1' }),
+      expect.objectContaining({ name: 'Stretch', weekly_target: 2, goal_id: 'goal-1' }),
     );
     expect(mockLinkMarkToGoal).toHaveBeenCalledTimes(2);
   });

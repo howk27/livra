@@ -1,14 +1,14 @@
 import {
   MoonStarsIcon, BarbellIcon, FootprintsIcon, PersonSimpleRunIcon,
   PersonSimpleIcon, WavesIcon, BicycleIcon, DropIcon, ForkKnifeIcon,
-  PillIcon, ProhibitIcon, FireIcon, BrainIcon, NotePencilIcon,
-  HandHeartIcon, WindIcon, ChatCenteredTextIcon, TargetIcon,
-  CalendarCheckIcon, BookOpenTextIcon, MetronomeIcon, PhoneSlashIcon,
+  ProhibitIcon, FireIcon, BrainIcon, NotePencilIcon,
+  HandHeartIcon, WindIcon, TargetIcon,
+  CalendarCheckIcon, BookOpenTextIcon, MetronomeIcon,
   HourglassIcon, GraduationCapIcon, WalletIcon, PiggyBankIcon,
-  TrendUpIcon, BriefcaseIcon, ShowerIcon, SunHorizonIcon,
+  TrendUpIcon, BriefcaseIcon, ShowerIcon,
   CakeIcon, MonitorIcon, CookingPotIcon, UsersThreeIcon,
   HouseIcon, HandshakeIcon, HeartIcon, PaintBrushIcon,
-  ArrowsVerticalIcon, CurrencyCircleDollarIcon, BedIcon,
+  CurrencyCircleDollarIcon,
   PenNibIcon, GlobeSimpleIcon, BowlFoodIcon,
 } from 'phosphor-react-native';
 
@@ -54,14 +54,6 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     tags: ['flexibility', 'mobility', 'recovery', 'injury', 'yoga', 'marathon', 'run', 'athlete', 'posture', 'soreness', 'tightness'],
     healthKitType: null,
     frequency_min: 3, frequency_recommended: 5, frequency_max: 7, frequencyKind: 'variable',
-  },
-  {
-    id: 'rest', name: 'Rest Day', icon: BedIcon, emoji: '😴',
-    description: 'Days you deliberately take off from training so your body can recover.',
-    color: '#7B9EA6', unit: 'days', category: 'Recovery',
-    tags: ['recovery', 'overtraining', 'burnout', 'athlete', 'marathon', 'fatigue', 'rest', 'balance'],
-    healthKitType: null,
-    frequency_min: 1, frequency_recommended: 2, frequency_max: 3, frequencyKind: 'variable',
   },
 
   // FITNESS
@@ -124,14 +116,6 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     frequency_min: 3, frequency_recommended: 5, frequency_max: 7, frequencyKind: 'variable',
   },
   {
-    id: 'vitamins', name: 'Vitamins', icon: PillIcon, emoji: '💊',
-    description: 'Days you take the supplements you planned to take.',
-    color: '#6B9E8A', unit: 'days', category: 'Health',
-    tags: ['vitamins', 'supplements', 'health', 'immunity', 'wellness', 'energy', 'nutrition', 'deficiency'],
-    healthKitType: null,
-    frequency_min: 5, frequency_recommended: 7, frequency_max: 7, frequencyKind: 'variable',
-  },
-  {
     id: 'calories', name: 'Calories', icon: FireIcon, emoji: '🔥',
     description: 'Days you stay inside the calorie range you set.',
     color: '#6B9E8A', unit: 'items', category: 'Health',
@@ -189,14 +173,6 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     healthKitType: null,
     frequency_min: 3, frequency_recommended: 5, frequency_max: 7, frequencyKind: 'variable',
   },
-  {
-    id: 'affirmations', name: 'Affirmations', icon: ChatCenteredTextIcon, emoji: '💬',
-    description: 'Each time you say or write your affirmations.',
-    color: '#8A6B7B', unit: 'sessions', category: 'Mindset',
-    tags: ['affirmations', 'confidence', 'mindset', 'self esteem', 'positivity', 'motivation', 'identity', 'belief'],
-    healthKitType: null,
-    frequency_min: 3, frequency_recommended: 5, frequency_max: 7, frequencyKind: 'variable',
-  },
 
   // DEEP WORK
   {
@@ -246,14 +222,6 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     tags: ['deep work', 'focus', 'productivity', 'distraction', 'startup', 'career', 'writing', 'coding', 'flow state', 'output'],
     healthKitType: null,
     frequency_min: 3, frequency_recommended: 4, frequency_max: 6, frequencyKind: 'variable',
-  },
-  {
-    id: 'no-phone', name: 'No Phone', icon: PhoneSlashIcon, emoji: '📵',
-    description: 'Days you keep to the phone limits you set for yourself.',
-    color: '#8A9E8A', unit: 'days', category: 'Deep Work',
-    tags: ['phone', 'screen time', 'distraction', 'focus', 'productivity', 'social media', 'addiction', 'dopamine', 'presence'],
-    healthKitType: null,
-    frequency_min: 7, frequency_recommended: 7, frequency_max: 7, frequencyKind: 'abstinence',
   },
   {
     id: 'writing', name: 'Writing', icon: PenNibIcon, emoji: '✍️',
@@ -324,14 +292,6 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     frequency_min: 3, frequency_recommended: 5, frequency_max: 7, frequencyKind: 'variable',
   },
   {
-    id: 'wake-early', name: 'Wake Early', icon: SunHorizonIcon, emoji: '🌅',
-    description: 'Days you get up at the time you set.',
-    color: '#9E8A6B', unit: 'days', category: 'Discipline',
-    tags: ['wake early', 'morning routine', '5am', 'discipline', 'productivity', 'sleep schedule', 'routine', 'schedule'],
-    healthKitType: null,
-    frequency_min: 5, frequency_recommended: 7, frequency_max: 7, frequencyKind: 'variable',
-  },
-  {
     id: 'no-sugar', name: 'No Sugar', icon: CakeIcon, emoji: '🚫',
     description: 'Days you go without added sugar.',
     color: '#6B9E8A', unit: 'days', category: 'Discipline',
@@ -354,14 +314,6 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     tags: ['cooking', 'meal prep', 'nutrition', 'diet', 'health', 'money', 'food', 'eating out', 'skills', 'discipline'],
     healthKitType: null,
     frequency_min: 2, frequency_recommended: 3, frequency_max: 5, frequencyKind: 'variable',
-  },
-  {
-    id: 'posture', name: 'Posture', icon: ArrowsVerticalIcon, emoji: '🧍',
-    description: 'Days you caught your posture slipping and straightened up.',
-    color: '#8A7E6B', unit: 'days', category: 'Discipline',
-    tags: ['posture', 'back pain', 'ergonomics', 'health', 'desk', 'alignment', 'neck', 'spine', 'sitting'],
-    healthKitType: null,
-    frequency_min: 3, frequency_recommended: 5, frequency_max: 7, frequencyKind: 'variable',
   },
 
   // RELATIONSHIPS

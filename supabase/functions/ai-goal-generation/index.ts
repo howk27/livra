@@ -23,12 +23,23 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 // ─── Constants (kept in sync with lib/ai/goalGeneration.ts) ────────────────────
 
+// Prune 2026-07-19 (founder decision): mirrors lib/ai/goalGeneration.ts exactly.
+// Covers every surviving library mark (38 ids) plus two legacy aliases
+// (gym, tasks). Kept byte-identical to the client list — a drift guard test
+// (tests/unit/onboarding/goalGeneration.test.ts) parses this array and fails CI
+// if the two lists diverge.
 const VALID_ICONS = [
-  'gym', 'sleep', 'reading', 'meditation', 'water', 'study',
-  'focus', 'tasks', 'planning', 'language', 'rest', 'steps',
-  'calories', 'gratitude', 'journaling', 'run', 'stretch', 'nutrition',
-  'meal-prep', 'breathwork', 'wake-early', 'no-alcohol', 'screen-time',
-  'finance', 'saving', 'socialize', 'family', 'creative', 'writing',
+  // 38 surviving library ids (identity mapping)
+  'sleep', 'stretch', 'workout', 'steps', 'run', 'swim', 'cycling',
+  'water', 'nutrition', 'calories', 'no-alcohol', 'meal-prep',
+  'meditation', 'journaling', 'gratitude', 'breathwork',
+  'focus', 'planning', 'reading', 'practice', 'study', 'deep-work',
+  'writing', 'language',
+  'finance', 'saving', 'no-spend', 'invest', 'side-hustle',
+  'cold-shower', 'no-sugar', 'screen-time', 'cooking',
+  'socialize', 'family', 'networking', 'volunteer', 'creative',
+  // legacy aliases (cache/back-compat)
+  'gym', 'tasks',
 ] as const;
 const FALLBACK_ICON = 'focus';
 

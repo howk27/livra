@@ -171,7 +171,7 @@ const SAMPLE_PACKAGE = {
   confidence: 'high' as const,
   marks: [
     { name: 'Morning run', icon: 'gym', frequency: 4, why: 'Builds endurance over time' },
-    { name: 'Rest day', icon: 'rest', frequency: 2, why: 'Prevents overtraining' },
+    { name: 'Mobility', icon: 'stretch', frequency: 2, why: 'Prevents overtraining' },
   ],
 };
 

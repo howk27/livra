@@ -70,49 +70,73 @@ export type GenerationFailReason =
  * These map to entries in MARK_LIBRARY via AI_ICON_TO_MARK_ID.
  * Mirrors the same list in the Edge Function system prompt.
  */
+// Prune 2026-07-19 (founder decision): VALID_ICONS now covers EVERY surviving
+// library mark (38 ids, identity-mapped) — no more subset. Two legacy aliases
+// (`gym`, `tasks`) are kept so cached packages and the model's older vocabulary
+// still resolve; they map to `workout`/`planning`. The 6 hollow marks
+// (wake-early, posture, affirmations, no-phone, vitamins, rest) are gone.
 export const VALID_ICONS = [
-  'gym', 'sleep', 'reading', 'meditation', 'water', 'study',
-  'focus', 'tasks', 'planning', 'language', 'rest', 'steps',
-  'calories', 'gratitude', 'journaling', 'run', 'stretch', 'nutrition',
-  'meal-prep', 'breathwork', 'wake-early', 'no-alcohol', 'screen-time',
-  'finance', 'saving', 'socialize', 'family', 'creative', 'writing',
+  // 38 surviving library ids (identity mapping)
+  'sleep', 'stretch', 'workout', 'steps', 'run', 'swim', 'cycling',
+  'water', 'nutrition', 'calories', 'no-alcohol', 'meal-prep',
+  'meditation', 'journaling', 'gratitude', 'breathwork',
+  'focus', 'planning', 'reading', 'practice', 'study', 'deep-work',
+  'writing', 'language',
+  'finance', 'saving', 'no-spend', 'invest', 'side-hustle',
+  'cold-shower', 'no-sugar', 'screen-time', 'cooking',
+  'socialize', 'family', 'networking', 'volunteer', 'creative',
+  // legacy aliases (cache/back-compat)
+  'gym', 'tasks',
 ] as const;
 
 export type ValidIcon = typeof VALID_ICONS[number];
 
 const FALLBACK_ICON: ValidIcon = 'focus';
 
-/** Maps each AI icon key to the closest MARK_LIBRARY id. */
+/** Maps each AI icon key to the closest MARK_LIBRARY id. Identity for the 38
+ * survivors; `gym`/`tasks` are legacy aliases onto `workout`/`planning`. */
 export const AI_ICON_TO_MARK_ID: Record<ValidIcon, string> = {
-  gym:        'workout',
-  sleep:      'sleep',
-  reading:    'reading',
-  meditation: 'meditation',
-  water:      'water',
-  study:      'study',
-  focus:      'focus',
-  tasks:      'planning',
-  planning:   'planning',
-  language:   'language',
-  rest:       'rest',
-  steps:      'steps',
-  calories:   'calories',
-  gratitude:  'gratitude',
-  journaling: 'journaling',
-  run:           'run',
+  sleep:         'sleep',
   stretch:       'stretch',
+  workout:       'workout',
+  steps:         'steps',
+  run:           'run',
+  swim:          'swim',
+  cycling:       'cycling',
+  water:         'water',
   nutrition:     'nutrition',
-  'meal-prep':   'meal-prep',
-  breathwork:    'breathwork',
-  'wake-early':  'wake-early',
+  calories:      'calories',
   'no-alcohol':  'no-alcohol',
-  'screen-time': 'screen-time',
+  'meal-prep':   'meal-prep',
+  meditation:    'meditation',
+  journaling:    'journaling',
+  gratitude:     'gratitude',
+  breathwork:    'breathwork',
+  focus:         'focus',
+  planning:      'planning',
+  reading:       'reading',
+  practice:      'practice',
+  study:         'study',
+  'deep-work':   'deep-work',
+  writing:       'writing',
+  language:      'language',
   finance:       'finance',
   saving:        'saving',
+  'no-spend':    'no-spend',
+  invest:        'invest',
+  'side-hustle': 'side-hustle',
+  'cold-shower': 'cold-shower',
+  'no-sugar':    'no-sugar',
+  'screen-time': 'screen-time',
+  cooking:       'cooking',
   socialize:     'socialize',
   family:        'family',
+  networking:    'networking',
+  volunteer:     'volunteer',
   creative:      'creative',
-  writing:       'writing',
+  // legacy aliases
+  gym:           'workout',
+  tasks:         'planning',
 };
 
 /**

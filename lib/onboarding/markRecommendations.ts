@@ -20,7 +20,7 @@ export const GOAL_TEMPLATES: GoalTemplate[] = [
   // FITNESS
   { id: 'marathon', name: 'Run a Marathon', category: 'Fitness', recommendedMarkIds: ['run', 'steps', 'sleep', 'water', 'stretch'], minMarks: 3 },
   { id: 'lose-weight', name: 'Lose Weight', category: 'Fitness', recommendedMarkIds: ['workout', 'calories', 'water', 'nutrition', 'sleep'], minMarks: 3 },
-  { id: 'build-muscle', name: 'Build Muscle', category: 'Fitness', recommendedMarkIds: ['workout', 'nutrition', 'sleep', 'water', 'vitamins'], minMarks: 3 },
+  { id: 'build-muscle', name: 'Build Muscle', category: 'Fitness', recommendedMarkIds: ['workout', 'nutrition', 'sleep', 'water'], minMarks: 3 },
   { id: 'run-5k', name: 'Run a 5K', category: 'Fitness', recommendedMarkIds: ['run', 'steps', 'sleep', 'water'], minMarks: 2 },
   { id: 'triathlon', name: 'Complete a Triathlon', category: 'Fitness', recommendedMarkIds: ['swim', 'cycling', 'run', 'sleep', 'nutrition'], minMarks: 3 },
   { id: 'get-active', name: 'Get More Active', category: 'Fitness', recommendedMarkIds: ['steps', 'workout', 'water'], minMarks: 2 },
@@ -29,18 +29,18 @@ export const GOAL_TEMPLATES: GoalTemplate[] = [
   { id: 'eat-better', name: 'Eat Better', category: 'Health', recommendedMarkIds: ['nutrition', 'cooking', 'water', 'no-sugar'], minMarks: 2 },
   { id: 'quit-alcohol', name: 'Quit Drinking', category: 'Health', recommendedMarkIds: ['no-alcohol', 'journaling', 'meditation'], minMarks: 2 },
   { id: 'quit-sugar', name: 'Cut Out Sugar', category: 'Health', recommendedMarkIds: ['no-sugar', 'nutrition', 'water'], minMarks: 2 },
-  { id: 'better-sleep', name: 'Sleep Better', category: 'Health', recommendedMarkIds: ['sleep', 'no-phone', 'breathwork'], minMarks: 2 },
+  { id: 'better-sleep', name: 'Sleep Better', category: 'Health', recommendedMarkIds: ['sleep', 'breathwork'], minMarks: 2 },
   { id: 'lose-fat', name: 'Get Lean', category: 'Health', recommendedMarkIds: ['calories', 'workout', 'water', 'nutrition', 'sleep'], minMarks: 3 },
 
   // MINDSET
   { id: 'reduce-stress', name: 'Reduce Stress', category: 'Mindset', recommendedMarkIds: ['meditation', 'breathwork', 'journaling', 'sleep'], minMarks: 2 },
   { id: 'mental-health', name: 'Improve Mental Health', category: 'Mindset', recommendedMarkIds: ['meditation', 'journaling', 'gratitude', 'sleep', 'socialize'], minMarks: 3 },
   { id: 'mindfulness', name: 'Practice Mindfulness', category: 'Mindset', recommendedMarkIds: ['meditation', 'breathwork', 'gratitude'], minMarks: 2 },
-  { id: 'confidence', name: 'Build Confidence', category: 'Mindset', recommendedMarkIds: ['affirmations', 'journaling', 'workout'], minMarks: 2 },
+  { id: 'confidence', name: 'Build Confidence', category: 'Mindset', recommendedMarkIds: ['journaling', 'workout'], minMarks: 2 },
 
   // DEEP WORK
   { id: 'learn-skill', name: 'Learn a New Skill', category: 'Deep Work', recommendedMarkIds: ['practice', 'study', 'focus', 'reading'], minMarks: 2 },
-  { id: 'read-books', name: 'Read More Books', category: 'Deep Work', recommendedMarkIds: ['reading', 'no-phone', 'planning'], minMarks: 2 },
+  { id: 'read-books', name: 'Read More Books', category: 'Deep Work', recommendedMarkIds: ['reading', 'planning'], minMarks: 2 },
   { id: 'build-business', name: 'Build a Business', category: 'Deep Work', recommendedMarkIds: ['deep-work', 'planning', 'focus', 'networking', 'finance'], minMarks: 3 },
   { id: 'learn-instrument', name: 'Learn an Instrument', category: 'Deep Work', recommendedMarkIds: ['practice', 'focus', 'planning'], minMarks: 2 },
   { id: 'pass-exam', name: 'Pass an Exam', category: 'Deep Work', recommendedMarkIds: ['study', 'focus', 'sleep', 'planning'], minMarks: 3 },
@@ -54,12 +54,12 @@ export const GOAL_TEMPLATES: GoalTemplate[] = [
   { id: 'side-income', name: 'Build a Side Income', category: 'Finance', recommendedMarkIds: ['side-hustle', 'deep-work', 'networking', 'planning'], minMarks: 2 },
 
   // DISCIPLINE
-  { id: 'morning-routine', name: 'Build a Morning Routine', category: 'Discipline', recommendedMarkIds: ['wake-early', 'cold-shower', 'meditation', 'planning'], minMarks: 2 },
-  { id: 'digital-detox', name: 'Digital Detox', category: 'Discipline', recommendedMarkIds: ['no-phone', 'screen-time', 'journaling', 'creative'], minMarks: 2 },
+  { id: 'morning-routine', name: 'Build a Morning Routine', category: 'Discipline', recommendedMarkIds: ['cold-shower', 'meditation', 'planning'], minMarks: 2 },
+  { id: 'digital-detox', name: 'Digital Detox', category: 'Discipline', recommendedMarkIds: ['screen-time', 'journaling', 'creative'], minMarks: 2 },
 
   // RELATIONSHIPS
   { id: 'social-life', name: 'Improve Social Life', category: 'Relationships', recommendedMarkIds: ['socialize', 'networking', 'volunteer'], minMarks: 2 },
-  { id: 'family-time', name: 'Spend More Time with Family', category: 'Relationships', recommendedMarkIds: ['family', 'no-phone', 'planning'], minMarks: 2 },
+  { id: 'family-time', name: 'Spend More Time with Family', category: 'Relationships', recommendedMarkIds: ['family', 'planning'], minMarks: 2 },
 
   // CREATIVE
   { id: 'creative-project', name: 'Finish a Creative Project', category: 'Creative', recommendedMarkIds: ['creative', 'deep-work', 'focus', 'planning'], minMarks: 2 },
