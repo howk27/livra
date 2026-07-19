@@ -20,6 +20,8 @@ import { addDays, format } from 'date-fns';
 import { getSupabaseClient } from '../supabase';
 import { MARK_LIBRARY } from '../suggestedCounters';
 import { colorForSuggestedCounter, getCategoryColor } from '../markCategory';
+import { tokenize, inferDomains } from '../goalMarkSuggestions';
+import { isMarkAllowedForGoal } from '../markRelevance';
 import { logger } from '../utils/logger';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -443,7 +445,16 @@ export async function generateGoalPackage(
       // Defensive: never trust an unvalidated package from the wire.
       const pkg = validateAIGoalPackage(res.package);
       if (!pkg) return { ok: false, reason: 'invalid_output' };
-      return { ok: true, package: pkg, source: res.source === 'cache' ? 'cache' : 'api' };
+      // Domain-gate restricted marks: the model must not attach cold-shower/
+      // screen-time/gratitude to a goal that is not about their domain. Never
+      // return an empty mark list — if the gate would strip everything, keep the
+      // model's package as-is rather than ship a mark-less goal.
+      const domains = inferDomains(tokenize(trimmed));
+      const allowed = pkg.marks.filter((m) =>
+        isMarkAllowedForGoal(resolveMarkForAIIcon(m.icon).markId, domains),
+      );
+      const gated: AIGoalPackage = { ...pkg, marks: allowed.length > 0 ? allowed : pkg.marks };
+      return { ok: true, package: gated, source: res.source === 'cache' ? 'cache' : 'api' };
     }
 
     const reason = typeof res.reason === 'string' && KNOWN_FAIL_REASONS.has(res.reason)

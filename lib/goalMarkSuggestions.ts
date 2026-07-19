@@ -1,4 +1,5 @@
 import { MARK_LIBRARY, MarkDefinition } from './suggestedCounters';
+import { isMarkAllowedForGoal } from './markRelevance';
 
 // ─── Commitment system types ──────────────────────────────────────────────────
 
@@ -60,7 +61,7 @@ const STOP_WORDS = new Set([
  * from "Run a 5k" (race distance). The old `[^a-z0-9\s]` strip destroyed it
  * before scoring ever saw it. Everything else non-alphanumeric is noise.
  */
-function tokenize(title: string): string[] {
+export function tokenize(title: string): string[] {
   return title
     .toLowerCase()
     .replace(/[^a-z0-9$\s]/g, ' ')
@@ -186,7 +187,7 @@ function domainsFromTokens(tokens: string[]): Set<string> {
  * would make Run in-domain and rank it above the user's actual savings marks —
  * the exact QC4 bug. Magnitudes only get a vote when nothing else spoke ("5k").
  */
-function inferDomains(tokens: string[]): Set<string> {
+export function inferDomains(tokens: string[]): Set<string> {
   const decisive = domainsFromTokens(tokens.filter(t => !isMagnitudeToken(t)));
   if (decisive.size > 0) return decisive;
   return domainsFromTokens(tokens);
@@ -250,6 +251,9 @@ export function getMarksForGoal(goalTitle: string): MarkDefinition[] {
       return { mark, score, tier: tierOf(domains.has(mark.category), score) };
     })
     .filter(({ tier }) => tier >= 0)
+    // Domain-gate restricted marks (cold-shower/screen-time/gratitude) BEFORE the
+    // slice, so dropping an off-domain restricted mark frees a real slot.
+    .filter(({ mark }) => isMarkAllowedForGoal(mark.id, domains))
     // Ties break on mark id, never on MARK_LIBRARY array order.
     .sort((a, b) => b.tier - a.tier || b.score - a.score || a.mark.id.localeCompare(b.mark.id))
     .slice(0, MAX_SUGGESTIONS)
