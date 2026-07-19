@@ -27,6 +27,13 @@ export function initAnalytics(): PostHog | null {
       host: env.posthogHost,
       enableSessionReplay: false,
     });
+    // Super-properties attached to every event, so a single PostHog project can
+    // separate app vs web (`platform`) and prod vs preview vs dev (`environment`)
+    // by filtering — no second project needed. Web registers platform:'web'.
+    client.register({
+      platform: 'app',
+      environment: env.isProduction ? 'production' : env.isPreview ? 'preview' : 'development',
+    });
   } catch (e) {
     logger.error('[Analytics] initAnalytics failed:', e);
     client = null;

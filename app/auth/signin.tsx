@@ -283,7 +283,14 @@ export default function SignInScreen() {
           : data.user.user_metadata?.full_name || '';
         await ensureProfile(supabase, data.user.id, data.user, appleFullName);
         identify(data.user.id, { $set: { auth_provider: 'apple' } });
-        capture(ANALYTICS_EVENTS.USER_SIGNED_IN, { method: 'apple' });
+        // signInWithIdToken both creates and signs in, so distinguish a brand-new
+        // Apple account (created just now) from a returning one for the funnel.
+        const createdMs = data.user.created_at ? new Date(data.user.created_at).getTime() : NaN;
+        const isNewAppleUser = Number.isFinite(createdMs) && Date.now() - createdMs < 60_000;
+        capture(
+          isNewAppleUser ? ANALYTICS_EVENTS.USER_SIGNED_UP : ANALYTICS_EVENTS.USER_SIGNED_IN,
+          { method: 'apple' },
+        );
         try { await sync(); } catch { /* non-blocking */ }
       }
     } catch (err: unknown) {

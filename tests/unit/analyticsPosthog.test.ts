@@ -3,6 +3,7 @@ jest.mock('posthog-react-native', () => {
     capture: jest.fn(),
     identify: jest.fn(),
     reset: jest.fn(),
+    register: jest.fn(),
   }));
 });
 
@@ -61,6 +62,11 @@ describe('lib/analytics/posthog', () => {
       expect.objectContaining({ host: 'https://us.i.posthog.com' }),
     );
 
+    // Registers super-properties so app/web + env can be split in one project.
+    expect(client!.register).toHaveBeenCalledWith(
+      expect.objectContaining({ platform: 'app', environment: expect.any(String) }),
+    );
+
     // Idempotent: calling init again does not construct a second client
     posthog.initAnalytics();
     expect(PostHogMock).toHaveBeenCalledTimes(1);
@@ -83,6 +89,7 @@ describe('lib/analytics/posthog', () => {
       capture: jest.fn(() => { throw new Error('network down'); }),
       identify: jest.fn(),
       reset: jest.fn(),
+      register: jest.fn(),
     }));
     posthog.initAnalytics();
     expect(() => posthog.capture('mark_logged')).not.toThrow();

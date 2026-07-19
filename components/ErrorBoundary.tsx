@@ -6,6 +6,7 @@ import { env } from '../lib/env';
 import { spacing, borderRadius, fontSize, fontWeight } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { logger } from '../lib/utils/logger';
+import { captureException } from '../lib/analytics/posthog';
 
 interface Props {
   children: ReactNode;
@@ -35,6 +36,10 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     logger.error('ErrorBoundary caught an error:', error, errorInfo);
+
+    // Report to PostHog error tracking (no-op until the key is set). The React
+    // component stack is the most useful extra context for a render crash.
+    captureException(error, { component_stack: errorInfo.componentStack ?? null });
 
     this.setState({
       error,
