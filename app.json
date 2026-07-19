@@ -14,7 +14,7 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.livra.app",
       "appleTeamId": "AL8YGQMBQG",
-      "buildNumber": "46",
+      "buildNumber": "47",
       "associatedDomains": [
         "applinks:livralife.com",
         "applinks:www.livralife.com"
@@ -43,7 +43,7 @@
     },
     "android": {
       "package": "com.livra.app",
-      "versionCode": 44,
+      "versionCode": 45,
       "adaptiveIcon": {
         "foregroundImage": "./assets/Livra-Clean-Dark.png",
         "backgroundColor": "#ffffff"
