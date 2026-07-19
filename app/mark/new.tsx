@@ -206,13 +206,20 @@ export default function NewCounterScreen() {
     // groups existed and this derivation still holds. Any horizontal inset added
     // to a band must be subtracted here too.
     const cardPad = spacing.md;
-    const rowInner = SCREEN_WIDTH - scrollPad * 2 - cardPad * 2;
+    // The card also draws a hairline border (styles.card borderWidth), so its
+    // inner content box is 2×hairline narrower than padding alone implies.
+    // Earlier rounds subtracted only the padding and relied on Math.floor's
+    // slack to "absorb" the border — but that slack is the fractional part of
+    // the exact cell, which on some device widths falls UNDER the border width,
+    // so 4*cell + 3*gap overflowed the true inner box and the 4th tile wrapped
+    // to 3 (founder device QC, repeatedly). Subtract the border explicitly and
+    // reserve a 1px safety slack so Yoga's sub-pixel rounding can never tip it.
+    const cardBorder = StyleSheet.hairlineWidth;
+    const rowInner = SCREEN_WIDTH - scrollPad * 2 - cardPad * 2 - cardBorder * 2;
     const gap = spacing.sm;
-    // Math.floor so all 4 tiles fit on one row (founder device QC: the grid kept
-    // wrapping to 3). An exact-fill fractional cell (e.g. 71.5) rounds UP under
-    // Yoga on-device, so 4*cell + 3*gap exceeds the row and the 4th tile wraps.
-    // Flooring leaves sub-pixel slack that also absorbs the card's hairline border.
-    const cell = Math.floor((rowInner - gap * (ICON_GRID_COLUMNS - 1)) / ICON_GRID_COLUMNS);
+    const cell = Math.floor(
+      (rowInner - gap * (ICON_GRID_COLUMNS - 1) - 1) / ICON_GRID_COLUMNS,
+    );
     // QC4-F: never let the derived cell fall under the HIG touch minimum. The
     // 44pt floor is headerControl.minTarget — the app's single source for it —
     // rather than a fresh literal. (At 320pt the derived cell is ~54, so this
