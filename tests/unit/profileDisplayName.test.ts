@@ -52,4 +52,15 @@ describe('resolveFirstName (PL-4 voice/greeting {name} slot)', () => {
     expect(resolveFirstName(null, null)).toBeNull();
     expect(resolveFirstName({}, undefined)).toBeNull();
   });
+
+  it('never leaks an Apple hide-my-email relay token as a name', () => {
+    expect(resolveFirstName(null, 'a1b2c3d4x9@privaterelay.appleid.com')).toBeNull();
+    expect(resolveFirstName({}, 'ABC.DEF@PrivateRelay.AppleID.com')).toBeNull();
+  });
+
+  it('still uses a real metadata name for a hide-my-email user', () => {
+    expect(
+      resolveFirstName({ full_name: 'Dei Sierra' }, 'a1b2@privaterelay.appleid.com')
+    ).toBe('Dei');
+  });
 });
