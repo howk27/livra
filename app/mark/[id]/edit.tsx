@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
@@ -26,6 +26,7 @@ import { DailyTargetStepper } from '../../../components/DailyTargetStepper';
 import { resolveDailyTarget } from '../../../lib/markDailyTarget';
 import { getIconAccent } from '../../../lib/markCategory';
 import { ICON_TYPE_TO_EMOJI, MARK_ICON_OPTIONS } from '../../../lib/markIcons';
+import { useNotification } from '../../../contexts/NotificationContext';
 
 // VD-7 retry #1: the icon emoji map + selectable list live in lib/markIcons.ts,
 // shared with mark/new.tsx so the two grids can never diverge.
@@ -35,6 +36,7 @@ export default function EditCounterScreen() {
   const theme = useEffectiveTheme();
   const themeColors = themedColors(theme);
   const router = useRouter();
+  const { showError } = useNotification();
   const params = useLocalSearchParams<{ id: string }>();
   const id = typeof params.id === 'string' ? params.id : params.id?.[0];
 
@@ -96,7 +98,7 @@ export default function EditCounterScreen() {
 
   const handleSave = async () => {
     if (!name.trim()) {
-      Alert.alert('Required', 'Please enter a counter name');
+      showError('Please enter a counter name');
       return;
     }
 
@@ -119,7 +121,7 @@ export default function EditCounterScreen() {
       router.back();
     } catch (error) {
       logger.error('Error updating counter:', error);
-      Alert.alert('Error', 'Failed to update counter. Please try again.');
+      showError('Failed to update counter. Please try again.');
     } finally {
       setLoading(false);
     }

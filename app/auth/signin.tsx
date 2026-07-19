@@ -7,7 +7,6 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  Alert,
   ActivityIndicator,
   Keyboard,
   TouchableWithoutFeedback,
@@ -35,6 +34,7 @@ import { logger } from '../../lib/utils/logger';
 import * as Notifications from 'expo-notifications';
 import { getAuthStorageWriteFailed } from '../../lib/auth/authStorageHealth';
 import { Logo } from '../../components/Logo';
+import { confirm } from '../../components/ui/overlays';
 import { capture, identify } from '../../lib/analytics/posthog';
 import { ANALYTICS_EVENTS } from '../../lib/analytics/events';
 
@@ -158,10 +158,14 @@ export default function SignInScreen() {
             setTimeout(() => { passwordInputRef.current?.focus(); setPassword(''); }, 100);
           } else if (signInError.message.includes('User not found')) {
             setEmailError(true);
-            Alert.alert('Account Not Found', 'No account found with this email. Would you like to create one?', [
-              { text: 'Cancel', style: 'cancel', onPress: () => setEmailError(false) },
-              { text: 'Create Account', onPress: () => { setMode('signup'); setError(null); setEmailError(false); } },
-            ]);
+            const create = await confirm({
+              title: 'Account not found',
+              message: 'No account found with this email. Would you like to create one?',
+              confirmLabel: 'Create Account',
+              cancelLabel: 'Cancel',
+            });
+            if (create) { setMode('signup'); setError(null); }
+            setEmailError(false);
           } else {
             setError(signInError.message);
           }

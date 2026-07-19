@@ -7,7 +7,6 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -24,12 +23,14 @@ import {
 } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { getSupabaseClient } from '../../lib/supabase';
+import { useNotification } from '../../contexts/NotificationContext';
 
 export default function ResetPasswordScreen() {
   const supabase = getSupabaseClient();
   const theme = useEffectiveTheme();
   const c = themedColors(theme);
   const router = useRouter();
+  const { showSuccess } = useNotification();
 
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
@@ -65,16 +66,8 @@ export default function ResetPasswordScreen() {
         setError(resetError.message);
       } else {
         setSuccess(true);
-        Alert.alert(
-          'Password Reset Email Sent',
-          'Please check your email for instructions to reset your password.',
-          [
-            {
-              text: 'OK',
-              onPress: () => router.back(),
-            },
-          ]
-        );
+        showSuccess('Password reset email sent. Check your inbox for instructions.');
+        router.back();
       }
     } catch (err: any) {
       setError(err.message || 'An unexpected error occurred');

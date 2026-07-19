@@ -30,12 +30,12 @@ import { useAuth } from '../hooks/useAuth';
 import { useSync } from '../hooks/useSync';
 import { themedColors } from '../theme/tokens';
 import { NotificationProvider } from '../contexts/NotificationContext';
+import { ConfirmHost, ActionSheetHost } from '../components/ui/overlays';
 import { cleanupDuplicateCounters } from '../lib/db/cleanup';
 import { parseError } from '../hooks/useSync';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { AuthPersistenceGate } from '../components/AuthPersistenceGate';
 import { logger } from '../lib/utils/logger';
-import { DevToolsProvider } from '../providers/DevToolsProvider';
 import { ExperimentsProvider } from '../providers/ExperimentsProvider';
 import { useFeaturesStore } from '../state/featuresSlice';
 import { useGoalsStore } from '../state/goalsSlice';
@@ -550,16 +550,16 @@ export default function RootLayout() {
     <ErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>
         <QueryClientProvider client={queryClient}>
-          <DevToolsProvider>
-            <ExperimentsProvider>
-              <NotificationProvider>
-                <View style={{ flex: 1 }}>
-                  <RootNavigator />
-                  <AuthPersistenceGate />
-                </View>
-              </NotificationProvider>
-            </ExperimentsProvider>
-          </DevToolsProvider>
+          <ExperimentsProvider>
+            <NotificationProvider>
+              <View style={{ flex: 1 }}>
+                <RootNavigator />
+                <AuthPersistenceGate />
+                <ConfirmHost />
+                <ActionSheetHost />
+              </View>
+            </NotificationProvider>
+          </ExperimentsProvider>
         </QueryClientProvider>
       </GestureHandlerRootView>
     </ErrorBoundary>
@@ -605,7 +605,6 @@ function RootNavigator() {
           name="auth"
           options={{ presentation: 'fullScreenModal', gestureEnabled: false }}
         />
-        <Stack.Screen name="iap-dashboard" options={{ presentation: 'modal' }} />
         <Stack.Screen name="goal/new" options={{ presentation: 'modal', title: 'New Goal', headerShown: false }} />
         <Stack.Screen name="goal/suggest" options={{ presentation: 'modal', title: 'Suggest a plan', headerShown: false }} />
         <Stack.Screen name="goal/[id]" options={{ presentation: 'modal', headerShown: false }} />

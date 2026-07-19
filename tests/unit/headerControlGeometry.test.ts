@@ -70,7 +70,6 @@ const TOP_GAP_SITES: [string, string][] = [
   ['app/goal/suggest.tsx', 'header'],
   ['app/legal/privacy-policy.tsx', 'header'],
   ['app/legal/terms-and-conditions.tsx', 'header'],
-  ['app/iap-dashboard.tsx', 'header'],
   // Screens whose header is the first child of a padded scroll body — the page
   // padding is what sets the offset there.
   ['app/mark/[id]/edit.tsx', 'content'],
@@ -123,7 +122,6 @@ const BOX_SITES: [string, string][] = [
 const EXPLICIT_SIZE_SITES: [string, string][] = [
   ['app/legal/privacy-policy.tsx', 'backButton'],
   ['app/legal/terms-and-conditions.tsx', 'backButton'],
-  ['app/iap-dashboard.tsx', 'backButton'],
   ['app/auth/reset-password.tsx', 'backButton'],
   ['app/auth/reset-password-complete.tsx', 'backButton'],
 ];

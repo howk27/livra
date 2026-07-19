@@ -8,7 +8,7 @@
  * identical to what previously lived inline in the screen component.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Keyboard } from 'react-native';
+import { Keyboard } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { themedColors } from '../theme/tokens';
@@ -27,6 +27,7 @@ import type { GoalPackageReviewSelection } from '../components/ai/GoalPackageRev
 import { capture } from '../lib/analytics/posthog';
 import { ANALYTICS_EVENTS } from '../lib/analytics/events';
 import { logger } from '../lib/utils/logger';
+import { useNotification } from '../contexts/NotificationContext';
 
 export type SuggestSource = 'goals' | 'goal_create_fallback';
 
@@ -35,6 +36,7 @@ export function useSuggestGoalFlow() {
   const c = themedColors(theme);
   const router = useRouter();
   const { user, initialized } = useAuth();
+  const { showError } = useNotification();
   const params = useLocalSearchParams<{ goalText?: string; source?: string }>();
 
   const source: SuggestSource =
@@ -147,14 +149,14 @@ export function useSuggestGoalFlow() {
           // Soft cap surface — Livra's own popup, never the iOS-native Alert.
           setGoalLimitVisible(true);
         } else {
-          Alert.alert('Error', 'Could not save goal. Please try again.');
+          showError('Could not save goal. Please try again.');
         }
         logger.error('[suggest] confirm failed:', err);
       } finally {
         setConfirming(false);
       }
     },
-    [user?.id, pkg, goalText, source, router],
+    [user?.id, pkg, goalText, source, router, showError],
   );
 
   return {

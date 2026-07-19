@@ -18,6 +18,18 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ replace: jest.fn(), push: jest.fn(), back: jest.fn() }),
 }));
 
+// OnboardingScreen surfaces errors via the toast context, which is mounted at the
+// app root (NotificationProvider) — not in this isolated render. Stub it.
+jest.mock('../../../contexts/NotificationContext', () => ({
+  useNotification: () => ({
+    showNotification: jest.fn(),
+    showSuccess: jest.fn(),
+    showError: jest.fn(),
+    showInfo: jest.fn(),
+    showWarning: jest.fn(),
+  }),
+}));
+
 jest.mock('react-native-safe-area-context', () => ({
   SafeAreaView: ({ children }: any) => {
     const React = require('react');

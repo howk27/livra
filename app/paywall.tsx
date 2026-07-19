@@ -7,7 +7,6 @@ import {
   ScrollView,
   ActivityIndicator,
   Linking,
-  Alert,
   Platform,
 } from 'react-native';
 import {
@@ -56,6 +55,8 @@ import { ANALYTICS_EVENTS } from '../lib/analytics/events';
 import { AppText } from '../components/Typography';
 import { Card, PrimaryButton } from '../components/ui';
 import { SvgLogo } from '../components/ui/SvgLogo';
+import { useNotification } from '../contexts/NotificationContext';
+import { confirm } from '../components/ui/overlays';
 
 // Locked Livra+ split — list only features a subscriber can use today (no dead-ends).
 // Mark reordering and pace projection are built but not yet wired into a screen, so they
@@ -103,6 +104,7 @@ function PaywallScreenContent() {
   const c = themedColors(theme);
   const isDark = theme === 'dark';
   const router = useRouter();
+  const { showSuccess, showError, showInfo } = useNotification();
   const [selectedPlan, setSelectedPlan] = useState<PlanType>('monthly');
   
   // STEP 5: Restore message state
@@ -179,10 +181,10 @@ function PaywallScreenContent() {
         // TestFlight build: export support bundle
         try {
           await exportSupportBundle();
-          Alert.alert('Support Bundle', 'Support bundle exported. Check your share sheet.');
+          showSuccess('Support bundle exported. Check your share sheet.');
         } catch (error) {
           logger.error('[Paywall] Error exporting support bundle:', error);
-          Alert.alert('Error', 'Failed to export support bundle. Please try again.');
+          showError('Failed to export support bundle. Please try again.');
         }
       }
       return;
@@ -285,14 +287,13 @@ function PaywallScreenContent() {
     try {
       await Linking.openURL(url);
     } catch (error) {
-      Alert.alert(
-        'Unable to Open Subscriptions',
-        'We could not open your subscription settings. Please try again.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Try Again', onPress: () => retryOpen() },
-        ]
-      );
+      const retry = await confirm({
+        title: 'Unable to open subscriptions',
+        message: 'We could not open your subscription settings. Please try again.',
+        confirmLabel: 'Try Again',
+        cancelLabel: 'Cancel',
+      });
+      if (retry) retryOpen();
     }
   };
 
@@ -425,7 +426,7 @@ function PaywallScreenContent() {
       if (isSubscribed) {
         setOperationState('subscribed');
         setOperationMessage(null);
-        Alert.alert('Subscribed', 'You already have an active subscription.');
+        showInfo('You already have an active subscription.');
         purchaseInProgressRef.current = false;
         return;
       }
@@ -433,10 +434,7 @@ function PaywallScreenContent() {
       if (hasPendingVerification) {
         setOperationState('verifying');
         setOperationMessage('Verification pending. Please retry.');
-        Alert.alert(
-          'Verification Pending',
-          'Your previous purchase is still being verified. Please wait a moment and tap "Retry Verification".'
-        );
+        showInfo('Your previous purchase is still being verified. Please wait a moment and tap "Retry Verification".');
         purchaseInProgressRef.current = false;
         return;
       }
@@ -467,11 +465,7 @@ function PaywallScreenContent() {
         } catch (e) {
           // Silently fail if diagnostics logging fails
         }
-        Alert.alert(
-          'Purchase Unavailable',
-          'Subscription pricing is not available. Please try again later.',
-          [{ text: 'OK' }]
-        );
+        showError('Subscription pricing is not available. Please try again later.');
         purchaseInProgressRef.current = false;
         setOperationState('error');
         setOperationMessage('Subscription pricing is not available.');

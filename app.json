@@ -6,11 +6,6 @@
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "description": "Livra is where goals actually get done — one at a time, in sequence.",
-    "splash": {
-      "image": "./assets/Livra-Clean-Dark.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#F0EBE3"
-    },
     "icon": "./assets/Livra-Clean-Dark.png",
     "assetBundlePatterns": [
       "**/*"
@@ -129,7 +124,14 @@
       ],
       "./plugins/withLivraWidget",
       "expo-sharing",
-      "expo-splash-screen",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/Livra-Clean-Dark.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#F0EBE3"
+        }
+      ],
       "expo-localization"
     ],
     "scheme": "livra",

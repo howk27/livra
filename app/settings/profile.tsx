@@ -8,7 +8,6 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
-  Alert,
   ActivityIndicator,
   Image,
 } from 'react-native';
@@ -24,12 +23,14 @@ import { getSupabaseClient } from '../../lib/supabase';
 import { uploadAvatar, getAvatarUrl } from '../../lib/storage/avatarStorage';
 import { resolveInitialDisplayName } from '../../lib/profile/displayName';
 import { logger } from '../../lib/utils/logger';
+import { useNotification } from '../../contexts/NotificationContext';
 
 export default function ProfileScreen() {
   const theme = useEffectiveTheme();
   const c = themedColors(theme);
   const styles = useMemo(() => createStyles(c), [c]);
   const { user } = useAuth();
+  const { showSuccess, showError } = useNotification();
   const supabase = getSupabaseClient();
 
   const [displayName, setDisplayName] = useState('');
@@ -107,7 +108,7 @@ export default function ProfileScreen() {
         await uploadAvatar(user.id, uri);
       } catch (e) {
         setAvatarUri(prev);
-        Alert.alert('Upload failed', e instanceof Error ? e.message : 'Could not upload avatar.');
+        showError(e instanceof Error ? e.message : 'Could not upload avatar.');
       }
     }
   }, [user?.id, avatarUri]);
@@ -120,10 +121,10 @@ export default function ProfileScreen() {
         .from('profiles')
         .upsert({ id: user.id, display_name: displayName.trim() });
       if (error) throw error;
-      Alert.alert('Saved', 'Profile updated.');
+      showSuccess('Profile updated.');
     } catch (err) {
       logger.error('[Profile] save error:', err);
-      Alert.alert('Error', 'Could not save profile. Please try again.');
+      showError('Could not save profile. Please try again.');
     } finally {
       setSaving(false);
     }

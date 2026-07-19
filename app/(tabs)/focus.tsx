@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   Platform,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
@@ -24,6 +23,7 @@ import { SectionLabel } from '../../components/ui/SectionLabel';
 import { GoalTitle } from '../../components/ui/GoalTitle';
 import { SpeedDialFAB } from '../../components/ui/SpeedDialFAB';
 import { VoiceLine } from '../../components/ui/VoiceLine';
+import { confirm, actionSheet } from '../../components/ui/overlays';
 
 import { useCounters } from '../../hooks/useCounters';
 import { useAuth } from '../../hooks/useAuth';
@@ -347,64 +347,44 @@ export default function FocusScreen() {
     [user?.id, incrementCounter, showError],
   );
 
-  const handleMarkLongPress = useCallback((markId: string, markName: string) => {
-    Alert.alert(
-      markName,
-      undefined,
-      [
-        { text: 'View details', onPress: () => router.push(`/mark/${markId}` as any) },
-        { text: 'Edit', onPress: () => router.push(`/mark/${markId}/edit` as any) },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            Alert.alert(
-              'Remove mark?',
-              `"${markName}" will be permanently removed.`,
-              [
-                { text: 'Keep it', style: 'cancel' },
-                {
-                  text: 'Remove',
-                  style: 'destructive',
-                  onPress: () => { deleteCounter(markId).catch(() => {}); },
-                },
-              ],
-            );
-          },
-        },
-        { text: 'Cancel', style: 'cancel' },
-      ],
-    );
-  }, [router, deleteCounter]);
-
-  const handleDeleteMark = useCallback((markId: string, markName: string) => {
-    Alert.alert(
-      'Remove mark?',
-      `"${markName}" will be permanently removed.`,
-      [
-        { text: 'Keep it', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: () => { deleteCounter(markId).catch(() => {}); },
-        },
-      ],
-    );
+  const confirmDeleteMark = useCallback(async (markId: string, markName: string) => {
+    const ok = await confirm({
+      title: 'Remove mark?',
+      message: `"${markName}" will be permanently removed.`,
+      confirmLabel: 'Remove',
+      cancelLabel: 'Keep it',
+      destructive: true,
+    });
+    if (ok) deleteCounter(markId).catch(() => {});
   }, [deleteCounter]);
 
-  // A maintenance habit is retired, not deleted — a gentle ending, not destruction.
-  const handleRetireMark = useCallback((markId: string, markName: string) => {
-    Alert.alert(
-      'Retire this habit?',
-      `You've kept "${markName}" going. Ready to let it rest?`,
-      [
-        { text: 'Keep going', style: 'cancel' },
-        {
-          text: 'Retire',
-          onPress: () => { deleteCounter(markId).catch(() => {}); },
-        },
+  const handleMarkLongPress = useCallback(async (markId: string, markName: string) => {
+    const choice = await actionSheet({
+      title: markName,
+      actions: [
+        { label: 'View details' },
+        { label: 'Edit' },
+        { label: 'Delete', destructive: true },
       ],
-    );
+    });
+    if (choice === 0) router.push(`/mark/${markId}` as any);
+    else if (choice === 1) router.push(`/mark/${markId}/edit` as any);
+    else if (choice === 2) void confirmDeleteMark(markId, markName);
+  }, [router, confirmDeleteMark]);
+
+  const handleDeleteMark = useCallback((markId: string, markName: string) => {
+    void confirmDeleteMark(markId, markName);
+  }, [confirmDeleteMark]);
+
+  // A maintenance habit is retired, not deleted — a gentle ending, not destruction.
+  const handleRetireMark = useCallback(async (markId: string, markName: string) => {
+    const ok = await confirm({
+      title: 'Retire this habit?',
+      message: `You've kept "${markName}" going. Ready to let it rest?`,
+      confirmLabel: 'Retire',
+      cancelLabel: 'Keep going',
+    });
+    if (ok) deleteCounter(markId).catch(() => {});
   }, [deleteCounter]);
 
   // ── Mark row renderer (shared) ────────────────────────────────────────────

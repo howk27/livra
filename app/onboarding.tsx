@@ -8,7 +8,6 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Check } from 'phosphor-react-native';
@@ -33,6 +32,7 @@ import { logger } from '../lib/utils/logger';
 import { capture } from '../lib/analytics/posthog';
 import { ANALYTICS_EVENTS } from '../lib/analytics/events';
 import { GENERATION_ERROR_COPY } from '../lib/copy';
+import { useNotification } from '../contexts/NotificationContext';
 import {
   generateGoalPackage, MIN_GOAL_LENGTH, resolveMarkForAIIcon,
   writeGoalPackageCache,
@@ -99,6 +99,7 @@ export default function OnboardingScreen() {
   const styles = useMemo(() => createStyles(c), [c]);
   const router = useRouter();
   const { user } = useAuth();
+  const { showError } = useNotification();
 
   const store = useOnboardingStore();
   const completeOnboarding = useUIStore(s => s.completeOnboarding);
@@ -205,7 +206,7 @@ export default function OnboardingScreen() {
     store.setSelectedMarkTargets(targets);
 
     if (!user?.id) {
-      Alert.alert('Something went wrong', 'Please sign in again to finish setup.');
+      showError('Please sign in again to finish setup.');
       router.replace('/auth/signin');
       return;
     }
@@ -215,7 +216,7 @@ export default function OnboardingScreen() {
       await handlePersistAndComplete(user.id);
     } catch (err) {
       logger.error('[Onboarding] complete failed:', err);
-      Alert.alert('Something went wrong', 'Could not finish setup. Please try again.');
+      showError('Could not finish setup. Please try again.');
     } finally {
       setLoading(false);
     }

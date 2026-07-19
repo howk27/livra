@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   Platform,
   TextInput,
   ActivityIndicator,
@@ -49,6 +48,8 @@ import { LivraHeader } from '../../../components/ui/LivraHeader';
 import { frequencyLabel } from '../../../components/ui/MarkFrequencyPicker';
 import { PillButton } from '../../../components/ui/PillButton';
 import { SectionLabel } from '../../../components/ui/SectionLabel';
+import { confirm } from '../../../components/ui/overlays';
+import { useNotification } from '../../../contexts/NotificationContext';
 import { useCounters } from '../../../hooks/useCounters';
 import { useEventsStore } from '../../../state/eventsSlice';
 import { LoadingScreen } from '../../../components/LoadingScreen';
@@ -114,6 +115,7 @@ function MarkDetailContent() {
   const id = typeof params.id === 'string' ? params.id : params.id?.[0];
 
   const { counters, loading, incrementCounter, decrementCounter, resetCounter, deleteCounter, updateMark } = useCounters();
+  const { showError } = useNotification();
   const allEvents = useEventsStore((state) => state.events || []);
   const counter = id ? counters.find((c) => c.id === id) : null;
   // QC2-A: shared resolver — name-first, emoji fallback (immune to library
@@ -272,7 +274,7 @@ function MarkDetailContent() {
 
     incrementCounter(id, user.id, 1).catch((error) => {
       logger.error('increment failed:', error);
-      Alert.alert('Error', 'Could not update mark');
+      showError('Could not update mark');
     });
 
     // Check if all marks done after this log (check after short delay for state to update)
@@ -309,76 +311,66 @@ function MarkDetailContent() {
       .deleteEvent(lastEvent.id)
       .catch((error) => {
         logger.error('undo failed:', error);
-        Alert.alert('Error', 'Could not undo');
+        showError('Could not undo');
       })
       .finally(() => {
         undoInFlight.current = false;
       });
   };
 
-  const handleReset = () => {
+  const handleReset = async () => {
     if (!id || !user?.id || todayCount === 0 || !counter) return;
-    Alert.alert(
-      "Reset today's progress",
-      `Remove today's ${todayCount} log${todayCount === 1 ? '' : 's'} for "${counter.name}"?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reset',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const freshEvents = useEventsStore.getState().events;
-              const todayIncrements = freshEvents.filter(
-                (e) =>
-                  e.mark_id === id &&
-                  e.event_type === 'increment' &&
-                  e.occurred_local_date === todayStr &&
-                  !e.deleted_at,
-              );
-              for (const event of todayIncrements) {
-                await useEventsStore.getState().deleteEvent(event.id);
-              }
-            } catch (error) {
-              logger.error('reset today failed:', error);
-              Alert.alert('Error', 'Could not reset progress for today');
-            }
-          },
-        },
-      ],
-    );
+    const ok = await confirm({
+      title: "Reset today's progress",
+      message: `Remove today's ${todayCount} log${todayCount === 1 ? '' : 's'} for "${counter.name}"?`,
+      confirmLabel: 'Reset',
+      cancelLabel: 'Cancel',
+      destructive: true,
+    });
+    if (!ok) return;
+    try {
+      const freshEvents = useEventsStore.getState().events;
+      const todayIncrements = freshEvents.filter(
+        (e) =>
+          e.mark_id === id &&
+          e.event_type === 'increment' &&
+          e.occurred_local_date === todayStr &&
+          !e.deleted_at,
+      );
+      for (const event of todayIncrements) {
+        await useEventsStore.getState().deleteEvent(event.id);
+      }
+    } catch (error) {
+      logger.error('reset today failed:', error);
+      showError('Could not reset progress for today');
+    }
   };
 
-  const handleDeleteMark = () => {
+  const handleDeleteMark = async () => {
     if (!id) return;
-    Alert.alert(
-      'Delete mark?',
-      `Remove "${counter.name}"? This deletes the mark and its activity${user?.id ? ' from your account' : ''}.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () =>
-            Alert.alert('Are you sure?', `This permanently deletes "${counter.name}".`, [
-              { text: 'Cancel', style: 'cancel' },
-              {
-                text: 'Delete forever',
-                style: 'destructive',
-                onPress: async () => {
-                  try {
-                    await deleteCounter(id);
-                    router.replace('/(tabs)/focus' as any);
-                  } catch (error) {
-                    logger.error('delete mark failed:', error);
-                    Alert.alert('Error', 'Could not delete this mark.');
-                  }
-                },
-              },
-            ]),
-        },
-      ],
-    );
+    const first = await confirm({
+      title: 'Delete mark?',
+      message: `Remove "${counter.name}"? This deletes the mark and its activity${user?.id ? ' from your account' : ''}.`,
+      confirmLabel: 'Delete',
+      cancelLabel: 'Cancel',
+      destructive: true,
+    });
+    if (!first) return;
+    const sure = await confirm({
+      title: 'Are you sure?',
+      message: `This permanently deletes "${counter.name}".`,
+      confirmLabel: 'Delete forever',
+      cancelLabel: 'Cancel',
+      destructive: true,
+    });
+    if (!sure) return;
+    try {
+      await deleteCounter(id);
+      router.replace('/(tabs)/focus' as any);
+    } catch (error) {
+      logger.error('delete mark failed:', error);
+      showError('Could not delete this mark.');
+    }
   };
 
   const handleConnectHealth = async () => {
@@ -416,7 +408,7 @@ function MarkDetailContent() {
         }
       }
     } catch {
-      Alert.alert('Could not connect', 'Health permissions could not be requested. Try Settings → Privacy → Health.');
+      showError('Health permissions could not be requested. Try Settings → Privacy → Health.');
     } finally {
       setHealthConnecting(false);
       setHealthModalVisible(false);
@@ -426,17 +418,16 @@ function MarkDetailContent() {
 
   const handleDisconnectHealth = async () => {
     if (!id) return;
-    Alert.alert('Disconnect Apple Health?', 'Your weekly reflection will return to manual check-ins.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Disconnect',
-        style: 'destructive',
-        onPress: async () => {
-          await updateMark(id, { health_kit_type: null, health_kit_config: null });
-          await cancelSleepNotification(id);
-        },
-      },
-    ]);
+    const ok = await confirm({
+      title: 'Disconnect Apple Health?',
+      message: 'Your weekly reflection will return to manual check-ins.',
+      confirmLabel: 'Disconnect',
+      cancelLabel: 'Cancel',
+      destructive: true,
+    });
+    if (!ok) return;
+    await updateMark(id, { health_kit_type: null, health_kit_config: null });
+    await cancelSleepNotification(id);
   };
 
   // ── Render ────────────────────────────────────────────────────────────────────
@@ -665,7 +656,7 @@ function MarkDetailContent() {
                   onPress={() => {
                     const goal = parseInt(healthStepGoal, 10);
                     if (isNaN(goal) || goal <= 0) {
-                      Alert.alert('Invalid goal', 'Enter a number greater than 0.');
+                      showError('Enter a number greater than 0.');
                       return;
                     }
                     void confirmHealthConnection('steps', goal);

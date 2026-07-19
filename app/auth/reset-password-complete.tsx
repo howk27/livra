@@ -7,7 +7,6 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -25,6 +24,8 @@ import {
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { getSupabaseClient } from '../../lib/supabase';
 import { logger } from '../../lib/utils/logger';
+import { useNotification } from '../../contexts/NotificationContext';
+import { confirm } from '../../components/ui/overlays';
 
 /** `checking` → session probe; `ready` → form; `invalid` → request new email (no defect in naming). */
 type RecoveryGate = 'checking' | 'ready' | 'invalid';
@@ -34,6 +35,7 @@ export default function ResetPasswordCompleteScreen() {
   const theme = useEffectiveTheme();
   const c = themedColors(theme);
   const router = useRouter();
+  const { showSuccess } = useNotification();
   const params = useLocalSearchParams<{ token?: string; type?: string }>();
 
   const [newPassword, setNewPassword] = useState('');
@@ -158,18 +160,8 @@ export default function ResetPasswordCompleteScreen() {
         throw updateError;
       }
 
-      Alert.alert(
-        'Password updated',
-        'You can now sign in with your new password.',
-        [
-          {
-            text: 'Sign in',
-            onPress: () => {
-              router.replace('/auth/signin');
-            },
-          },
-        ],
-      );
+      showSuccess('Password updated. You can now sign in with your new password.');
+      router.replace('/auth/signin');
     } catch (err: unknown) {
       const errorMessage =
         err instanceof Error ? err.message : 'Failed to reset password. Please try again.';
@@ -181,13 +173,13 @@ export default function ResetPasswordCompleteScreen() {
         errorMessage.includes('invalid') ||
         errorMessage.includes('no longer valid')
       ) {
-        Alert.alert('Reset link invalid', 'Request a new link from the sign-in screen.', [
-          {
-            text: 'Request new link',
-            onPress: () => router.replace('/auth/reset-password'),
-          },
-          { text: 'Cancel', style: 'cancel' },
-        ]);
+        const requestNew = await confirm({
+          title: 'Reset link invalid',
+          message: 'Request a new link from the sign-in screen.',
+          confirmLabel: 'Request new link',
+          cancelLabel: 'Cancel',
+        });
+        if (requestNew) router.replace('/auth/reset-password');
       }
     } finally {
       setLoading(false);

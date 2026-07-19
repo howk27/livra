@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   Image,
   Animated,
 } from 'react-native';
@@ -34,6 +33,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { LivraHeader } from '../../components/ui/LivraHeader';
 import { SectionLabel } from '../../components/ui/SectionLabel';
+import { DeleteAccountDialog } from '../../components/ui/DeleteAccountDialog';
+import { confirm } from '../../components/ui/overlays';
 import { fonts, spacing, radius, shadow, themedColors, fontSize } from '../../theme/tokens';
 import { useEffectiveTheme, useUIStore } from '../../state/uiSlice';
 
@@ -161,6 +162,7 @@ export default function SettingsScreen() {
   const [profileDisplayName, setProfileDisplayName] = useState<string | null>(null);
   const [persistedSyncDiag, setPersistedSyncDiag] = useState<SyncDiagSnapshotV1 | null>(null);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
   const [resendingVerification, setResendingVerification] = useState(false);
   const [pace, setPaceState] = useState<PaceLevel>('steady');
 
@@ -319,46 +321,28 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleSignOut = () => {
-    Alert.alert(
-      'Sign Out',
-      'Are you sure you want to sign out?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Sign Out',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await clearSyncCursors();
-              await AsyncStorage.removeItem('pro_unlocked');
-              router.push('/auth/signing-out');
-            } catch (error) {
-              logger.error('Error preparing sign out:', error);
-              Alert.alert('Error', 'Failed to prepare sign out. Please try again.');
-            }
-          },
-        },
-      ]
-    );
+  const handleSignOut = async () => {
+    const ok = await confirm({
+      title: 'Sign out?',
+      message: 'Are you sure you want to sign out?',
+      confirmLabel: 'Sign Out',
+      cancelLabel: 'Cancel',
+      destructive: true,
+    });
+    if (!ok) return;
+    try {
+      await clearSyncCursors();
+      await AsyncStorage.removeItem('pro_unlocked');
+      router.push('/auth/signing-out');
+    } catch (error) {
+      logger.error('Error preparing sign out:', error);
+      showError('Failed to prepare sign out. Please try again.');
+    }
   };
 
   const handleDeleteAccount = () => {
     if (!user?.id || isDeletingAccount) return;
-    Alert.alert(
-      'Delete Account',
-      'This permanently deletes your account and all associated data. This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete Account',
-          style: 'destructive',
-          onPress: () => {
-            void performAccountDeletion();
-          },
-        },
-      ]
-    );
+    setDeleteDialogVisible(true);
   };
 
   const performAccountDeletion = async () => {
@@ -375,10 +359,8 @@ export default function SettingsScreen() {
       if (!ok) {
         logger.error('[Settings] Account deletion failed:', error?.message ?? data);
         setIsDeletingAccount(false);
-        Alert.alert(
-          'Could not delete account',
-          'Something went wrong deleting your account. Please check your connection and try again.'
-        );
+        setDeleteDialogVisible(false);
+        showError('Something went wrong deleting your account. Please check your connection and try again.');
         return;
       }
 
@@ -400,10 +382,8 @@ export default function SettingsScreen() {
     } catch (e: any) {
       logger.error('[Settings] Account deletion threw:', e);
       setIsDeletingAccount(false);
-      Alert.alert(
-        'Could not delete account',
-        'Something went wrong deleting your account. Please check your connection and try again.'
-      );
+      setDeleteDialogVisible(false);
+      showError('Something went wrong deleting your account. Please check your connection and try again.');
     }
   };
 
@@ -423,14 +403,13 @@ export default function SettingsScreen() {
 
   const handleExportMarks = async () => {
     if (!canExportData(isProUnlocked)) {
-      Alert.alert(
-        'Export is a Livra+ perk',
-        'Your history is always yours to see. Livra+ adds CSV export so you can take it anywhere.',
-        [
-          { text: 'Not now', style: 'cancel' },
-          { text: 'See Livra+', onPress: () => router.push('/paywall') },
-        ]
-      );
+      const seePlus = await confirm({
+        title: 'Export is a Livra+ perk',
+        message: 'Your history is always yours to see. Livra+ adds CSV export so you can take it anywhere.',
+        confirmLabel: 'See Livra+',
+        cancelLabel: 'Not now',
+      });
+      if (seePlus) router.push('/paywall');
       return;
     }
     try {
@@ -461,33 +440,28 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleResetAllData = () => {
-    Alert.alert(
-      'Reset All Data',
-      'This permanently deletes all your marks, goals, and history on this device. Your account and sign-in stay intact. This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reset',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await resetDatabaseState();
-              // Reload the in-memory stores so the UI reflects the wipe.
-              await Promise.all([
-                useMarksStore.getState().loadMarks(user?.id),
-                user?.id ? useGoalsStore.getState().loadGoals(user.id) : Promise.resolve(),
-                useEventsStore.getState().loadEvents(undefined, user?.id),
-              ]);
-              showSuccess('All local data has been reset.');
-            } catch (e: any) {
-              logger.error('[Settings] Reset All Data failed:', e);
-              showError(e?.message || 'Failed to reset data.');
-            }
-          },
-        },
-      ]
-    );
+  const handleResetAllData = async () => {
+    const ok = await confirm({
+      title: 'Reset all data?',
+      message: 'This permanently deletes all your marks, goals, and history on this device. Your account and sign-in stay intact. This cannot be undone.',
+      confirmLabel: 'Reset',
+      cancelLabel: 'Cancel',
+      destructive: true,
+    });
+    if (!ok) return;
+    try {
+      await resetDatabaseState();
+      // Reload the in-memory stores so the UI reflects the wipe.
+      await Promise.all([
+        useMarksStore.getState().loadMarks(user?.id),
+        user?.id ? useGoalsStore.getState().loadGoals(user.id) : Promise.resolve(),
+        useEventsStore.getState().loadEvents(undefined, user?.id),
+      ]);
+      showSuccess('All local data has been reset.');
+    } catch (e: any) {
+      logger.error('[Settings] Reset All Data failed:', e);
+      showError(e?.message || 'Failed to reset data.');
+    }
   };
 
   const scrollContentBottomPad = spacing.xxl + TAB_BAR_CONTENT_HEIGHT + insets.bottom + spacing.lg;
@@ -712,6 +686,13 @@ export default function SettingsScreen() {
           </Text>
         </View>
       </ScrollView>
+
+      <DeleteAccountDialog
+        visible={deleteDialogVisible}
+        deleting={isDeletingAccount}
+        onClose={() => setDeleteDialogVisible(false)}
+        onConfirm={() => { void performAccountDeletion(); }}
+      />
     </View>
   );
 }

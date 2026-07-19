@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-  Alert,
   TextInput,
   Platform,
   KeyboardAvoidingView,
@@ -33,6 +32,7 @@ import { getAppDate } from '../../../lib/appDate';
 import { formatDate } from '../../../lib/date';
 import { applyOpacity } from '../../../src/components/icons/color';
 import { JournalComposer } from '../../../components/journal/JournalComposer';
+import { confirm } from '../../../components/ui/overlays';
 
 type ThemeColors = ReturnType<typeof themedColors>;
 
@@ -199,17 +199,15 @@ export default function GoalJournalScreen() {
   );
 
   const handleDelete = useCallback(
-    (noteId: string) => {
-      Alert.alert('Delete entry?', 'This journal entry will be permanently removed.', [
-        { text: 'Keep it', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            void deleteGoalNote(noteId);
-          },
-        },
-      ]);
+    async (noteId: string) => {
+      const ok = await confirm({
+        title: 'Delete entry?',
+        message: 'This journal entry will be permanently removed.',
+        confirmLabel: 'Delete',
+        cancelLabel: 'Keep it',
+        destructive: true,
+      });
+      if (ok) void deleteGoalNote(noteId);
     },
     [deleteGoalNote],
   );

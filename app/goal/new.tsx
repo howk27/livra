@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  Alert,
   Keyboard,
 } from 'react-native';
 import Animated from 'react-native-reanimated';
@@ -43,6 +42,7 @@ import { MarkDefinition } from '../../lib/suggestedCounters';
 import { colorForSuggestedCounter } from '../../lib/markCategory';
 import { defaultDailyTargetForMarkId } from '../../lib/markQuantitative';
 import { useDeferredAutoFocus } from '../../hooks/useDeferredAutoFocus';
+import { useNotification } from '../../contexts/NotificationContext';
 import { useHalfRenderProbe } from '../../hooks/useHalfRenderProbe';
 
 type Step = 'title' | 'commitment';
@@ -203,6 +203,7 @@ export default function NewGoalScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ title?: string }>();
   const { user } = useAuth();
+  const { showError } = useNotification();
   const createGoal = useGoalsStore(s => s.createGoal);
   const addMark = useMarksStore(s => s.addMark);
   const marks = useMarksStore(s => s.marks);
@@ -323,7 +324,7 @@ export default function NewGoalScreen() {
         // Livra's own in-app popup (GoalLimitDialog), not the iOS-native prompt.
         setCapVisible(true);
       } else {
-        Alert.alert('Error', 'Could not save goal. Please try again.');
+        showError('Could not save goal. Please try again.');
       }
     } finally {
       setSaving(false);

@@ -28,8 +28,6 @@ export const env = {
   isDev,
   isPreview,
   isProduction,
-  enableDiagnosticsByDefault: isDev,
-  allowMockData: isDev,
   executionEnvironment: Constants.executionEnvironment || 'unknown',
   appOwnership: Constants.appOwnership || 'unknown',
   posthogApiKey: process.env.EXPO_PUBLIC_POSTHOG_KEY || null,

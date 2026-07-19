@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-  Alert,
   TextInput,
   Modal,
   Platform,
@@ -60,6 +59,7 @@ import { useIapSubscriptions } from '../../hooks/useIapSubscriptions';
 import { canAddMarkToGoal, countMarksInGoal, FREE_MARKS_PER_GOAL } from '../../lib/gating';
 import { useMotion } from '../../hooks/useMotion';
 import { useNotification } from '../../contexts/NotificationContext';
+import { confirm } from '../../components/ui/overlays';
 import { CATEGORY_MAP } from '../../components/ui/MarkRow';
 import { GoalTitle } from '../../components/ui/GoalTitle';
 import { ProgressArc } from '../../components/ui/ProgressArc';
@@ -775,46 +775,52 @@ function useGoalWeekStory({
     [runDays, isNewBest, linkedMarks.length, dueCount, goal, todayStr],
   );
 
-  return { weeklyCountsMap, weekSentence };
+  return { weeklyCountsMap, todayCountsMap, weekSentence };
 }
 
 /** Confirm-then-run for completing a goal. Copy unchanged. */
-function confirmCompleteGoal(title: string, run: () => Promise<unknown>, onDone: () => void) {
-  Alert.alert(
-    'Complete this goal?',
-    `"${title}" will move to your history.`,
-    [
-      { text: 'Not yet', style: 'cancel' },
-      {
-        text: "Done, it's mine",
-        onPress: () => {
-          run().then(onDone).catch(() => {
-            Alert.alert('Error', 'Could not complete goal. Please try again.');
-          });
-        },
-      },
-    ],
-  );
+async function confirmCompleteGoal(
+  title: string,
+  run: () => Promise<unknown>,
+  onDone: () => void,
+  onError: (message: string) => void,
+) {
+  const ok = await confirm({
+    title: 'Complete this goal?',
+    message: `"${title}" will move to your history.`,
+    confirmLabel: "Done, it's mine",
+    cancelLabel: 'Not yet',
+  });
+  if (!ok) return;
+  try {
+    await run();
+    onDone();
+  } catch {
+    onError('Could not complete goal. Please try again.');
+  }
 }
 
 /** Confirm-then-run for removing a goal. Copy unchanged. */
-function confirmRemoveGoal(title: string, run: () => Promise<unknown>, onDone: () => void) {
-  Alert.alert(
-    'Remove this goal?',
-    `"${title}" will be permanently removed.`,
-    [
-      { text: 'Keep it', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: () => {
-          run().then(onDone).catch(() => {
-            Alert.alert('Error', 'Could not remove goal. Please try again.');
-          });
-        },
-      },
-    ],
-  );
+async function confirmRemoveGoal(
+  title: string,
+  run: () => Promise<unknown>,
+  onDone: () => void,
+  onError: (message: string) => void,
+) {
+  const ok = await confirm({
+    title: 'Remove this goal?',
+    message: `"${title}" will be permanently removed.`,
+    confirmLabel: 'Remove',
+    cancelLabel: 'Keep it',
+    destructive: true,
+  });
+  if (!ok) return;
+  try {
+    await run();
+    onDone();
+  } catch {
+    onError('Could not remove goal. Please try again.');
+  }
 }
 
 // ── Screen ───────────────────────────────────────────────────────────────────
@@ -909,7 +915,7 @@ export default function GoalDetailScreen() {
 
   // ── Weekly state (same machinery Focus uses) ──────────────────────────────
 
-  const { weeklyCountsMap, weekSentence } = useGoalWeekStory({
+  const { weeklyCountsMap, todayCountsMap, weekSentence } = useGoalWeekStory({
     goal,
     linkedMarks,
     allEvents,
@@ -983,26 +989,21 @@ export default function GoalDetailScreen() {
   // that plainly up front instead of letting the number move unexplained. No
   // guilt, no warning-off: the user asked for control.
   const handleUnlink = useCallback(
-    (mark: Mark) => {
-      Alert.alert(
-        'Unlink this mark?',
-        `"${mark.name}" keeps all of its history and carries on as a daily habit. This goal's progress will count only the marks still linked to it.`,
-        [
-          { text: 'Keep it linked', style: 'cancel' },
-          {
-            text: 'Unlink',
-            onPress: () => {
-              (async () => {
-                await unlinkMarkFromGoal(id!, mark.id);
-                await updateMark(mark.id, { goal_id: null });
-              })().catch((error: unknown) => {
-                logger.error('Error unlinking mark from goal:', error);
-                showError('Could not unlink that mark. Try again.');
-              });
-            },
-          },
-        ],
-      );
+    async (mark: Mark) => {
+      const ok = await confirm({
+        title: 'Unlink this mark?',
+        message: `"${mark.name}" keeps all of its history and carries on as a daily habit. This goal's progress will count only the marks still linked to it.`,
+        confirmLabel: 'Unlink',
+        cancelLabel: 'Keep it linked',
+      });
+      if (!ok) return;
+      try {
+        await unlinkMarkFromGoal(id!, mark.id);
+        await updateMark(mark.id, { goal_id: null });
+      } catch (error: unknown) {
+        logger.error('Error unlinking mark from goal:', error);
+        showError('Could not unlink that mark. Try again.');
+      }
     },
     [id, unlinkMarkFromGoal, updateMark, showError],
   );
@@ -1025,8 +1026,12 @@ export default function GoalDetailScreen() {
   // Completing is a moment, not a list move: run the confirm, then land on the
   // celebration screen (which nothing navigated to before M7).
   const handleComplete = () =>
-    confirmCompleteGoal(goal.title, () => completeGoal(id!), () =>
-      router.replace({ pathname: '/goal/complete', params: { goalTitle: goal.title, goalId: id! } } as any)
+    void confirmCompleteGoal(
+      goal.title,
+      () => completeGoal(id!),
+      () =>
+        router.replace({ pathname: '/goal/complete', params: { goalTitle: goal.title, goalId: id! } } as any),
+      showError,
     );
 
   const handleOpenDatePicker = () => {
@@ -1105,7 +1110,7 @@ export default function GoalDetailScreen() {
           canComplete={canComplete}
           onOpenDatePicker={handleOpenDatePicker}
           onComplete={handleComplete}
-          onDelete={() => confirmRemoveGoal(goal.title, () => deleteGoal(id!), () => router.back())}
+          onDelete={() => void confirmRemoveGoal(goal.title, () => deleteGoal(id!), () => router.back(), showError)}
         />
       </ScrollView>
 
