@@ -376,9 +376,17 @@ describe('QC4-M — legacy stored colors heal on read', () => {
     }
   });
 
-  it('the widget resolves color through the same healer, not mark.color raw', () => {
+  it('the widget resolves mark visuals through the category resolver, never raw mark.color', () => {
     const src = readFileSync(join(ROOT, 'lib/widgets/widgetSync.ts'), 'utf8');
-    expect(src).toContain('getCategoryColorForMark');
+    // Post widget-redesign (2026-07-19, spec §5): the widget mirrors the in-app
+    // mark tile — category-accent tinting via categoryVisual(resolveMarkCategory)
+    // — drawing from the SAME sanctioned `categoryAccents` palette as
+    // getCategoryColorForMark. The QC4-M intent (never render the raw stored
+    // mark.color; only sanctioned palette values) is preserved by a stronger
+    // mechanism: the widget no longer reads mark.color at all.
+    expect(src).toContain('categoryVisual');
+    expect(src).toContain('resolveMarkCategory');
+    expect(src).not.toMatch(/\bmark\.color\b/);
     // The private fallback that bypassed the palette entirely.
     expect(src).not.toContain('#C47E8A');
   });
