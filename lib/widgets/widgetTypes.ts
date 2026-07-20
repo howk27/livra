@@ -6,16 +6,19 @@ export interface WidgetMarkData {
   completed: boolean;
 }
 
-export interface WidgetData {
-  activeGoalTitle: string | null;
-  goalIcon: string;       // bundled imageset name for the active goal's category glyph
-  goalAccent: string;     // active goal's category accent hex
-  goalProgress: number;   // days/units completed toward the goal
-  goalThreshold: number;  // total days/units the goal requires
+export interface WidgetGoalData {
+  id: string;
+  title: string | null;
+  icon: string;      // bundled imageset name for the goal's majority-category glyph
+  accent: string;    // majority-category accent hex
+  progress: number;  // DAYS toward the goal's unlock threshold
+  threshold: number; // total days the goal requires (>= 1)
   marks: WidgetMarkData[];
-  completedCount: number;
-  totalCount: number;
-  lastUpdated: number;    // Unix ms timestamp
+}
+
+export interface WidgetData {
+  goals: WidgetGoalData[]; // active goals in getActiveGoals (sort_index) order; cap 4
+  lastUpdated: number;     // Unix ms timestamp
   isPro: boolean;
 }
 

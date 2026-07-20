@@ -2,28 +2,24 @@ import { Platform } from 'react-native';
 import { getAppDate } from '../appDate';
 import { query } from '../db';
 import { checkProStatus } from '../iap/iap';
+import { getActiveGoals } from '../goalLogic';
 import { useGoalsStore } from '../../state/goalsSlice';
 import { useMarksStore } from '../../state/countersSlice';
 import { resolveMarkCategory, majorityCategory } from '../markCategoryResolve';
-import type { WidgetData, WidgetMarkData } from './widgetTypes';
+import type { WidgetData, WidgetMarkData, WidgetGoalData } from './widgetTypes';
 import { APP_GROUP_ID, WIDGET_DATA_KEY } from './widgetTypes';
 import { categoryVisual } from './widgetIcons';
 
+const MAX_GOALS = 4;
+const MAX_MARKS_PER_GOAL = 6;
+
 export async function buildWidgetData(): Promise<WidgetData> {
   const goalsState = useGoalsStore.getState();
-  const activeGoal = goalsState.getActiveGoal();
   const { marks } = useMarksStore.getState();
   const { effectiveUnlocked: isPro } = await checkProStatus();
 
-  // Ring: progress toward the active goal's unlock threshold. Mirrors the
-  // goal-detail ring so the widget reads the same as the in-app view.
-  const goalRing = activeGoal
-    ? goalsState.getGoalProgress(activeGoal.id)
-    : { progress: 0, threshold: 7 };
-
   const appDate = getAppDate();
   const today = `${appDate.getFullYear()}-${String(appDate.getMonth() + 1).padStart(2, '0')}-${String(appDate.getDate()).padStart(2, '0')}`;
-
   const todayLogs = await query<{ mark_id: string; count: number }>(
     `SELECT counter_id AS mark_id, COUNT(*) AS count
      FROM lc_events
@@ -31,19 +27,10 @@ export async function buildWidgetData(): Promise<WidgetData> {
      GROUP BY counter_id`,
     [today],
   );
-  const loggedTodayIds = new Set(todayLogs.map(r => r.mark_id));
+  const loggedTodayIds = new Set(todayLogs.map((r) => r.mark_id));
+  const activeMarks = marks.filter((m) => !m.deleted_at);
 
-  const activeMarks = marks.filter(m => !m.deleted_at);
-
-  // The widget is goal-centric: prefer the active goal's marks, falling back to
-  // all active marks when the goal has none (or there is no active goal).
-  const goalMarks = activeGoal
-    ? activeMarks.filter(m => m.goal_id === activeGoal.id)
-    : [];
-  const sourceMarks = goalMarks.length > 0 ? goalMarks : activeMarks;
-
-  // Category icon + accent, mirroring the in-app mark tile (never a raw emoji).
-  const widgetMarks: WidgetMarkData[] = sourceMarks.slice(0, 6).map(mark => {
+  const toWidgetMark = (mark: (typeof activeMarks)[number]): WidgetMarkData => {
     const visual = categoryVisual(resolveMarkCategory({ name: mark.name, emoji: mark.emoji }));
     return {
       id: mark.id,
@@ -52,28 +39,46 @@ export async function buildWidgetData(): Promise<WidgetData> {
       accent: visual.accent,
       completed: loggedTodayIds.has(mark.id),
     };
-  });
-
-  const completedCount = widgetMarks.filter(m => m.completed).length;
-
-  // Goal icon = majority category across the goal's marks (goal-detail hero
-  // medallion parity), rendered as the matching SF Symbol + accent.
-  const goalVisual = categoryVisual(
-    majorityCategory(sourceMarks.map(m => ({ name: m.name, emoji: m.emoji }))),
-  );
-
-  return {
-    activeGoalTitle: activeGoal?.title ?? null,
-    goalIcon: goalVisual.icon,
-    goalAccent: goalVisual.accent,
-    goalProgress: goalRing.progress,
-    goalThreshold: Math.max(1, goalRing.threshold),
-    marks: widgetMarks,
-    completedCount,
-    totalCount: widgetMarks.length,
-    lastUpdated: Date.now(),
-    isPro,
   };
+
+  const goals: WidgetGoalData[] = [];
+  for (const goal of getActiveGoals(goalsState.goals).slice(0, MAX_GOALS)) {
+    const goalMarks = activeMarks.filter((m) => m.goal_id === goal.id).slice(0, MAX_MARKS_PER_GOAL);
+    if (goalMarks.length === 0) continue; // nothing loggable — skip
+    const ring = goalsState.getGoalProgress(goal.id);
+    const goalVisual = categoryVisual(
+      majorityCategory(goalMarks.map((m) => ({ name: m.name, emoji: m.emoji }))),
+    );
+    goals.push({
+      id: goal.id,
+      title: goal.title,
+      icon: goalVisual.icon,
+      accent: goalVisual.accent,
+      progress: ring.progress,
+      threshold: Math.max(1, ring.threshold),
+      marks: goalMarks.map(toWidgetMark),
+    });
+  }
+
+  // Fallback: no active goal has marks → one "Today" pseudo-goal over all marks,
+  // preserving the pre-rework goal-less behavior.
+  if (goals.length === 0 && activeMarks.length > 0) {
+    const fallbackMarks = activeMarks.slice(0, MAX_MARKS_PER_GOAL);
+    const goalVisual = categoryVisual(
+      majorityCategory(fallbackMarks.map((m) => ({ name: m.name, emoji: m.emoji }))),
+    );
+    goals.push({
+      id: 'today',
+      title: 'Today',
+      icon: goalVisual.icon,
+      accent: goalVisual.accent,
+      progress: 0,
+      threshold: 7,
+      marks: fallbackMarks.map(toWidgetMark),
+    });
+  }
+
+  return { goals, lastUpdated: Date.now(), isPro };
 }
 
 export async function syncWidgetData(): Promise<void> {
