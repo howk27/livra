@@ -16,7 +16,10 @@ enum WidgetPalette {
     static let ink = dynamic(light: "#1A1A18", dark: "#F0EDE8")
     static let inkMuted = dynamic(light: "#4A4A45", dark: "#A8C4BC")
     static let accent = dynamic(light: "#1C3830", dark: "#8DB5A8")
-    static let ringTrack = dynamic(light: "#1A1A18", dark: "#F0EDE8").opacity(0.13)
+    static let ringTrack = dynamic(
+        light: Color(hex: "#1A1A18").opacity(0.12),
+        dark: Color(hex: "#F0EDE8").opacity(0.14)
+    )
     // Sanctioned VD-1 ring gradient — light [amber→ember], dark [amber→amber].
     static let ringAmber = dynamic(light: "#D8A658", dark: "#E0B36A")
     static let ringEmber = dynamic(light: "#C8913F", dark: "#D8A658")
@@ -24,6 +27,12 @@ enum WidgetPalette {
     private static func dynamic(light: String, dark: String) -> Color {
         Color(UIColor { traits in
             UIColor(traits.userInterfaceStyle == .dark ? Color(hex: dark) : Color(hex: light))
+        })
+    }
+
+    private static func dynamic(light: Color, dark: Color) -> Color {
+        Color(UIColor { traits in
+            UIColor(traits.userInterfaceStyle == .dark ? dark : light)
         })
     }
 }

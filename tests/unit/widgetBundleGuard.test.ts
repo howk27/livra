@@ -132,6 +132,11 @@ describe('LivraWidget is theme-aware (light + dark surfaces)', () => {
     expect(views).toContain('#E0B36A'); // dark ring start
   });
 
+  it('resolves the ring-track opacity per theme (not a shared flat value)', () => {
+    expect(views).toMatch(/opacity\(0\.12\)/); // light ring track
+    expect(views).toMatch(/opacity\(0\.14\)/); // dark ring track
+  });
+
   it('still renders the current mark via the queue, not a fixed index', () => {
     expect(views).toMatch(/currentMark/);
     expect(views).toMatch(/currentGoal/);
