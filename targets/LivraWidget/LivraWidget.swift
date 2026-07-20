@@ -1,26 +1,31 @@
 import WidgetKit
 import SwiftUI
+import UIKit
 
-// MARK: - Palette (Livra design system — fixed forest dark surface)
+// MARK: - Palette (Livra design system — theme-aware surface)
 //
-// Values mirror theme/tokens.ts (colorsDark) + .reports/design-decisions.md.
+// Values mirror theme/tokens.ts (colorsLight / colorsDark) + .reports/design-decisions.md.
 // The widget is a native target and cannot import the TS tokens, so the token
-// VALUES are mirrored here. All text colors verified ≥ 4.5:1 against `bg`
-// (ink 10.85:1, inkMuted 6.81:1); the ring gradient reads as graphical.
+// VALUES are mirrored here. Surface/ink/muted/accent/ring-track resolve per
+// light/dark via a dynamic UIColor; category accents (on mark tiles) stay
+// constant regardless of scheme.
 
 enum WidgetPalette {
-    static let bg = Color(hex: "#1C3830")        // forest (colorsDark surface)
-    static let ink = Color(hex: "#F0EDE8")       // linen ink on dark
-    static let inkMuted = Color(hex: "#A8C4BC")  // mint-tinted muted (AA: 6.81:1)
-    static let accent = Color(hex: "#8DB5A8")    // mint — structural accent (tiles, buttons)
-    static let ringTrack = Color(hex: "#F0EDE8").opacity(0.14)
-    // Ring "star" gradient — the ONE non-forest progress surface
-    // (design-decisions 2026-07-15, "the ring is a star"). Exact mirror of the
-    // in-app goal-detail hero ring on dark: colorsDark.progressGradient in
-    // theme/tokens.ts = ['#E0B36A', '#D8A658'], so the widget ring reads as the
-    // same object as the in-app ring on the dark surface.
-    static let ringAmber = Color(hex: "#E0B36A")
-    static let ringEmber = Color(hex: "#D8A658")
+    // Dynamic surface/ink resolve per light/dark; category accents stay constant.
+    static let bg = dynamic(light: "#F0EDE8", dark: "#1C3830")
+    static let ink = dynamic(light: "#1A1A18", dark: "#F0EDE8")
+    static let inkMuted = dynamic(light: "#4A4A45", dark: "#A8C4BC")
+    static let accent = dynamic(light: "#1C3830", dark: "#8DB5A8")
+    static let ringTrack = dynamic(light: "#1A1A18", dark: "#F0EDE8").opacity(0.13)
+    // Sanctioned VD-1 ring gradient — light [amber→ember], dark [amber→amber].
+    static let ringAmber = dynamic(light: "#D8A658", dark: "#E0B36A")
+    static let ringEmber = dynamic(light: "#C8913F", dark: "#D8A658")
+
+    private static func dynamic(light: String, dark: String) -> Color {
+        Color(UIColor { traits in
+            UIColor(traits.userInterfaceStyle == .dark ? Color(hex: dark) : Color(hex: light))
+        })
+    }
 }
 
 // MARK: - Container background (iOS 17 migration)
@@ -73,7 +78,7 @@ struct LivraWidgetProvider: TimelineProvider {
 // MARK: - Goal ring (amber→ember progress arc, category glyph centered)
 
 struct GoalRingView: View {
-    let data: WidgetData
+    let goal: WidgetGoalData
     let diameter: CGFloat
     var lineWidth: CGFloat = 6
 
@@ -85,7 +90,7 @@ struct GoalRingView: View {
             // accent lives on the mark tiles, never the ring. No bottom-up icon
             // fill (failed device QA 3× on this stack); the glyph is static.
             Circle()
-                .trim(from: 0, to: max(0.0001, data.progressFraction))
+                .trim(from: 0, to: max(0.0001, goal.progressFraction))
                 .stroke(
                     AngularGradient(
                         gradient: Gradient(colors: [WidgetPalette.ringAmber, WidgetPalette.ringEmber]),
@@ -96,7 +101,7 @@ struct GoalRingView: View {
                 .rotationEffect(.degrees(-90))
             // The app's own Phosphor duotone glyph (accent baked into the asset),
             // statically centered — carries the goal's identity.
-            Image(data.goalIcon.isEmpty ? "livra_circle" : data.goalIcon)
+            Image(goal.icon.isEmpty ? "livra_circle" : goal.icon)
                 .resizable()
                 .scaledToFit()
                 .frame(width: diameter * 0.5, height: diameter * 0.5)
@@ -220,11 +225,11 @@ struct SmallWidgetView: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            GoalRingView(data: data, diameter: 58, lineWidth: 6)
-
-            if let mark = data.nextQueuedMark {
+            if let goal = data.currentGoal {
+                GoalRingView(goal: goal, diameter: 58, lineWidth: 6)
+            }
+            if let mark = data.currentMark {
                 LogMarkButton(mark: mark, compact: true)
-                QueueStatusText(data: data)
             } else {
                 AllDoneOrEmpty(data: data)
             }
@@ -243,18 +248,20 @@ struct MediumWidgetView: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            GoalRingView(data: data, diameter: 76, lineWidth: 7)
+            if let goal = data.currentGoal {
+                GoalRingView(goal: goal, diameter: 76, lineWidth: 7)
+            }
 
             VStack(alignment: .leading, spacing: 8) {
                 // Serif goal title — echoes the signature Cormorant voice via the
                 // system serif (New York); no font bundling into the appex in v1.
-                Text(data.activeGoalTitle ?? "No active goal")
+                Text(data.currentGoal?.title ?? "No active goal")
                     .font(.system(size: 15, weight: .semibold, design: .serif))
                     .foregroundColor(WidgetPalette.ink)
                     .lineLimit(1)
                     .truncationMode(.tail)
 
-                if let mark = data.nextQueuedMark {
+                if let mark = data.currentMark {
                     LogMarkButton(mark: mark, compact: false)
                     QueueStatusText(data: data)
                 } else {

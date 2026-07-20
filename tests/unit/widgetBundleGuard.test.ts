@@ -113,3 +113,27 @@ describe('LivraWidget iOS 17 container-background migration', () => {
     expect(views).not.toContain('.background(WidgetPalette.bg)');
   });
 });
+
+describe('LivraWidget is theme-aware (light + dark surfaces)', () => {
+  const views = readFileSync(
+    join(__dirname, '../../targets/LivraWidget/LivraWidget.swift'),
+    'utf8',
+  );
+
+  it('resolves surface + ink per color scheme via a dynamic UIColor', () => {
+    expect(views).toMatch(/UIColor\s*\{/); // trait-based dynamic color
+    expect(views).toContain('#F0EDE8'); // light surface
+    expect(views).toContain('#1C3830'); // dark surface
+    expect(views).toContain('#1A1A18'); // light ink
+  });
+
+  it('keeps the sanctioned amber→ember ring in both themes', () => {
+    expect(views).toContain('#C8913F'); // light ring end
+    expect(views).toContain('#E0B36A'); // dark ring start
+  });
+
+  it('still renders the current mark via the queue, not a fixed index', () => {
+    expect(views).toMatch(/currentMark/);
+    expect(views).toMatch(/currentGoal/);
+  });
+});
