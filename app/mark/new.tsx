@@ -28,6 +28,7 @@ import { useCounters } from '../../hooks/useCounters';
 import { SuggestedCounter, MARK_LIBRARY_BY_ID } from '../../lib/suggestedCounters';
 import { useAuth } from '../../hooks/useAuth';
 import { useGoalsStore } from '../../state/goalsSlice';
+import { getActiveGoals } from '../../lib/goalLogic';
 import { DuplicateCounterError, DuplicateMarkError } from '../../state/countersSlice';
 import type { GoalPeriod, ScheduleType, DayOfWeek } from '../../types';
 import { DuplicateCounterModal } from '../../components/DuplicateCounterModal';
@@ -160,7 +161,8 @@ export default function NewCounterScreen() {
   const goalsLoading = useGoalsStore(s => s.isLoading);
   const goalsError = useGoalsStore(s => s.error);
   const linkMarkToGoal = useGoalsStore(s => s.linkMarkToGoal);
-  const activeGoals = useMemo(() => goals.filter(g => g.status === 'active'), [goals]);
+  // sort_index order — the chooser must list goals as the Goals screen does.
+  const activeGoals = useMemo(() => getActiveGoals(goals), [goals]);
   // Smart default (ux-psychology): one active goal is not a decision — don't
   // stage one. Two or more, and the user picks; we never guess for them.
   const soleActiveGoalId = activeGoals.length === 1 ? activeGoals[0].id : null;

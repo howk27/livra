@@ -13,6 +13,7 @@ import * as Sharing from 'expo-sharing';
 import { themedColors, spacing, fontSize, fontWeight, borderRadius, fonts } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useGoalsStore } from '../../state/goalsSlice';
+import { getActiveGoals } from '../../lib/goalLogic';
 import { resolveCompletionState } from '../../lib/completionState';
 import { getAppDate } from '../../lib/appDate';
 import { checkProStatus } from '../../lib/iap/iap';
@@ -55,8 +56,9 @@ export default function GoalCompleteScreen() {
   const goals = useGoalsStore((s) => s.goals);
   const completedGoal = goalId ? goals.find((g) => g.id === goalId) : undefined;
 
+  // sort_index order, so "up next" is the goal the user ranked highest.
   const nextGoal = useGoalsStore((s) =>
-    s.goals.find((g) => g.status === 'active' && g.id !== goalId) ?? null
+    getActiveGoals(s.goals).find((g) => g.id !== goalId) ?? null
   );
 
   const closure = resolveCompletionState(goals);

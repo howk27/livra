@@ -48,6 +48,7 @@ import {
 } from '../../lib/momentumBannerDismiss';
 import { getMomentumBannerCopy } from '../../lib/copy';
 import { getAppDate } from '../../lib/appDate';
+import { getActiveGoals } from '../../lib/goalLogic';
 import { formatDate } from '../../lib/date';
 import { resolveDailyTarget } from '../../lib/markDailyTarget';
 import { partitionMarks } from '../../lib/maintenanceMarks';
@@ -115,10 +116,10 @@ export default function FocusScreen() {
   }, [allEvents, todayStr]);
 
   const goals = useGoalsStore((s) => s.goals);
-  const activeGoals = useMemo(
-    () => goals.filter((g) => g.status === 'active').slice(0, 2),
-    [goals],
-  );
+  // Canonical goal order is sort_index (the Goals-screen drag order) — raw
+  // store order diverges from it, so an unsorted filter here both ignored
+  // reorders and could slice the wrong two goals.
+  const activeGoals = useMemo(() => getActiveGoals(goals).slice(0, 2), [goals]);
 
   const momentumSnapshots = useMomentumStore((s) => s.snapshots);
   const longestRuns = useMomentumStore((s) => s.longestRuns);
