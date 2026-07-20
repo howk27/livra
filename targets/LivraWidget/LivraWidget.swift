@@ -15,9 +15,11 @@ enum WidgetPalette {
     static let accent = Color(hex: "#8DB5A8")    // mint — structural accent (tiles, buttons)
     static let ringTrack = Color(hex: "#F0EDE8").opacity(0.14)
     // Ring "star" gradient — the ONE non-forest progress surface
-    // (design-decisions 2026-07-15, "the ring is a star"). Mirrors the in-app
-    // goal-detail hero ring so the widget ring reads as the same object.
-    static let ringAmber = Color(hex: "#C8913F")
+    // (design-decisions 2026-07-15, "the ring is a star"). Exact mirror of the
+    // in-app goal-detail hero ring on dark: colorsDark.progressGradient in
+    // theme/tokens.ts = ['#E0B36A', '#D8A658'], so the widget ring reads as the
+    // same object as the in-app ring on the dark surface.
+    static let ringAmber = Color(hex: "#E0B36A")
     static let ringEmber = Color(hex: "#D8A658")
 }
 
