@@ -48,3 +48,28 @@ describe('LivraWidgetBundle gallery-crash guard', () => {
     expect(source).toContain('LivraLockScreenWidget()');
   });
 });
+
+/**
+ * Guard: the widget is fully free — no Pro gate in the views.
+ *
+ * The redesign's branch source gated logging behind `if !data.isPro { "Upgrade
+ * to Livra+…" }`, which walled the widget's core usability. Founder call
+ * (2026-07-19): the widget is fully free — logging is not Pro-gated in-app
+ * either, so the gate was pure widget-side invention. This locks it out for
+ * good; if a real Pro perk is ever added it must not resurrect this copy or a
+ * blanket `data.isPro` branch in the views.
+ */
+describe('LivraWidget views are fully free (no Pro gate)', () => {
+  const views = readFileSync(
+    join(__dirname, '../../targets/LivraWidget/LivraWidget.swift'),
+    'utf8',
+  );
+
+  it('has no isPro gating branch in the widget views', () => {
+    expect(views).not.toMatch(/if\s+!?\s*data\.isPro/);
+  });
+
+  it('has no upgrade/paywall copy in the widget views', () => {
+    expect(views).not.toMatch(/Upgrade to Livra\+|Livra\+ to log/);
+  });
+});

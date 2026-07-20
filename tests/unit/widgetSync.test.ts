@@ -8,7 +8,8 @@ jest.mock('react-native-shared-group-preferences', () => ({
 jest.mock('../../state/goalsSlice', () => ({
   useGoalsStore: {
     getState: jest.fn(() => ({
-      getActiveGoal: () => ({ id: 'goal-1', title: 'Run a 5K' }),
+      getActiveGoal: () => ({ id: 'goal-1', title: 'Run a 5K', icon: '🏃' }),
+      getGoalProgress: () => ({ progress: 4, threshold: 10, canComplete: false }),
     })),
   },
 }));
@@ -17,8 +18,10 @@ jest.mock('../../state/countersSlice', () => ({
   useMarksStore: {
     getState: jest.fn(() => ({
       marks: [
-        { id: 'mark-1', name: 'Workout', emoji: '💪', color: '#10B981', deleted_at: null },
-        { id: 'mark-2', name: 'Sleep', emoji: '😴', color: '#3B82F6', deleted_at: null },
+        // '😴' → category 'sleep' → moon.fill / recovery accent.
+        { id: 'mark-1', name: 'Sleep', emoji: '😴', goal_id: 'goal-1', deleted_at: null },
+        // '💧' → category 'water' → drop.fill / health accent.
+        { id: 'mark-2', name: 'Drink water', emoji: '💧', goal_id: 'goal-1', deleted_at: null },
       ],
     })),
   },
@@ -44,6 +47,8 @@ describe('buildWidgetData', () => {
   it('returns active goal title and marks with completion state', async () => {
     const data = await buildWidgetData();
     expect(data.activeGoalTitle).toBe('Run a 5K');
+    expect(data.goalProgress).toBe(4);
+    expect(data.goalThreshold).toBe(10);
     expect(data.marks).toHaveLength(2);
     expect(data.marks.find(m => m.id === 'mark-1')?.completed).toBe(true);
     expect(data.marks.find(m => m.id === 'mark-2')?.completed).toBe(false);
@@ -52,11 +57,36 @@ describe('buildWidgetData', () => {
     expect(data.isPro).toBe(true);
   });
 
+  it('renders category glyph assets + accents (never raw emoji) for marks and goal', async () => {
+    const data = await buildWidgetData();
+
+    const sleep = data.marks.find(m => m.id === 'mark-1');
+    expect(sleep?.icon).toBe('livra_moon');
+    expect(sleep?.accent).toBe('#6B8FA6'); // categoryAccents.recovery
+
+    const water = data.marks.find(m => m.id === 'mark-2');
+    expect(water?.icon).toBe('livra_drop');
+    expect(water?.accent).toBe('#4A8C7A'); // categoryAccents.health
+
+    // Goal icon = majority category across the goal's marks; the tie resolves to
+    // the first category in mark order ('sleep').
+    expect(data.goalIcon).toBe('livra_moon');
+    expect(data.goalAccent).toBe('#6B8FA6');
+
+    // No raw emoji leaks into the widget payload.
+    expect(JSON.stringify(data)).not.toMatch(/😴|💧|🏃/);
+  });
+
   it('handles no active goal gracefully', async () => {
     const { useGoalsStore } = require('../../state/goalsSlice');
     useGoalsStore.getState.mockReturnValueOnce({ getActiveGoal: () => undefined });
     const data = await buildWidgetData();
     expect(data.activeGoalTitle).toBeNull();
+    expect(data.goalProgress).toBe(0);
+    expect(data.goalThreshold).toBe(7);
+    // Falls back to a category glyph asset (from remaining marks), never emoji.
+    expect(data.goalIcon).toMatch(/^livra_/);
+    expect(data.goalAccent).toMatch(/^#[0-9A-Fa-f]{6}$/);
   });
 });
 
