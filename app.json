@@ -127,9 +127,9 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/Livra-Clean-Dark.png",
+          "image": "./assets/Livra-Splash-Mark.png",
           "resizeMode": "contain",
-          "backgroundColor": "#F0EBE3"
+          "backgroundColor": "#F0EDE8"
         }
       ],
       "expo-localization"
