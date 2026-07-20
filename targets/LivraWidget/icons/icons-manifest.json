@@ -1,0 +1,145 @@
+{
+  "moon.png": {
+    "def": "Moon",
+    "accent": "#6B8FA6",
+    "sha256": "b6348315b86e84847be288e9167f6ed3b577655f967dfc60c5d09ce7219617d5",
+    "bbox": {
+      "minX": 30,
+      "minY": 18,
+      "maxX": 220,
+      "maxY": 209
+    }
+  },
+  "pulse.png": {
+    "def": "Pulse",
+    "accent": "#A0614A",
+    "sha256": "636d6eddf3ef9dd2a14ebf2b036fb8bf97a320f04f87032c74f8b290f0982c38",
+    "bbox": {
+      "minX": 15,
+      "minY": 30,
+      "maxX": 224,
+      "maxY": 202
+    }
+  },
+  "drop.png": {
+    "def": "Drop",
+    "accent": "#4A8C7A",
+    "sha256": "055a287178e4e0609c0634cadc3c1580be4b7455a74e5f98c1c7e2f1c0da5728",
+    "bbox": {
+      "minX": 37,
+      "minY": 7,
+      "maxX": 202,
+      "maxY": 217
+    }
+  },
+  "heart.png": {
+    "def": "Heart",
+    "accent": "#8A6B7B",
+    "sha256": "ab571cbe0adafc302083772216f464dce51a65d9d29637aec2794aae7e06fad0",
+    "bbox": {
+      "minX": 15,
+      "minY": 37,
+      "maxX": 224,
+      "maxY": 217
+    }
+  },
+  "briefcase.png": {
+    "def": "Briefcase",
+    "accent": "#4A6A8C",
+    "sha256": "679ee714ed56ead09b7625190550387b4c13105c012b1cd2f2388c4c26f52c70",
+    "bbox": {
+      "minX": 22,
+      "minY": 22,
+      "maxX": 217,
+      "maxY": 202
+    }
+  },
+  "pencil.png": {
+    "def": "PencilSimple",
+    "accent": "#7A4A8C",
+    "sha256": "5fbf6b2784b7c8867699b6da8ccdcdb03a6edf2e3ca25aa2589da3f126cc1f0d",
+    "bbox": {
+      "minX": 30,
+      "minY": 22,
+      "maxX": 217,
+      "maxY": 209
+    }
+  },
+  "shield.png": {
+    "def": "Shield",
+    "accent": "#8A7E6B",
+    "sha256": "8a8f7478a809d1461d0190cc0d4aa3402aa69707948579306bbb65f2454c74b2",
+    "bbox": {
+      "minX": 30,
+      "minY": 37,
+      "maxX": 209,
+      "maxY": 224
+    }
+  },
+  "users.png": {
+    "def": "Users",
+    "accent": "#9E7B6B",
+    "sha256": "2b0de9672d7f75b25982bcf18a6eae6a44a0f25bd206e8c400bd77f2d9783fda",
+    "bbox": {
+      "minX": 2,
+      "minY": 45,
+      "maxX": 237,
+      "maxY": 194
+    }
+  },
+  "currency.png": {
+    "def": "CurrencyDollar",
+    "accent": "#9E8A6B",
+    "sha256": "57d9218136311961448bdaeed23080058c4e1f6c7acea04551d604cb161e55ca",
+    "bbox": {
+      "minX": 52,
+      "minY": 15,
+      "maxX": 187,
+      "maxY": 224
+    }
+  },
+  "envelope.png": {
+    "def": "EnvelopeSimple",
+    "accent": "#4A7A8C",
+    "sha256": "98816358c4ce3c03a167c02c6587e766307b277420ccd72f93c221b2dc1ee681",
+    "bbox": {
+      "minX": 22,
+      "minY": 45,
+      "maxX": 217,
+      "maxY": 194
+    }
+  },
+  "calendar.png": {
+    "def": "Calendar",
+    "accent": "#8C7A3A",
+    "sha256": "8158028249fdc6fa188abb3677d967f6707f3248b00d007db02c3aceb5f31387",
+    "bbox": {
+      "minX": 30,
+      "minY": 15,
+      "maxX": 209,
+      "maxY": 209
+    }
+  },
+  "book.png": {
+    "def": "BookOpen",
+    "accent": "#7A4A8C",
+    "sha256": "49bae76f4fc09805540079bb1977831e09c66434af57c0394e30c54190f1a392",
+    "bbox": {
+      "minX": 15,
+      "minY": 45,
+      "maxX": 224,
+      "maxY": 224
+    }
+  },
+  "circle.png": {
+    "def": "Circle",
+    "accent": "#6B7A6B",
+    "sha256": "66026eb8d4797cf8acb9b5c556ceccd02cf202554e8a3e216eb3ab70e5284b03",
+    "bbox": {
+      "minX": 22,
+      "minY": 22,
+      "maxX": 217,
+      "maxY": 217
+    }
+  }
+}

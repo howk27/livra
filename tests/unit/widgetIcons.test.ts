@@ -25,6 +25,27 @@ describe('categoryVisual', () => {
     expect(categoryVisual('')).toEqual(custom);
   });
 
+  it('every bundled PNG matches the generator manifest (guards clipped/hand-edited assets)', () => {
+    // The 2026-07 "icons render half way" device bug: PNGs committed with the
+    // glyph clipped at ~62% canvas height. scripts/generate-widget-icons.js
+    // only writes the manifest after its bounding-box clip assertion passes,
+    // so bytes-match-manifest ⇒ the asset came from a verified render.
+    const crypto = require('crypto') as typeof import('crypto');
+    const iconsDir = path.join(__dirname, '../../targets/LivraWidget/icons');
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(iconsDir, 'icons-manifest.json'), 'utf8'),
+    ) as Record<string, { sha256: string }>;
+    const pngs = fs.readdirSync(iconsDir).filter((f) => f.endsWith('.png'));
+    expect(pngs.sort()).toEqual(Object.keys(manifest).sort());
+    for (const file of pngs) {
+      const sha = crypto
+        .createHash('sha256')
+        .update(fs.readFileSync(path.join(iconsDir, file)))
+        .digest('hex');
+      expect(`${file}:${sha}`).toBe(`${file}:${manifest[file].sha256}`);
+    }
+  });
+
   it('every mapped glyph asset has a bundled PNG and a target images entry', () => {
     const keys = [
       'Recovery', 'Fitness', 'Health', 'Mindset', 'Deep Work', 'Creative',
