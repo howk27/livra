@@ -462,11 +462,6 @@ function MarkDetailContent() {
             ) : null}
           </View>
 
-          {/* ── What this measures ─────────────────────────────────────────── */}
-          <View style={styles.section}>
-            <MarkDefinitionBlock definition={resolveMarkDefinition(counter)} />
-          </View>
-
           {/* ── Compact Stat Row ── */}
           <View style={styles.compactStatRow}>
             <View style={styles.compactStatCell}>
@@ -601,6 +596,11 @@ function MarkDetailContent() {
               </View>
             </View>
           )}
+
+          {/* ── What this measures (reference — kept at the bottom) ─────────── */}
+          <View style={styles.section}>
+            <MarkDefinitionBlock definition={resolveMarkDefinition(counter)} />
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
 
