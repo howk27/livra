@@ -13,76 +13,80 @@ struct WidgetMarkData: Codable, Identifiable {
     let completed: Bool
 }
 
-struct WidgetData: Codable {
-    let activeGoalTitle: String?
-    let goalIcon: String
-    let goalAccent: String
-    let goalProgress: Int
-    let goalThreshold: Int
+struct WidgetGoalData: Codable, Identifiable {
+    let id: String
+    let title: String?
+    let icon: String
+    let accent: String
+    let progress: Int
+    let threshold: Int
     let marks: [WidgetMarkData]
-    let completedCount: Int
-    let totalCount: Int
+
+    var progressFraction: Double {
+        guard threshold > 0 else { return 0 }
+        return min(1, max(0, Double(progress) / Double(threshold)))
+    }
+    /// First not-yet-completed mark in this goal, or nil when the goal is done today.
+    var nextMark: WidgetMarkData? { marks.first(where: { !$0.completed }) }
+}
+
+struct WidgetData: Codable {
+    let goals: [WidgetGoalData]
     let lastUpdated: Double
     let isPro: Bool
 
-    // Older snapshots (written before the icon/ring fields existed) decode with
-    // these defaults so the widget never crashes on an app-update boundary.
-    enum CodingKeys: String, CodingKey {
-        case activeGoalTitle, goalIcon, goalAccent, goalProgress, goalThreshold
-        case marks, completedCount, totalCount, lastUpdated, isPro
-    }
+    enum CodingKeys: String, CodingKey { case goals, lastUpdated, isPro }
 
-    init(
-        activeGoalTitle: String?,
-        goalIcon: String,
-        goalAccent: String,
-        goalProgress: Int,
-        goalThreshold: Int,
-        marks: [WidgetMarkData],
-        completedCount: Int,
-        totalCount: Int,
-        lastUpdated: Double,
-        isPro: Bool
-    ) {
-        self.activeGoalTitle = activeGoalTitle
-        self.goalIcon = goalIcon
-        self.goalAccent = goalAccent
-        self.goalProgress = goalProgress
-        self.goalThreshold = goalThreshold
-        self.marks = marks
-        self.completedCount = completedCount
-        self.totalCount = totalCount
+    init(goals: [WidgetGoalData], lastUpdated: Double, isPro: Bool) {
+        self.goals = goals
         self.lastUpdated = lastUpdated
         self.isPro = isPro
     }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        activeGoalTitle = try c.decodeIfPresent(String.self, forKey: .activeGoalTitle)
-        goalIcon = (try? c.decode(String.self, forKey: .goalIcon)) ?? "livra_circle"
-        goalAccent = (try? c.decode(String.self, forKey: .goalAccent)) ?? "#6B7A6B"
-        goalProgress = (try? c.decode(Int.self, forKey: .goalProgress)) ?? 0
-        goalThreshold = max(1, (try? c.decode(Int.self, forKey: .goalThreshold)) ?? 7)
-        marks = (try? c.decode([WidgetMarkData].self, forKey: .marks)) ?? []
-        completedCount = (try? c.decode(Int.self, forKey: .completedCount)) ?? 0
-        totalCount = (try? c.decode(Int.self, forKey: .totalCount)) ?? 0
-        lastUpdated = (try? c.decode(Double.self, forKey: .lastUpdated)) ?? 0
         isPro = (try? c.decode(Bool.self, forKey: .isPro)) ?? false
+        lastUpdated = (try? c.decode(Double.self, forKey: .lastUpdated)) ?? 0
+        if let v2 = try? c.decode([WidgetGoalData].self, forKey: .goals) {
+            goals = v2
+        } else {
+            // Legacy v1 snapshot (written by an app build before v2, still on
+            // disk until the app next foregrounds). Adapt its top-level fields
+            // into a single goal so the widget renders instead of blanking.
+            goals = WidgetData.adaptLegacy(from: decoder)
+        }
+    }
+
+    private static func adaptLegacy(from decoder: Decoder) -> [WidgetGoalData] {
+        enum LegacyKeys: String, CodingKey {
+            case activeGoalTitle, goalIcon, goalAccent, goalProgress, goalThreshold, marks
+        }
+        guard let c = try? decoder.container(keyedBy: LegacyKeys.self) else { return [] }
+        let activeGoalTitle = (try? c.decodeIfPresent(String.self, forKey: .activeGoalTitle)) ?? nil
+        let goalIcon = (try? c.decodeIfPresent(String.self, forKey: .goalIcon)) ?? nil
+        let goalAccent = (try? c.decodeIfPresent(String.self, forKey: .goalAccent)) ?? nil
+        let goalProgress = (try? c.decodeIfPresent(Int.self, forKey: .goalProgress)) ?? nil
+        let goalThreshold = (try? c.decodeIfPresent(Int.self, forKey: .goalThreshold)) ?? nil
+        guard let marks = try? c.decodeIfPresent([WidgetMarkData].self, forKey: .marks),
+              let marksUnwrapped = marks, !marksUnwrapped.isEmpty else { return [] }
+        return [WidgetGoalData(
+            id: "legacy",
+            title: activeGoalTitle,
+            icon: goalIcon ?? "livra_circle",
+            accent: goalAccent ?? "#6B7A6B",
+            progress: goalProgress ?? 0,
+            threshold: max(1, goalThreshold ?? 7),
+            marks: marksUnwrapped
+        )]
     }
 
     static let placeholder = WidgetData(
-        activeGoalTitle: "Your active goal",
-        goalIcon: "livra_pulse",
-        goalAccent: "#A0614A",
-        goalProgress: 3,
-        goalThreshold: 7,
-        marks: [
-            WidgetMarkData(id: "p1", name: "Move today", icon: "livra_pulse", accent: "#A0614A", completed: false),
-        ],
-        completedCount: 0,
-        totalCount: 1,
-        lastUpdated: 0,
-        isPro: false
+        goals: [WidgetGoalData(
+            id: "p", title: "Your active goal", icon: "livra_pulse", accent: "#A0614A",
+            progress: 3, threshold: 7,
+            marks: [WidgetMarkData(id: "p1", name: "Move today", icon: "livra_pulse", accent: "#A0614A", completed: false)]
+        )],
+        lastUpdated: 0, isPro: false
     )
 
     static func load() -> WidgetData {
@@ -91,9 +95,7 @@ struct WidgetData: Codable {
             let jsonString = defaults.string(forKey: LIVRA_WIDGET_DATA_KEY),
             let jsonData = jsonString.data(using: .utf8),
             let decoded = try? JSONDecoder().decode(WidgetData.self, from: jsonData)
-        else {
-            return .placeholder
-        }
+        else { return .placeholder }
         return decoded
     }
 
@@ -102,43 +104,39 @@ struct WidgetData: Codable {
         return (Date().timeIntervalSince1970 * 1000) - lastUpdated > sixHoursMs
     }
 
-    var lastUpdatedString: String {
-        let date = Date(timeIntervalSince1970: lastUpdated / 1000)
-        let formatter = DateFormatter()
-        formatter.timeStyle = .short
-        formatter.dateStyle = .none
-        return formatter.string(from: date)
+    // MARK: - Sequential queue derivation
+    /// Current goal = first goal (sort order) with a mark still to log today; the
+    /// last goal when every goal is done, so the all-done medallion still shows.
+    var currentGoal: WidgetGoalData? {
+        goals.first(where: { $0.nextMark != nil }) ?? goals.last
+    }
+    /// Current mark = the current goal's next unlogged mark; nil ⇒ all done today.
+    var currentMark: WidgetMarkData? { currentGoal?.nextMark }
+    /// Marks still queued behind the current one, within the current goal.
+    var remainingToday: Int {
+        guard let g = currentGoal else { return 0 }
+        return max(0, g.marks.filter { !$0.completed }.count - 1)
     }
 
-    /// Ring fill, clamped to 0...1.
-    var progressFraction: Double {
-        guard goalThreshold > 0 else { return 0 }
-        return min(1, max(0, Double(goalProgress) / Double(goalThreshold)))
-    }
-
-    /// The next mark to offer for logging: the first one not yet completed today.
-    /// Nil when everything loggable is done.
-    var nextQueuedMark: WidgetMarkData? {
-        marks.first(where: { !$0.completed })
-    }
-
-    /// How many other marks are still waiting behind `nextQueuedMark`.
-    var remainingQueuedCount: Int {
-        max(0, marks.filter { !$0.completed }.count - 1)
-    }
+    // MARK: - Backward-compat (lock-screen widget reads these v1 accessors)
+    var activeGoalTitle: String? { currentGoal?.title }
+    var goalProgress: Int { currentGoal?.progress ?? 0 }
+    var progressFraction: Double { currentGoal?.progressFraction ?? 0 }
+    var nextQueuedMark: WidgetMarkData? { currentMark }
+    var remainingQueuedCount: Int { remainingToday }
+    var marks: [WidgetMarkData] { currentGoal?.marks ?? [] }
 }
 
 // MARK: - Pending-log queue (widget → app reconciliation)
 
 enum WidgetLogQueue {
-    /// Append a tapped mark to the App Group queue so the app can replay it as a
-    /// real log on next foreground. Optimistically flips the mark to completed in
-    /// the cached snapshot so the widget can advance to the next queued mark
-    /// immediately, before the app has a chance to reconcile.
+    /// Append a tapped mark to the App Group queue for the app to replay, and
+    /// optimistically flip it to completed in the cached snapshot so the widget
+    /// advances to the next queued mark (and next goal) immediately. Does NOT
+    /// touch goal progress — the ring is days-based and updates on app sync.
     static func enqueue(markId: String) {
         guard let defaults = UserDefaults(suiteName: LIVRA_APP_GROUP_ID) else { return }
 
-        // 1. Append to the pending-logs array.
         var queue: [[String: Any]] = []
         if let raw = defaults.string(forKey: LIVRA_PENDING_LOGS_KEY),
            let data = raw.data(using: .utf8),
@@ -150,8 +148,6 @@ enum WidgetLogQueue {
            let str = String(data: data, encoding: .utf8) {
             defaults.set(str, forKey: LIVRA_PENDING_LOGS_KEY)
         }
-
-        // 2. Optimistically mark completed in the cached snapshot.
         optimisticallyComplete(markId: markId, defaults: defaults)
     }
 
@@ -162,27 +158,20 @@ enum WidgetLogQueue {
             let current = try? JSONDecoder().decode(WidgetData.self, from: jsonData)
         else { return }
 
-        let updatedMarks = current.marks.map { mark -> WidgetMarkData in
-            guard mark.id == markId, !mark.completed else { return mark }
-            return WidgetMarkData(
-                id: mark.id, name: mark.name, icon: mark.icon,
-                accent: mark.accent, completed: true
+        let updatedGoals = current.goals.map { goal -> WidgetGoalData in
+            guard goal.marks.contains(where: { $0.id == markId && !$0.completed }) else { return goal }
+            let updatedMarks = goal.marks.map { mark -> WidgetMarkData in
+                guard mark.id == markId, !mark.completed else { return mark }
+                return WidgetMarkData(id: mark.id, name: mark.name, icon: mark.icon, accent: mark.accent, completed: true)
+            }
+            // NOTE: progress is intentionally left unchanged — days-based ring.
+            return WidgetGoalData(
+                id: goal.id, title: goal.title, icon: goal.icon, accent: goal.accent,
+                progress: goal.progress, threshold: goal.threshold, marks: updatedMarks
             )
         }
-        let newlyCompleted = current.marks.contains { $0.id == markId && !$0.completed }
 
-        let updated = WidgetData(
-            activeGoalTitle: current.activeGoalTitle,
-            goalIcon: current.goalIcon,
-            goalAccent: current.goalAccent,
-            goalProgress: current.goalProgress + (newlyCompleted ? 1 : 0),
-            goalThreshold: current.goalThreshold,
-            marks: updatedMarks,
-            completedCount: current.completedCount + (newlyCompleted ? 1 : 0),
-            totalCount: current.totalCount,
-            lastUpdated: current.lastUpdated,
-            isPro: current.isPro
-        )
+        let updated = WidgetData(goals: updatedGoals, lastUpdated: current.lastUpdated, isPro: current.isPro)
         if let data = try? JSONEncoder().encode(updated),
            let str = String(data: data, encoding: .utf8) {
             defaults.set(str, forKey: LIVRA_WIDGET_DATA_KEY)
