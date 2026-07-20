@@ -99,7 +99,18 @@
     "typescript": "~6.0.3"
   },
   "overrides": {
-    "@tootallnate/once": ">=3.0.1"
+    "@tootallnate/once": ">=3.0.1",
+    "@expo/fingerprint": "0.19.8"
+  },
+  "expo": {
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "exclude": [
+          "react-native-health",
+          "react-native-shared-group-preferences"
+        ]
+      }
+    }
   },
   "private": true
 }
