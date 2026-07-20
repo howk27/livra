@@ -115,6 +115,36 @@ describe('buildWidgetData v2', () => {
     expect(data.goals[0].marks.length).toBe(6);
   });
 
+  it('includes a goal with marks even if it is beyond the first 4 candidates (filter before cap)', async () => {
+    const { useGoalsStore } = require('../../state/goalsSlice');
+    const { useMarksStore } = require('../../state/countersSlice');
+    // 6 goals: g0-g4 have no marks, g5 has marks at sort_index 5
+    const goals = Array.from({ length: 6 }, (_, i) => ({
+      id: `g${i}`, title: `Goal${i}`, status: 'active', sort_index: i,
+    }));
+    useGoalsStore.getState.mockReturnValueOnce({
+      goals,
+      getActiveGoals: () => goals,
+      getGoalProgress: (id: string) => (id === 'g5'
+        ? { progress: 3, threshold: 5 }
+        : { progress: 0, threshold: 7 }),
+    });
+    useMarksStore.getState.mockReturnValueOnce({
+      marks: [
+        // Only g5 has marks
+        { id: 'g5m1', name: 'Mark1', emoji: '📍', goal_id: 'g5', deleted_at: null },
+        { id: 'g5m2', name: 'Mark2', emoji: '📍', goal_id: 'g5', deleted_at: null },
+      ],
+    });
+    const data = await buildWidgetData();
+    // g5 should be in the snapshot (not the 'today' fallback)
+    expect(data.goals).toHaveLength(1);
+    expect(data.goals[0].id).toBe('g5');
+    expect(data.goals[0].progress).toBe(3);
+    expect(data.goals[0].threshold).toBe(5);
+    expect(data.goals[0].marks.map((m) => m.id)).toEqual(['g5m1', 'g5m2']);
+  });
+
   it('falls back to a single "Today" goal when no active goal has marks', async () => {
     const { useGoalsStore } = require('../../state/goalsSlice');
     useGoalsStore.getState.mockReturnValueOnce({

@@ -41,24 +41,32 @@ export async function buildWidgetData(): Promise<WidgetData> {
     };
   };
 
-  const goals: WidgetGoalData[] = [];
-  for (const goal of getActiveGoals(goalsState.goals).slice(0, MAX_GOALS)) {
-    const goalMarks = activeMarks.filter((m) => m.goal_id === goal.id).slice(0, MAX_MARKS_PER_GOAL);
-    if (goalMarks.length === 0) continue; // nothing loggable — skip
+  // Filter to goals with marks FIRST (preserving sort order), then cap at MAX_GOALS.
+  // This ensures a goal with marks beyond the first 4 candidates isn't lost.
+  const activeGoalsWithMarks = getActiveGoals(goalsState.goals)
+    .map((goal) => ({
+      goal,
+      goalMarks: activeMarks.filter((m) => m.goal_id === goal.id),
+    }))
+    .filter(({ goalMarks }) => goalMarks.length > 0)
+    .slice(0, MAX_GOALS);
+
+  const goals: WidgetGoalData[] = activeGoalsWithMarks.map(({ goal, goalMarks }) => {
+    const limitedMarks = goalMarks.slice(0, MAX_MARKS_PER_GOAL);
     const ring = goalsState.getGoalProgress(goal.id);
     const goalVisual = categoryVisual(
-      majorityCategory(goalMarks.map((m) => ({ name: m.name, emoji: m.emoji }))),
+      majorityCategory(limitedMarks.map((m) => ({ name: m.name, emoji: m.emoji }))),
     );
-    goals.push({
+    return {
       id: goal.id,
       title: goal.title,
       icon: goalVisual.icon,
       accent: goalVisual.accent,
       progress: ring.progress,
       threshold: Math.max(1, ring.threshold),
-      marks: goalMarks.map(toWidgetMark),
-    });
-  }
+      marks: limitedMarks.map(toWidgetMark),
+    };
+  });
 
   // Fallback: no active goal has marks → one "Today" pseudo-goal over all marks,
   // preserving the pre-rework goal-less behavior.
