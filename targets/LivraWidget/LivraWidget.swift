@@ -23,6 +23,29 @@ enum WidgetPalette {
     static let ringEmber = Color(hex: "#D8A658")
 }
 
+// MARK: - Container background (iOS 17 migration)
+//
+// iOS 17+ paints the widget's rounded-rect container itself and reserves default
+// content margins. A plain `.background()` on the CONTENT only fills the content
+// rect, so the system's default (dark) surface bleeds through at the corners and
+// margins — the "dark corners exposed" bug. The forest fill must be declared as
+// the CONTAINER background to reach the widget's edges. iOS 16 keeps the plain
+// background (containerBackground is unavailable there).
+//
+// The `if #available` here is inside a ViewBuilder body, NOT a WidgetBundle body
+// — it compiles to ViewBuilder.buildLimitedAvailability (safe), never the
+// WidgetBundleBuilder trap that caused the gallery crash (see widgetBundleGuard).
+extension View {
+    @ViewBuilder
+    func widgetContainerBackground(_ color: Color) -> some View {
+        if #available(iOS 17.0, *) {
+            containerBackground(color, for: .widget)
+        } else {
+            background(color)
+        }
+    }
+}
+
 // MARK: - Timeline
 
 struct LivraWidgetEntry: TimelineEntry {
@@ -208,7 +231,7 @@ struct SmallWidgetView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(WidgetPalette.bg)
+        .widgetContainerBackground(WidgetPalette.bg)
         .widgetURL(URL(string: "livra://home"))
     }
 }
@@ -244,7 +267,7 @@ struct MediumWidgetView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(WidgetPalette.bg)
+        .widgetContainerBackground(WidgetPalette.bg)
         .widgetURL(URL(string: "livra://home"))
     }
 }
@@ -279,5 +302,10 @@ struct LivraWidget: Widget {
         .configurationDisplayName("Livra")
         .description("Your goal ring and the next mark to log in one tap.")
         .supportedFamilies([.systemSmall, .systemMedium])
+        // iOS 17+ adds default content margins (~16pt) on top of the views'
+        // explicit padding, squeezing the ring + tiles past the content region
+        // (the "clipped / half-rendered elements" bug). We own our padding, so
+        // opt out of the system margins. No-op before iOS 17.
+        .contentMarginsDisabled()
     }
 }

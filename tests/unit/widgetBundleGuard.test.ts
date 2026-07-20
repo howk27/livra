@@ -73,3 +73,43 @@ describe('LivraWidget views are fully free (no Pro gate)', () => {
     expect(views).not.toMatch(/Upgrade to Livra\+|Livra\+ to log/);
   });
 });
+
+/**
+ * Guard: the iOS 17 container-background migration stays adopted.
+ *
+ * The redesign shipped with the iOS 16 pattern (`.background()` on the content +
+ * manual `.padding()`). On iOS 17+ that leaves the system's default dark surface
+ * bleeding at the widget's corners/margins (content background never reaches the
+ * container edge) AND double-pads the content against the system's default
+ * content margins, clipping the ring + tiles. Root-caused 2026-07-20 from a
+ * build-48 device report ("dark corners exposed", "half rendered icons/elements").
+ *
+ * Fix = declare the forest fill as the CONTAINER background + opt out of the
+ * system content margins (we own our padding). This locks both in so a future
+ * edit can't silently regress to the content-only `.background(WidgetPalette.bg)`.
+ */
+describe('LivraWidget iOS 17 container-background migration', () => {
+  const views = readFileSync(
+    join(__dirname, '../../targets/LivraWidget/LivraWidget.swift'),
+    'utf8',
+  );
+
+  it('declares the forest fill via containerBackground(for: .widget)', () => {
+    // The helper does the iOS 17+ container background; both views call it with
+    // the forest fill.
+    expect(views).toContain('containerBackground(color, for: .widget)');
+    expect(views).toContain('widgetContainerBackground(WidgetPalette.bg)');
+  });
+
+  it('opts out of the system content margins', () => {
+    expect(views).toContain('.contentMarginsDisabled()');
+  });
+
+  it('no longer paints the forest fill as a content-only background', () => {
+    // The old bug: `.background(WidgetPalette.bg)` on the content view. The iOS 16
+    // fallback lives inside the widgetContainerBackground helper as `background(color)`
+    // (no `WidgetPalette.bg` literal), so this literal must not reappear as a
+    // content background on the Small/Medium views.
+    expect(views).not.toContain('.background(WidgetPalette.bg)');
+  });
+});
