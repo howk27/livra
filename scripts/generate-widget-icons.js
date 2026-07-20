@@ -16,6 +16,7 @@
  * edges, and fails loudly if any glyph comes out clipped again.
  */
 
+/* global __dirname */
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
