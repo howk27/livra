@@ -10,6 +10,12 @@ export const ONBOARDING_COMPLETED_STORAGE_KEY = 'has_completed_onboarding';
 export const ONBOARDING_COMPLETED_LEGACY_KEY = 'is_onboarded';
 /** Set when local completion succeeded but profile.onboarding_completed could not be updated (cross-device may lag). */
 export const ONBOARDING_REMOTE_PENDING_KEY = 'onboarding_remote_pending';
+/**
+ * Cap on the profile write during `completeOnboarding`. The Supabase client sets
+ * no fetch timeout, so an unbounded await could hang the final onboarding step
+ * indefinitely. Matches the 5s ceiling `loadUIState` uses for its profile query.
+ */
+export const ONBOARDING_REMOTE_TIMEOUT_MS = 5000;
 
 /**
  * Bumped by `resetOnboardingState` (sign-out, or a brand-new account created on a device
@@ -103,43 +109,92 @@ export const useUIStore = create<UIState>((set, get) => ({
     const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || '';
     const isSupabaseConfigured = Boolean(supabaseUrl && !supabaseUrl.includes('placeholder'));
 
+    // LOCAL FIRST — this must land before any network work.
+    //
+    // Onboarding completion is documented as local-first (see app/index.tsx),
+    // but this function used to await the profile update BEFORE writing the
+    // local flags. The Supabase client has no fetch timeout (lib/supabase.ts),
+    // so a stalled request left the user pinned on the last onboarding step
+    // with `isOnboarded` still false — and because app/index.tsx routes on that
+    // flag, relaunching bounced them straight back into onboarding. Retrying on
+    // a healthier connection "fixed" it, which is exactly how it was reported
+    // (2026-07-21). Writing local state first makes completion survive any
+    // network outcome; the server flag is best-effort and self-heals via
+    // ONBOARDING_REMOTE_PENDING_KEY on the next launch.
+    await AsyncStorage.multiSet([
+      [ONBOARDING_COMPLETED_STORAGE_KEY, 'true'],
+      [ONBOARDING_COMPLETED_LEGACY_KEY, 'true'],
+    ]);
+    set({ isOnboarded: true });
+
     let remoteOk = true;
     let retryPending = false;
 
     if (userId && isSupabaseConfigured) {
+      // Bounded like the loadUIState profile query — never block completion on
+      // a hanging request.
+      const withTimeout = async <T,>(
+        work: PromiseLike<T>,
+        label: string
+      ): Promise<{ result: T | null; timedOut: boolean }> => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const timeout = new Promise<'timeout'>((resolve) => {
+          timer = setTimeout(() => resolve('timeout'), ONBOARDING_REMOTE_TIMEOUT_MS);
+        });
+        try {
+          const outcome = await Promise.race([Promise.resolve(work), timeout]);
+          if (outcome === 'timeout') {
+            logger.warn(`[UIState] ${label} timed out, deferring to next-launch retry`);
+            return { result: null, timedOut: true };
+          }
+          return { result: outcome as T, timedOut: false };
+        } finally {
+          if (timer) clearTimeout(timer);
+        }
+      };
+
       try {
         const profileUpdate: Record<string, unknown> = { onboarding_completed: true };
         if (meta?.commitment) profileUpdate.onboarding_focus_area = meta.commitment;
         if (meta?.completedAt) profileUpdate.onboarding_completed_at = meta.completedAt;
         const hasMetadata = Object.keys(profileUpdate).length > 1;
 
-        const { error } = await supabase
-          .from('profiles')
-          .update(profileUpdate)
-          .eq('id', userId);
+        const { result, timedOut } = await withTimeout(
+          supabase.from('profiles').update(profileUpdate).eq('id', userId),
+          'onboarding profile update'
+        );
 
-        if (!error) {
-          await AsyncStorage.removeItem(ONBOARDING_REMOTE_PENDING_KEY);
-        } else if (hasMetadata) {
-          // Column-level grants can deny the metadata columns (42501) while
-          // onboarding_completed alone is allowed. The critical flag must land.
-          logger.warn(
-            '[UIState] full onboarding profile update denied, retrying critical flag only:',
-            error
-          );
-          const { error: flagError } = await supabase
-            .from('profiles')
-            .update({ onboarding_completed: true })
-            .eq('id', userId);
-          if (flagError) {
-            logger.error('[UIState] onboarding_completed flag update failed:', flagError);
-            remoteOk = false;
-          }
-          retryPending = true;
-        } else {
-          logger.error('[UIState] profile onboarding_completed update failed:', error);
+        if (timedOut) {
           remoteOk = false;
           retryPending = true;
+        } else {
+          const error = result?.error;
+          if (!error) {
+            await AsyncStorage.removeItem(ONBOARDING_REMOTE_PENDING_KEY);
+          } else if (hasMetadata) {
+            // Column-level grants can deny the metadata columns (42501) while
+            // onboarding_completed alone is allowed. The critical flag must land.
+            logger.warn(
+              '[UIState] full onboarding profile update denied, retrying critical flag only:',
+              error
+            );
+            const { result: flagResult, timedOut: flagTimedOut } = await withTimeout(
+              supabase.from('profiles').update({ onboarding_completed: true }).eq('id', userId),
+              'onboarding flag update'
+            );
+            if (flagTimedOut || flagResult?.error) {
+              logger.error(
+                '[UIState] onboarding_completed flag update failed:',
+                flagResult?.error ?? 'timeout'
+              );
+              remoteOk = false;
+            }
+            retryPending = true;
+          } else {
+            logger.error('[UIState] profile onboarding_completed update failed:', error);
+            remoteOk = false;
+            retryPending = true;
+          }
         }
       } catch (error) {
         logger.error('[UIState] profile onboarding_completed update threw:', error);
@@ -147,12 +202,6 @@ export const useUIStore = create<UIState>((set, get) => ({
         retryPending = true;
       }
     }
-
-    await AsyncStorage.multiSet([
-      [ONBOARDING_COMPLETED_STORAGE_KEY, 'true'],
-      [ONBOARDING_COMPLETED_LEGACY_KEY, 'true'],
-    ]);
-    set({ isOnboarded: true });
 
     if (retryPending) {
       await AsyncStorage.setItem(ONBOARDING_REMOTE_PENDING_KEY, '1');

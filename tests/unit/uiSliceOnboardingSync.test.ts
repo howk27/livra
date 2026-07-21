@@ -35,6 +35,7 @@ import {
   useUIStore,
   ONBOARDING_REMOTE_PENDING_KEY,
   ONBOARDING_COMPLETED_STORAGE_KEY,
+  ONBOARDING_REMOTE_TIMEOUT_MS,
 } from '../../state/uiSlice';
 
 describe('completeOnboarding remote sync', () => {
@@ -111,5 +112,66 @@ describe('completeOnboarding remote sync', () => {
     await useUIStore.getState().loadUIState('uid-1');
 
     expect(await AsyncStorage.getItem(ONBOARDING_REMOTE_PENDING_KEY)).toBe('1');
+  });
+
+  /**
+   * The "onboarding never completes" loop (founder, 2026-07-21): the profile
+   * update was awaited BEFORE the local flags were written, and the Supabase
+   * client sets no fetch timeout — so a stalled request left `isOnboarded`
+   * false, and app/index.tsx routed the user back into onboarding on every
+   * relaunch. Retrying on a healthier connection appeared to "fix" it.
+   */
+  describe('hanging remote (never resolves)', () => {
+    // Release the stalled requests at teardown so Jest can exit cleanly.
+    let release: Array<() => void> = [];
+    const stalledUpdate = () =>
+      new Promise<{ error: null }>((resolve) => {
+        release.push(() => resolve({ error: null }));
+      });
+
+    beforeEach(() => {
+      release = [];
+      jest.useFakeTimers();
+    });
+    afterEach(() => {
+      release.forEach((r) => r());
+      jest.useRealTimers();
+    });
+
+    it('completes locally without waiting for the remote update', async () => {
+      mockUpdate.mockImplementation(stalledUpdate); // settles only at teardown
+
+      const completion = useUIStore.getState().completeOnboarding('uid-1', {
+        commitment: 'steady',
+        completedAt: '2026-07-21T00:00:00Z',
+      });
+
+      // Local completion must not be gated on the network call at all.
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(useUIStore.getState().isOnboarded).toBe(true);
+
+      await jest.advanceTimersByTimeAsync(ONBOARDING_REMOTE_TIMEOUT_MS + 100);
+      const ok = await completion;
+
+      expect(ok).toBe(false); // caller learns the server flag did not land
+      expect(await AsyncStorage.getItem(ONBOARDING_COMPLETED_STORAGE_KEY)).toBe('true');
+      expect(await AsyncStorage.getItem(ONBOARDING_REMOTE_PENDING_KEY)).toBe('1');
+    });
+
+    it('resolves rather than hanging forever', async () => {
+      mockUpdate.mockImplementation(stalledUpdate);
+
+      const completion = useUIStore.getState().completeOnboarding('uid-1');
+      let settled = false;
+      completion.then(() => {
+        settled = true;
+      });
+
+      await jest.advanceTimersByTimeAsync(ONBOARDING_REMOTE_TIMEOUT_MS + 100);
+      await completion;
+
+      expect(settled).toBe(true);
+    });
   });
 });
