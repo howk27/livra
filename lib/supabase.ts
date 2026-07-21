@@ -141,12 +141,20 @@ export type Database = {
   public: {
     Tables: {
       profiles: {
+        // The pro_* subscription columns are service-role writable ONLY (guard
+        // trigger, 20260721_iap_subscription_lifecycle.sql). They appear in
+        // Insert/Update for shape completeness; a client write to them is
+        // silently reverted, so never rely on one.
         Row: {
           id: string;
           created_at: string;
           display_name: string | null;
           pro_unlocked: boolean;
           pro_unlocked_at: string | null;
+          pro_expires_at: string | null;
+          pro_original_transaction_id: string | null;
+          pro_product_id: string | null;
+          pro_status: 'active' | 'grace' | 'expired' | 'refunded' | 'revoked' | null;
           onboarding_completed: boolean;
           avatar_url: string | null;
         };
@@ -156,6 +164,10 @@ export type Database = {
           display_name?: string | null;
           pro_unlocked?: boolean;
           pro_unlocked_at?: string | null;
+          pro_expires_at?: string | null;
+          pro_original_transaction_id?: string | null;
+          pro_product_id?: string | null;
+          pro_status?: 'active' | 'grace' | 'expired' | 'refunded' | 'revoked' | null;
           onboarding_completed?: boolean;
           avatar_url?: string | null;
         };
@@ -165,6 +177,10 @@ export type Database = {
           display_name?: string | null;
           pro_unlocked?: boolean;
           pro_unlocked_at?: string | null;
+          pro_expires_at?: string | null;
+          pro_original_transaction_id?: string | null;
+          pro_product_id?: string | null;
+          pro_status?: 'active' | 'grace' | 'expired' | 'refunded' | 'revoked' | null;
           onboarding_completed?: boolean;
           avatar_url?: string | null;
         };

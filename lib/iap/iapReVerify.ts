@@ -55,7 +55,11 @@ export async function reVerifyProOnLaunch(): Promise<void> {
     if (result.status === 'invalid') {
       logger.log('[IAP] Re-verify: subscription lapsed — clearing local pro cache');
       await AsyncStorage.removeItem('pro_unlocked');
-      // checkProStatus will re-read from DB on next call; DB was already updated by the edge function.
+      // Clearing the cache only. NOTE (corrected 2026-07-21): the edge function
+      // does NOT write pro_unlocked = false on an invalid receipt — it returns
+      // 400 and touches nothing. Revocation comes from two other places:
+      // pro_expires_at lapsing (checked by checkProStatus and by livra_is_pro),
+      // and the apple-server-notifications webhook on refund/revoke/expiry.
     } else if (result.status === 'valid') {
       logger.log('[IAP] Re-verify: subscription still active');
     } else {

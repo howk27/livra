@@ -1,0 +1,29 @@
+# Supabase project config.
+#
+# Created 2026-07-21 for ONE reason: apple-server-notifications must run with
+# verify_jwt = false. Apple is not a Supabase user and sends no Supabase JWT, so
+# with the default (true) the platform gateway would 401 every notification
+# before our code ran — refunds, revokes and expiries would silently never
+# arrive.
+#
+# That function is NOT unauthenticated. Its authentication is Apple's own JWS:
+# the request body must be signed by a certificate chain terminating at the
+# pinned Apple Root CA G3 (supabase/functions/apple-server-notifications/verifyAppleJws.ts).
+# An unsigned POST to that URL changes nothing in the database.
+#
+# Every other function keeps verify_jwt = true; they are listed explicitly so the
+# exception above reads as a deliberate, reviewed choice rather than an omission.
+
+project_id = "livra"
+
+[functions.apple-server-notifications]
+verify_jwt = false
+
+[functions.validate-iap-receipt]
+verify_jwt = true
+
+[functions.delete-account]
+verify_jwt = true
+
+[functions.ai-goal-generation]
+verify_jwt = true

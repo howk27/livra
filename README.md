@@ -117,9 +117,10 @@ Then press `i` for iOS, `a` for Android, or `w` for web.
 ### Supabase Setup
 
 1. Create a project at [supabase.com](https://supabase.com)
-2. Apply the RLS policies from `SUPABASE_RLS_POLICIES.sql`
+2. Apply the RLS policies from `SUPABASE_RLS_POLICIES.sql`, then every file in `supabase/migrations/` in filename order
 3. Deploy the `validate-iap-receipt` Edge Function for subscription validation
-4. Copy your project URL and anon key to `.env`
+4. Deploy the `apple-server-notifications` Edge Function (`--no-verify-jwt`) so refunds, revokes and expiries revoke access — see `supabase/config.toml`
+5. Copy your project URL and anon key to `.env`
 
 ---
 
@@ -213,8 +214,13 @@ Before building for the App Store:
 - [ ] `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY` set in `.env`
 - [ ] EAS project ID configured in `app.json` (`eas init` if needed)
 - [ ] Supabase RLS policies applied
+- [ ] Migration `supabase/migrations/20260721_iap_subscription_lifecycle.sql` applied (creates the `update_pro_status` RPC — **without it every purchase fails silently**)
+- [ ] `APPLE_SHARED_SECRET` set as a Supabase Edge Function secret (App Store Connect → Subscriptions → App-Specific Shared Secret)
 - [ ] `validate-iap-receipt` Edge Function deployed and tested
-- [ ] Edge function revocation path active (lapsed subscriptions → `pro_unlocked = false`)
+- [ ] `apple-server-notifications` Edge Function deployed with `--no-verify-jwt` (Apple sends no Supabase JWT; auth is Apple's JWS signature)
+- [ ] App Store Connect → App Information → App Store Server Notifications **V2** URL set to `https://<project-ref>.supabase.co/functions/v1/apple-server-notifications` (Production **and** Sandbox), then "Send Test Notification" returns 200
+- [ ] `APPLE_ROOT_CA_G3_B64` secret set (base64 DER of [Apple Root CA - G3](https://www.apple.com/certificateauthority/AppleRootCA-G3.cer)) — pins the signature trust root instead of fetching it at runtime
+- [ ] Revocation path verified end to end: refund a sandbox purchase → `profiles.pro_unlocked` flips to `false`, `pro_status` = `refunded`
 - [ ] Apple Health entitlements configured in EAS credentials
 - [ ] Push notification certificate configured
 

@@ -378,12 +378,21 @@ export async function checkProStatus(): Promise<ProStatusResult> {
 
     const { data, error } = await supabase
       .from('profiles')
-      .select('pro_unlocked')
+      .select('pro_unlocked, pro_expires_at')
       .eq('id', user.id)
       .single();
 
     if (!error && data != null) {
-      if (data.pro_unlocked) {
+      // Mirror public.livra_is_pro exactly (20260721_iap_subscription_lifecycle.sql):
+      // unlocked AND not past expiry. Reading pro_unlocked alone would keep
+      // showing Pro to a user whose subscription has already lapsed, until an
+      // Apple webhook happened to flip the boolean — the server-side RLS caps
+      // would already be treating them as free. A NULL expiry means "no expiry
+      // known" (legacy rows granted before that migration), not "expired".
+      const expiresAt = data.pro_expires_at ? new Date(data.pro_expires_at).getTime() : null;
+      const notExpired = expiresAt === null || Number.isNaN(expiresAt) || expiresAt > Date.now();
+
+      if (data.pro_unlocked && notExpired) {
         const cacheEntry = {
           value: true,
           checkedAt: new Date().toISOString(),
@@ -561,7 +570,18 @@ export async function validateReceiptWithServer(params: {
       serverError: data?.error ?? 'Unknown error',
     });
     const serverReason = String(data?.error ?? data?.reason ?? 'non_success');
-    const invalidSignals = ['invalid', 'expired', 'revoked', 'not_purchased', 'mismatched'];
+    // `already_linked` is the 409 from update_pro_status' replay guard: this Apple
+    // subscription belongs to a different Livra account. That is permanent, so it
+    // must read as invalid — treating it as transient would retry a condition that
+    // can never clear, and leave the transaction unfinished.
+    const invalidSignals = [
+      'invalid',
+      'expired',
+      'revoked',
+      'not_purchased',
+      'mismatched',
+      'already_linked',
+    ];
     const isInvalid = invalidSignals.some((signal) => serverReason.toLowerCase().includes(signal));
     return isInvalid
       ? { status: 'invalid', reason: serverReason }
