@@ -129,7 +129,12 @@
         {
           "image": "./assets/Livra-Splash-Mark.png",
           "resizeMode": "contain",
-          "backgroundColor": "#F0EDE8"
+          "backgroundColor": "#F0EDE8",
+          "dark": {
+            "image": "./assets/Livra-Splash-Mark-Dark.png",
+            "resizeMode": "contain",
+            "backgroundColor": "#15211D"
+          }
         }
       ],
       "expo-localization"
