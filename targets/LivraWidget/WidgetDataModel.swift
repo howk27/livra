@@ -67,8 +67,13 @@ struct WidgetData: Codable {
         let goalAccent = (try? c.decodeIfPresent(String.self, forKey: .goalAccent)) ?? nil
         let goalProgress = (try? c.decodeIfPresent(Int.self, forKey: .goalProgress)) ?? nil
         let goalThreshold = (try? c.decodeIfPresent(Int.self, forKey: .goalThreshold)) ?? nil
+        // Swift 5 `try?` FLATTENS optionals (SE-0230): `try? decodeIfPresent(...)`
+        // is already `[WidgetMarkData]?`, so this single `guard let` yields a
+        // non-optional `marks`. Do NOT add a second `let x = marks` unwrap — that
+        // binds a non-optional and fails to compile ("initializer for conditional
+        // binding must have Optional type").
         guard let marks = try? c.decodeIfPresent([WidgetMarkData].self, forKey: .marks),
-              let marksUnwrapped = marks, !marksUnwrapped.isEmpty else { return [] }
+              !marks.isEmpty else { return [] }
         return [WidgetGoalData(
             id: "legacy",
             title: activeGoalTitle,
@@ -76,7 +81,7 @@ struct WidgetData: Codable {
             accent: goalAccent ?? "#6B7A6B",
             progress: goalProgress ?? 0,
             threshold: max(1, goalThreshold ?? 7),
-            marks: marksUnwrapped
+            marks: marks
         )]
     }
 
