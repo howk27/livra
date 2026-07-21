@@ -26,6 +26,7 @@ import {
   CaretRight,
   PencilSimple,
   Envelope,
+  Lock,
   type Icon,
   type IconProps,
 } from 'phosphor-react-native';
@@ -46,6 +47,7 @@ import { useEventsStore } from '../../state/eventsSlice';
 import { useMarksStore } from '../../state/countersSlice';
 import { useGoalsStore } from '../../state/goalsSlice';
 import { getSupabaseClient } from '../../lib/supabase';
+import { isApplePrivateRelayEmail } from '../../lib/auth/accountCredentials';
 import { clearSyncCursors } from '../../lib/sync/syncCursors';
 import { resetDatabaseState } from '../../lib/db';
 import { generateAllCountersCSV } from '../../lib/csv';
@@ -194,6 +196,7 @@ export default function SettingsScreen() {
   }, [pace, showSuccess, showError]);
 
   const emailVerified = !!user?.email_confirmed_at;
+  const onPrivateRelay = isApplePrivateRelayEmail(user?.email);
 
   const refreshRotation = useRef(new Animated.Value(0)).current;
   const lastSyncErrorRef = useRef<string | null>(null);
@@ -512,11 +515,27 @@ export default function SettingsScreen() {
               </Text>
             </TouchableOpacity>
           </View>
+        ) : onPrivateRelay ? (
+          /* ── Apple private-relay nudge: Apple hides the real address ── */
+          <View style={[styles.verifyBanner, { backgroundColor: c.surface, borderColor: c.borderLight }]}>
+            <Envelope size={16} color={c.inkMid} weight="regular" />
+            <Text style={[styles.verifyText, { color: c.inkMid }]}>
+              Apple hides your real email. Add your own so account mail reaches you.
+            </Text>
+            <TouchableOpacity onPress={() => router.push('/settings/account' as any)} activeOpacity={0.7}>
+              <Text style={[styles.verifyAction, { color: c.accent }]}>Set email</Text>
+            </TouchableOpacity>
+          </View>
         ) : null}
 
         {/* ── ACCOUNT ── */}
         <SectionLabel style={styles.sectionLabel}>ACCOUNT</SectionLabel>
         <SettingsCard>
+          <SettingsRow
+            icon={Lock}
+            label="Sign-in"
+            onPress={() => router.push('/settings/account' as any)}
+          />
           <SettingsRow
             icon={Bell}
             label="Notifications"

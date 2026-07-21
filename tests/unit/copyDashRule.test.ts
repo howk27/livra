@@ -6,6 +6,7 @@ const COPY_MODULES = [
   'lib/weeklyReflectionCopy.ts',
   'components/ui/GoalHeroStep.tsx',
   'lib/moments/content.ts',
+  'lib/auth/accountCredentials.ts',
 ];
 
 // Matches single-quoted, double-quoted, and backtick string literals (no escaped
