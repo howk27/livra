@@ -1,44 +1,60 @@
 // components/mark/MarkDefinitionBlock.tsx
-// "What this measures" on the mark-detail screen: the per-mark definition plus a
-// subtle, tappable reveal of the canonical TERMS.mark. Presentational + pure;
-// no animation (reduced-motion safe by construction).
+// The reference block at the bottom of the mark-detail screen. Two subtle,
+// tappable questions — "What counts here?" reveals the per-mark definition,
+// "What's a mark?" reveals the canonical TERMS.mark. Presentational + pure;
+// the caret rotation is a static transform (reduced-motion safe by construction).
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { CaretRight } from 'phosphor-react-native';
 import { themedColors, spacing, fonts, fontSize } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
-import { SectionLabel } from '../ui/SectionLabel';
 import { TERMS } from '../../lib/copy';
 
-export function MarkDefinitionBlock({ definition }: { definition: string }) {
+// One tappable question that discloses its answer. Owns its open state so the
+// two rows toggle independently.
+function RevealRow({ question, answer }: { question: string; answer: string }) {
   const c = themedColors(useEffectiveTheme());
-  const [showConcept, setShowConcept] = useState(false);
+  const [open, setOpen] = useState(false);
 
   return (
-    <View style={styles.wrap}>
-      <SectionLabel>WHAT THIS MEASURES</SectionLabel>
-      <Text style={[styles.definition, { color: c.inkMid }]}>{definition}</Text>
+    <View>
       <TouchableOpacity
         style={styles.linkTouch}
-        onPress={() => setShowConcept((v) => !v)}
+        onPress={() => setOpen((v) => !v)}
         accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
-        <Text style={[styles.link, { color: c.accent }]}>What's a mark?</Text>
+        <Text style={[styles.link, { color: c.accent }]}>{question}</Text>
+        <CaretRight
+          size={14}
+          weight="bold"
+          color={c.accent}
+          style={open ? styles.caretOpen : styles.caret}
+        />
       </TouchableOpacity>
-      {showConcept && (
-        <Text style={[styles.concept, { color: c.inkMid }]}>{TERMS.mark}</Text>
-      )}
+      {/* inkMid, not inkMuted: inkMuted fails AA 4.5:1 on linen at this size
+          (repeat offender, see markDefinitionA11y.test.ts + design-decisions Log). */}
+      {open && <Text style={[styles.concept, { color: c.inkMid }]}>{answer}</Text>}
+    </View>
+  );
+}
+
+export function MarkDefinitionBlock({ definition }: { definition: string }) {
+  return (
+    <View style={styles.wrap}>
+      <RevealRow question="What counts here?" answer={definition} />
+      <RevealRow question="What's a mark?" answer={TERMS.mark} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: { gap: spacing.sm },
-  definition: { fontFamily: fonts.sans, fontSize: fontSize.base, lineHeight: 22 },
   // 44pt floor for the tap target (RN sizes a single text line well under it).
-  linkTouch: { minHeight: 44, justifyContent: 'center' },
+  linkTouch: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   link: { fontFamily: fonts.sansMedium, fontSize: fontSize.sm },
-  // inkMid, not inkMuted: inkMuted fails AA 4.5:1 on linen at this size
-  // (repeat offender, see markDefinitionA11y.test.ts + design-decisions Log).
+  caret: { transform: [{ rotate: '0deg' }] },
+  caretOpen: { transform: [{ rotate: '90deg' }] },
   concept: { fontFamily: fonts.sansItalic, fontSize: fontSize.sm, lineHeight: 20 },
 });

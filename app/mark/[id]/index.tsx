@@ -597,7 +597,7 @@ function MarkDetailContent() {
             </View>
           )}
 
-          {/* ── What this measures (reference — kept at the bottom) ─────────── */}
+          {/* ── Reference (tap-to-reveal "What counts here?" / "What's a mark?") ── */}
           <View style={styles.section}>
             <MarkDefinitionBlock definition={resolveMarkDefinition(counter)} />
           </View>
