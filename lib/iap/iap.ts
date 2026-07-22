@@ -16,6 +16,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { logger } from '../utils/logger';
 import { MONTHLY_SKU, YEARLY_SKU, ALL_SUBS_SKUS } from './skus';
+import { classifyValidationFailure } from './validationOutcome';
 import { env } from '../env';
 
 // Subscription product IDs - Imported from single source of truth (lib/iap/skus.ts)
@@ -545,15 +546,37 @@ export async function validateReceiptWithServer(params: {
     const error = result?.error;
 
     if (error) {
-      // Edge function responded with an error (not a timeout)
+      // supabase-js raises FunctionsHttpError for ANY non-2xx and leaves `data`
+      // null, so the server's reason is only reachable through error.context —
+      // the Response. Without reading it, a 409 (subscription already linked) is
+      // indistinguishable from a 500 and the client retries forever.
+      const ctx: any = (error as any)?.context;
+      const httpStatus = typeof ctx?.status === 'number' ? ctx.status : undefined;
+      let serverReason: string | null = null;
+      if (ctx && typeof ctx.json === 'function') {
+        try {
+          const body = await ctx.json();
+          serverReason = body?.error ?? body?.reason ?? null;
+        } catch {
+          serverReason = null;
+        }
+      }
+
+      const outcome = classifyValidationFailure({ httpStatus, serverReason });
       logger.error('[IAP] Edge Function error during receipt validation', {
         code: error?.code,
+        httpStatus,
         message: error?.message ?? String(error),
+        serverReason,
+        classifiedAs: outcome.status,
         transactionId: params.transactionId,
         productId: params.productId,
         platform: params.platform,
       });
-      return { status: 'transient', reason: `edge_error:${error?.code ?? 'UNKNOWN'}` };
+      return {
+        status: outcome.status,
+        reason: serverReason ? outcome.reason : `edge_error:${error?.code ?? 'UNKNOWN'}`,
+      };
     }
 
     if (data && typeof data !== 'object') {
@@ -585,23 +608,14 @@ export async function validateReceiptWithServer(params: {
       platform: params.platform,
       serverError: data?.error ?? 'Unknown error',
     });
-    const serverReason = String(data?.error ?? data?.reason ?? 'non_success');
     // `already_linked` is the 409 from update_pro_status' replay guard: this Apple
     // subscription belongs to a different Livra account. That is permanent, so it
     // must read as invalid — treating it as transient would retry a condition that
-    // can never clear, and leave the transaction unfinished.
-    const invalidSignals = [
-      'invalid',
-      'expired',
-      'revoked',
-      'not_purchased',
-      'mismatched',
-      'already_linked',
-    ];
-    const isInvalid = invalidSignals.some((signal) => serverReason.toLowerCase().includes(signal));
-    return isInvalid
-      ? { status: 'invalid', reason: serverReason }
-      : { status: 'transient', reason: serverReason };
+    // can never clear, and leave the transaction unfinished. Same classifier as the
+    // non-2xx branch above, so both paths agree on what is worth retrying.
+    return classifyValidationFailure({
+      serverReason: String(data?.error ?? data?.reason ?? 'non_success'),
+    });
   } catch (err: any) {
     // This catches BOTH timeout rejection and unexpected failures.
     const msg = err?.message ?? String(err);
