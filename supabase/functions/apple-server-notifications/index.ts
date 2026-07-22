@@ -12,7 +12,7 @@
 //   before this code ran. See supabase/config.toml:
 //       [functions.apple-server-notifications] verify_jwt = false
 //   The authentication is NOT missing, it is different: the request body is a
-//   JWS that must chain to Apple's pinned root CA (verifyAppleJws.ts). An
+//   JWS that must chain to Apple's pinned root CA (../_shared/verifyAppleJws.ts). An
 //   unsigned or wrongly-signed POST to this URL changes nothing.
 //
 // SHAPE OF THE WORK:
@@ -29,7 +29,7 @@
 //
 // Deploy:  supabase functions deploy apple-server-notifications --no-verify-jwt
 // Secrets: SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are injected automatically.
-//          APPLE_ROOT_CA_G3_B64 (recommended, see verifyAppleJws.ts)
+//          APPLE_ROOT_CA_G3_B64 (recommended, see ../_shared/verifyAppleJws.ts)
 //          APPLE_BUNDLE_ID      (optional, defaults to com.livra.app)
 //
 // @ts-nocheck - Deno runtime imports (not Node.js)
@@ -37,7 +37,7 @@
 // @ts-ignore - Deno runtime import
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { decideEntitlement } from './entitlementDecision.ts';
-import { verifyAppleSignedPayload } from './verifyAppleJws.ts';
+import { verifyAppleSignedPayload } from '../_shared/verifyAppleJws.ts';
 
 const EXPECTED_BUNDLE_ID = Deno.env.get('APPLE_BUNDLE_ID') || 'com.livra.app';
 

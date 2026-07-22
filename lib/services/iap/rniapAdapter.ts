@@ -13,7 +13,14 @@ export type CapabilityMatrix = {
   hasGetAvailablePurchases: boolean;
   hasListeners: boolean;
   hasFinishTransaction: boolean;
+  /**
+   * Legacy StoreKit 1 base64 receipt getter. expo-iap (StoreKit 2) does NOT
+   * export it, so this is expected to be false on every real build — it is kept
+   * purely as a diagnostics signal. Nothing on the happy path may gate on it.
+   */
   hasGetReceiptIOS: boolean;
+  /** StoreKit 2 JWS getter — this is what the server actually validates. */
+  hasGetTransactionJwsIOS: boolean;
   hasClearTransactionIOS: boolean;
   hasConvertNitroProductToProduct: boolean;
 };
@@ -38,6 +45,11 @@ export type AdapterFunctions = {
   purchaseErrorListener?: (...args: any[]) => { remove: () => void };
   finishTransaction?: (...args: any[]) => Promise<any>;
   getReceiptIOS?: (...args: any[]) => Promise<any>;
+  /**
+   * expo-iap >= 4: returns the StoreKit 2 transaction JWS for a transaction id.
+   * Fallback for when `purchase.purchaseToken` (the unified JWS field) is empty.
+   */
+  getTransactionJwsIOS?: (transactionId?: string) => Promise<string | null>;
   clearTransactionIOS?: (...args: any[]) => Promise<any>;
   convertNitroProductToProduct?: (...args: any[]) => any;
   deepLinkToSubscriptions?: (...args: any[]) => Promise<any>;
@@ -102,6 +114,8 @@ function buildCapabilities(module: any): CapabilityMatrix {
   const hasGetAvailablePurchases = typeof resolveFunction(module, 'getAvailablePurchases') === 'function';
   const hasFinishTransaction = typeof resolveFunction(module, 'finishTransaction') === 'function';
   const hasGetReceiptIOS = typeof resolveFunction(module, 'getReceiptIOS') === 'function';
+  const hasGetTransactionJwsIOS =
+    typeof resolveFunction(module, 'getTransactionJwsIOS') === 'function';
   const hasClearTransactionIOS = typeof resolveFunction(module, 'clearTransactionIOS') === 'function';
   const hasConvertNitroProductToProduct = typeof resolveFunction(module, 'convertNitroProductToProduct') === 'function';
   const hasListeners =
@@ -121,6 +135,7 @@ function buildCapabilities(module: any): CapabilityMatrix {
     hasListeners,
     hasFinishTransaction,
     hasGetReceiptIOS,
+    hasGetTransactionJwsIOS,
     hasClearTransactionIOS,
     hasConvertNitroProductToProduct,
   };
@@ -170,6 +185,7 @@ export function getRniapAdapter(): AdapterSnapshot {
     purchaseErrorListener: resolveFunction(module, 'purchaseErrorListener'),
     finishTransaction: resolveFunction(module, 'finishTransaction'),
     getReceiptIOS: resolveFunction(module, 'getReceiptIOS'),
+    getTransactionJwsIOS: resolveFunction(module, 'getTransactionJwsIOS'),
     clearTransactionIOS: resolveFunction(module, 'clearTransactionIOS'),
     convertNitroProductToProduct: resolveFunction(module, 'convertNitroProductToProduct'),
     deepLinkToSubscriptions: resolveFunction(module, 'deepLinkToSubscriptions'),
@@ -220,6 +236,7 @@ export function validateIapCapabilities(): CapabilityDiagnostics {
         hasListeners: false,
         hasFinishTransaction: false,
         hasGetReceiptIOS: false,
+        hasGetTransactionJwsIOS: false,
         hasClearTransactionIOS: false,
         hasConvertNitroProductToProduct: false,
       },

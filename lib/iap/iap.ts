@@ -467,7 +467,14 @@ export async function checkProStatus(): Promise<ProStatusResult> {
  */
 export async function validateReceiptWithServer(params: {
   platform: 'ios' | 'android';
+  /**
+   * Legacy StoreKit 1 base64 receipt. Optional and effectively always empty on
+   * a StoreKit 2 client; still forwarded so an older deployed edge function
+   * keeps working during rollout. NOT the iOS requirement any more.
+   */
   receipt?: string;
+  /** StoreKit 2 signed transaction JWS. REQUIRED on iOS. Never logged. */
+  jws?: string;
   purchaseToken?: string;
   transactionId?: string;
   productId?: string;
@@ -484,10 +491,15 @@ export async function validateReceiptWithServer(params: {
       return { status: 'transient', reason: 'user_not_logged_in' };
     }
 
-    // Platform-specific validation: iOS requires receipt, Android requires purchaseToken
-    if (params.platform === 'ios' && !params.receipt) {
-      logger.error('[IAP] iOS receipt validation called without receipt');
-      return { status: 'transient', reason: 'receipt_missing' };
+    // Platform-specific validation: iOS requires the StoreKit 2 JWS, Android
+    // requires purchaseToken. The legacy base64 receipt is no longer sufficient
+    // on iOS — StoreKit 2 never populates it.
+    // The ONLY exemption is the legacy background re-verify path
+    // (lib/iap/iapReVerify.ts), which replays a base64 receipt stored by an
+    // older build. Purchase and restore always supply a JWS.
+    if (params.platform === 'ios' && !params.jws && !params.receipt) {
+      logger.error('[IAP] iOS receipt validation called without transaction JWS');
+      return { status: 'transient', reason: 'jws_missing' };
     }
 
     if (params.platform === 'android' && !params.purchaseToken) {
@@ -504,7 +516,10 @@ export async function validateReceiptWithServer(params: {
     };
 
     if (params.platform === 'ios') {
-      requestBody.receipt = params.receipt;
+      if (params.jws) requestBody.jws = params.jws;
+      // Backward compatibility only: if an older function version is still
+      // deployed it will look for `receipt`. Omitted when empty.
+      if (params.receipt) requestBody.receipt = params.receipt;
     } else {
       // Android
       requestBody.purchaseToken = params.purchaseToken;
@@ -557,7 +572,8 @@ export async function validateReceiptWithServer(params: {
         environment: data.environment,
         productId: params.productId,
         platform: params.platform,
-        inputType: params.platform === 'ios' ? 'receipt' : 'purchaseToken',
+        inputType:
+          params.platform === 'ios' ? (params.jws ? 'jws' : 'legacy_receipt') : 'purchaseToken',
       });
       return { status: 'valid' };
     }

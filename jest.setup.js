@@ -52,7 +52,10 @@ jest.mock('expo-iap', () => ({
   finishTransaction: jest.fn(),
   restorePurchases: jest.fn(() => Promise.resolve()),
   getAvailablePurchases: jest.fn(() => Promise.resolve([])),
+  // NOTE: the real expo-iap (StoreKit 2) does NOT export getReceiptIOS. It is
+  // mocked here only because legacy diagnostics still probe for it.
   getReceiptIOS: jest.fn(() => Promise.resolve('')),
+  getTransactionJwsIOS: jest.fn(() => Promise.resolve(null)),
   clearTransactionIOS: jest.fn(() => Promise.resolve()),
   deepLinkToSubscriptions: jest.fn(() => Promise.resolve()),
 }));

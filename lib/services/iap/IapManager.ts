@@ -44,6 +44,7 @@ import {
   validateIapCapabilities,
   type CapabilityDiagnostics,
 } from './rniapAdapter';
+import { resolveIosTransactionJws } from './iosTransactionJws';
 import { storeReceipt } from '../../iap/iapReVerify';
 
 const isExpoGo = Constants.appOwnership === 'expo';
@@ -1161,41 +1162,50 @@ class IapManagerClass {
         purchaseKeys: Object.keys(purchase || {}),
       });
 
-      // Get receipt
-      // Platform-specific receipt/token extraction
+      // Platform-specific proof-of-purchase extraction.
+      // iOS = StoreKit 2 JWS (expo-iap). The legacy base64 receipt is never
+      // produced by StoreKit 2, so it is only carried opportunistically for
+      // backward compatibility with an older deployed edge function.
       let receipt: string | undefined;
+      let jws: string | undefined;
       let purchaseToken: string | undefined;
-      
+
       if (Platform.OS === 'ios') {
-        // iOS: require receipt
-        try {
-          if (typeof functions.getReceiptIOS === 'function') {
-            receipt = await functions.getReceiptIOS();
-          }
-          if (receipt) {
-            diagEvent('iap_manager_receipt_retrieved', {
-              receipt_length: receipt.length,
-              method: 'getReceiptIOS',
-            });
-          } else {
-            receipt = purchase.transactionReceipt || undefined;
-          }
-        } catch (receiptError) {
-          logger.warn('[IAP Manager] Could not get iOS receipt:', receiptError);
-          receipt = purchase.transactionReceipt || undefined;
-        }
-        
-        // iOS: receipt is required - if missing, treat as transient
-        if (!receipt) {
-          logger.error('[IAP Manager] iOS receipt not available for validation', {
+        // iOS: require the signed transaction JWS.
+        const resolution = await resolveIosTransactionJws(
+          purchase,
+          functions.getTransactionJwsIOS
+        );
+        jws = resolution.jws;
+        // Legacy receipt, if StoreKit 1 happens to have populated it. Never
+        // required, never sent instead of the JWS.
+        receipt = purchase.transactionReceipt || undefined;
+
+        if (jws) {
+          diagEvent('iap_manager_jws_retrieved', {
+            jws_length: jws.length,
+            method: resolution.source,
             transactionId,
             productId,
-            hasTransactionReceipt: !!purchase.transactionReceipt,
+          });
+        }
+
+        // iOS: JWS is required - if BOTH sources are empty, treat as transient
+        if (!jws) {
+          logger.error('[IAP Manager] iOS transaction JWS not available for validation', {
+            transactionId,
+            productId,
+            hasPurchaseToken: !!purchase.purchaseToken,
+            hasJwsGetter: typeof functions.getTransactionJwsIOS === 'function',
+            fallbackError: resolution.fallbackError,
           });
           diagEvent('iap_manager_receipt_missing_transient', {
             transactionId,
             productId,
             platform: 'ios',
+            hasPurchaseToken: !!purchase.purchaseToken,
+            hasJwsGetter: typeof functions.getTransactionJwsIOS === 'function',
+            fallbackError: resolution.fallbackError,
           });
           shouldFinishTransactionOnError = false;
           const receiptMissingError: any = new Error('Purchase receipt is being retrieved. Please try again in a moment.');
@@ -1242,6 +1252,7 @@ class IapManagerClass {
       const validation = await validateReceiptWithServer({
         platform: Platform.OS as 'ios' | 'android',
         receipt,
+        jws,
         purchaseToken,
         transactionId,
         productId,
@@ -2607,26 +2618,29 @@ class IapManagerClass {
             return { outcome: 'none_found', foundPurchases: purchases?.length || 0 };
           }
 
-          // Platform-specific receipt/token extraction
+          // Platform-specific proof-of-purchase extraction (see handlePurchaseUpdate)
           let receipt: string | undefined;
+          let jws: string | undefined;
           let purchaseToken: string | undefined;
           let hasRequiredReceiptToken = false;
-          
+
           if (Platform.OS === 'ios') {
-            // iOS: require receipt
-            try {
-              if (typeof functions.getReceiptIOS === 'function') {
-                receipt = await functions.getReceiptIOS();
-              }
-            } catch (receiptError) {
-              logger.warn('[IAP Manager] Could not get iOS receipt for restore:', receiptError);
-            }
-            
-            hasRequiredReceiptToken = !!receipt;
+            // iOS: require the signed StoreKit 2 transaction JWS
+            const resolution = await resolveIosTransactionJws(
+              proPurchase,
+              functions.getTransactionJwsIOS
+            );
+            jws = resolution.jws;
+            receipt = (proPurchase as any).transactionReceipt || undefined;
+
+            hasRequiredReceiptToken = !!jws;
             if (!hasRequiredReceiptToken) {
-              logger.warn('[IAP Manager] iOS receipt not available for restore validation', {
+              logger.warn('[IAP Manager] iOS transaction JWS not available for restore validation', {
                 transactionId,
                 productId,
+                hasPurchaseToken: !!(proPurchase as any).purchaseToken,
+                hasJwsGetter: typeof functions.getTransactionJwsIOS === 'function',
+                fallbackError: resolution.fallbackError,
               });
             }
           } else {
@@ -2666,6 +2680,7 @@ class IapManagerClass {
           const validation = await validateReceiptWithServer({
             platform: Platform.OS as 'ios' | 'android',
             receipt,
+            jws,
             purchaseToken,
             transactionId,
             productId,

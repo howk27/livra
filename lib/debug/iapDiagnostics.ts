@@ -70,6 +70,9 @@ export type DiagnosticEventType =
   | 'iap_manager_finishTransaction_error'
   | 'iap_manager_stuck_transaction_marker_set'
   | 'iap_manager_receipt_retrieved'
+  // StoreKit 2: the signed transaction JWS was obtained (from purchaseToken or
+  // getTransactionJwsIOS). Payload carries only length + source, never the JWS.
+  | 'iap_manager_jws_retrieved'
   | 'iap_manager_restore_start'
   | 'iap_manager_restore_success'
   | 'iap_manager_restore_error'
@@ -364,9 +367,10 @@ function updateStateFromEvent(type: DiagnosticEventType, payload: Record<string,
       break;
     case 'receipt_retrieved':
     case 'iap_manager_receipt_retrieved':
+    case 'iap_manager_jws_retrieved':
       currentState.lastReceiptInfo = {
         exists: true,
-        length: payload.receipt_length || 0,
+        length: payload.receipt_length || payload.jws_length || 0,
         timestamp: new Date().toISOString(),
       };
       // Detect sandbox if receipt environment indicates it

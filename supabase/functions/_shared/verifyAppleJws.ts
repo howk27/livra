@@ -1,4 +1,9 @@
-// JWS verification for App Store Server Notifications V2.
+// JWS verification for Apple-signed payloads.
+//
+// SHARED (moved here 2026-07-22): used by BOTH `apple-server-notifications`
+// (App Store Server Notifications V2) and `validate-iap-receipt` (StoreKit 2
+// transaction JWS sent by the client). One copy on purpose — a forked verifier
+// is a forked trust root.
 //
 // Apple signs the notification (and the transaction/renewal payloads nested
 // inside it) as compact JWS whose protected header carries an `x5c` certificate

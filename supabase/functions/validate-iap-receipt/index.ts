@@ -1,6 +1,15 @@
 // Supabase Edge Function: Validate IAP Receipt/Token (Subscriptions)
 // Validates receipts server-side before granting premium access.
 //
+// STOREKIT 2 (2026-07-22): the client (expo-iap >= 4) is a StoreKit 2 client and
+// has NO legacy base64 receipt to send — `transactionReceipt` is empty and
+// `getReceiptIOS` does not exist. It now sends `jws`, the Apple-signed
+// transaction, which we verify against the pinned Apple root
+// (../_shared/verifyAppleJws.ts, the same verifier the server-notifications
+// function uses) and then derive the entitlement from (jwsEntitlement.ts).
+// The legacy `receipt` → /verifyReceipt path below is INTENTIONALLY still here
+// for clients on an older build; it is chosen only when no `jws` is supplied.
+//
 // IMPORTANT:
 // - iOS: checks ACTIVE entitlement (expires_date_ms > now, not cancelled).
 // - Android: accepts purchaseToken for future support (currently NOT implemented; returns 501).
@@ -28,12 +37,22 @@ import {
   extractActiveEntitlement,
   type AppleVerifyReceiptResponse,
 } from "./receiptEntitlement.ts";
+import {
+  deriveJwsEntitlement,
+  type JWSTransactionDecodedPayload,
+} from "./jwsEntitlement.ts";
+import { verifyAppleSignedPayload } from "../_shared/verifyAppleJws.ts";
 
 const APPLE_PRODUCTION_VERIFY_URL = "https://buy.itunes.apple.com/verifyReceipt";
 const APPLE_SANDBOX_VERIFY_URL = "https://sandbox.itunes.apple.com/verifyReceipt";
 
-// App Store Connect Shared Secret (required for auto-renewable subscriptions)
+// App Store Connect Shared Secret (required for auto-renewable subscriptions).
+// STILL USED: the legacy /verifyReceipt path below stays live until the JWS path
+// is proven on device. Do not remove.
 const APPLE_SHARED_SECRET = Deno.env.get("APPLE_SHARED_SECRET") || "";
+
+// Same default and env var as apple-server-notifications — one app identity.
+const EXPECTED_BUNDLE_ID = Deno.env.get("APPLE_BUNDLE_ID") || "com.livra.app";
 
 // Allowed subscription product IDs (must match App Store Connect + client code)
 const ALLOWED_PRODUCT_IDS = new Set(["livra_plus_monthly", "livra_plus_yearly"]);
@@ -41,7 +60,11 @@ const ALLOWED_PRODUCT_IDS = new Set(["livra_plus_monthly", "livra_plus_yearly"])
 type ValidationRequest = {
   platform: "ios" | "android";
 
-  // iOS base64 receipt
+  // iOS StoreKit 2 signed transaction JWS (expo-iap `purchaseToken` /
+  // `getTransactionJwsIOS`). PREFERRED — this is what a current client sends.
+  jws?: string;
+
+  // iOS legacy StoreKit 1 base64 receipt. Kept for clients on an older build.
   receipt?: string;
 
   // Android purchase token (future support)
@@ -73,7 +96,7 @@ serve(async (req: any) => {
     }
 
     const body: ValidationRequest = await req.json();
-    const { platform, receipt, purchaseToken, transactionId } = body || {};
+    const { platform, jws, receipt, purchaseToken, transactionId } = body || {};
     const claimedUserId = body?.userId;
 
     if (!platform) {
@@ -82,8 +105,11 @@ serve(async (req: any) => {
 
     // Validate required input based on platform
     if (platform === "ios") {
-      if (!receipt) {
-        return json(400, { error: "Missing required field: receipt (ios)" });
+      if (typeof jws !== "undefined" && (typeof jws !== "string" || !jws.trim())) {
+        return json(400, { error: "invalid_transaction_payload", message: "jws must be a non-empty string" });
+      }
+      if (!jws && !receipt) {
+        return json(400, { error: "Missing required field: jws (ios)" });
       }
     } else if (platform === "android") {
       if (!purchaseToken) {
@@ -131,30 +157,80 @@ serve(async (req: any) => {
     }
 
     // ---- iOS (current) ----
-    // 1) Validate receipt with Apple (production first)
-    let appleResponse = await validateReceiptWithApple(receipt as string, false);
-
-    // If sandbox receipt sent to prod, retry on sandbox (21007)
-    if (appleResponse.status === 21007) {
-      appleResponse = await validateReceiptWithApple(receipt as string, true);
-    }
-
-    if (appleResponse.status !== 0) {
-      return json(400, {
-        error: "Invalid receipt",
-        status: appleResponse.status,
-        message: getAppleStatusMessage(appleResponse.status),
-      });
-    }
-
-    // 2) Determine ACTIVE subscription entitlement
     const nowMs = Date.now();
-    const entitlement = extractActiveEntitlement(
-      appleResponse,
-      nowMs,
-      ALLOWED_PRODUCT_IDS,
-      transactionId
-    );
+    let entitlement:
+      | { productId: string; transactionId: string; originalTransactionId: string; expiresDateMs: number }
+      | null = null;
+    let environment: string | undefined;
+    let validationPath: "jws" | "legacy_receipt";
+
+    if (jws) {
+      // ===== StoreKit 2 path (current clients) =====
+      // The client is expo-iap, a StoreKit 2 client: it has no legacy receipt to
+      // give us, only the Apple-signed transaction JWS. Trust comes from the
+      // signature + pinned Apple root, exactly as for server notifications —
+      // NOT from the fact that a signed-in user posted it.
+      validationPath = "jws";
+
+      let transaction: JWSTransactionDecodedPayload;
+      try {
+        transaction = await verifyAppleSignedPayload<JWSTransactionDecodedPayload>(jws);
+      } catch (err) {
+        console.error(
+          "[validate-iap-receipt] JWS signature verification failed:",
+          err instanceof Error ? err.message : String(err)
+        );
+        // Permanent, not a server fault: never 5xx (the client retries 5xx).
+        return json(400, { error: "invalid_signature" });
+      }
+
+      const derived = deriveJwsEntitlement(
+        transaction,
+        nowMs,
+        EXPECTED_BUNDLE_ID,
+        ALLOWED_PRODUCT_IDS
+      );
+
+      if (!derived.ok) {
+        console.error("[validate-iap-receipt] JWS entitlement rejected:", derived.reason);
+        return json(400, {
+          error: derived.reason,
+          allowedProductIds: Array.from(ALLOWED_PRODUCT_IDS),
+        });
+      }
+
+      entitlement = derived.entitlement;
+      environment = derived.entitlement.environment;
+    } else {
+      // ===== Legacy /verifyReceipt path (older deployed clients) =====
+      // Kept alive deliberately until the JWS path is proven on device.
+      validationPath = "legacy_receipt";
+
+      // 1) Validate receipt with Apple (production first)
+      let appleResponse = await validateReceiptWithApple(receipt as string, false);
+
+      // If sandbox receipt sent to prod, retry on sandbox (21007)
+      if (appleResponse.status === 21007) {
+        appleResponse = await validateReceiptWithApple(receipt as string, true);
+      }
+
+      if (appleResponse.status !== 0) {
+        return json(400, {
+          error: "Invalid receipt",
+          status: appleResponse.status,
+          message: getAppleStatusMessage(appleResponse.status),
+        });
+      }
+
+      // 2) Determine ACTIVE subscription entitlement
+      entitlement = extractActiveEntitlement(
+        appleResponse,
+        nowMs,
+        ALLOWED_PRODUCT_IDS,
+        transactionId
+      );
+      environment = appleResponse.environment;
+    }
 
     if (!entitlement) {
       return json(400, {
@@ -206,7 +282,8 @@ serve(async (req: any) => {
       originalTransactionId: entitlement.originalTransactionId,
       productId: entitlement.productId,
       expiresDateMs: entitlement.expiresDateMs,
-      environment: appleResponse.environment,
+      environment,
+      validationPath,
     });
   } catch (error) {
     console.error("Error validating receipt:", error);

@@ -8,8 +8,14 @@
 #
 # That function is NOT unauthenticated. Its authentication is Apple's own JWS:
 # the request body must be signed by a certificate chain terminating at the
-# pinned Apple Root CA G3 (supabase/functions/apple-server-notifications/verifyAppleJws.ts).
+# pinned Apple Root CA G3 (supabase/functions/_shared/verifyAppleJws.ts).
 # An unsigned POST to that URL changes nothing in the database.
+#
+# validate-iap-receipt keeps verify_jwt = true DELIBERATELY: the user it unlocks
+# is the JWT subject, so the gateway rejecting an unauthenticated call is the
+# first line of the identity guarantee. Consequence to remember when debugging:
+# a client with a stale/expired access token is 401'd at the gateway BEFORE the
+# function is invoked, so that failure mode also produces zero function logs.
 #
 # Every other function keeps verify_jwt = true; they are listed explicitly so the
 # exception above reads as a deliberate, reviewed choice rather than an omission.
