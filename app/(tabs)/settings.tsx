@@ -26,7 +26,6 @@ import {
   CaretRight,
   PencilSimple,
   Envelope,
-  Lock,
   type Icon,
   type IconProps,
 } from 'phosphor-react-native';
@@ -522,7 +521,7 @@ export default function SettingsScreen() {
             <Text style={[styles.verifyText, { color: c.inkMid }]}>
               Apple hides your real email. Add your own so account mail reaches you.
             </Text>
-            <TouchableOpacity onPress={() => router.push('/settings/account' as any)} activeOpacity={0.7}>
+            <TouchableOpacity onPress={() => router.push('/settings/profile' as any)} activeOpacity={0.7}>
               <Text style={[styles.verifyAction, { color: c.accent }]}>Set email</Text>
             </TouchableOpacity>
           </View>
@@ -531,11 +530,8 @@ export default function SettingsScreen() {
         {/* ── ACCOUNT ── */}
         <SectionLabel style={styles.sectionLabel}>ACCOUNT</SectionLabel>
         <SettingsCard>
-          <SettingsRow
-            icon={Lock}
-            label="Sign-in"
-            onPress={() => router.push('/settings/account' as any)}
-          />
+          {/* Sign-in row retired 2026-07-22: email and password now live in
+              Edit Profile, reached from the profile card above. */}
           <SettingsRow
             icon={Bell}
             label="Notifications"

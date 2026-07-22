@@ -11,6 +11,7 @@ import {
   mapReauthError,
   pendingEmail,
   validateEmailChange,
+  validateNewPassword,
   validatePasswordChange,
   type CredentialUser,
 } from '../../lib/auth/accountCredentials';
@@ -64,6 +65,30 @@ describe('provider detection', () => {
     expect(hasPasswordIdentity(appleUser)).toBe(false);
     expect(hasPasswordIdentity(null)).toBe(false);
     expect(hasPasswordIdentity({})).toBe(false);
+  });
+});
+
+describe('add-password validation (no password on the account)', () => {
+  const base = { newPassword: 'newpassword', confirmPassword: 'newpassword' };
+
+  it('accepts a new password with no current password anywhere in the input', () => {
+    expect(validateNewPassword(base)).toBeNull();
+    expect(Object.keys(base)).not.toContain('currentPassword');
+  });
+
+  it('enforces the same minimum length as signup', () => {
+    const short = 'a'.repeat(MIN_PASSWORD_LENGTH - 1);
+    expect(validateNewPassword({ newPassword: short, confirmPassword: short })).toMatch(
+      new RegExp(`${MIN_PASSWORD_LENGTH} characters`),
+    );
+  });
+
+  it('rejects a mismatched confirmation', () => {
+    expect(validateNewPassword({ ...base, confirmPassword: 'newpassword2' })).toMatch(/do not match/i);
+  });
+
+  it('rejects an empty password', () => {
+    expect(validateNewPassword({ newPassword: '', confirmPassword: '' })).toMatch(/new password/i);
   });
 });
 

@@ -1,7 +1,8 @@
 /**
- * Pure logic behind the Sign-in screen (app/settings/account.tsx): which
- * credentials an account actually has, whether the new values are usable, and
- * what honestly happened after Supabase answered.
+ * Pure logic behind the credential blocks of Edit Profile
+ * (app/settings/profile.tsx): which credentials an account actually has,
+ * whether the new values are usable, and what honestly happened after Supabase
+ * answered.
  *
  * Kept free of React and of the Supabase client so every rule here is unit
  * testable (tests/unit/accountCredentials.test.ts).
@@ -45,32 +46,53 @@ export function authProviders(user?: CredentialUser | null): string[] {
 
 /**
  * True only when the account can actually be signed into with a password.
- * Apple/OAuth only accounts have none, so the change form must stay hidden for
- * them rather than failing at reauthentication.
+ * Apple/OAuth only accounts have none: there is nothing to reauthenticate
+ * against, so those accounts get the ADD form (validateNewPassword) instead of
+ * the CHANGE form, rather than being asked for a password they never set.
  */
 export function hasPasswordIdentity(user?: CredentialUser | null): boolean {
   return authProviders(user).includes('email');
 }
 
-export interface PasswordChangeInput {
-  currentPassword: string;
+export interface NewPasswordInput {
   newPassword: string;
   confirmPassword: string;
 }
 
-/** Returns the first problem with the entered passwords, or null when usable. */
+export interface PasswordChangeInput extends NewPasswordInput {
+  currentPassword: string;
+}
+
+/**
+ * The ADD-a-password path: an account with no password identity has nothing to
+ * verify, so no current password is asked for or checked here.
+ */
+export function validateNewPassword({
+  newPassword,
+  confirmPassword,
+}: NewPasswordInput): string | null {
+  if (!newPassword) return 'Enter a new password.';
+  if (newPassword.length < MIN_PASSWORD_LENGTH) {
+    return `Your new password needs at least ${MIN_PASSWORD_LENGTH} characters.`;
+  }
+  if (newPassword !== confirmPassword) return 'The two new passwords do not match.';
+  return null;
+}
+
+/**
+ * The CHANGE path: the current password is mandatory because the screen
+ * reauthenticates with it before writing (updateUser never checks it).
+ * Returns the first problem with the entered passwords, or null when usable.
+ */
 export function validatePasswordChange({
   currentPassword,
   newPassword,
   confirmPassword,
 }: PasswordChangeInput): string | null {
   if (!currentPassword.trim()) return 'Enter your current password first.';
-  if (!newPassword) return 'Enter a new password.';
-  if (newPassword.length < MIN_PASSWORD_LENGTH) {
-    return `Your new password needs at least ${MIN_PASSWORD_LENGTH} characters.`;
-  }
+  const problem = validateNewPassword({ newPassword, confirmPassword });
+  if (problem) return problem;
   if (newPassword === currentPassword) return 'That is already your password. Pick a different one.';
-  if (newPassword !== confirmPassword) return 'The two new passwords do not match.';
   return null;
 }
 
