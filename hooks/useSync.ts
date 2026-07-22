@@ -1571,14 +1571,40 @@ export const useSync = () => {
         await migrateLegacySyncCursor();
 
         // Push first, then pull - this ensures deletions are synced to Supabase
-        // before pulling, preventing deleted counters from being restored
-        await pushChanges(user.id);
-        
+        // before pulling, preventing deleted counters from being restored.
+        //
+        // A PUSH REJECTION MUST NEVER SUPPRESS THE PULL (founder device report,
+        // 2026-07-22: "a further reinstall lost ALL goals and marks"). This used
+        // to be a bare `await pushChanges(...)`, so any throw skipped the pull
+        // entirely — and pushChanges rethrows every server rejection that is not
+        // isProLimitError, which a RESTRICTIVE RLS violation (42501) is not. On a
+        // fresh install the sequence was: re-onboard, push the new marks, server
+        // rejects one under a stale cap policy, sync aborts, THE RESTORE PULL
+        // NEVER RUNS. Every later sync repeated it identically: permanently empty
+        // app with all the data still sitting on the server.
+        //
+        // Pulling after a failed push is safe: local tombstones already win over
+        // live remote rows during the merge (see pullChanges), and the split-cursor
+        // model means the pull cannot advance the push cursor past unsent rows.
+        let pushError: unknown = null;
+        try {
+          await pushChanges(user.id);
+        } catch (err) {
+          pushError = err;
+          logger.error(
+            '[SYNC] Push failed — continuing to pull so remote data is still restored; the push error is rethrown after',
+            parseError(err).message,
+          );
+        }
+
         // Small delay to ensure Supabase has processed the push
         // This is especially important for deletions
         await new Promise(resolve => setTimeout(resolve, 100));
-        
+
         await pullChanges(user.id);
+
+        // Surface the push failure only now that the pull has had its chance.
+        if (pushError) throw pushError;
 
         const maintenanceWarnings: SyncMaintenanceWarningCode[] = [];
         let duplicateMarkNameGroupCount = 0;
