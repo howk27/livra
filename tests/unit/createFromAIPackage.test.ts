@@ -30,10 +30,14 @@ jest.mock('../../state/goalsSlice', () => {
   };
 });
 
+// `marks` is read to size the package against the free-tier account ceiling.
+let mockExistingMarks: Array<{ id: string; goal_id: string | null; deleted_at: string | null }> = [];
+
 jest.mock('../../state/countersSlice', () => ({
   useMarksStore: {
     getState: () => ({
       addMark: mockAddMark,
+      marks: mockExistingMarks,
     }),
   },
 }));
@@ -63,8 +67,12 @@ const SAMPLE_PACKAGE: AIGoalPackage = {
   ],
 };
 
+const existing = (n: number) =>
+  Array.from({ length: n }, (_, i) => ({ id: `existing-${i}`, goal_id: null, deleted_at: null }));
+
 beforeEach(() => {
   jest.clearAllMocks();
+  mockExistingMarks = [];
   mockCreateGoal.mockResolvedValue({ id: 'goal-1' });
   mockAddMark.mockImplementation(async (data: Record<string, unknown>) => ({
     id: `mark-${data.name}`,
@@ -263,5 +271,59 @@ describe('createFromAIPackage — free use spent on create (2026-07-19)', () => 
     });
 
     expect(goal.id).toBe('goal-1');
+  });
+});
+
+/**
+ * Free-tier ceiling (2026-07-22). addMark writes straight to the store, so this
+ * path never ran useMarks.createMark's gating. Without the trim a free user near
+ * the 6-mark account ceiling gets marks locally that the RESTRICTIVE policy on
+ * public.marks rejects at sync — the raw RLS error the founder hit.
+ */
+describe('createFromAIPackage — free-tier account ceiling', () => {
+  const args = (isPro: boolean) => ({
+    userId: 'user-1',
+    isPro,
+    goalText: 'run a half marathon',
+    pkg: SAMPLE_PACKAGE,
+    title: 'Half marathon',
+    marks: SAMPLE_PACKAGE.marks, // 2 marks
+  });
+
+  test('creates every package mark when the account has room', async () => {
+    mockExistingMarks = existing(2); // headroom 4
+    await createFromAIPackage(args(false));
+    expect(mockAddMark).toHaveBeenCalledTimes(2);
+  });
+
+  test('trims the package to the remaining headroom', async () => {
+    mockExistingMarks = existing(5); // headroom 1
+    await createFromAIPackage(args(false));
+    expect(mockAddMark).toHaveBeenCalledTimes(1);
+    expect(mockLinkMarkToGoal).toHaveBeenCalledTimes(1);
+  });
+
+  test('creates no marks at all when the account is already at the ceiling', async () => {
+    mockExistingMarks = existing(6); // headroom 0
+    const goal = await createFromAIPackage(args(false));
+    expect(mockAddMark).not.toHaveBeenCalled();
+    // The goal itself still exists — the caller owns the 2-goal cap, not this.
+    expect(goal.id).toBe('goal-1');
+  });
+
+  test('soft-deleted marks do not consume headroom', async () => {
+    mockExistingMarks = [
+      ...existing(4),
+      { id: 'gone-1', goal_id: null, deleted_at: '2026-01-01' },
+      { id: 'gone-2', goal_id: null, deleted_at: '2026-01-01' },
+    ];
+    await createFromAIPackage(args(false)); // 4 active → headroom 2
+    expect(mockAddMark).toHaveBeenCalledTimes(2);
+  });
+
+  test('Pro is never trimmed', async () => {
+    mockExistingMarks = existing(40);
+    await createFromAIPackage(args(true));
+    expect(mockAddMark).toHaveBeenCalledTimes(2);
   });
 });

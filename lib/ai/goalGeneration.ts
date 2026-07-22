@@ -22,6 +22,7 @@ import { MARK_LIBRARY } from '../suggestedCounters';
 import { colorForSuggestedCounter, getCategoryColor } from '../markCategory';
 import { tokenize, inferDomains } from '../goalMarkSuggestions';
 import { isMarkAllowedForGoal } from '../markRelevance';
+import { FREE_MARKS_PER_GOAL, remainingMarkAllowance } from '../gating';
 import { logger } from '../utils/logger';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -47,11 +48,28 @@ export type AIGoalPackage = {
 };
 
 /**
- * Max marks kept in a validated AI package. Raised 3 → 4 (QC2-G, 2026-07-14):
- * the server now suggests 3–4 marks. Mirrors the Edge Function's cap; below the
- * free per-goal cap (FREE_MARKS_PER_GOAL = 5) so a full package always activates.
+ * Max marks kept in a validated AI package. Mirrors the Edge Function's cap and
+ * equals the free per-goal cap (FREE_MARKS_PER_GOAL = 4, lowered from 5 on
+ * 2026-07-22), so a full package never breaks the per-goal wall on its own.
  */
-export const AI_PACKAGE_MAX_MARKS = 4;
+export const AI_PACKAGE_MAX_MARKS = FREE_MARKS_PER_GOAL;
+
+/**
+ * How many marks of a package may actually be persisted for this account.
+ *
+ * The per-goal cap is not the only wall any more: the free tier also has an
+ * account-wide ceiling (FREE_MARK_CEILING = 6) counting goal-linked and
+ * unlinked marks together. A free user with 4 marks already on their first goal
+ * has room for 2, not 4 — persisting the full package would be accepted by the
+ * client and then rejected by the RESTRICTIVE RLS policy on public.marks, which
+ * is the raw error the founder hit on 2026-07-22. Trim before writing.
+ *
+ * Pro has no ceiling, so it is always the package cap.
+ */
+export function allowedPackageMarkCount(isPro: boolean, totalActiveMarkCount: number): number {
+  const headroom = remainingMarkAllowance(isPro, totalActiveMarkCount);
+  return Math.min(AI_PACKAGE_MAX_MARKS, headroom);
+}
 
 export type GenerationResult =
   | { ok: true; package: AIGoalPackage; source: 'api' | 'cache' }

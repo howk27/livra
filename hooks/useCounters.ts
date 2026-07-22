@@ -18,9 +18,10 @@ import { useAppDateStore } from '../state/appDateSlice';
 import {
   canAddMarkToGoal,
   countMarksInGoal,
-  canAddHabitMark,
-  countUnlinkedMarks,
+  canAddMark,
+  countActiveMarks,
 } from '../lib/gating';
+import { MARK_PER_GOAL_LIMIT_MESSAGE, MARK_CEILING_MESSAGE } from '../lib/copy';
 import { maybeShowPostLogVoice } from '../lib/moments/postLogVoice';
 import { resolveFirstName } from '../lib/profile/displayName';
 import { useVoiceStore } from '../state/voiceSlice';
@@ -99,10 +100,14 @@ export const useMarks = () => {
       frequency_max?: number | null;
       skipSync?: boolean; // Optional flag to skip sync (useful for batch operations)
     }) => {
-      // Free-tier caps: two independent buckets, both bypassed by Pro and by batch
-      // operations (onboarding) via skipSync.
-      //   • goal-linked marks  → 5 per goal_id (per-goal, not a global ceiling)
-      //   • unlinked "daily habit" marks (no goal_id) → 3 total
+      // Free-tier caps (2026-07-22): two caps, both live, whichever binds first.
+      // Both are bypassed by Pro and by batch operations (onboarding) via skipSync.
+      //   • per goal    → FREE_MARKS_PER_GOAL (4) goal-linked marks per goal_id
+      //   • per account → FREE_MARK_CEILING (6) marks total, goal-linked AND
+      //     unlinked "daily habit" marks counted together (no separate bucket).
+      // These must mirror the RESTRICTIVE policy in
+      // supabase/migrations/20260722_free_tier_mark_ceiling.sql exactly: anything
+      // the client lets through and the server rejects surfaces as a raw RLS error.
       if (!data.skipSync && !isProUnlocked) {
         if (proStatus.verification === 'unverified' && proStatus.status === 'unknown') {
           throw new Error('PRO_STATUS_UNKNOWN: Unable to verify subscription. Please try again.');
@@ -110,17 +115,11 @@ export const useMarks = () => {
         if (data.goal_id) {
           const marksInGoal = countMarksInGoal(marks, data.goal_id);
           if (!canAddMarkToGoal(isProUnlocked, marksInGoal)) {
-            throw new Error(
-              "FREE_COUNTER_LIMIT_REACHED: You've added 5 marks to this goal. Livra+ lets you add more."
-            );
+            throw new Error(`FREE_COUNTER_LIMIT_REACHED: ${MARK_PER_GOAL_LIMIT_MESSAGE}`);
           }
-        } else {
-          const unlinkedCount = countUnlinkedMarks(marks);
-          if (!canAddHabitMark(isProUnlocked, unlinkedCount)) {
-            throw new Error(
-              "FREE_COUNTER_LIMIT_REACHED: You've added 3 daily habits. Livra+ lets you add more."
-            );
-          }
+        }
+        if (!canAddMark(isProUnlocked, countActiveMarks(marks))) {
+          throw new Error(`FREE_COUNTER_LIMIT_REACHED: ${MARK_CEILING_MESSAGE}`);
         }
       }
 

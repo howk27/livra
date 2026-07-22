@@ -18,11 +18,13 @@ import { MARK_LIBRARY } from '../suggestedCounters';
 import { colorForSuggestedCounter } from '../markCategory';
 import { defaultDailyTargetForMarkId } from '../markQuantitative';
 import {
+  allowedPackageMarkCount,
   resolveMarkForAIIcon,
   writeGoalPackageCache,
   type AIGoalPackage,
   type AIGoalMark,
 } from '../ai/goalGeneration';
+import { countActiveMarks } from '../gating';
 import { logger } from '../utils/logger';
 import type { Goal } from '../../types/goal';
 
@@ -61,8 +63,20 @@ export async function createFromAIPackage(args: CreateFromAIPackageArgs): Promis
     method: 'ai',
   });
 
-  // 2 + 3. Create and link each selected mark.
-  for (const m of marks) {
+  // 2 + 3. Create and link each selected mark, trimmed to what the account can
+  // actually hold. addMark writes to the store directly (it does not run
+  // useMarks.createMark's gating), so without this trim a free user near the
+  // account-wide ceiling would get marks locally that the RESTRICTIVE policy on
+  // public.marks rejects at sync time, surfacing as a raw RLS error.
+  const allowed = allowedPackageMarkCount(isPro, countActiveMarks(useMarksStore.getState().marks));
+  const marksToCreate = marks.slice(0, allowed);
+  if (marksToCreate.length < marks.length) {
+    logger.warn(
+      `[createFromAIPackage] trimmed ${marks.length - marksToCreate.length} mark(s) to stay inside the free-tier ceiling`,
+    );
+  }
+
+  for (const m of marksToCreate) {
     const resolved = resolveMarkForAIIcon(m.icon);
     const libraryMark = MARK_LIBRARY.find((l) => l.id === resolved.markId);
     if (!libraryMark) continue;

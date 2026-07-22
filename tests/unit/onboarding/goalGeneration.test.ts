@@ -15,9 +15,12 @@ import {
   validateAIGoalPackage,
   normalizeGoalText,
   resolveMarkForAIIcon,
+  allowedPackageMarkCount,
+  AI_PACKAGE_MAX_MARKS,
   VALID_ICONS,
   AI_ICON_TO_MARK_ID,
 } from '../../../lib/ai/goalGeneration';
+import { FREE_MARKS_PER_GOAL, FREE_MARK_CEILING } from '../../../lib/gating';
 import { MARK_LIBRARY } from '../../../lib/suggestedCounters';
 import { colorForSuggestedCounter, getCategoryColor } from '../../../lib/markCategory';
 
@@ -410,5 +413,36 @@ describe('edge-function mark count (3–4, QC2-G)', () => {
 
   test('server validation caps at 4 marks, matching AI_PACKAGE_MAX_MARKS', () => {
     expect(source).toContain('validMarks.slice(0, 4)');
+  });
+});
+
+// ─── allowedPackageMarkCount (free-tier account ceiling, 2026-07-22) ──────────
+
+describe('allowedPackageMarkCount', () => {
+  test('AI_PACKAGE_MAX_MARKS tracks the per-goal cap, so a package never breaks it alone', () => {
+    expect(AI_PACKAGE_MAX_MARKS).toBe(FREE_MARKS_PER_GOAL);
+    expect(AI_PACKAGE_MAX_MARKS).toBe(4);
+  });
+
+  test('a fresh free account gets the whole package', () => {
+    expect(allowedPackageMarkCount(false, 0)).toBe(4);
+  });
+
+  test('the account ceiling trims the package when the first goal already filled it', () => {
+    // 4 marks on goal one → 2 of the 6 left, so the second goal gets 2, not 4.
+    expect(allowedPackageMarkCount(false, 4)).toBe(2);
+    expect(allowedPackageMarkCount(false, 5)).toBe(1);
+  });
+
+  test('an account at the ceiling gets nothing', () => {
+    expect(allowedPackageMarkCount(false, FREE_MARK_CEILING)).toBe(0);
+  });
+
+  test('never negative past the ceiling', () => {
+    expect(allowedPackageMarkCount(false, 99)).toBe(0);
+  });
+
+  test('Pro always gets the full package', () => {
+    expect(allowedPackageMarkCount(true, 99)).toBe(AI_PACKAGE_MAX_MARKS);
   });
 });

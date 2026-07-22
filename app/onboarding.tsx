@@ -516,7 +516,7 @@ export default function OnboardingScreen() {
         </View>
 
         <Text style={styles.paceFootnote}>
-          Free tier includes up to 5 marks per goal.
+          Free tier includes up to 4 marks per goal · 6 marks in total.
         </Text>
 
         <PillButton

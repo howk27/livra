@@ -316,8 +316,11 @@ export default function NewCounterScreen() {
       logger.warn('[Counter] Subscription status unknown');
       showError('Unable to verify your subscription. Please check your connection and try again.');
     } else if (error instanceof Error && error.message.includes('FREE_COUNTER_LIMIT_REACHED')) {
-      logger.warn('[Counter] Per-goal mark limit reached for free user');
-      showError('That’s 5 marks on this goal. Livra+ lets you add more.');
+      // Two different walls (this goal is full vs the account is full) throw two
+      // different messages from useCounters. Surface the one that actually fired
+      // instead of re-typing a single generic line here.
+      logger.warn('[Counter] Free-tier mark limit reached');
+      showError(error.message.replace('FREE_COUNTER_LIMIT_REACHED: ', ''));
       setTimeout(() => {
         router.replace('/paywall');
       }, 2000);

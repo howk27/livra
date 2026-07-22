@@ -4,6 +4,8 @@
  * Every string the user sees that changes with context lives here.
  */
 
+import { FREE_MARKS_PER_GOAL, FREE_MARK_CEILING } from './gating';
+
 // ─── Momentum at-risk warning copy (Phase 1.3) ──────────────────────────────
 // No dashes. Offer-framed with a rest-out. Rotate, never the same template twice in a row.
 
@@ -97,6 +99,18 @@ export const TERMS = {
 /** Shown when a free user hits the 2-goal cap (goal/new + the suggest-a-plan flow). */
 export const GOAL_LIMIT_MESSAGE =
   'Free keeps you to 2 goals at once so you can actually finish them. Livra+ opens unlimited goals.';
+
+/**
+ * The two free-tier mark limits, each with its own reason (2026-07-22). They are
+ * different walls and must never share one message: one goal being full says
+ * nothing about the account, and a full account says nothing about this goal.
+ * Numbers come from lib/gating.ts so copy and gate can never drift.
+ */
+export const MARK_PER_GOAL_LIMIT_MESSAGE =
+  `Free keeps each goal to ${FREE_MARKS_PER_GOAL} marks so the goal stays something you can actually do. Livra+ opens unlimited marks.`;
+
+export const MARK_CEILING_MESSAGE =
+  `Free tracks ${FREE_MARK_CEILING} marks in total across your goals and daily habits, and you’re at ${FREE_MARK_CEILING}. Free one up, or Livra+ opens unlimited marks.`;
 
 // ─── AI generation failure copy (onboarding + /goal/suggest share one source) ─
 // Keys mirror GenerationFailReason in lib/ai/goalGeneration.ts. Kept here (not

@@ -1,48 +1,86 @@
 /**
- * QC2-G — Free per-goal mark cap copy guard.
+ * Free-tier mark limit copy guard (founder decision 2026-07-22).
  *
- * The cap was raised 3 → 5 (founder decision, 2026-07-14). The user-facing
- * limit copy lives inline at three call sites (matching the existing pattern;
- * only the goal-limit message is centralized in lib/copy.ts). This guard keeps
- * the number in the copy in sync with lib/gating.ts FREE_MARKS_PER_GOAL and
- * fails if a stale "3 marks on this goal" string reappears.
+ * There are now TWO walls, and they must never be described by one message:
+ *   • this goal is full        → MARK_PER_GOAL_LIMIT_MESSAGE (4 per goal)
+ *   • the account is full      → MARK_CEILING_MESSAGE (6 in total)
+ * Both live in lib/copy.ts and take their numbers from lib/gating.ts, so the
+ * copy cannot drift from the gate. This guard also fails if a stale "5 marks on
+ * this goal" literal reappears at any call site.
  */
 
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { FREE_MARKS_PER_GOAL } from '../../lib/gating';
+import { FREE_MARKS_PER_GOAL, FREE_MARK_CEILING } from '../../lib/gating';
+import { MARK_PER_GOAL_LIMIT_MESSAGE, MARK_CEILING_MESSAGE } from '../../lib/copy';
 
 const read = (rel: string) => readFileSync(join(__dirname, '../../', rel), 'utf8');
 
-describe('per-goal mark cap copy (5, QC2-G)', () => {
-  test('FREE_MARKS_PER_GOAL and copy agree on 5', () => {
-    expect(FREE_MARKS_PER_GOAL).toBe(5);
+describe('free-tier mark limit copy', () => {
+  test('the per-goal message names the real cap and the real reason', () => {
+    expect(MARK_PER_GOAL_LIMIT_MESSAGE).toBe(
+      'Free keeps each goal to 4 marks so the goal stays something you can actually do. Livra+ opens unlimited marks.',
+    );
+    expect(MARK_PER_GOAL_LIMIT_MESSAGE).toContain(String(FREE_MARKS_PER_GOAL));
   });
 
-  test('useCounters throws the 5-mark message', () => {
+  test('the ceiling message names the account-wide total and both buckets', () => {
+    expect(MARK_CEILING_MESSAGE).toBe(
+      'Free tracks 6 marks in total across your goals and daily habits, and you’re at 6. Free one up, or Livra+ opens unlimited marks.',
+    );
+    expect(MARK_CEILING_MESSAGE).toContain(String(FREE_MARK_CEILING));
+  });
+
+  test('the two messages are distinct', () => {
+    expect(MARK_PER_GOAL_LIMIT_MESSAGE).not.toBe(MARK_CEILING_MESSAGE);
+  });
+
+  test('neither message uses a dash as a separator', () => {
+    expect(MARK_PER_GOAL_LIMIT_MESSAGE).not.toMatch(/[—–]/);
+    expect(MARK_CEILING_MESSAGE).not.toMatch(/[—–]/);
+  });
+
+  test('useCounters throws both messages from the constants, never inline', () => {
     const src = read('hooks/useCounters.ts');
-    expect(src).toContain("You've added 5 marks to this goal. Livra+ lets you add more.");
-    expect(src).not.toContain("You've added 3 marks to this goal");
+    expect(src).toContain('FREE_COUNTER_LIMIT_REACHED: ${MARK_PER_GOAL_LIMIT_MESSAGE}');
+    expect(src).toContain('FREE_COUNTER_LIMIT_REACHED: ${MARK_CEILING_MESSAGE}');
+    expect(src).not.toContain('marks to this goal. Livra+ lets you add more.');
   });
 
-  test('mark/new.tsx toast says 5', () => {
+  test('mark/new surfaces the message that actually fired', () => {
     const src = read('app/mark/new.tsx');
-    expect(src).toContain('That’s 5 marks on this goal. Livra+ lets you add more.');
-    expect(src).not.toContain('3 marks on this goal');
+    expect(src).toContain("error.message.replace('FREE_COUNTER_LIMIT_REACHED: ', '')");
+    expect(src).not.toContain('marks on this goal');
   });
 
-  // QC3-G: AddMarkSheet deleted — the add-a-mark surface unified to /mark/new,
-  // whose cap copy is guarded by the 'mark/new.tsx toast says 5' test above.
+  test('goal detail uses the centralized per-goal message', () => {
+    const src = read('app/goal/[id].tsx');
+    expect(src).toContain('showError(MARK_PER_GOAL_LIMIT_MESSAGE)');
+    expect(src).not.toContain('marks on this goal');
+  });
 
-  test('onboarding footnote says 5', () => {
+  test('onboarding footnote states both caps', () => {
     const src = read('app/onboarding.tsx');
-    expect(src).toContain('Free tier includes up to 5 marks per goal.');
-    expect(src).not.toContain('up to 3 marks per goal');
+    expect(src).toContain('Free tier includes up to 4 marks per goal · 6 marks in total.');
+    expect(src).not.toContain('up to 5 marks per goal');
   });
 
-  test('server RLS backstop migration for the 5 cap exists', () => {
-    const src = read('supabase/migrations/20260714_raise_marks_per_goal_cap_to_5.sql');
-    expect(src).toContain('< 5');
+  test('the server RLS backstop migration for both caps exists', () => {
+    const src = read('supabase/migrations/20260722_free_tier_mark_ceiling.sql');
+    expect(src).toContain('< 4');
+    expect(src).toContain('< 6');
     expect(src).toContain('DROP POLICY IF EXISTS "Free tier: max 3 marks per goal"');
+    expect(src).toContain('DROP POLICY IF EXISTS "Free tier: max 5 marks per goal"');
+    // Upsert safety: both counting helpers must exclude the row being written.
+    expect(src).toContain('id <> p_id');
+    // livra_is_pro is called, never redefined (it owns expiry since 20260721).
+    expect(src).toContain('public.livra_is_pro(auth.uid())');
+    expect(src).not.toMatch(/FUNCTION public\.livra_is_pro/);
+  });
+
+  test('the superseded 5-cap migration is not the live one', () => {
+    // It stays in the tree for history but must never be described as current.
+    const src = read('supabase/migrations/20260722_free_tier_mark_ceiling.sql');
+    expect(src).toContain('SUPERSEDES 20260714_raise_marks_per_goal_cap_to_5.sql');
   });
 });

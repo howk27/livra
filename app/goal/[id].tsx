@@ -56,7 +56,8 @@ import { resolveDailyTarget } from '../../lib/markDailyTarget';
 import { useCounters } from '../../hooks/useCounters';
 import { useAuth } from '../../hooks/useAuth';
 import { useIapSubscriptions } from '../../hooks/useIapSubscriptions';
-import { canAddMarkToGoal, countMarksInGoal, FREE_MARKS_PER_GOAL } from '../../lib/gating';
+import { canAddMarkToGoal, countMarksInGoal } from '../../lib/gating';
+import { MARK_PER_GOAL_LIMIT_MESSAGE } from '../../lib/copy';
 import { useMotion } from '../../hooks/useMotion';
 import { useNotification } from '../../contexts/NotificationContext';
 import { confirm } from '../../components/ui/overlays';
@@ -898,9 +899,11 @@ export default function GoalDetailScreen() {
     [goals],
   );
 
-  // The real gate from lib/gating.ts — free is 5 marks per goal, Livra+ lifts
+  // The real gate from lib/gating.ts — free is 4 marks per goal, Livra+ lifts
   // it. Control itself is never premium: unlink, manage and choose stay free at
   // any tier; only the cap on how many is a Livra+ line.
+  // Only the PER-GOAL cap applies here: linking moves a mark that already exists,
+  // so the account-wide ceiling (FREE_MARK_CEILING) cannot be crossed by linking.
   const canLinkMore = useMemo(
     () => canAddMarkToGoal(isProUnlocked, countMarksInGoal(marks, id ?? '')),
     [isProUnlocked, marks, id],
@@ -958,7 +961,7 @@ export default function GoalDetailScreen() {
   // contributing nothing to the ring.
   const handleOpenLinkSheet = useCallback(() => {
     if (!canLinkMore) {
-      showError(`That’s ${FREE_MARKS_PER_GOAL} marks on this goal. Livra+ lets you add more.`);
+      showError(MARK_PER_GOAL_LIMIT_MESSAGE);
       setTimeout(() => router.push('/paywall'), 2000);
       return;
     }
