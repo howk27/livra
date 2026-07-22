@@ -151,12 +151,19 @@ export const backfillGoalIdPushStamp = async (): Promise<GoalIdBackfillResult> =
     const now = new Date().toISOString();
     let stamped = 0;
     const updated = marks.map((mark) => {
-      const hasGoalId = typeof mark?.goal_id === 'string' && mark.goal_id.trim() !== '';
+      // EVERY live mark, not just the ones carrying a goal_id. Two reasons:
+      //   * the frequency columns have the same never-pushed problem, and they
+      //     exist on marks that have no goal at all;
+      //   * convertMarksToMaintenance (state/countersSlice.ts) explicitly NULLS
+      //     goal_id when a goal completes, so a goal_id-only predicate would skip
+      //     exactly the marks of the user's finished goals.
+      // Scoping this narrower would leave "marks became daily habits" unhealed for
+      // standalone and maintenance marks.
       const isTombstoned =
         mark?.deleted_at !== null &&
         mark?.deleted_at !== undefined &&
         String(mark.deleted_at).trim() !== '';
-      if (!hasGoalId || isTombstoned) return mark;
+      if (isTombstoned) return mark;
       stamped += 1;
       return { ...mark, updated_at: now };
     });

@@ -38,7 +38,10 @@ describe('backfillGoalIdPushStamp', () => {
     }
   });
 
-  it('leaves marks without a goal_id untouched', async () => {
+  it('re-stamps live marks that have NO goal_id — they carry the frequency columns too', async () => {
+    // A goal_id-only predicate would skip standalone habits AND every mark of a
+    // completed goal, because convertMarksToMaintenance nulls goal_id on those.
+    // Those are exactly the marks that come back as daily habits after a reinstall.
     await AsyncStorage.setItem(
       MARKS_KEY,
       JSON.stringify([
@@ -50,13 +53,13 @@ describe('backfillGoalIdPushStamp', () => {
 
     const result = await backfillGoalIdPushStamp();
 
-    expect(result.stamped).toBe(0);
+    expect(result.stamped).toBe(3);
     const marks = await readMarks();
-    expect(marks.map((m) => m.updated_at)).toEqual([
-      '2026-01-01T00:00:00.000Z',
-      '2026-01-01T00:00:00.000Z',
-      '2026-01-01T00:00:00.000Z',
-    ]);
+    for (const mark of marks) {
+      expect(new Date(mark.updated_at).getTime()).toBeGreaterThan(
+        new Date('2026-01-01T00:00:00.000Z').getTime(),
+      );
+    }
   });
 
   it('never re-stamps a tombstoned mark (would risk resurrecting it)', async () => {
