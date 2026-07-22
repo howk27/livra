@@ -74,6 +74,41 @@ const isProLimitError = (error: any): boolean => {
   );
 };
 
+/**
+ * Optional columns on public.marks that the client owns but the server may not
+ * have yet. The live DB has drifted from supabase/migrations in BOTH directions,
+ * so every leg that carries these must degrade (drop the column, keep syncing)
+ * instead of aborting — an aborted sync is how a reinstall loses everything.
+ */
+const OPTIONAL_MARK_COLUMNS = [
+  'dailyTarget',
+  'frequency_min',
+  'frequency_recommended',
+  'frequency_max',
+  'weekly_target',
+  'frequency_kind',
+] as const;
+type OptionalMarkColumn = (typeof OPTIONAL_MARK_COLUMNS)[number];
+
+/** PostgREST/Postgres shapes for "that column isn't there" (select side). */
+const isUnknownColumnError = (error: any): boolean => {
+  const code = error?.code;
+  const message = typeof error?.message === 'string' ? error.message : '';
+  if (code === '42703' || code === 'PGRST204' || code === 'PGRST100') return true;
+  return OPTIONAL_MARK_COLUMNS.some(
+    (column) =>
+      message.includes(column) &&
+      (/does not exist/i.test(message) || /could not find/i.test(message)),
+  );
+};
+
+/** The optional column named by a PGRST204 upsert rejection, if any (push side). */
+const missingOptionalColumnFromError = (error: any): OptionalMarkColumn | null => {
+  if (error?.code !== 'PGRST204') return null;
+  const message = typeof error?.message === 'string' ? error.message : '';
+  return OPTIONAL_MARK_COLUMNS.find((column) => message.includes(column)) ?? null;
+};
+
 /** Wall-clock guard so a hung push/pull cannot leave isSyncing true forever. Does not abort in-flight work; cursors only advance inside completed push/pull. */
 const SYNC_EXECUTION_TIMEOUT_MS = 180_000;
 
@@ -370,18 +405,50 @@ export const useSync = () => {
       // reinstall. Omitting it here is exactly why the reinstall link-heal never
       // worked — marks came back with a null goal_id, so the reconcile had no
       // source (founder device QC, delete+reinstall shows goals with no marks).
+      // dailyTarget and the five frequency columns (migration 20260612) MUST be
+      // pulled as well. They only ever existed on the device, so a reinstall
+      // returned them NULL and every mark read as a plain daily habit
+      // (goals.tsx falls back to weekly_target 7 — founder device QC 2026-07-22).
+      // dailyTarget was worse: pushed since day one, never read back.
       const counterSelect =
+        'id, user_id, name, emoji, color, unit, enable_streak, sort_index, total, last_activity_date, deleted_at, created_at, updated_at, goal_id, dailyTarget, frequency_min, frequency_recommended, frequency_max, weekly_target, frequency_kind';
+      // Degrade target: if the live DB is missing any optional column the select
+      // 400s, and a failed pull is exactly the reinstall data loss we are fixing.
+      const counterSelectLegacy =
         'id, user_id, name, emoji, color, unit, enable_streak, sort_index, total, last_activity_date, deleted_at, created_at, updated_at, goal_id';
+
+      let activeCounterSelect = counterSelect;
+      // PromiseLike: a PostgrestFilterBuilder is a thenable, not a real Promise.
+      const selectMarks = async (
+        run: (select: string) => PromiseLike<{ data: any[] | null; error: any }>,
+      ): Promise<{ data: any[] | null; error: any }> => {
+        const first = await run(activeCounterSelect);
+        if (
+          first.error &&
+          activeCounterSelect !== counterSelectLegacy &&
+          isUnknownColumnError(first.error)
+        ) {
+          logger.warn(
+            '[SYNC] Remote marks table is missing an optional column; retrying pull without dailyTarget/frequency fields:',
+            first.error?.message,
+          );
+          activeCounterSelect = counterSelectLegacy;
+          return run(activeCounterSelect);
+        }
+        return first;
+      };
 
       let remoteCounterRows: any[] = [];
 
       if (lastPulledAt) {
-        const { data: activeRows, error: activeErr } = await supabase
-          .from('marks')
-          .select(counterSelect)
-          .eq('user_id', userId)
-          .is('deleted_at', null)
-          .gt('updated_at', lastPulledAt);
+        const { data: activeRows, error: activeErr } = await selectMarks((select) =>
+          supabase
+            .from('marks')
+            .select(select)
+            .eq('user_id', userId)
+            .is('deleted_at', null)
+            .gt('updated_at', lastPulledAt),
+        );
 
         if (activeErr) {
           const parsed = parseError(activeErr);
@@ -391,12 +458,14 @@ export const useSync = () => {
           throw activeErr;
         }
 
-        const { data: tombRows, error: tombErr } = await supabase
-          .from('marks')
-          .select(counterSelect)
-          .eq('user_id', userId)
-          .not('deleted_at', 'is', null)
-          .gt('updated_at', lastPulledAt);
+        const { data: tombRows, error: tombErr } = await selectMarks((select) =>
+          supabase
+            .from('marks')
+            .select(select)
+            .eq('user_id', userId)
+            .not('deleted_at', 'is', null)
+            .gt('updated_at', lastPulledAt),
+        );
 
         if (tombErr) {
           const parsed = parseError(tombErr);
@@ -411,12 +480,14 @@ export const useSync = () => {
         const PAGE = 500;
         let offset = 0;
         for (;;) {
-          const { data: batch, error } = await supabase
-            .from('marks')
-            .select(counterSelect)
-            .eq('user_id', userId)
-            .order('updated_at', { ascending: false })
-            .range(offset, offset + PAGE - 1);
+          const { data: batch, error } = await selectMarks((select) =>
+            supabase
+              .from('marks')
+              .select(select)
+              .eq('user_id', userId)
+              .order('updated_at', { ascending: false })
+              .range(offset, offset + PAGE - 1),
+          );
 
           if (error) {
             const parsed = parseError(error);
@@ -1030,6 +1101,16 @@ export const useSync = () => {
             // server column has existed since 20260609 but was never sent, so
             // it was always NULL — see counterSelect above).
             goal_id: (c as Counter & { goal_id?: string | null }).goal_id ?? null,
+            // Frequency model (migration 20260612). Never pushed before, so the
+            // device held the only copy and a reinstall turned every mark into a
+            // daily habit. Sent as null when unset so the server row is explicit.
+            frequency_min: (c as Counter & { frequency_min?: number | null }).frequency_min ?? null,
+            frequency_recommended:
+              (c as Counter & { frequency_recommended?: number | null }).frequency_recommended ?? null,
+            frequency_max: (c as Counter & { frequency_max?: number | null }).frequency_max ?? null,
+            weekly_target: (c as Counter & { weekly_target?: number | null }).weekly_target ?? null,
+            frequency_kind:
+              (c as Counter & { frequency_kind?: string | null }).frequency_kind ?? null,
           };
         });
         
@@ -1048,28 +1129,39 @@ export const useSync = () => {
         const BATCH_SIZE = 100;
         const counterBatches = batchArray(countersToPush, BATCH_SIZE);
 
-        let supportsRemoteDailyTarget = true;
+        // Columns the live DB turns out not to have. Learned once, then applied
+        // to every later batch. Same degrade-don't-abort contract the dailyTarget
+        // retry had, generalised to all optional columns.
+        const unsupportedRemoteColumns = new Set<OptionalMarkColumn>();
+        const stripUnsupported = (rows: typeof countersToPush) =>
+          unsupportedRemoteColumns.size === 0
+            ? rows
+            : rows.map((row) => {
+                const copy: Record<string, unknown> = { ...row };
+                for (const column of unsupportedRemoteColumns) delete copy[column];
+                return copy;
+              });
+
         for (let i = 0; i < counterBatches.length; i++) {
           const batch = counterBatches[i];
           logger.log(`[SYNC] Upserting batch ${i + 1}/${counterBatches.length} (${batch.length} counter(s))...`);
 
-          const batchPayload = supportsRemoteDailyTarget
-            ? batch
-            : batch.map(({ dailyTarget: _dailyTarget, ...rest }) => rest);
-
           let { error: countersError } = await supabase
             .from('marks')
-            .upsert(batchPayload, { onConflict: 'id' });
+            .upsert(stripUnsupported(batch) as any[], { onConflict: 'id' });
 
-          if (
-            countersError?.code === 'PGRST204' &&
-            typeof countersError.message === 'string' &&
-            countersError.message.includes('dailyTarget')
-          ) {
-            logger.warn('[SYNC] Remote marks table missing dailyTarget column; retrying without it');
-            supportsRemoteDailyTarget = false;
-            const legacyBatch = batch.map(({ dailyTarget: _dailyTarget, ...rest }) => rest);
-            const retryResult = await supabase.from('marks').upsert(legacyBatch, { onConflict: 'id' });
+          // Bounded: each pass removes one column, so at most one retry per
+          // optional column before the error is treated as a real failure.
+          for (let retry = 0; retry < OPTIONAL_MARK_COLUMNS.length && countersError; retry++) {
+            const missingColumn = missingOptionalColumnFromError(countersError);
+            if (!missingColumn || unsupportedRemoteColumns.has(missingColumn)) break;
+            logger.warn(
+              `[SYNC] Remote marks table missing ${missingColumn} column; retrying push without it`,
+            );
+            unsupportedRemoteColumns.add(missingColumn);
+            const retryResult = await supabase
+              .from('marks')
+              .upsert(stripUnsupported(batch) as any[], { onConflict: 'id' });
             countersError = retryResult.error;
           }
 
@@ -2021,8 +2113,9 @@ const mergeCounter = async (counter: Counter, existingCountersMap?: Map<string, 
     await execute(
       `INSERT INTO lc_counters (
         id, user_id, name, emoji, color, unit, enable_streak,
-        sort_index, total, last_activity_date, deleted_at, created_at, updated_at, dailyTarget, goal_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        sort_index, total, last_activity_date, deleted_at, created_at, updated_at, dailyTarget, goal_id,
+        frequency_min, frequency_recommended, frequency_max, weekly_target, frequency_kind
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         counter.id,
         counter.user_id,
@@ -2039,6 +2132,11 @@ const mergeCounter = async (counter: Counter, existingCountersMap?: Map<string, 
         counter.updated_at,
         normalizeDailyTargetInput((counter as any).dailyTarget),
         (counter as any).goal_id ?? null,
+        (counter as any).frequency_min ?? null,
+        (counter as any).frequency_recommended ?? null,
+        (counter as any).frequency_max ?? null,
+        (counter as any).weekly_target ?? null,
+        (counter as any).frequency_kind ?? null,
       ]
     );
     return true; // Counter was inserted
@@ -2144,10 +2242,20 @@ const mergeCounter = async (counter: Counter, existingCountersMap?: Map<string, 
           ? normalizeDailyTargetInput((counter as any).dailyTarget)
           : resolveDailyTarget(existing as Counter);
 
+      // A server row whose optional column is NULL (pre-fix rows, or a live DB
+      // missing the column so the pull degraded) must NEVER wipe a good local
+      // value — the local copy is the only one that ever held it.
+      const preserveRemote = <T>(remote: T | null | undefined, local: T | null | undefined): T | null =>
+        remote === null || remote === undefined ? (local ?? null) : remote;
+      const existingCounter = existing as any;
+      const remoteCounter = counter as any;
+
       await execute(
         `UPDATE lc_counters SET
           name = ?, emoji = ?, color = ?, unit = ?, enable_streak = ?,
-          sort_index = ?, total = ?, last_activity_date = ?, deleted_at = ?, dailyTarget = ?, goal_id = ?, updated_at = ?
+          sort_index = ?, total = ?, last_activity_date = ?, deleted_at = ?, dailyTarget = ?, goal_id = ?,
+          frequency_min = ?, frequency_recommended = ?, frequency_max = ?, weekly_target = ?, frequency_kind = ?,
+          updated_at = ?
         WHERE id = ?`,
         [
           counter.name,
@@ -2163,6 +2271,11 @@ const mergeCounter = async (counter: Counter, existingCountersMap?: Map<string, 
           // This branch runs only when remote is the newer write, so LWW says
           // take the remote goal_id (link/unlink/graduate all bump updated_at).
           (counter as any).goal_id ?? null,
+          preserveRemote(remoteCounter.frequency_min, existingCounter.frequency_min),
+          preserveRemote(remoteCounter.frequency_recommended, existingCounter.frequency_recommended),
+          preserveRemote(remoteCounter.frequency_max, existingCounter.frequency_max),
+          preserveRemote(remoteCounter.weekly_target, existingCounter.weekly_target),
+          preserveRemote(remoteCounter.frequency_kind, existingCounter.frequency_kind),
           counter.updated_at,
           counter.id,
         ]

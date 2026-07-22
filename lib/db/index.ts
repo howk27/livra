@@ -33,6 +33,13 @@ const STORAGE_KEYS = {
 const MIGRATION_V2_FLAG = '@livra_migration_v2_complete';
 const LEGACY_COUNTERS_KEY = '@livra_db_counters';
 const MIGRATION_FREQ_V1_FLAG = '@livra_migration_freq_v1';
+const BACKFILL_GOAL_ID_PUSH_FLAG = '@livra_backfill_goal_id_push_v1';
+
+/** Outcome of the one-off goal_id re-push backfill (returned for tests/logging). */
+export type GoalIdBackfillResult = {
+  stamped: number;
+  skipped: 'already-run' | 'no-marks' | 'error' | null;
+};
 
 /**
  * One-time migration: copies data from the old @livra_db_counters key to @livra_db_marks.
@@ -109,6 +116,66 @@ export const migrateFrequencyFields = async (): Promise<void> => {
     await AsyncStorage.setItem(MIGRATION_FREQ_V1_FLAG, '1');
   } catch (error) {
     logger.error('[DB] Frequency fields migration failed (non-fatal):', error);
+  }
+};
+
+/**
+ * One-time backfill: re-stamps `updated_at` on every local mark that carries a
+ * `goal_id`, so the next push finally sends that column.
+ *
+ * Why: push only sends rows newer than the push cursor. `marks.goal_id` started
+ * being pushed in M6, so a mark created before that and never edited since has
+ * NEVER been pushed with its goal_id — the server column is still NULL,
+ * `goalsReconcile` has no source, and the goal comes back from a reinstall with
+ * no marks. Existing accounts cannot self-heal without this nudge.
+ *
+ * Rules: idempotent (flag-guarded), non-fatal on error, never touches tombstoned
+ * marks (re-stamping a deleted row would re-push it and risk a resurrection),
+ * and does NOT claim the flag when the device has no local marks — a fresh
+ * install must pull first, and there is nothing local to re-stamp yet.
+ */
+export const backfillGoalIdPushStamp = async (): Promise<GoalIdBackfillResult> => {
+  try {
+    const alreadyDone = await AsyncStorage.getItem(BACKFILL_GOAL_ID_PUSH_FLAG);
+    if (alreadyDone) return { stamped: 0, skipped: 'already-run' };
+
+    const marksJson = await AsyncStorage.getItem(STORAGE_KEYS.counters);
+    const marks: any[] = marksJson ? JSON.parse(marksJson) : [];
+    if (!Array.isArray(marks) || marks.length === 0) {
+      // Fresh install: leave the flag unclaimed so the backfill can still run on
+      // a later launch if local marks appear (e.g. an upgrade path that restores
+      // storage). Nothing to do right now either way.
+      return { stamped: 0, skipped: 'no-marks' };
+    }
+
+    const now = new Date().toISOString();
+    let stamped = 0;
+    const updated = marks.map((mark) => {
+      const hasGoalId = typeof mark?.goal_id === 'string' && mark.goal_id.trim() !== '';
+      const isTombstoned =
+        mark?.deleted_at !== null &&
+        mark?.deleted_at !== undefined &&
+        String(mark.deleted_at).trim() !== '';
+      if (!hasGoalId || isTombstoned) return mark;
+      stamped += 1;
+      return { ...mark, updated_at: now };
+    });
+
+    if (stamped > 0) {
+      await AsyncStorage.setItem(STORAGE_KEYS.counters, JSON.stringify(updated));
+      // Keep the in-memory mirror in step, otherwise the next saveToStorage
+      // would write the stale array straight back over the re-stamped one.
+      if (storage.has('counters')) {
+        storage.set('counters', updated);
+      }
+    }
+
+    await AsyncStorage.setItem(BACKFILL_GOAL_ID_PUSH_FLAG, '1');
+    logger.log(`[DB] goal_id push backfill re-stamped ${stamped} mark(s)`);
+    return { stamped, skipped: null };
+  } catch (error) {
+    logger.error('[DB] goal_id push backfill failed (non-fatal):', error);
+    return { stamped: 0, skipped: 'error' };
   }
 };
 
@@ -191,6 +258,42 @@ const saveMetaToStorage = async (): Promise<void> => {
   }
 };
 
+/**
+ * Fields every stored counter row carries, so a column-mapped INSERT still
+ * produces the same shape the param-length branches used to produce.
+ */
+const COUNTER_COLUMN_DEFAULTS: Record<string, any> = {
+  last_activity_date: null,
+  deleted_at: null,
+  dailyTarget: null,
+  goal_id: null,
+  gated: null,
+  gate_type: null,
+  min_interval_minutes: null,
+  max_per_day: null,
+  frequency_min: null,
+  frequency_recommended: null,
+  frequency_max: null,
+  weekly_target: null,
+  frequency_kind: null,
+};
+
+/**
+ * Extracts the column list from `INSERT INTO lc_counters (a, b, c) VALUES (...)`.
+ * Returns null when the SQL has no parseable column list.
+ */
+const parseInsertColumns = (sql: string): string[] | null => {
+  const match = sql.match(/INSERT\s+INTO\s+lc_counters\s*\(([\s\S]*?)\)\s*VALUES/i);
+  if (!match) return null;
+  const columns = match[1]
+    .split(',')
+    .map((column) => column.trim())
+    .filter((column) => column.length > 0);
+  if (columns.length === 0) return null;
+  if (!columns.every((column) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(column))) return null;
+  return columns;
+};
+
 // Mock database implementation
 const createMockDb = (): MockDatabase => ({
   execAsync: async (sql: string) => {
@@ -229,7 +332,28 @@ const createMockDb = (): MockDatabase => ({
 
       const counters = storage.get('counters') || [];
       let newCounter: any;
-      
+
+      // PREFERRED PATH: map params by the column list in the SQL. The historical
+      // params.length branches below collide (mergeCounter's 15-param insert with
+      // goal_id landed in the 15-param *gating* branch and silently wrote
+      // created_at into gated, dropping goal_id/dailyTarget/deleted_at entirely).
+      // Column-name mapping removes the positional hazard for good; the length
+      // branches stay only as a fallback for SQL we cannot parse.
+      const insertColumns = parseInsertColumns(sql);
+      if (insertColumns && insertColumns.length === params.length) {
+        newCounter = { ...COUNTER_COLUMN_DEFAULTS };
+        insertColumns.forEach((column, i) => {
+          newCounter[column] = params[i];
+        });
+        counters.push(newCounter);
+        storage.set('counters', counters);
+        await saveToStorage('counters', counters);
+        logger.log(
+          `[DB] Inserted counter ${newCounter.id} (${newCounter.name}) via column map (${insertColumns.length} columns)`,
+        );
+        return { insertId: counters.length - 1, rowsAffected: 1 };
+      }
+
       if (params.length === 14) {
         // Sync insert with dailyTarget (last column)
         newCounter = {
@@ -462,7 +586,12 @@ const createMockDb = (): MockDatabase => ({
                   }
                 }
               });
-              updated.updated_at = new Date().toISOString();
+              // Only stamp a fresh timestamp when the caller did not supply one.
+              // mergeCounter passes the REMOTE updated_at explicitly; clobbering
+              // it made every freshly pulled row look locally-dirty and re-push.
+              if (!/\bupdated_at\s*=/i.test(setMatch[1])) {
+                updated.updated_at = new Date().toISOString();
+              }
             }
             
             counters[index] = updated;
@@ -1106,6 +1235,8 @@ export const initDatabase = async (): Promise<MockDatabase> => {
   await migrateCountersStorageKey();
   // Backfill frequency fields on existing marks
   await migrateFrequencyFields();
+  // One-off: make pre-M6 marks re-push their goal_id so reinstalls can relink
+  await backfillGoalIdPushStamp();
 
   // Load existing data from AsyncStorage first
   await loadFromStorage();
@@ -1128,7 +1259,13 @@ export const initDatabase = async (): Promise<MockDatabase> => {
       deleted_at TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
-      dailyTarget INTEGER
+      dailyTarget INTEGER,
+      goal_id TEXT,
+      frequency_min INTEGER,
+      frequency_recommended INTEGER,
+      frequency_max INTEGER,
+      weekly_target INTEGER,
+      frequency_kind TEXT
     );
   `);
   
