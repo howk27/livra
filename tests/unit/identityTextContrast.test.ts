@@ -120,31 +120,32 @@ describe('identity screen body text clears WCAG AA (QA B1/B2)', () => {
     expect(contrastRatio(themedColors('light').inkMid, themedColors('light').surface)).toBeGreaterThan(8);
   });
 
-  it('the two styles QA charged are the ones that moved', () => {
-    // Cheap regression pin on the exact reported styles, so a revert of either
-    // is named in the failure rather than showing up as a generic scan miss.
+  it('the signed-out copy QA charged stays on the legible ink', () => {
+    // quietLine was one of the two 2026-07-22 offenders; pin it so a revert is
+    // named in the failure. (Its sibling `note` was retired in the 2026-07-23
+    // flatten — the scan above still catches any inkMuted text that returns.)
     expect(src).toMatch(/quietLine:\s*\{[^}]*color:\s*c\.inkMid/s);
-    expect(src).toMatch(/\bnote:\s*\{[^}]*color:\s*c\.inkMid/s);
   });
 });
 
 /**
- * QA gate B3 — identity and credentials must not read as one flat list.
+ * Founder 2026-07-23 — Edit Profile is now ONE clean flat workflow: no bordered
+ * cards, no "sign-in zone" seam. Name, Email and Password stack as plain fields,
+ * with explanatory text kept out of the way. (Supersedes the old QA B3 seam.)
  */
-describe('identity screen has a sign-in zone seam (QA B3)', () => {
-  it('draws a rule and a heading above the credential cards', () => {
-    expect(src).toMatch(/zoneSeam:\s*\{[^}]*borderTopWidth:\s*1/s);
-    expect(src).toMatch(/zoneSeam:\s*\{[^}]*borderTopColor:\s*c\.borderLight/s);
-    expect(src).toMatch(/<SectionLabel color=\{c\.inkMid\}>SIGN-IN<\/SectionLabel>/);
+describe('identity screen is one clean flat form (founder 2026-07-23)', () => {
+  it('has no bordered-card or zone-seam chrome', () => {
+    expect(src).not.toMatch(/\bcard:\s*\{/);
+    expect(src).not.toMatch(/zoneSeam:/);
   });
 
-  it('opens the zone with the full xxl gap', () => {
-    expect(src).toMatch(/zoneSeam:\s*\{[^}]*marginTop:\s*spacing\.xxl/s);
-  });
-
-  it('ties Save changes to the field above it, not to the zone below', () => {
+  it('ties Save changes to the field above it', () => {
     expect(src).toMatch(/saveBtn:\s*\{[^}]*marginTop:\s*spacing\.md/s);
-    expect(src).not.toMatch(/saveBtn:\s*\{[^}]*marginTop:\s*spacing\.xl\b/s);
+  });
+
+  it('email rests as a greyed on-file value that taps to edit', () => {
+    expect(src).toMatch(/readonlyField:/);
+    expect(src).toMatch(/onPress=\{startEmailEdit\}/);
   });
 
   it('leaves exactly one filled pill, so the screen has a focal point', () => {

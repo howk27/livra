@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import * as ImagePicker from 'expo-image-picker';
-import { User, Camera, Envelope, Lock } from 'phosphor-react-native';
+import { User, Camera, PencilSimple } from 'phosphor-react-native';
 import { LivraHeader } from '../../components/ui/LivraHeader';
 import { PillButton } from '../../components/ui/PillButton';
 import { SectionLabel } from '../../components/ui/SectionLabel';
@@ -69,6 +69,9 @@ export default function ProfileScreen() {
   const [emailError, setEmailError] = useState<string | null>(null);
   const [emailOutcome, setEmailOutcome] = useState<EmailChangeOutcome | null>(null);
   const [savingEmail, setSavingEmail] = useState(false);
+  // The email reads as a greyed, on-file value until the user taps it to edit —
+  // a smart default (show what's there) over a second empty box.
+  const [emailEditing, setEmailEditing] = useState(false);
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -203,6 +206,9 @@ export default function ProfileScreen() {
       const outcome = describeEmailChangeOutcome(data?.user, target);
       setEmailOutcome(outcome);
       setEmailDraft(null);
+      // Submit succeeded — collapse back to the calm on-file view. The outcome
+      // line (and the pending block for a confirmation flow) still shows below.
+      setEmailEditing(false);
       if (outcome.status === 'applied') showSuccess('Your email is updated.');
     } catch (e) {
       logger.error('[Profile] email change threw:', e);
@@ -211,6 +217,19 @@ export default function ProfileScreen() {
       setSavingEmail(false);
     }
   }, [emailValue, savingEmail, supabase, userEmail, showSuccess]);
+
+  const startEmailEdit = useCallback(() => {
+    setEmailEditing(true);
+    setEmailError(null);
+    setEmailOutcome(null);
+  }, []);
+
+  const cancelEmailEdit = useCallback(() => {
+    setEmailEditing(false);
+    setEmailDraft(null);
+    setEmailError(null);
+    setEmailOutcome(null);
+  }, []);
 
   const handlePasswordSubmit = useCallback(async () => {
     if (savingPassword) return;
@@ -330,8 +349,11 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             </View>
 
+            {/* One clean workflow, no card chrome: Name, Email, Password stacked
+                as a single form. Explanatory text stays out of the way — it only
+                appears on error/outcome or the confirmation pending state. */}
             <View style={styles.fieldBlock}>
-              <SectionLabel>DISPLAY NAME</SectionLabel>
+              <SectionLabel>NAME</SectionLabel>
               <TextInput
                 style={[styles.input, loadingProfile && styles.inputDisabled]}
                 value={displayName}
@@ -343,8 +365,6 @@ export default function ProfileScreen() {
               />
             </View>
 
-            {/* Sits close to the field it saves (md above) and far from the
-                seam below (xxl), so proximity answers what it belongs to. */}
             <PillButton
               label={saving ? 'Saving…' : 'Save changes'}
               onPress={handleSave}
@@ -352,159 +372,139 @@ export default function ProfileScreen() {
               style={styles.saveBtn}
             />
 
-            {/* ── SIGN-IN ZONE ──────────────────────────────────────────
-                A rule and a heading mark where the sensitive half starts;
-                everything below it changes how you get into the account. */}
-            <View style={styles.zoneSeam}>
-              <SectionLabel color={c.inkMid}>SIGN-IN</SectionLabel>
-              <Text style={styles.zoneNote}>
-                Where account mail reaches you, and how you get back in.
-              </Text>
-            </View>
+            {/* ── Email ── greyed on-file value; tap to edit. No standing copy. */}
+            <SectionLabel style={styles.groupLabel}>EMAIL</SectionLabel>
 
-            <SectionLabel style={styles.zoneChild}>EMAIL</SectionLabel>
-
-            <View style={styles.card}>
-              <View style={styles.cardHeadRow}>
-                <Envelope size={18} color={c.inkMid} weight="regular" />
-                <Text style={styles.cardHeadText}>The address account mail goes to</Text>
-              </View>
-
-              {awaitingConfirmation ? (
-                <View style={styles.pendingBlock}>
-                  <Text style={styles.pendingText}>
-                    Waiting on {awaitingConfirmation}. Open the confirmation link we sent there
-                    and this screen will show the new address.
-                  </Text>
-                </View>
-              ) : null}
-
-              <TextInput
-                style={styles.input}
-                value={emailValue}
-                onChangeText={(t) => {
-                  setEmailDraft(t);
-                  setEmailError(null);
-                  setEmailOutcome(null);
-                }}
-                placeholder="you@example.com"
-                placeholderTextColor={c.inkMuted}
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="email-address"
-                editable={!savingEmail}
-                returnKeyType="done"
-                onSubmitEditing={() => { void handleEmailChange(); }}
-              />
-
-              {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
-              {emailOutcome ? (
-                <Animated.Text entering={FadeIn.duration(160)} style={styles.outcomeText}>
-                  {emailOutcome.message}
-                </Animated.Text>
-              ) : null}
-
-              {/* Ghost: "Save changes" stays the screen's one filled action. */}
-              <PillButton
-                variant="ghost"
-                label={savingEmail ? 'Saving…' : 'Update email'}
-                onPress={() => { void handleEmailChange(); }}
-                disabled={savingEmail || emailUnchanged}
-                style={styles.action}
-              />
-            </View>
-
-            {/* ── PASSWORD ──────────────────────────────────────────────── */}
-            <SectionLabel style={styles.zoneChild}>PASSWORD</SectionLabel>
-
-            <View style={styles.card}>
-              <View style={styles.cardHeadRow}>
-                <Lock size={18} color={c.inkMid} weight="regular" />
-                <Text style={styles.cardHeadText}>
-                  {hasPassword ? 'Change your password' : 'Add a password to this account'}
-                </Text>
-              </View>
-
-              {hasPassword ? (
-                <>
-                  <Text style={styles.label}>Current password</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={currentPassword}
-                    onChangeText={(t) => { setCurrentPassword(t); setPasswordError(null); }}
-                    placeholder="Your current password"
-                    placeholderTextColor={c.inkMuted}
-                    secureTextEntry
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    editable={!savingPassword}
-                    textContentType="password"
+            {emailEditing ? (
+              <>
+                <TextInput
+                  style={styles.input}
+                  value={emailValue}
+                  onChangeText={(t) => {
+                    setEmailDraft(t);
+                    setEmailError(null);
+                    setEmailOutcome(null);
+                  }}
+                  placeholder="you@example.com"
+                  placeholderTextColor={c.inkMuted}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="email-address"
+                  editable={!savingEmail}
+                  autoFocus
+                  returnKeyType="done"
+                  onSubmitEditing={() => { void handleEmailChange(); }}
+                />
+                {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
+                <View style={styles.actionRow}>
+                  <PillButton
+                    variant="ghost"
+                    label={savingEmail ? 'Saving…' : 'Update email'}
+                    onPress={() => { void handleEmailChange(); }}
+                    disabled={savingEmail || emailUnchanged}
+                    style={styles.actionFlex}
                   />
-                </>
-              ) : (
-                <Text style={styles.note}>
-                  You sign in with Apple today. A password lets you sign in with your email as
-                  well, on any device.
+                  <TouchableOpacity onPress={cancelEmailEdit} hitSlop={8} disabled={savingEmail}>
+                    <Text style={styles.cancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <TouchableOpacity
+                style={[styles.input, styles.readonlyField]}
+                onPress={startEmailEdit}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={`Email ${userEmail ?? 'not set'}. Tap to edit.`}
+              >
+                <Text
+                  style={[styles.readonlyValue, !userEmail && { color: c.inkMid }]}
+                  numberOfLines={1}
+                >
+                  {userEmail ?? 'Add an email'}
                 </Text>
-              )}
+                <PencilSimple size={16} color={c.inkMid} weight="regular" />
+              </TouchableOpacity>
+            )}
 
-              <Text style={styles.label}>{hasPassword ? 'New password' : 'Password'}</Text>
+            {emailOutcome ? (
+              <Animated.Text entering={FadeIn.duration(160)} style={styles.outcomeText}>
+                {emailOutcome.message}
+              </Animated.Text>
+            ) : null}
+            {awaitingConfirmation ? (
+              <Text style={styles.pendingText}>
+                Waiting on {awaitingConfirmation}. Open the confirmation link we sent there and this
+                screen will show the new address.
+              </Text>
+            ) : null}
+
+            {/* ── Password ── minimal: placeholders carry the labels. */}
+            <SectionLabel style={styles.groupLabel}>PASSWORD</SectionLabel>
+
+            {hasPassword ? (
               <TextInput
                 style={styles.input}
-                value={newPassword}
-                onChangeText={(t) => { setNewPassword(t); setPasswordError(null); }}
-                placeholder="At least 8 characters"
-                placeholderTextColor={c.inkMuted}
-                autoCapitalize="none"
-                autoCorrect={false}
-                secureTextEntry
-                editable={!savingPassword}
-                textContentType="newPassword"
-              />
-
-              <Text style={styles.label}>{hasPassword ? 'Repeat new password' : 'Repeat password'}</Text>
-              <TextInput
-                style={styles.input}
-                value={confirmPassword}
-                onChangeText={(t) => { setConfirmPassword(t); setPasswordError(null); }}
-                placeholder="Repeat it once more"
+                value={currentPassword}
+                onChangeText={(t) => { setCurrentPassword(t); setPasswordError(null); }}
+                placeholder="Current password"
                 placeholderTextColor={c.inkMuted}
                 secureTextEntry
                 autoCapitalize="none"
                 autoCorrect={false}
                 editable={!savingPassword}
-                textContentType="newPassword"
-                returnKeyType="done"
-                onSubmitEditing={() => { void handlePasswordSubmit(); }}
+                textContentType="password"
               />
+            ) : null}
 
-              {passwordError ? <Text style={styles.errorText}>{passwordError}</Text> : null}
+            <TextInput
+              style={[styles.input, styles.stackedInput]}
+              value={newPassword}
+              onChangeText={(t) => { setNewPassword(t); setPasswordError(null); }}
+              placeholder={hasPassword ? 'New password' : 'Password — at least 8 characters'}
+              placeholderTextColor={c.inkMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              secureTextEntry
+              editable={!savingPassword}
+              textContentType="newPassword"
+            />
 
-              {hasPassword ? (
-                <Text style={styles.note}>
-                  We ask for your current password first, so only you can change it.
-                </Text>
-              ) : null}
+            <TextInput
+              style={[styles.input, styles.stackedInput]}
+              value={confirmPassword}
+              onChangeText={(t) => { setConfirmPassword(t); setPasswordError(null); }}
+              placeholder={hasPassword ? 'Repeat new password' : 'Repeat password'}
+              placeholderTextColor={c.inkMuted}
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+              editable={!savingPassword}
+              textContentType="newPassword"
+              returnKeyType="done"
+              onSubmitEditing={() => { void handlePasswordSubmit(); }}
+            />
 
-              <PillButton
-                variant="ghost"
-                label={
-                  savingPassword
-                    ? 'Saving…'
-                    : hasPassword
-                      ? 'Change password'
-                      : 'Set password'
-                }
-                onPress={() => { void handlePasswordSubmit(); }}
-                disabled={
-                  savingPassword ||
-                  (hasPassword && !currentPassword.trim()) ||
-                  !newPassword ||
-                  !confirmPassword
-                }
-                style={styles.action}
-              />
-            </View>
+            {passwordError ? <Text style={styles.errorText}>{passwordError}</Text> : null}
+
+            <PillButton
+              variant="ghost"
+              label={
+                savingPassword
+                  ? 'Saving…'
+                  : hasPassword
+                    ? 'Change password'
+                    : 'Set password'
+              }
+              onPress={() => { void handlePasswordSubmit(); }}
+              disabled={
+                savingPassword ||
+                (hasPassword && !currentPassword.trim()) ||
+                !newPassword ||
+                !confirmPassword
+              }
+              style={styles.action}
+            />
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -578,51 +578,9 @@ function createStyles(c: ReturnType<typeof themedColors>) {
       marginTop: spacing.xl,
       gap: spacing.xs,
     },
-    card: {
-      backgroundColor: c.surface,
-      borderRadius: radius.lg,
-      borderWidth: 1,
-      borderColor: c.borderLight,
-      padding: spacing.md,
-      marginTop: spacing.xs,
-      gap: spacing.xs,
-    },
-    cardHeadRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: spacing.sm,
-      marginBottom: spacing.xs,
-    },
-    cardHeadText: {
-      flex: 1,
-      fontFamily: fonts.sansMedium,
-      fontSize: fontSize.md,
-      color: c.inkDark,
-    },
-    // The seam between "who you are" and "how you sign in". The rule plus the
-    // xxl gap above it is what makes the second half read as its own zone.
-    zoneSeam: {
-      marginTop: spacing.xxl,
-      paddingTop: spacing.lg,
-      borderTopWidth: 1,
-      borderTopColor: c.borderLight,
-      gap: spacing.xs,
-    },
-    zoneNote: {
-      fontFamily: fonts.sans,
-      fontSize: fontSize[13],
-      color: c.inkMid,
-      lineHeight: 19,
-    },
-    // Sub-labels inside the zone sit closer than the zone gap, so they read as
-    // children of SIGN-IN rather than as three peers of DISPLAY NAME.
-    zoneChild: { marginTop: spacing.lg },
-    label: {
-      fontFamily: fonts.sansMedium,
-      fontSize: fontSize.sm,
-      color: c.inkMid,
-      marginTop: spacing.sm,
-    },
+    // Section labels below the first one get breathing room above so Name,
+    // Email and Password read as three calm groups in one flat form.
+    groupLabel: { marginTop: spacing.xl },
     input: {
       height: 48,
       backgroundColor: c.surfaceAlt,
@@ -636,26 +594,43 @@ function createStyles(c: ReturnType<typeof themedColors>) {
       justifyContent: 'center',
     },
     inputDisabled: { opacity: 0.6 },
-    // 13px carries no large-text allowance, so it needs the full 4.5:1 that
-    // inkMid gives (8.47:1) and inkMuted does not (2.69:1 on surface).
-    note: {
+    // Stacked password fields sit tight to each other (one xs gap), reading as
+    // one group rather than three peers.
+    stackedInput: { marginTop: spacing.sm },
+    // The email in its resting state: a field-shaped row showing the on-file
+    // address with a pencil affordance. Row layout over the shared input shell.
+    readonlyField: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: spacing.sm,
+    },
+    readonlyValue: {
+      flex: 1,
       fontFamily: fonts.sans,
-      fontSize: fontSize[13],
+      fontSize: fontSize.md,
+      color: c.inkDark,
+    },
+    actionRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      marginTop: spacing.md,
+    },
+    actionFlex: { flex: 1 },
+    cancelText: {
+      fontFamily: fonts.sansMedium,
+      fontSize: fontSize.md,
       color: c.inkMid,
-      lineHeight: 19,
-      marginTop: spacing.xs,
+      paddingHorizontal: spacing.sm,
     },
-    pendingBlock: {
-      backgroundColor: c.surfaceAlt,
-      borderRadius: radius.md,
-      padding: spacing.md,
-      marginTop: spacing.xs,
-    },
+    // 13px carries no large-text allowance, so inkMid (8.47:1) not inkMuted.
     pendingText: {
       fontFamily: fonts.sans,
       fontSize: fontSize[13],
       color: c.inkMid,
       lineHeight: 19,
+      marginTop: spacing.xs,
     },
     errorText: {
       fontFamily: fonts.sans,
