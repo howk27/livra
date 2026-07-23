@@ -216,7 +216,7 @@ export function GoalPackageReview({
               <Sparkle size={16} color={c.ember} weight="fill" />
               <Text style={[styles.limitNoteText, { color: c.inkMid }]}>
                 {markHeadroom > 0
-                  ? `Your free plan fits ${markHeadroom} more mark${markHeadroom === 1 ? '' : 's'} here. We'll keep the first ${markHeadroom} — unlock Livra+ to add the rest.`
+                  ? `Your free plan fits ${markHeadroom} more mark${markHeadroom === 1 ? '' : 's'} here. We'll keep the first ${markHeadroom}. Unlock Livra+ to add the rest.`
                   : `You've reached the free plan's mark limit. Unlock Livra+ to add these marks.`}
               </Text>
               <TouchableOpacity

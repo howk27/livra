@@ -115,22 +115,29 @@ beforeEach(() => {
   mockAuthState.loading = false;
 });
 
+// Placeholders after the 2026-07-23 flatten: the change/add copy differs, and
+// the email rests as a greyed on-file value that taps to edit.
 function changePassword(
   api: ReturnType<typeof render>,
   current: string,
   next: string,
   confirm: string,
 ) {
-  fireEvent.changeText(api.getByPlaceholderText('Your current password'), current);
-  fireEvent.changeText(api.getByPlaceholderText('At least 8 characters'), next);
-  fireEvent.changeText(api.getByPlaceholderText('Repeat it once more'), confirm);
+  fireEvent.changeText(api.getByPlaceholderText('Current password'), current);
+  fireEvent.changeText(api.getByPlaceholderText('New password'), next);
+  fireEvent.changeText(api.getByPlaceholderText('Repeat new password'), confirm);
   fireEvent.press(api.getByText('Change password'));
 }
 
 function setPassword(api: ReturnType<typeof render>, next: string, confirm: string) {
-  fireEvent.changeText(api.getByPlaceholderText('At least 8 characters'), next);
-  fireEvent.changeText(api.getByPlaceholderText('Repeat it once more'), confirm);
+  fireEvent.changeText(api.getByPlaceholderText('Password (at least 8 characters)'), next);
+  fireEvent.changeText(api.getByPlaceholderText('Repeat password'), confirm);
   fireEvent.press(api.getByText('Set password'));
+}
+
+/** Reveal the email TextInput — it rests as a greyed on-file value until tapped. */
+function openEmailEditor(api: ReturnType<typeof render>) {
+  fireEvent.press(api.getByLabelText(/Tap to edit/i));
 }
 
 describe('loading and signed-out states', () => {
@@ -198,7 +205,7 @@ describe('adding a password (Apple-only account)', () => {
 
   it('asks for no current password and writes without reauthenticating', async () => {
     const api = render(<ProfileScreen />);
-    expect(api.queryByPlaceholderText('Your current password')).toBeNull();
+    expect(api.queryByPlaceholderText('Current password')).toBeNull();
 
     setPassword(api, 'newpassword', 'newpassword');
 
@@ -221,12 +228,16 @@ describe('adding a password (Apple-only account)', () => {
     const api = render(<ProfileScreen />);
     setPassword(api, 'newpassword', 'newpassword');
 
-    await waitFor(() => expect(api.getByPlaceholderText('Your current password')).toBeTruthy());
+    await waitFor(() => expect(api.getByPlaceholderText('Current password')).toBeTruthy());
     expect(api.getByText('Change password')).toBeTruthy();
   });
 
   it('offers an editable email field instead of an explanation', () => {
     const api = render(<ProfileScreen />);
+    // The Apple relay address is shown as the on-file value, editable on tap —
+    // not a dead-end explanation.
+    expect(api.getByText(appleUser.email)).toBeTruthy();
+    openEmailEditor(api);
     const field = api.getByPlaceholderText('you@example.com');
     expect(field.props.value).toBe(appleUser.email);
     expect(field.props.editable).not.toBe(false);
@@ -240,6 +251,7 @@ describe('adding a password (Apple-only account)', () => {
       error: null,
     });
     const api = render(<ProfileScreen />);
+    openEmailEditor(api);
     fireEvent.changeText(api.getByPlaceholderText('you@example.com'), 'real@example.com');
     fireEvent.press(api.getByText('Update email'));
 
@@ -250,6 +262,9 @@ describe('adding a password (Apple-only account)', () => {
 describe('email change', () => {
   it('pre-fills the field with the address on file', () => {
     const api = render(<ProfileScreen />);
+    // Shown as the on-file value before tapping; the editor pre-fills it too.
+    expect(api.getByText('sam@example.com')).toBeTruthy();
+    openEmailEditor(api);
     expect(api.getByPlaceholderText('you@example.com').props.value).toBe('sam@example.com');
   });
 
@@ -259,6 +274,7 @@ describe('email change', () => {
       error: null,
     });
     const api = render(<ProfileScreen />);
+    openEmailEditor(api);
     fireEvent.changeText(api.getByPlaceholderText('you@example.com'), 'new@example.com');
     fireEvent.press(api.getByText('Update email'));
 
@@ -271,6 +287,7 @@ describe('email change', () => {
   it('does not claim a mail was sent when confirmation is off', async () => {
     mockUpdateUser.mockResolvedValue({ data: { user: { email: 'new@example.com' } }, error: null });
     const api = render(<ProfileScreen />);
+    openEmailEditor(api);
     fireEvent.changeText(api.getByPlaceholderText('you@example.com'), 'new@example.com');
     fireEvent.press(api.getByText('Update email'));
 
@@ -284,6 +301,7 @@ describe('email change', () => {
       error: { message: 'A user with this email address has already been registered' },
     });
     const api = render(<ProfileScreen />);
+    openEmailEditor(api);
     fireEvent.changeText(api.getByPlaceholderText('you@example.com'), 'taken@example.com');
     fireEvent.press(api.getByText('Update email'));
 
@@ -294,6 +312,7 @@ describe('email change', () => {
 
   it('never calls Supabase while the field still holds the address on file', async () => {
     const api = render(<ProfileScreen />);
+    openEmailEditor(api);
     fireEvent.changeText(api.getByPlaceholderText('you@example.com'), 'sam@example.com');
     fireEvent.press(api.getByText('Update email'));
 

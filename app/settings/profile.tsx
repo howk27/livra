@@ -461,7 +461,7 @@ export default function ProfileScreen() {
               style={[styles.input, styles.stackedInput]}
               value={newPassword}
               onChangeText={(t) => { setNewPassword(t); setPasswordError(null); }}
-              placeholder={hasPassword ? 'New password' : 'Password — at least 8 characters'}
+              placeholder={hasPassword ? 'New password' : 'Password (at least 8 characters)'}
               placeholderTextColor={c.inkMuted}
               autoCapitalize="none"
               autoCorrect={false}
