@@ -122,7 +122,12 @@ export type DiagnosticEventType =
   | 'iap_recover_now_attempted'
   | 'iap_recover_now_no_pending'
   | 'iap_recover_now_busy'
-  | 'iap_recover_now_error';
+  | 'iap_recover_now_error'
+  // Optimistic-close paywall flow (2026-07-23): close on submit, verify silently.
+  | 'paywall_purchase_submitted_optimistic_close'
+  | 'paywall_pending_verification_close'
+  | 'paywall_bg_verification_incomplete'
+  | 'paywall_bg_verification_error';
 
 export interface DiagnosticEvent {
   timestamp: string;

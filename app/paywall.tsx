@@ -405,6 +405,16 @@ function PaywallScreenContent() {
   const hasValidPrice = selectedPrice && selectedPrice.trim() !== '';
   const buttonDisabled = !canAttemptPurchase || !hasValidPrice;
 
+  // Leave the paywall — same nav the isProUnlocked auto-close uses. Called on an
+  // optimistic close so a successful purchase never sits on a verifying card.
+  const closePaywall = useCallback(() => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)/focus');
+    }
+  }, [router]);
+
   // STEP 3: Remove double-authority purchase gating
   // Paywall guard is ONLY for UI spam prevention (1 second tap guard)
   // IapManager is the authoritative source for purchase state
@@ -432,10 +442,12 @@ function PaywallScreenContent() {
       }
 
       if (hasPendingVerification) {
-        setOperationState('verifying');
-        setOperationMessage('Verification pending. Please retry.');
-        showInfo('Your previous purchase is still being verified. Please wait a moment and tap "Retry Verification".');
+        // A prior purchase is already validating in the background — don't charge
+        // again and don't show a retry card. Just leave; it unlocks when
+        // validation lands (or lapses on its own if it never does).
+        try { diagEvent('paywall_pending_verification_close', {}); } catch (e) { void e; }
         purchaseInProgressRef.current = false;
+        closePaywall();
         return;
       }
 
@@ -518,29 +530,19 @@ function PaywallScreenContent() {
       // IapManager will handle its own purchaseInProgress guard and throw if already in progress
       const purchaseResult = await purchaseSubscription(productId);
       if (purchaseResult.outcome === 'submitted') {
-        setOperationState('verifying');
-        setOperationMessage('Verifying your purchase...');
+        // Optimistic close (founder 2026-07-23): the store accepted the purchase,
+        // so unlock the experience and leave the paywall immediately — no
+        // verifying/retry card. Receipt validation continues in the background,
+        // driven by the IAP service's transaction listener (independent of this
+        // screen): an unfinished StoreKit transaction re-delivers until it
+        // validates, and a bad/refunded receipt lapses on its own via
+        // pro_expires_at. The SUBSCRIPTION_STARTED capture is a client-side
+        // funnel signal only, never the revenue source of truth.
         setNormalizedError(null);
-        const verificationResult = await refreshEntitlementWithBackoff({
-          maxMs: 90000,
-          requireDbConfirmation: true,
-        });
-        if (verificationResult === 'aborted') {
-          return;
-        }
-        if (verificationResult === 'unlocked') {
-          setOperationState('subscribed');
-          setOperationMessage(null);
-          // Client-side signal only — best-effort, not the revenue source of truth
-          // (App Store/Play server receipts are). See analytics decisions log.
-          capture(ANALYTICS_EVENTS.SUBSCRIPTION_STARTED, { plan: selectedPlan, product_id: productId });
-        } else if (verificationResult === 'still_locked') {
-          setOperationState('info');
-          setOperationMessage(verificationPendingMessage);
-        } else {
-          setOperationState('error');
-          setOperationMessage('Purchase failed. Please try again.');
-        }
+        capture(ANALYTICS_EVENTS.SUBSCRIPTION_STARTED, { plan: selectedPlan, product_id: productId });
+        try { diagEvent('paywall_purchase_submitted_optimistic_close', { productId }); } catch (e) { void e; }
+        purchaseInProgressRef.current = false;
+        closePaywall();
         return;
       }
       if (purchaseResult.outcome === 'cancelled') {
@@ -722,43 +724,6 @@ function PaywallScreenContent() {
     !hasPurchaseUpdated &&
     !hasPurchaseTransactionId;
 
-  const handleRetryVerification = async () => {
-    try {
-      setOperationState('verifying');
-      setOperationMessage('Verifying your purchase...');
-      await iapService.recoverNow();
-      const verificationResult = await refreshEntitlementWithBackoff({
-        maxMs: 90000,
-        requireDbConfirmation: true,
-      });
-      if (verificationResult === 'aborted') {
-        return;
-      }
-      if (verificationResult === 'unlocked') {
-        setOperationState('subscribed');
-        setOperationMessage(null);
-      } else if (verificationResult === 'still_locked') {
-        setOperationState('info');
-        setOperationMessage(verificationPendingMessage);
-      } else {
-        setOperationState('error');
-        setOperationMessage('Purchase failed. Please try again.');
-      }
-    } catch (error) {
-      logger.error('[Paywall] Retry verification failed', error);
-      setOperationState('error');
-      setOperationMessage('Purchase failed. Please try again.');
-    } finally {
-      setOperationState((current) => {
-        if (current === 'verifying') {
-          setOperationMessage(null);
-          return 'idle';
-        }
-        return current;
-      });
-    }
-  };
-
   useEffect(() => {
     if (isProUnlocked) {
       if (router.canGoBack()) {
@@ -825,30 +790,25 @@ function PaywallScreenContent() {
     if (lastPurchaseUpdatedRef.current === lastPurchaseUpdatedAt) return;
     lastPurchaseUpdatedRef.current = lastPurchaseUpdatedAt;
     if (isSubscribed) return;
-    setOperationState('verifying');
-    setOperationMessage('Verifying your purchase...');
+    // A transaction landed while the paywall is still open (a restore, or a
+    // transaction that arrived outside handlePurchase). Confirm entitlement in
+    // the BACKGROUND with no verifying/retry card: on unlock the isProUnlocked
+    // auto-close fires; if it stays locked we log to diagnostics and stay quiet.
+    // The receipt validation itself lives in the IAP service listener, not here.
     setNormalizedError(null);
     refreshEntitlementWithBackoff({ maxMs: 90000, requireDbConfirmation: true })
       .then((verificationResult) => {
-        if (verificationResult === 'aborted') {
-          return;
-        }
         if (verificationResult === 'unlocked') {
           setOperationState('subscribed');
           setOperationMessage(null);
-        } else if (verificationResult === 'still_locked') {
-          setOperationState('info');
-          setOperationMessage(verificationPendingMessage);
-        } else {
-          setOperationState('error');
-          setOperationMessage('Purchase failed. Please try again.');
+        } else if (verificationResult !== 'aborted') {
+          try { diagEvent('paywall_bg_verification_incomplete', { result: verificationResult }); } catch (e) { void e; }
         }
       })
-      .catch(() => {
-        setOperationState('error');
-        setOperationMessage('Purchase failed. Please try again.');
+      .catch((err) => {
+        try { diagEvent('paywall_bg_verification_error', { message: String(err) }); } catch (e) { void e; }
       });
-  }, [isSubscribed, lastPurchaseUpdatedAt, refreshEntitlementWithBackoff, verificationPendingMessage]);
+  }, [isSubscribed, lastPurchaseUpdatedAt, refreshEntitlementWithBackoff]);
 
   useEffect(() => {
     if (!isStrictFailure) return;
@@ -1366,21 +1326,6 @@ function PaywallScreenContent() {
               <AppText variant="label" style={[styles.errorHint, { color: c.inkMid, marginTop: spacing.xs }]}>
                 Please check your internet connection and try again.
               </AppText>
-            )}
-            {isTransientState && !isAlreadyOwned && (
-              <PrimaryButton
-                size="compact"
-                onPress={handleRetryVerification}
-                backgroundColor={c.forest}
-                indicatorColor={c.inkInverse}
-                shadowVariant="none"
-                style={{ marginTop: spacing.md }}
-                accessibilityLabel="Retry verification"
-              >
-                <AppText variant="body" style={{ color: c.inkInverse, fontWeight: fontWeight.semibold }}>
-                  Retry Verification
-                </AppText>
-              </PrimaryButton>
             )}
             {isAlreadyOwned && !isSubscribed && (
               <PrimaryButton
