@@ -229,6 +229,7 @@ export default function SuggestGoalScreen() {
     panelWash,
     panelBorder,
     tooShort,
+    markHeadroom,
     goalLimitVisible,
     dismissGoalLimit,
     handleGenerate,
@@ -262,6 +263,8 @@ export default function SuggestGoalScreen() {
           onDismiss={handleDismissReview}
           dismissLabel="Start over"
           confirming={confirming}
+          markHeadroom={markHeadroom}
+          onUpgrade={() => router.push('/paywall')}
         />
         {goalLimitDialog}
       </SafeAreaView>

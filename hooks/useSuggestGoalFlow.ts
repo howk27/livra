@@ -18,7 +18,10 @@ import { checkProStatus } from '../lib/iap/iap';
 import { applyOpacity } from '../src/components/icons/color';
 import { GENERATION_ERROR_COPY } from '../lib/copy';
 import { createFromAIPackage } from '../lib/goals/createFromAIPackage';
+import { useMarksStore } from '../state/countersSlice';
+import { countActiveMarks } from '../lib/gating';
 import {
+  allowedPackageMarkCount,
   generateGoalPackage,
   meetsGoalTextGate,
   type AIGoalPackage,
@@ -57,6 +60,18 @@ export function useSuggestGoalFlow() {
   // QC-FAIL-4: the free-goal cap surfaces as Livra's own GoalLimitDialog, never
   // the iOS-native Alert (the manual goal-create path was fixed the same way).
   const [goalLimitVisible, setGoalLimitVisible] = useState(false);
+  // Pro status for the review's over-limit note (#5). Defaults false — the safe
+  // default, since only a free account near the mark ceiling ever sees the note;
+  // it flips true once checkProStatus resolves, hiding the note for Pro.
+  const [isPro, setIsPro] = useState(false);
+  const marks = useMarksStore((s) => s.marks);
+
+  // How many marks THIS new goal can actually hold (per-goal cap AND the
+  // account-wide ceiling, whichever binds). Drives the soft over-limit note.
+  const markHeadroom = useMemo(
+    () => allowedPackageMarkCount(isPro, countActiveMarks(marks)),
+    [isPro, marks],
+  );
 
   // Authed-screen guard: bounce a signed-out session like other authed screens.
   useEffect(() => {
@@ -64,6 +79,17 @@ export function useSuggestGoalFlow() {
       router.replace('/auth/signin');
     }
   }, [initialized, user, router]);
+
+  // Resolve Pro status once the review is up, so the over-limit note reflects
+  // the real plan. Best-effort; a failure leaves the safe free default.
+  useEffect(() => {
+    if (!pkg) return;
+    let cancelled = false;
+    void checkProStatus()
+      .then((s) => { if (!cancelled) setIsPro(s.effectiveUnlocked); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [pkg]);
 
   // VD-5 ember hatch: the AI voice speaks in ember, so the exhausted panel's
   // hollow-card wash + border derive from `ember` (same alphas as the FU-5
@@ -175,6 +201,7 @@ export function useSuggestGoalFlow() {
     panelWash,
     panelBorder,
     tooShort,
+    markHeadroom,
     goalLimitVisible,
     dismissGoalLimit: () => setGoalLimitVisible(false),
     handleGenerate,

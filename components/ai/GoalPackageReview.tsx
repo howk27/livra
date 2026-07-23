@@ -18,7 +18,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Check } from 'phosphor-react-native';
+import { Check, X, Sparkle } from 'phosphor-react-native';
 import { PillButton } from '../ui/PillButton';
 import { fonts, radius, spacing, themedColors, fontSize } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
@@ -48,6 +48,13 @@ interface GoalPackageReviewProps {
   dismissLabel: string;
   /** Disables the confirm CTA while the caller persists. */
   confirming?: boolean;
+  /** How many marks THIS goal can actually hold on the current plan
+   *  (allowedPackageMarkCount). Infinity/omitted = unbounded (Pro / onboarding).
+   *  When the selection exceeds it, a soft, dismissable note offers Livra+ and
+   *  the goal is created with the marks that fit (createFromAIPackage trims). */
+  markHeadroom?: number;
+  /** Soft paywall link target for the over-limit note. */
+  onUpgrade?: () => void;
 }
 
 export function GoalPackageReview({
@@ -56,6 +63,8 @@ export function GoalPackageReview({
   onDismiss,
   dismissLabel,
   confirming,
+  markHeadroom = Number.POSITIVE_INFINITY,
+  onUpgrade,
 }: GoalPackageReviewProps) {
   const c = themedColors(useEffectiveTheme());
 
@@ -65,6 +74,12 @@ export function GoalPackageReview({
   );
   const [description, setDescription] = useState('');
   const descriptionRef = useRef('');
+  // The over-limit note is informational and dismissable — we never block the
+  // confirm; the goal is created with the marks that fit either way.
+  const [limitNoteDismissed, setLimitNoteDismissed] = useState(false);
+
+  const overLimit = Number.isFinite(markHeadroom) && selected.size > markHeadroom;
+  const showLimitNote = overLimit && !limitNoteDismissed && !!onUpgrade;
 
   const handleDescriptionChange = useCallback((text: string) => {
     descriptionRef.current = text;
@@ -192,6 +207,38 @@ export function GoalPackageReview({
           </View>
         </View>
 
+        {/* Over-limit soft note — the goal is still created (with the marks that
+            fit); this just tells them and offers Livra+. Dismissable, never a
+            wall. Only shows for a free account already near the mark ceiling. */}
+        {showLimitNote ? (
+          <View style={[styles.limitNote, { backgroundColor: applyOpacity(c.ember, 0.08), borderColor: applyOpacity(c.ember, 0.5) }]}>
+            <View style={styles.limitNoteHead}>
+              <Sparkle size={16} color={c.ember} weight="fill" />
+              <Text style={[styles.limitNoteText, { color: c.inkMid }]}>
+                {markHeadroom > 0
+                  ? `Your free plan fits ${markHeadroom} more mark${markHeadroom === 1 ? '' : 's'} here. We'll keep the first ${markHeadroom} — unlock Livra+ to add the rest.`
+                  : `You've reached the free plan's mark limit. Unlock Livra+ to add these marks.`}
+              </Text>
+              <TouchableOpacity
+                onPress={() => setLimitNoteDismissed(true)}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Dismiss"
+              >
+                <X size={14} color={c.inkMuted} weight="bold" />
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity
+              onPress={onUpgrade}
+              accessibilityRole="button"
+              accessibilityLabel="Unlock with Livra+"
+              style={styles.limitNoteCta}
+            >
+              <Text style={[styles.limitNoteCtaText, { color: c.ember }]}>Unlock with Livra+ →</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
         <PillButton
           label="Looks good →"
           onPress={handleConfirm}
@@ -310,6 +357,33 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  limitNote: {
+    marginTop: spacing.xl,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  limitNoteHead: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  limitNoteText: {
+    flex: 1,
+    fontFamily: fonts.sans,
+    fontSize: fontSize.sm,
+    lineHeight: 19,
+  },
+  limitNoteCta: {
+    minHeight: 32,
+    justifyContent: 'center',
+    paddingLeft: spacing.lg + spacing.xs,
+  },
+  limitNoteCtaText: {
+    fontFamily: fonts.sansMedium,
+    fontSize: fontSize.sm,
   },
   primaryBtn: {
     marginTop: spacing.xxl,
