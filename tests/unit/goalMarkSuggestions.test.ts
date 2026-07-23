@@ -20,9 +20,9 @@ describe('getMarksForGoal', () => {
     expect(ids('Learn Spanish')).toContain('language');
   });
 
-  it('returns no more than 5 marks', () => {
+  it('returns no more than 4 marks', () => {
     const marks = getMarksForGoal('Run a marathon lose weight get fit eat clean sleep better');
-    expect(marks.length).toBeLessThanOrEqual(5);
+    expect(marks.length).toBeLessThanOrEqual(4);
   });
 
   it('returns fallback marks for an empty title', () => {
@@ -156,9 +156,9 @@ describe('getMarksForGoal â€” cross-domain guard', () => {
 });
 
 describe('getMarksForGoal â€” contract preserved', () => {
-  it('returns at most MAX_SUGGESTIONS (5)', () => {
+  it('returns at most MAX_SUGGESTIONS (4)', () => {
     for (const title of ['Save $5k', 'Run a 5k', 'Read nightly', 'Get fit and healthy']) {
-      expect(getMarksForGoal(title).length).toBeLessThanOrEqual(5);
+      expect(getMarksForGoal(title).length).toBeLessThanOrEqual(4);
     }
   });
 

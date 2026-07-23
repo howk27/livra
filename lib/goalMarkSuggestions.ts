@@ -48,7 +48,10 @@ export function commitmentSummary(tier: TierId, frequency: FrequencyId, associat
 
 // ─── Suggestion engine ────────────────────────────────────────────────────────
 
-const MAX_SUGGESTIONS = 5;
+// 4, not 5: a fresh preset goal must leave headroom under the free 4-marks-per-
+// goal cap (lib/gating.ts). At 5 a free user hit the ceiling the moment they
+// created a preset goal (founder 2026-07-23).
+const MAX_SUGGESTIONS = 4;
 
 const STOP_WORDS = new Set([
   'a', 'an', 'the', 'and', 'or', 'but', 'to', 'for', 'of', 'in',
