@@ -44,12 +44,17 @@ interface UIState {
    *  user's own connect action to drive the Integrations badge. Device-level,
    *  not per-account. */
   healthConnected: boolean;
+  /** User dismissed the Apple private-relay notice in Settings. Informational
+   *  only — we let them know Apple hides their address, never enforce it — so a
+   *  dismiss sticks. Device-level, like healthConnected. */
+  privateRelayNoticeDismissed: boolean;
 
   // Actions
   setThemeMode: (mode: ThemeMode) => Promise<void>;
   setAccentColor: (color: AccentColor) => Promise<void>;
   setDailyHabitsOpen: (open: boolean) => Promise<void>;
   setHealthConnected: (connected: boolean) => Promise<void>;
+  setPrivateRelayNoticeDismissed: (dismissed: boolean) => Promise<void>;
   setSortBy: (sort: SortOption) => void;
   setSearchQuery: (query: string) => void;
   /** Returns false if logged-in cloud update failed (local completion still applied). */
@@ -72,6 +77,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   uiStateLoaded: false,
   dailyHabitsOpen: true,
   healthConnected: false,
+  privateRelayNoticeDismissed: false,
 
   setThemeMode: async (mode) => {
     set({ themeMode: mode });
@@ -86,6 +92,11 @@ export const useUIStore = create<UIState>((set, get) => ({
   setHealthConnected: async (connected) => {
     set({ healthConnected: connected });
     await AsyncStorage.setItem('health_connected', connected ? 'true' : 'false');
+  },
+
+  setPrivateRelayNoticeDismissed: async (dismissed) => {
+    set({ privateRelayNoticeDismissed: dismissed });
+    await AsyncStorage.setItem('private_relay_notice_dismissed', dismissed ? 'true' : 'false');
   },
 
   setAccentColor: async (color) => {
@@ -223,17 +234,19 @@ export const useUIStore = create<UIState>((set, get) => ({
   loadUIState: async (userId?: string) => {
     const tokenAtStart = onboardingResetToken;
     const supabase = getSupabaseClient();
-    const [themeMode, accentColor, completedModern, completedLegacy, dailyHabitsStored, healthConnectedStored] = await Promise.all([
+    const [themeMode, accentColor, completedModern, completedLegacy, dailyHabitsStored, healthConnectedStored, relayDismissedStored] = await Promise.all([
       AsyncStorage.getItem('theme_mode'),
       AsyncStorage.getItem('accent_color'),
       AsyncStorage.getItem(ONBOARDING_COMPLETED_STORAGE_KEY),
       AsyncStorage.getItem(ONBOARDING_COMPLETED_LEGACY_KEY),
       AsyncStorage.getItem('daily_habits_open'),
       AsyncStorage.getItem('health_connected'),
+      AsyncStorage.getItem('private_relay_notice_dismissed'),
     ]);
     // Open unless the user explicitly hid it (founder: always open by default).
     const dailyHabitsOpen = dailyHabitsStored !== 'false';
     const healthConnected = healthConnectedStored === 'true';
+    const privateRelayNoticeDismissed = relayDismissedStored === 'true';
 
     let isOnboarded = completedModern === 'true' || completedLegacy === 'true';
     
@@ -325,6 +338,7 @@ export const useUIStore = create<UIState>((set, get) => ({
         accentColor: (accentColor as AccentColor) || 'blue',
         dailyHabitsOpen,
         healthConnected,
+        privateRelayNoticeDismissed,
         uiStateLoaded: true,
       });
       return;
@@ -336,6 +350,7 @@ export const useUIStore = create<UIState>((set, get) => ({
       isOnboarded,
       dailyHabitsOpen,
       healthConnected,
+      privateRelayNoticeDismissed,
       uiStateLoaded: true,
     });
   },

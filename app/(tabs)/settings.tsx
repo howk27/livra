@@ -26,6 +26,7 @@ import {
   CaretRight,
   PencilSimple,
   Envelope,
+  X,
   type Icon,
   type IconProps,
 } from 'phosphor-react-native';
@@ -148,6 +149,8 @@ export default function SettingsScreen() {
   const theme = useEffectiveTheme();
   const c = themedColors(theme);
   const setThemeMode = useUIStore((s) => s.setThemeMode);
+  const relayNoticeDismissed = useUIStore((s) => s.privateRelayNoticeDismissed);
+  const setRelayNoticeDismissed = useUIStore((s) => s.setPrivateRelayNoticeDismissed);
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -514,17 +517,31 @@ export default function SettingsScreen() {
               </Text>
             </TouchableOpacity>
           </View>
-        ) : onPrivateRelay ? (
-          /* ── Apple private-relay nudge: Apple hides the real address ── */
-          <View style={[styles.verifyBanner, { backgroundColor: c.surface, borderColor: c.borderLight }]}>
+        ) : onPrivateRelay && !relayNoticeDismissed ? (
+          /* ── Apple private-relay nudge: Apple hides the real address ──
+             Purely informational — we tell them, we don't enforce it. The whole
+             banner taps through to Edit Profile (where they can add an address);
+             the × dismisses it for good (persisted in uiSlice). */
+          <TouchableOpacity
+            style={[styles.verifyBanner, { backgroundColor: c.surface, borderColor: c.borderLight }]}
+            onPress={() => router.push('/settings/profile' as any)}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Apple hides your real email. Tap to add your own in Edit Profile."
+          >
             <Envelope size={16} color={c.inkMid} weight="regular" />
             <Text style={[styles.verifyText, { color: c.inkMid }]}>
               Apple hides your real email. Add your own so account mail reaches you.
             </Text>
-            <TouchableOpacity onPress={() => router.push('/settings/profile' as any)} activeOpacity={0.7}>
-              <Text style={[styles.verifyAction, { color: c.accent }]}>Set email</Text>
+            <TouchableOpacity
+              onPress={() => { void setRelayNoticeDismissed(true); }}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss"
+            >
+              <X size={16} color={c.inkMuted} weight="bold" />
             </TouchableOpacity>
-          </View>
+          </TouchableOpacity>
         ) : null}
 
         {/* ── ACCOUNT ── */}
