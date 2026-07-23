@@ -18,7 +18,7 @@ import { useEffectiveTheme, useUIStore } from '../../state/uiSlice';
 import { LivraHeader } from '../../components/ui/LivraHeader';
 import { MarkRow } from '../../components/ui/MarkRow';
 import { Breathing } from '../../components/ui/Breathing';
-import { Plus, CaretRight } from 'phosphor-react-native';
+import { Plus, CaretRight, CheckCircle } from 'phosphor-react-native';
 import { SectionLabel } from '../../components/ui/SectionLabel';
 import { GoalTitle } from '../../components/ui/GoalTitle';
 import { SpeedDialFAB } from '../../components/ui/SpeedDialFAB';
@@ -116,10 +116,13 @@ export default function FocusScreen() {
   }, [allEvents, todayStr]);
 
   const goals = useGoalsStore((s) => s.goals);
-  // Canonical goal order is sort_index (the Goals-screen drag order) — raw
-  // store order diverges from it, so an unsorted filter here both ignored
-  // reorders and could slice the wrong two goals.
-  const activeGoals = useMemo(() => getActiveGoals(goals).slice(0, 2), [goals]);
+  // Focus lists EVERY active goal, in canonical sort_index order (the
+  // Goals-screen drag order). It used to `.slice(0, 2)` — a free-era artifact:
+  // free is capped at 2 goals, so the slice was invisible there, but it
+  // silently hid a Pro user's 3rd+ goals and reorder only swapped which two
+  // showed. Fully-done goals collapse to a compact row below, so the list stays
+  // calm without ever dropping a goal.
+  const activeGoals = useMemo(() => getActiveGoals(goals), [goals]);
 
   const momentumSnapshots = useMomentumStore((s) => s.snapshots);
   const longestRuns = useMomentumStore((s) => s.longestRuns);
@@ -534,7 +537,7 @@ export default function FocusScreen() {
           </View>
         )}
 
-        {/* ── Goal cards (≤2 active goals with their marks) ── */}
+        {/* ── Goal cards (all active goals; fully-done ones collapse) ── */}
         {activeGoals.length > 0 && (
           <View style={styles.goalCardsSection}>
             <SectionLabel style={styles.sectionLabel}>YOUR GOALS</SectionLabel>
@@ -550,13 +553,48 @@ export default function FocusScreen() {
               );
 
               const isExpanded = expandedGoalIds.has(goal.id);
+
+              // Founder 2026-07-23: when every mark on a goal is done for the
+              // week there's nothing to log here, so the goal collapses to a
+              // compact done row — keeping the goals with work left prominent.
+              // markWeeklyState is total ('due' | 'doneForWeek'), so zero due
+              // marks means all marks are done (doneMarks === marks). Tap the
+              // row to expand it back into the full card (the dimmed done rows
+              // + "Log one more"); tapping an expanded done goal's header
+              // re-collapses it. A goal with any due mark never collapses.
+              const allDone = dueMarks.length === 0;
+              if (allDone && !isExpanded) {
+                return (
+                  <TouchableOpacity
+                    key={goal.id}
+                    style={[styles.goalCard, styles.goalCardDone, { backgroundColor: c.surface }]}
+                    onPress={() => toggleGoalExpand(goal.id)}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${goal.title}, all done this week. Tap to expand.`}
+                  >
+                    <CheckCircle size={20} color={c.accent} weight="fill" />
+                    <GoalTitle
+                      title={goal.title}
+                      size="card"
+                      color={c.inkMid}
+                      style={styles.goalCardDoneTitle}
+                    />
+                    <Text style={[styles.goalCardDoneMeta, { color: c.inkMid }]}>All done</Text>
+                    <CaretRight size={16} color={c.inkMuted} weight="bold" />
+                  </TouchableOpacity>
+                );
+              }
+
               const visibleDue = isExpanded ? dueMarks : dueMarks.slice(0, MAX_MARKS_PER_CARD);
               const hiddenCount = dueMarks.length - visibleDue.length;
 
               return (
                 <View key={goal.id} style={[styles.goalCard, { backgroundColor: c.surface }]}>
                   <TouchableOpacity
-                    onPress={() => router.push(`/goal/${goal.id}` as any)}
+                    onPress={() =>
+                      allDone ? toggleGoalExpand(goal.id) : router.push(`/goal/${goal.id}` as any)
+                    }
                     activeOpacity={0.7}
                     style={styles.goalCardHeader}
                   >
@@ -733,6 +771,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md + spacing.xs,
     paddingBottom: spacing.sm,
+  },
+  // Collapsed "all done" goal — a single quiet row so finished goals recede
+  // without leaving the list. Reuses the goalCard shell (shadow + radius) with
+  // a compact single-line row layout.
+  goalCardDone: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  goalCardDoneTitle: {
+    flex: 1,
+  },
+  goalCardDoneMeta: {
+    fontFamily: fonts.sansMedium,
+    fontSize: fontSize.sm,
   },
   // The goal is the reason this card exists — it anchors the card, above the
   // greeting (xl) and well clear of body text, not one more white-text row.
