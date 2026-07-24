@@ -86,19 +86,18 @@ const POPULAR_GRID_COLUMNS = 2;
 /**
  * QC3-G: the staged confirm zone — rises under the popular grid when a chip is
  * staged. One orchestrated entrance-settle motion moment (reduced-safe via
- * useMotion), a centered daily-target stepper, and an inline "Add {name}" CTA.
+ * useMotion) and a centered daily-target stepper. The CTA lives in the screen
+ * footer (single-CTA rule, founder 2026-07-23).
  */
 function StagedConfirmZone({
   counter,
   dailyTarget,
   onChangeTarget,
-  onConfirm,
   themeColors,
 }: {
   counter: SuggestedCounter;
   dailyTarget: number;
   onChangeTarget: (next: number) => void;
-  onConfirm: () => void;
   themeColors: ReturnType<typeof themedColors>;
 }) {
   const { reduced, spring } = useMotion();
@@ -125,19 +124,14 @@ function StagedConfirmZone({
           </Text>
         </View>
       ) : null}
+      {/* Founder 2026-07-23: the staged zone no longer carries its own CTA —
+          two "create" buttons on one screen (this one and the footer) were the
+          same action twice. The single footer CTA relabels to "Add {name}"
+          while a pick is staged; this zone is just target-setting now. */}
       <Text style={[styles.stagedHint, { color: themeColors.inkMid }]}>
-        Set today’s target, then add it.
+        Set today’s target, then add it below.
       </Text>
       <DailyTargetStepper value={dailyTarget} onChange={onChangeTarget} label={null} />
-      <TouchableOpacity
-        style={[styles.footerCta, styles.stagedCta, { backgroundColor: themeColors.forest }, shadow.sm]}
-        onPress={onConfirm}
-        activeOpacity={0.88}
-      >
-        <Text style={[styles.footerCtaText, { color: themeColors.inkInverse }]}>
-          Add {counter.name}
-        </Text>
-      </TouchableOpacity>
     </Animated.View>
   );
 }
@@ -533,7 +527,6 @@ export default function NewCounterScreen() {
             counter={pendingSuggestedCounter}
             dailyTarget={dailyTarget}
             onChangeTarget={setDailyTarget}
-            onConfirm={handleConfirmSuggestedCounter}
             themeColors={themeColors}
           />
         ) : null}
@@ -805,18 +798,25 @@ export default function NewCounterScreen() {
           },
         ]}
       >
+        {/* Founder 2026-07-23: ONE create action for the whole screen. While a
+            popular pick is staged the button confirms it ("Add {name}"); typing
+            a custom name un-stages the pick (handleNameChange), so the two
+            sources can never both be armed at once. */}
         <TouchableOpacity
           style={[
             styles.footerCta,
-            { backgroundColor: themeColors.forest, opacity: !name.trim() ? 0.4 : 1 },
+            {
+              backgroundColor: themeColors.forest,
+              opacity: pendingSuggestedCounter || name.trim() ? 1 : 0.4,
+            },
             shadow.sm,
           ]}
-          onPress={handleSave}
-          disabled={loading || !name.trim()}
+          onPress={pendingSuggestedCounter ? handleConfirmSuggestedCounter : handleSave}
+          disabled={loading || (!pendingSuggestedCounter && !name.trim())}
           activeOpacity={0.88}
         >
-          <Text style={[styles.footerCtaText, { color: themeColors.inkInverse }]}>
-            Create mark →
+          <Text style={[styles.footerCtaText, { color: themeColors.inkInverse }]} numberOfLines={1}>
+            {pendingSuggestedCounter ? `Add ${pendingSuggestedCounter.name} →` : 'Create mark →'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -931,9 +931,6 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     lineHeight: fontSize.sm * 1.35,
     textAlign: 'center',
-  },
-  stagedCta: {
-    marginTop: spacing.xs,
   },
   divider: {
     flexDirection: 'row',
