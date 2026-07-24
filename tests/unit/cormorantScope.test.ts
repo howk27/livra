@@ -26,6 +26,10 @@ const SANCTIONED = new Set<string>([
   'app/goal/complete.tsx',                          // goal-complete goal title
   'components/overlays/GoalCompletionOverlay.tsx',  // completion overlay goal title
   'app/goal/history.tsx',                           // goal-history goal title
+  // Founder 2026-07-23: the subscriber paywall replaces the buy CTA with the
+  // "Livra+" wordmark "in cursive, greyed out" — an explicit ask for the fancy
+  // written face, so this is a sanctioned brand-wordmark site, not drift.
+  'app/paywall.tsx',                                // subscriber "Livra+" wordmark
 ]);
 
 const CORMORANT = /fonts\.(serif|serifSemibold|serifItalic)\b/;

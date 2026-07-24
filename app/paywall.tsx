@@ -724,13 +724,24 @@ function PaywallScreenContent() {
     !hasPurchaseUpdated &&
     !hasPurchaseTransactionId;
 
+  // Founder 2026-07-23: the paywall is PERSISTENT for subscribers — Settings →
+  // Subscription must be able to OPEN it so status stays checkable. Auto-close
+  // is therefore only for the mid-session unlock (a purchase or restore landing
+  // while the screen is open): we close on the false→true TRANSITION this
+  // screen has itself observed, never on arriving already-Pro. `sawLockedRef`
+  // is the transition witness — it flips once the screen renders locked, so a
+  // subscriber whose entitlement was already resolved on open never trips it.
+  const sawLockedRef = useRef(false);
   useEffect(() => {
-    if (isProUnlocked) {
-      if (router.canGoBack()) {
-        router.back();
-      } else {
-        router.replace('/(tabs)/focus');
-      }
+    if (!isProUnlocked) {
+      sawLockedRef.current = true;
+      return;
+    }
+    if (!sawLockedRef.current) return;
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)/focus');
     }
   }, [isProUnlocked, router]);
 
@@ -1201,18 +1212,31 @@ function PaywallScreenContent() {
         )}
 
         {isSubscribed && (
-          <PrimaryButton
-            onPress={handleManageSubscription}
-            backgroundColor={c.forest}
-            indicatorColor={c.inkInverse}
-            shadowVariant="lg"
-            style={{ marginBottom: spacing.md }}
-            accessibilityLabel="Manage Livra+ subscription"
-          >
-            <AppText variant="button" style={{ color: c.inkInverse, fontWeight: fontWeight.bold }}>
-              Manage Livra+
-            </AppText>
-          </PrimaryButton>
+          <View style={styles.subscribedBlock}>
+            {/* Founder 2026-07-23: for subscribers the CTA slot carries the
+                wordmark itself — cursive, greyed, inert. The paywall stays
+                reachable (Settings → Subscription) as a status page, and the
+                absence of a buy button IS the status. Managing moves to a
+                quiet text link below; Apple's sheet is the real actor there. */}
+            <Text
+              style={[styles.subscribedWordmark, { color: c.inkMuted }]}
+              accessibilityRole="text"
+              accessibilityLabel="Livra+ is active"
+            >
+              Livra+
+            </Text>
+            <TouchableOpacity
+              onPress={handleManageSubscription}
+              activeOpacity={0.7}
+              style={styles.manageLink}
+              accessibilityRole="button"
+              accessibilityLabel="Manage Livra+ subscription"
+            >
+              <Text style={[styles.manageLinkText, { color: c.inkMid }]}>
+                Manage subscription
+              </Text>
+            </TouchableOpacity>
+          </View>
         )}
 
         {/* Loading State */}
@@ -1800,6 +1824,30 @@ const styles = StyleSheet.create({
     marginTop: spacing.xl,
     marginBottom: spacing.md,
     gap: spacing.lg,
+  },
+  // Subscriber state: the CTA slot holds the greyed cursive wordmark. Large on
+  // purpose — it is a state, not a control, and the serif italic is the brand's
+  // voice for it. Low contrast is the point (disabled/owned), and the block is
+  // announced to screen readers via accessibilityLabel, not its paint.
+  subscribedBlock: {
+    alignItems: 'center',
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  subscribedWordmark: {
+    fontFamily: fonts.serifItalic,
+    fontSize: fontSize['4xl'],
+    lineHeight: 48,
+  },
+  manageLink: {
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  manageLinkText: {
+    fontSize: fontSize.sm,
+    textDecorationLine: 'underline',
   },
   loadingLogo: {
     width: 72,
