@@ -18,7 +18,10 @@ import { useEffectiveTheme, useUIStore } from '../../state/uiSlice';
 import { LivraHeader } from '../../components/ui/LivraHeader';
 import { MarkRow } from '../../components/ui/MarkRow';
 import { Breathing } from '../../components/ui/Breathing';
-import { Plus, CaretRight, CheckCircle } from 'phosphor-react-native';
+// This phosphor version exports the plain circle only as CircleIcon (no
+// legacy `Circle` alias, unlike CheckCircle) — aliased locally to match the
+// naming of its siblings here.
+import { Plus, CaretRight, CaretDown, CheckCircle, CircleIcon as Circle } from 'phosphor-react-native';
 import { SectionLabel } from '../../components/ui/SectionLabel';
 import { GoalTitle } from '../../components/ui/GoalTitle';
 import { SpeedDialFAB } from '../../components/ui/SpeedDialFAB';
@@ -60,6 +63,7 @@ import {
   markWeeklyState,
 } from '../../lib/features';
 import { resolveMarkCategory, resolveMarkIcon, resolveMarkAccent } from '../../lib/markCategoryResolve';
+import { isGoalDoneToday, isMarkDoneToday, pickSpotlightGoalId } from '../../lib/focusQueue';
 import { resolveFirstName } from '../../lib/profile/displayName';
 import { computeWeek } from '../../lib/consistency';
 import { logger } from '../../lib/utils/logger';
@@ -196,6 +200,28 @@ export default function FocusScreen() {
   const { loose: goallessMarks, maintenance: maintenanceMarks } = useMemo(
     () => partitionMarks(activeCounters),
     [activeCounters],
+  );
+
+  // ── Spotlight queue (founder 2026-07-23) ──────────────────────────────────
+  // ONE goal renders expanded — the first in the user's drag order with work
+  // left today; the rest sit as compact queued rows until their turn. Same
+  // sequential model as the widget. Pure selection lives in lib/focusQueue.ts;
+  // auto-advance is view state only (sort_index is never touched).
+  const marksByGoalId = useMemo(() => {
+    const map = new Map<string, Counter[]>();
+    for (const goal of activeGoals) map.set(goal.id, marksForGoal(goal.id));
+    return map;
+  }, [activeGoals, marksForGoal]);
+
+  const spotlightGoalId = useMemo(
+    () =>
+      pickSpotlightGoalId(
+        activeGoals.map((g) => g.id),
+        marksByGoalId,
+        weeklyCountsMap,
+        todayCountsMap,
+      ),
+    [activeGoals, marksByGoalId, weeklyCountsMap, todayCountsMap],
   );
 
   // True when nothing is still loggable today: every mark is doneForWeek OR already hit daily target
@@ -568,11 +594,7 @@ export default function FocusScreen() {
               // and tomorrow the marks come due again and the card unfolds on
               // its own. The compact row says which of the two states it is.
               const allDoneForWeek = dueMarks.length === 0;
-              const allDoneToday =
-                allDoneForWeek ||
-                dueMarks.every(
-                  (m) => (todayCountsMap.get(m.id) ?? 0) >= resolveDailyTarget(m),
-                );
+              const allDoneToday = isGoalDoneToday(marks, weeklyCountsMap, todayCountsMap);
               if (allDoneToday && !isExpanded) {
                 return (
                   <TouchableOpacity
@@ -594,6 +616,47 @@ export default function FocusScreen() {
                       {allDoneForWeek ? 'All done' : 'Done today'}
                     </Text>
                     <CaretRight size={16} color={c.inkMuted} weight="bold" />
+                  </TouchableOpacity>
+                );
+              }
+
+              // Spotlight queue: a goal that still has work today but is NOT
+              // the spotlight renders as a compact queued row — title quiet
+              // (inkMid), today's due checks as small circles (the sanctioned
+              // Focus progress voice: checks, never fractions or bars), and a
+              // down-caret inviting expansion. Tap to expand it in place; the
+              // expanded card carries a "Show less" row to fold it back.
+              const isSpotlight = goal.id === spotlightGoalId;
+              const isQueuedExpanded = !isSpotlight && !allDoneToday && isExpanded;
+              if (!isSpotlight && !allDoneToday && !isExpanded) {
+                const remainingToday = dueMarks.filter(
+                  (m) => !isMarkDoneToday(m, todayCountsMap.get(m.id) ?? 0),
+                ).length;
+                return (
+                  <TouchableOpacity
+                    key={goal.id}
+                    style={[styles.goalCard, styles.goalCardQueued, { backgroundColor: c.surface }]}
+                    onPress={() => toggleGoalExpand(goal.id)}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${goal.title}, up next, ${remainingToday} mark${remainingToday !== 1 ? 's' : ''} left today. Tap to expand.`}
+                  >
+                    <GoalTitle
+                      title={goal.title}
+                      size="card"
+                      color={c.inkMid}
+                      style={styles.goalCardDoneTitle}
+                    />
+                    <View style={styles.queuedChecks}>
+                      {dueMarks.slice(0, 6).map((m) =>
+                        isMarkDoneToday(m, todayCountsMap.get(m.id) ?? 0) ? (
+                          <CheckCircle key={m.id} size={14} color={c.accent} weight="regular" />
+                        ) : (
+                          <Circle key={m.id} size={14} color={c.inkMuted} weight="regular" />
+                        ),
+                      )}
+                    </View>
+                    <CaretDown size={16} color={c.inkMuted} weight="bold" />
                   </TouchableOpacity>
                 );
               }
@@ -640,6 +703,21 @@ export default function FocusScreen() {
                         renderMarkRow(mark, idx === doneMarks.length - 1, true, false, idx)
                       )}
                     </>
+                  )}
+
+                  {/* A queued goal the user expanded folds back on request —
+                      the header keeps its push-to-detail, so the fold lives
+                      in the same expander vocabulary as "X more marks". */}
+                  {isQueuedExpanded && (
+                    <TouchableOpacity
+                      style={styles.expanderRow}
+                      onPress={() => toggleGoalExpand(goal.id)}
+                      activeOpacity={0.7}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Collapse ${goal.title}`}
+                    >
+                      <Text style={[styles.expanderText, { color: c.accent }]}>Show less</Text>
+                    </TouchableOpacity>
                   )}
                 </View>
               );
@@ -783,6 +861,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md + spacing.xs,
     paddingBottom: spacing.sm,
+  },
+  // Queued goal (spotlight queue) — a compact row for goals waiting their
+  // turn: quiet title, small due-check circles, down-caret. Same card shell
+  // as goalCardDone so the queue reads as one family of folded rows.
+  goalCardQueued: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  queuedChecks: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
   },
   // Collapsed "all done" goal — a single quiet row so finished goals recede
   // without leaving the list. Reuses the goalCard shell (shadow + radius) with
