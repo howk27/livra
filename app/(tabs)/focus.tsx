@@ -557,13 +557,23 @@ export default function FocusScreen() {
               // Founder 2026-07-23: when every mark on a goal is done for the
               // week there's nothing to log here, so the goal collapses to a
               // compact done row — keeping the goals with work left prominent.
-              // markWeeklyState is total ('due' | 'doneForWeek'), so zero due
-              // marks means all marks are done (doneMarks === marks). Tap the
-              // row to expand it back into the full card (the dimmed done rows
-              // + "Log one more"); tapping an expanded done goal's header
-              // re-collapses it. A goal with any due mark never collapses.
-              const allDone = dueMarks.length === 0;
-              if (allDone && !isExpanded) {
+              // Tap the row to expand it back into the full card (the dimmed
+              // done rows + "Log one more"); tapping an expanded done goal's
+              // header re-collapses it.
+              //
+              // Founder 2026-07-23(b): the week-only fold never fired in
+              // practice — a daily mark (weekly target 7) held its goal open
+              // until day 7. So the goal ALSO folds when every remaining due
+              // mark has met its DAILY bar today: today's work here is done,
+              // and tomorrow the marks come due again and the card unfolds on
+              // its own. The compact row says which of the two states it is.
+              const allDoneForWeek = dueMarks.length === 0;
+              const allDoneToday =
+                allDoneForWeek ||
+                dueMarks.every(
+                  (m) => (todayCountsMap.get(m.id) ?? 0) >= resolveDailyTarget(m),
+                );
+              if (allDoneToday && !isExpanded) {
                 return (
                   <TouchableOpacity
                     key={goal.id}
@@ -571,7 +581,7 @@ export default function FocusScreen() {
                     onPress={() => toggleGoalExpand(goal.id)}
                     activeOpacity={0.7}
                     accessibilityRole="button"
-                    accessibilityLabel={`${goal.title}, all done this week. Tap to expand.`}
+                    accessibilityLabel={`${goal.title}, ${allDoneForWeek ? 'all done this week' : 'done for today'}. Tap to expand.`}
                   >
                     <CheckCircle size={20} color={c.accent} weight="fill" />
                     <GoalTitle
@@ -580,7 +590,9 @@ export default function FocusScreen() {
                       color={c.inkMid}
                       style={styles.goalCardDoneTitle}
                     />
-                    <Text style={[styles.goalCardDoneMeta, { color: c.inkMid }]}>All done</Text>
+                    <Text style={[styles.goalCardDoneMeta, { color: c.inkMid }]}>
+                      {allDoneForWeek ? 'All done' : 'Done today'}
+                    </Text>
                     <CaretRight size={16} color={c.inkMuted} weight="bold" />
                   </TouchableOpacity>
                 );
@@ -593,7 +605,7 @@ export default function FocusScreen() {
                 <View key={goal.id} style={[styles.goalCard, { backgroundColor: c.surface }]}>
                   <TouchableOpacity
                     onPress={() =>
-                      allDone ? toggleGoalExpand(goal.id) : router.push(`/goal/${goal.id}` as any)
+                      allDoneToday ? toggleGoalExpand(goal.id) : router.push(`/goal/${goal.id}` as any)
                     }
                     activeOpacity={0.7}
                     style={styles.goalCardHeader}
