@@ -160,12 +160,24 @@ export default function RootLayout() {
 
   const markCount = useMarksStore((s) => s.marks.length);
   const activeGoalTitle = useGoalsStore((s) => s.getActiveGoal()?.title);
+  // Founder 2026-07-23(b): the widget sat on a COMPLETED goal until the next
+  // foreground. This effect's deps only saw the FIRST active goal's title, so
+  // completing any other goal (status flip, no mark-count change) never
+  // triggered a snapshot rebuild. Watch the whole active set — a joined id
+  // string, so Zustand's equality check stays a cheap string compare — and the
+  // completed goal drops out of the snapshot, advancing the widget queue.
+  const activeGoalIdsKey = useGoalsStore((s) =>
+    s.goals
+      .filter((g) => g.status === 'active')
+      .map((g) => g.id)
+      .join(','),
+  );
 
   useEffect(() => {
     if (initialized) {
       void syncWidgetData();
     }
-  }, [initialized, markCount, activeGoalTitle]);
+  }, [initialized, markCount, activeGoalTitle, activeGoalIdsKey]);
 
   useEffect(() => {
     if (!initialized) return;
