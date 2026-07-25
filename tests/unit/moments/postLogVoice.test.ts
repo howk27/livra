@@ -245,6 +245,21 @@ describe('evaluatePostLogVoice — Task 4: comeback / identity / account-first r
     expect(m!.id.startsWith('comeback.return.')).toBe(true);
   });
 
+  it('comeback fires ONCE — the second log of the comeback day is an ordinary check-in (spec §2)', () => {
+    const m = evaluatePostLogVoice(
+      makeInputs({
+        // Same 4-day gap as above, but a second log already landed today.
+        events: [
+          makeEvent(),
+          makeEvent({ id: 'e2', occurred_local_date: TODAY, occurred_at: '2026-07-14T09:00:00Z' }),
+          makeEvent({ id: 'e0', occurred_local_date: '2026-07-10', occurred_at: '2026-07-10T10:00:00Z' }),
+        ],
+        rng: silent,
+      }),
+    );
+    expect(m?.type ?? null).not.toBe('comeback');
+  });
+
   it('identity claim tier speaks and fills {markName}/{n} (pool template path)', () => {
     // A mark name outside MARK_LIBRARY (Task 5 gave 'run' a real identityLine,
     // which would override the pool template below and swallow {n}).

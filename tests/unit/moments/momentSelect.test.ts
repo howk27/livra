@@ -128,6 +128,13 @@ describe('greeting priority matrix', () => {
     expect(m!.text).toContain('Younger goal');
   });
 
+  it('suppressSlipping bypasses whyResurface on a comeback day (spec §2 coordination)', () => {
+    const goals = [makeGoal({ isSlipping: true, cushionRemaining: 0.3 })];
+    const m = selectMoment('greeting', makeCtx({ goals }), { rng: speak, suppressSlipping: true });
+    expect(m).not.toBeNull();
+    expect(m!.type).not.toBe('whyResurface');
+  });
+
   it('slipping picks the goal with the worst cushion', () => {
     const goals = [
       makeGoal({ goalId: 'a', goalTitle: 'Goal A', why: 'why A', isSlipping: true, cushionRemaining: 0.8 }),

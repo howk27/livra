@@ -162,8 +162,13 @@ export function evaluatePostLogVoice(inputs: PostLogVoiceInputs): Moment | null 
 
   // spec §3 (Task 1/4): a comeback log is a normal check-in that outranks
   // every other postLog pick, computed from the FULL ledger (stripped of
-  // today's own events by endsComebackGap itself).
-  const endsComebackGapFlag = endsComebackGap(inputs.events, inputs.todayStr);
+  // today's own events by endsComebackGap itself). Spec §2: the comeback line
+  // fires ONCE, on the FIRST log after the gap — later logs the same day are
+  // ordinary check-ins.
+  const endsComebackGapFlag =
+    endsComebackGap(inputs.events, inputs.todayStr) &&
+    accountIncrements(inputs.events).filter((e) => e.occurred_local_date === inputs.todayStr)
+      .length === 1;
 
   // spec §2 (Task 4): account-wide first-week fuel, suppressed by a comeback.
   const accountFirstVariant = computeAccountFirstVariant(

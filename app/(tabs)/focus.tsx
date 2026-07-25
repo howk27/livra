@@ -356,6 +356,12 @@ export default function FocusScreen() {
     [allEvents, todayStr, momentCtx.logsToday],
   );
 
+  // Spec §2 says the slipping greeting yields on a comeback DAY, not merely
+  // after the comeback log lands: while the card is asking to START BACK
+  // SMALL, the greeting must not scold in the same breath. `comeback` covers
+  // the pre-log hours; `gapEndedToday` covers the rest of the day.
+  const suppressSlippingGreeting = comeback || gapEndedToday;
+
   // M6 (PL-3): the greeting is a single engine call. Priority lives in the
   // selector (slipping-direct > first-week > celebration > default rotation);
   // the default pool replaced the old static line, so a brand-new user with no
@@ -367,12 +373,12 @@ export default function FocusScreen() {
     const moment = selectMoment('greeting', momentCtx, {
       rng: dayHashRng(todayStr),
       lastMomentIds: lastGreetingId ? { greetingDefault: lastGreetingId } : undefined,
-      suppressSlipping: gapEndedToday,
+      suppressSlipping: suppressSlippingGreeting,
     });
     // The greeting surface always resolves from the default pool; '' only if
     // the registry were emptied (Jest walks it, so it cannot ship empty).
     return moment?.text ?? '';
-  }, [momentCtx, todayStr, gapEndedToday]);
+  }, [momentCtx, todayStr, suppressSlippingGreeting]);
 
   // M4 (PL-5): the empty invitation distinguishes a brand-new user (no marks
   // ever, no logs ever) from one who cleared everything out. uniqueCounters
