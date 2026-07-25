@@ -34,7 +34,7 @@ export function milestoneForLog(markId: string, events: MarkEvent[]): IdentityMi
   if (weeks.size >= IDENTITY_MIN_WEEKS && total >= IDENTITY_MIN_LOGS) {
     const crossedNow =
       total === IDENTITY_MIN_LOGS ||
-      (total > IDENTITY_MIN_LOGS && justAddedWeek(markId, events, weeks.size));
+      (total > IDENTITY_MIN_LOGS && weeks.size === IDENTITY_MIN_WEEKS && justAddedWeek(markId, events, weeks.size));
     if (crossedNow) return { id: 'identity-12w3', tier: 'identity', n: total };
   }
 

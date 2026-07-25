@@ -40,4 +40,31 @@ describe('identity tier — ≥12 logs across ≥3 distinct Monday weeks', () =>
   });
   it('13th log does not re-fire identity', () =>
     expect(milestoneForLog('m1', [...spread, ev('2026-07-22')])).toBeNull());
+  it('13th log opening a 4th week does not re-fire identity', () =>
+    expect(milestoneForLog('m1', [...spread, ev('2026-07-27')])).toBeNull());
+  it('fact not masked: 20th log opening a 4th+ week returns fact-20', () => {
+    // 20 logs with weeks spread: ensure the 20th log opens a new week
+    const events = [
+      ...['06','07','08','09','10'].map((d) => ev(`2026-07-${d}`)), // wk1: 5 logs
+      ...['13','14','15','16','17'].map((d) => ev(`2026-07-${d}`)), // wk2: 5 logs
+      ...['20','21','22','23','24'].map((d) => ev(`2026-07-${d}`)), // wk3: 5 logs
+      ...['27','28','29','30','31'].map((d) => ev(`2026-07-${d}`)), // wk4: 5 logs = 20 total
+    ];
+    expect(milestoneForLog('m1', events)).toEqual({ id: 'fact-20', tier: 'fact', n: 20 });
+  });
+  it('crossing via week bar: 13+ logs/2 weeks + log opening 3rd week fires identity, next log in that week → null', () => {
+    // Build 14 logs across 2 weeks (wk1: 7, wk2: 7)
+    const dense2weeks = [
+      ...['06','07','08','09','10','11','12'].map((d) => ev(`2026-07-${d}`)), // wk1: 7 logs
+      ...['13','14','15','16','17','18','19'].map((d) => ev(`2026-07-${d}`)), // wk2: 7 logs = 14 total
+    ];
+    // 14 logs in 2 weeks, doesn't fire identity
+    expect(milestoneForLog('m1', dense2weeks)).toBeNull();
+    // The 15th log opens wk3 (2026-07-20 is Monday of wk3)
+    const with3rdWeekCrossing = [...dense2weeks, ev('2026-07-20')]; // opens wk3, total=15
+    expect(milestoneForLog('m1', with3rdWeekCrossing)).toEqual({ id: 'identity-12w3', tier: 'identity', n: 15 });
+    // The 16th log in wk3 does not re-fire
+    const nextInWk3 = [...with3rdWeekCrossing, ev('2026-07-21')]; // same wk3
+    expect(milestoneForLog('m1', nextInWk3)).toBeNull();
+  });
 });
