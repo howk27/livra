@@ -1,5 +1,19 @@
--- NOT YET APPLIED. Soft email verification: let people in at the door, ask them
--- to prove the inbox afterwards (founder call 2026-07-25, .reports/decisions.md).
+-- APPLIED 2026-07-25 via the Supabase MCP (apply_migration
+-- "soft_email_verification"), founder-approved, and verified afterwards:
+-- the column exists, on_auth_user_email_changed is on auth.users, the guard
+-- function's body carries email_verified_at, and the backfill stamped 6 of 11
+-- profiles (exactly the 6 relay accounts).
+--
+-- Soft email verification: let people in at the door, ask them to prove the
+-- inbox afterwards (founder call 2026-07-25, .reports/decisions.md).
+--
+-- PRIVILEGE NOTE, checked live while applying this: `authenticated` holds
+-- COLUMN-level UPDATE on public.profiles for exactly avatar_url, display_name,
+-- full_name and onboarding_completed — so a client cannot UPDATE
+-- email_verified_at at all, whatever RLS says. The guard trigger below is not
+-- redundant to that: `authenticated` does hold table-level INSERT, and the app
+-- inserts profile rows (app/auth/signin.tsx) and upserts them
+-- (app/settings/profile.tsx), so the INSERT branch is the hole it closes.
 --
 -- Supabase's "Confirm email" toggle cannot express this: ON refuses the sign-in
 -- entirely (email_not_confirmed), OFF auto-confirms at signup, which is why

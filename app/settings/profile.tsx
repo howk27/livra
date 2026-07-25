@@ -504,6 +504,11 @@ export default function ProfileScreen() {
           <View style={styles.avatarRow}>
             <View style={[styles.avatar, styles.skeleton]} />
           </View>
+          {/* One label + field per section the real screen has: Name, Email,
+              Password. A two-section skeleton described the screen as it was
+              before credentials moved in, so the layout jumped on load. */}
+          <View style={[styles.skeletonBar, styles.skeleton]} />
+          <View style={[styles.skeletonInput, styles.skeleton]} />
           <View style={[styles.skeletonBar, styles.skeleton]} />
           <View style={[styles.skeletonInput, styles.skeleton]} />
           <View style={[styles.skeletonBar, styles.skeleton]} />
@@ -598,6 +603,8 @@ export default function ProfileScreen() {
                   autoCapitalize="none"
                   autoCorrect={false}
                   keyboardType="email-address"
+                  textContentType="emailAddress"
+                  autoComplete="email"
                   editable={!savingEmail}
                   autoFocus
                   returnKeyType="done"
@@ -624,9 +631,16 @@ export default function ProfileScreen() {
                     autoCorrect={false}
                     editable={!savingEmail}
                     textContentType="password"
+                    autoComplete="current-password"
                   />
                 ) : null}
                 {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
+                {/* An emptied field disables the button; without this the screen
+                    goes quiet and the user is left guessing which of the two
+                    inputs it is unhappy about. */}
+                {!emailError && !emailValue.trim() ? (
+                  <Text style={styles.note}>Enter the email you want to use.</Text>
+                ) : null}
                 <View style={styles.actionRow}>
                   <PillButton
                     variant="ghost"
@@ -776,6 +790,7 @@ export default function ProfileScreen() {
                 autoCorrect={false}
                 editable={!savingPassword}
                 textContentType="password"
+                autoComplete="current-password"
               />
             ) : null}
 
@@ -790,6 +805,7 @@ export default function ProfileScreen() {
               secureTextEntry
               editable={!savingPassword}
               textContentType="newPassword"
+              autoComplete="new-password"
             />
 
             <TextInput
@@ -803,6 +819,7 @@ export default function ProfileScreen() {
               autoCorrect={false}
               editable={!savingPassword}
               textContentType="newPassword"
+              autoComplete="new-password"
               returnKeyType="done"
               onSubmitEditing={() => { void handlePasswordSubmit(); }}
             />
