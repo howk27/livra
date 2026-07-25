@@ -39,7 +39,6 @@ import { buildMomentContext } from '../../lib/moments/context';
 import {
   dayHashRng,
   previousDayGreetingDefaultId,
-  previousDayRestLineId,
   selectMoment,
 } from '../../lib/moments/select';
 import { deriveFocusEmptyVariant, getEmptyStateCopy } from '../../lib/moments/emptyState';
@@ -63,17 +62,17 @@ import {
   markWeeklyState,
 } from '../../lib/features';
 import { resolveMarkCategory, resolveMarkIcon, resolveMarkAccent } from '../../lib/markCategoryResolve';
-import { isGoalDoneToday, isMarkDoneToday, pickSpotlightGoalId } from '../../lib/focusQueue';
+import { isGoalDoneToday, isMarkDoneToday, pickSpotlightGoalId, pickNextMove } from '../../lib/focusQueue';
+import { isComebackState, endsComebackGap, pickComebackMove, resolveComebackAsk } from '../../lib/comeback';
 import { resolveFirstName } from '../../lib/profile/displayName';
 import { computeWeek } from '../../lib/consistency';
 import { logger } from '../../lib/utils/logger';
 import { useNotification } from '../../contexts/NotificationContext';
 import { applyOpacity } from '../../src/components/icons/color';
 import { useWidgetLogSync } from '../../hooks/useWidgetLogSync';
+import { NextMoveCard } from '../../components/NextMoveCard';
 
 import type { Counter } from '../../types';
-
-const MAX_MARKS_PER_CARD = 4;
 
 export default function FocusScreen() {
   const theme = useEffectiveTheme();
@@ -224,6 +223,33 @@ export default function FocusScreen() {
     [activeGoals, marksByGoalId, weeklyCountsMap, todayCountsMap],
   );
 
+  // ── Next Move session overrides (spec §1) ─────────────────────────────────
+  // A tap on a chip seats that mark as the hero without touching sort_index;
+  // a tap on a queued row hoists that whole goal into the spotlight seat. Both
+  // are pure VIEW state — the user's own drag order is never mutated. Neither
+  // needs a cleanup effect: overrides whose target has no work left today are
+  // ignored at read time (pickNextMove's heroable guard; the
+  // effectiveSpotlightGoalId memo), and the spotlight-moving handlers below
+  // clear the hero override on every hand-off.
+  const [heroOverride, setHeroOverride] = useState<{ goalId: string; markId: string } | null>(null);
+  const [spotlightOverride, setSpotlightOverride] = useState<string | null>(null);
+
+  // Effective spotlight: the override wins only while its goal still has work
+  // today; otherwise the computed queue order (drag order) decides.
+  const effectiveSpotlightGoalId = useMemo(() => {
+    if (spotlightOverride) {
+      const marks = marksByGoalId.get(spotlightOverride) ?? [];
+      if (!isGoalDoneToday(marks, weeklyCountsMap, todayCountsMap)) return spotlightOverride;
+    }
+    return spotlightGoalId;
+  }, [spotlightOverride, spotlightGoalId, marksByGoalId, weeklyCountsMap, todayCountsMap]);
+
+  // Comeback (spec §3): 2+ full quiet days → the Next Move card presents the
+  // easiest due mark with a shrunk ask instead of the normal queue pick. The
+  // override is ignored in this state — comeback wants the smallest true next
+  // step, not whatever was last tapped before the gap.
+  const comeback = useMemo(() => isComebackState(allEvents, todayStr), [allEvents, todayStr]);
+
   // True when nothing is still loggable today: every mark is doneForWeek OR already hit daily target
   const allDoneForDay = useMemo(() => {
     if (pressureMarks.length === 0) return false;
@@ -319,6 +345,23 @@ export default function FocusScreen() {
     return copy.text;
   }, [bannerVisible, momentCtx, todayStr]);
 
+  // spec §3 (Task 7): a comeback gap that ended TODAY (a fresh log landed
+  // after 2+ quiet days) should not also get the slipping-goal scold in the
+  // same breath — the greeting stays quiet on that branch for the day the
+  // gap closes. endsComebackGap reads events with today's rows stripped, so
+  // it answers "was there a gap before this log", and logsToday confirms a
+  // log actually landed today (not just that the account is old enough).
+  const gapEndedToday = useMemo(
+    () => endsComebackGap(allEvents, todayStr) && momentCtx.logsToday > 0,
+    [allEvents, todayStr, momentCtx.logsToday],
+  );
+
+  // Spec §2 says the slipping greeting yields on a comeback DAY, not merely
+  // after the comeback log lands: while the card is asking to START BACK
+  // SMALL, the greeting must not scold in the same breath. `comeback` covers
+  // the pre-log hours; `gapEndedToday` covers the rest of the day.
+  const suppressSlippingGreeting = comeback || gapEndedToday;
+
   // M6 (PL-3): the greeting is a single engine call. Priority lives in the
   // selector (slipping-direct > first-week > celebration > default rotation);
   // the default pool replaced the old static line, so a brand-new user with no
@@ -330,11 +373,12 @@ export default function FocusScreen() {
     const moment = selectMoment('greeting', momentCtx, {
       rng: dayHashRng(todayStr),
       lastMomentIds: lastGreetingId ? { greetingDefault: lastGreetingId } : undefined,
+      suppressSlipping: suppressSlippingGreeting,
     });
     // The greeting surface always resolves from the default pool; '' only if
     // the registry were emptied (Jest walks it, so it cannot ship empty).
     return moment?.text ?? '';
-  }, [momentCtx, todayStr]);
+  }, [momentCtx, todayStr, suppressSlippingGreeting]);
 
   // M4 (PL-5): the empty invitation distinguishes a brand-new user (no marks
   // ever, no logs ever) from one who cleared everything out. uniqueCounters
@@ -343,25 +387,6 @@ export default function FocusScreen() {
   const emptyMarksLine = useMemo(
     () => getEmptyStateCopy('focus', deriveFocusEmptyVariant(uniqueCounters, allEvents)).body,
     [uniqueCounters, allEvents],
-  );
-
-  // QC2-F: the rest line under a doneForWeek mark speaks in the mentor voice —
-  // rest framed as part of the plan, not absence of it. Engine-owned words,
-  // greeting-style stateless rotation: day+mark seeded rng (stable within a
-  // day), yesterday's base pick excluded. The "Log one more" affordance next
-  // to it is untouched; a met weekly target never blocks today's log.
-  const restLineTextFor = useCallback(
-    (markId: string) => {
-      const lastId = previousDayRestLineId(todayStr, markId);
-      const moment = selectMoment('restLine', momentCtx, {
-        rng: dayHashRng(`${todayStr}:${markId}`),
-        lastMomentIds: lastId ? { rest: lastId } : undefined,
-        markDoneForWeek: true,
-      });
-      // Registry-walked, so the pool cannot ship empty; fallback is defensive.
-      return moment?.text ?? 'Done for the week.';
-    },
-    [momentCtx, todayStr],
   );
 
   // ── Handlers ──────────────────────────────────────────────────────────────
@@ -455,11 +480,6 @@ export default function FocusScreen() {
       const isDoneForWeek = markWeeklyState(mark, weeklyCount) === 'doneForWeek';
       const category = resolveMarkCategory(mark);
 
-      const showRestLine =
-        isDoneForWeek &&
-        mark.frequency_kind !== 'abstinence' &&
-        mark.frequency_kind !== 'fixed';
-
       return (
         <View key={mark.id}>
           <Swipeable
@@ -495,24 +515,10 @@ export default function FocusScreen() {
               />
             </View>
           </Swipeable>
-          {showRestLine && (
-            <View style={styles.restLineRow}>
-              <Text style={[styles.restLineText, { color: c.inkMuted }]}>
-                {restLineTextFor(mark.id)}
-              </Text>
-              <TouchableOpacity
-                style={styles.bonusButton}
-                onPress={() => handleQuickIncrement(mark.id)}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.bonusButtonText, { color: c.accent }]}>Log one more</Text>
-              </TouchableOpacity>
-            </View>
-          )}
         </View>
       );
     },
-    [weeklyCountsMap, todayCountsMap, c, handleDeleteMark, handleRetireMark, handleMarkLongPress, handleQuickIncrement, router, celebrateStamp, restLineTextFor],
+    [weeklyCountsMap, todayCountsMap, c, handleDeleteMark, handleRetireMark, handleMarkLongPress, handleQuickIncrement, router, celebrateStamp],
   );
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -584,8 +590,7 @@ export default function FocusScreen() {
               // week there's nothing to log here, so the goal collapses to a
               // compact done row — keeping the goals with work left prominent.
               // Tap the row to expand it back into the full card (the dimmed
-              // done rows + "Log one more"); tapping an expanded done goal's
-              // header re-collapses it.
+              // done rows); tapping an expanded done goal's header re-collapses it.
               //
               // Founder 2026-07-23(b): the week-only fold never fired in
               // practice — a daily mark (weekly target 7) held its goal open
@@ -620,15 +625,23 @@ export default function FocusScreen() {
                 );
               }
 
-              // Spotlight queue: a goal that still has work today but is NOT
-              // the spotlight renders as a compact queued row — title quiet
-              // (inkMid), today's due checks as small circles (the sanctioned
-              // Focus progress voice: checks, never fractions or bars), and a
-              // down-caret inviting expansion. Tap to expand it in place; the
-              // expanded card carries a "Show less" row to fold it back.
-              const isSpotlight = goal.id === spotlightGoalId;
-              const isQueuedExpanded = !isSpotlight && !allDoneToday && isExpanded;
-              if (!isSpotlight && !allDoneToday && !isExpanded) {
+              // Spotlight queue (spec §1): ONE goal renders expanded as the
+              // Next Move card at a time — the effective spotlight (computed
+              // queue order, or a tapped queued row's override while it still
+              // has work). Stale overrides need no cleanup effect: pickNextMove
+              // ignores a hero override with no work left today, the
+              // effectiveSpotlightGoalId memo ignores a done spotlight
+              // override, and every handler that MOVES the spotlight clears
+              // the hero override (spec §1: it clears when the mark is done
+              // or the spotlight changes). Every other goal with work left today renders as a
+              // compact queued row — title quiet (inkMid), today's due checks
+              // as small circles (the sanctioned Focus progress voice: checks,
+              // never fractions or bars), down-caret inviting expansion. A tap
+              // hoists that goal into the spotlight seat (setSpotlightOverride),
+              // replacing whichever goal held it; "Show less" on the card
+              // itself clears the override and hands the seat back.
+              const isSpotlight = goal.id === effectiveSpotlightGoalId;
+              if (!isSpotlight && !allDoneToday) {
                 const remainingToday = dueMarks.filter(
                   (m) => !isMarkDoneToday(m, todayCountsMap.get(m.id) ?? 0),
                 ).length;
@@ -636,7 +649,10 @@ export default function FocusScreen() {
                   <TouchableOpacity
                     key={goal.id}
                     style={[styles.goalCard, styles.goalCardQueued, { backgroundColor: c.surface }]}
-                    onPress={() => toggleGoalExpand(goal.id)}
+                    onPress={() => {
+                      setSpotlightOverride(goal.id);
+                      setHeroOverride(null);
+                    }}
                     activeOpacity={0.7}
                     accessibilityRole="button"
                     accessibilityLabel={`${goal.title}, up next, ${remainingToday} mark${remainingToday !== 1 ? 's' : ''} left today. Tap to expand.`}
@@ -661,57 +677,96 @@ export default function FocusScreen() {
                 );
               }
 
-              const visibleDue = isExpanded ? dueMarks : dueMarks.slice(0, MAX_MARKS_PER_CARD);
-              const hiddenCount = dueMarks.length - visibleDue.length;
+              // A goal that's fully done today but expanded for review
+              // (allDoneToday && isExpanded — the only way to reach here
+              // without being the spotlight) keeps its original card shell:
+              // header + dimmed done-for-week rows, unchanged.
+              if (!isSpotlight) {
+                return (
+                  <View key={goal.id} style={[styles.goalCard, { backgroundColor: c.surface }]}>
+                    <TouchableOpacity
+                      onPress={() => toggleGoalExpand(goal.id)}
+                      activeOpacity={0.7}
+                      style={styles.goalCardHeader}
+                    >
+                      <GoalTitle title={goal.title} size="card" color={c.inkDark} style={styles.goalCardTitle} />
+                      <CaretRight size={16} color={c.inkMuted} weight="bold" />
+                    </TouchableOpacity>
+
+                    {dueMarks.map((mark, idx) =>
+                      renderMarkRow(mark, idx === dueMarks.length - 1 && doneMarks.length === 0, false, false, idx)
+                    )}
+
+                    {doneMarks.length > 0 && (
+                      <>
+                        <View style={[styles.doneDivider, { backgroundColor: c.borderLight }]} />
+                        {doneMarks.map((mark, idx) =>
+                          renderMarkRow(mark, idx === doneMarks.length - 1, true, false, idx)
+                        )}
+                      </>
+                    )}
+                  </View>
+                );
+              }
+
+              // ── Spotlight: the Next Move card (spec §1) ───────────────────
+              // Comeback ignores the hero override — it wants the smallest
+              // true next step, not whatever was last tapped before the gap.
+              const hero = (
+                comeback
+                  ? pickComebackMove(dueMarks)
+                  : pickNextMove(
+                      marks,
+                      weeklyCountsMap,
+                      todayCountsMap,
+                      heroOverride?.goalId === goal.id ? heroOverride.markId : null,
+                    )
+              ) as Counter | null;
+              // isGoalDoneToday already guards effectiveSpotlightGoalId against
+              // ever selecting a goal with no work left today; defensive only.
+              if (!hero) return null;
+
+              const chipMarks = dueMarks.filter((m) => m.id !== hero.id);
+              const chips = chipMarks.slice(0, 6).map((m) => ({
+                id: m.id,
+                name: m.name,
+                doneToday: isMarkDoneToday(m, todayCountsMap.get(m.id) ?? 0),
+              }));
+              const overflowCount = Math.max(0, chipMarks.length - 6);
+              const comebackPresentation = comeback ? { ask: resolveComebackAsk(hero) } : null;
 
               return (
                 <View key={goal.id} style={[styles.goalCard, { backgroundColor: c.surface }]}>
-                  <TouchableOpacity
-                    onPress={() =>
-                      allDoneToday ? toggleGoalExpand(goal.id) : router.push(`/goal/${goal.id}` as any)
-                    }
-                    activeOpacity={0.7}
-                    style={styles.goalCardHeader}
-                  >
-                    <GoalTitle title={goal.title} size="card" color={c.inkDark} style={styles.goalCardTitle} />
-                    <CaretRight size={16} color={c.inkMuted} weight="bold" />
-                  </TouchableOpacity>
+                  <NextMoveCard
+                    goalTitle={goal.title}
+                    onGoalPress={() => router.push(`/goal/${goal.id}` as any)}
+                    hero={hero}
+                    comeback={comebackPresentation}
+                    onMarkIt={() => handleQuickIncrement(hero.id)}
+                    onHeroLongPress={() => handleMarkLongPress(hero.id, hero.name)}
+                    chips={chips}
+                    overflowCount={overflowCount}
+                    onChipPress={(markId) => setHeroOverride({ goalId: goal.id, markId })}
+                    onOverflowPress={() => router.push(`/goal/${goal.id}` as any)}
+                  />
 
-                  {/* Due marks */}
-                  {visibleDue.map((mark, idx) =>
-                    renderMarkRow(mark, idx === visibleDue.length - 1 && doneMarks.length === 0 && hiddenCount === 0, false, false, idx)
-                  )}
+                  {/* spec §1 Decision #1: "No extra rows" — done-for-week
+                      marks ask nothing today and render NOWHERE on the
+                      spotlight card (not even dimmed). They still surface,
+                      unchanged, inside a manually re-expanded done-today
+                      goal's card (the `!isSpotlight` branch above) and in
+                      Daily Habits. Intentionally no doneMarks block here. */}
 
-                  {/* "X more" expander */}
-                  {hiddenCount > 0 && (
+                  {/* Queued-expand = spotlight override (spec §1): only the
+                      goal a queued-row tap hoisted into the seat gets a fold
+                      row back to the computed queue order. */}
+                  {spotlightOverride === goal.id && (
                     <TouchableOpacity
                       style={styles.expanderRow}
-                      onPress={() => toggleGoalExpand(goal.id)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={[styles.expanderText, { color: c.accent }]}>
-                        {hiddenCount} more mark{hiddenCount !== 1 ? 's' : ''}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-
-                  {/* Done marks (dimmed) */}
-                  {doneMarks.length > 0 && (
-                    <>
-                      <View style={[styles.doneDivider, { backgroundColor: c.borderLight }]} />
-                      {doneMarks.map((mark, idx) =>
-                        renderMarkRow(mark, idx === doneMarks.length - 1, true, false, idx)
-                      )}
-                    </>
-                  )}
-
-                  {/* A queued goal the user expanded folds back on request —
-                      the header keeps its push-to-detail, so the fold lives
-                      in the same expander vocabulary as "X more marks". */}
-                  {isQueuedExpanded && (
-                    <TouchableOpacity
-                      style={styles.expanderRow}
-                      onPress={() => toggleGoalExpand(goal.id)}
+                      onPress={() => {
+                        setSpotlightOverride(null);
+                        setHeroOverride(null);
+                      }}
                       activeOpacity={0.7}
                       accessibilityRole="button"
                       accessibilityLabel={`Collapse ${goal.title}`}
@@ -793,29 +848,6 @@ const styles = StyleSheet.create({
     lineHeight: 30,
     marginTop: spacing.lg,
     paddingHorizontal: spacing.lg,
-  },
-
-  restLineRow: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  restLineText: {
-    fontFamily: fonts.sans,
-    fontSize: fontSize.sm,
-    lineHeight: 17,
-    flex: 1,
-    marginRight: spacing.sm,
-  },
-  bonusButton: {
-    paddingVertical: 4,
-    paddingHorizontal: spacing.sm,
-  },
-  bonusButtonText: {
-    fontFamily: fonts.sansMedium,
-    fontSize: fontSize.sm,
   },
 
   forgivenessLine: {

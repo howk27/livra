@@ -70,3 +70,25 @@ export function pickSpotlightGoalId(
   }
   return null;
 }
+
+/**
+ * The hero of the Next Move card (spec §1): the override if it still has work
+ * today, else the first week-due mark in the user's own order with today's bar
+ * unmet. Pure view selection — sort_index is never touched.
+ */
+export function pickNextMove(
+  orderedMarks: QueueMark[],
+  weeklyCounts: ReadonlyMap<string, number>,
+  todayCounts: ReadonlyMap<string, number>,
+  overrideMarkId?: string | null,
+): QueueMark | null {
+  const heroable = (m: QueueMark) =>
+    markWeeklyState(m as Pick<Mark, 'weekly_target' | 'frequency_kind'>, weeklyCounts.get(m.id) ?? 0) === 'due' &&
+    !isMarkDoneToday(m, todayCounts.get(m.id) ?? 0);
+
+  if (overrideMarkId) {
+    const o = orderedMarks.find((m) => m.id === overrideMarkId);
+    if (o && heroable(o)) return o;
+  }
+  return orderedMarks.find(heroable) ?? null;
+}

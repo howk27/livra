@@ -2,6 +2,7 @@ import {
   isMarkDoneToday,
   isGoalDoneToday,
   pickSpotlightGoalId,
+  pickNextMove,
   type QueueMark,
 } from '../../lib/focusQueue';
 
@@ -100,4 +101,24 @@ describe('pickSpotlightGoalId', () => {
   it('returns null for an empty goal list', () => {
     expect(pickSpotlightGoalId([], marksBy({}), counts({}), counts({}))).toBe(null);
   });
+});
+
+describe('pickNextMove', () => {
+  const m = (id: string): QueueMark => ({ id, dailyTarget: 1, weekly_target: 5, frequency_kind: 'variable' });
+  const counts = (o: Record<string, number>) => new Map(Object.entries(o));
+  const marks = [m('a'), m('b'), m('c')];
+  const dueAll = counts({ a: 0, b: 0, c: 0 });
+
+  it('picks the first due mark in the given order', () =>
+    expect(pickNextMove(marks, dueAll, counts({ a: 0, b: 0, c: 0 }))?.id).toBe('a'));
+  it('advances past a done-today mark', () =>
+    expect(pickNextMove(marks, dueAll, counts({ a: 1, b: 0, c: 0 }))?.id).toBe('b'));
+  it('honors a valid override', () =>
+    expect(pickNextMove(marks, dueAll, counts({ a: 0, b: 0, c: 0 }), 'c')?.id).toBe('c'));
+  it('ignores an override that is already done today (auto-advance)', () =>
+    expect(pickNextMove(marks, dueAll, counts({ a: 0, b: 0, c: 1 }), 'c')?.id).toBe('a'));
+  it('skips done-for-week marks', () =>
+    expect(pickNextMove(marks, counts({ a: 5, b: 0, c: 0 }), counts({ a: 0, b: 0, c: 0 }))?.id).toBe('b'));
+  it('returns null when everything is done today', () =>
+    expect(pickNextMove(marks, dueAll, counts({ a: 1, b: 1, c: 1 }))).toBeNull());
 });

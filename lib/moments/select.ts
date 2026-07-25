@@ -2,6 +2,7 @@
 // Returns null when Livra should stay quiet — silence is a first-class output;
 // the mentor does not fill air. Selection logic only: content comes from the registry.
 import { addDays, parseISO, yyyyMmDd } from '../date';
+import type { IdentityMilestone } from '../identity';
 import { fillTemplate, pickTemplate, type TemplateSlots } from './content';
 import type {
   EmptySurface,
@@ -78,6 +79,26 @@ export type SelectOptions = {
   /** QC2-F: the restLine surface speaks only over a doneForWeek mark. The caller
    *  (focus.tsx showRestLine) owns the markWeeklyState check; this flag carries it. */
   markDoneForWeek?: boolean;
+  /** spec §2 (Task 4): the milestone THIS log crossed, already filtered for
+   *  once-ever by the caller (state/voiceSlice checks hasFired) — postLogVoice
+   *  stays store-free and just threads whatever it was given. */
+  identityMilestone?: IdentityMilestone | null;
+  /** Task 4: the logged mark's own name — MomentContext is goal-scoped, so the
+   *  identity/account-first picks (mark- or account-scoped) need it separately. */
+  markName?: string | null;
+  /** spec §2/§5 (Task 4/5): MARK_LIBRARY's identityLine, when the logged mark
+   *  has one. Replaces the pool template for the identity `claim` variant only. */
+  identityLibraryLine?: string | null;
+  /** spec §3 (Task 1/4): true when this log ends a comeback gap. Outranks every
+   *  other postLog pick — a comeback log is a normal check-in, never scolded. */
+  endsComebackGap?: boolean;
+  /** spec §2 (Task 4): which account-wide first-week milestone this log is,
+   *  computed by the caller (evaluatePostLogVoice) from account-wide events. */
+  accountFirstVariant?: 'firstEver' | 'firstDayClosed' | 'dayTwoReturn' | 'weekOne' | null;
+  /** spec §1/§3 (Task 7): a comeback gap closed TODAY — the greeting skips the
+   *  whyResurface (slipping-goal) branch for the day the gap ends, so a fresh
+   *  comeback log is never scolded in the same breath it's welcomed back. */
+  suppressSlipping?: boolean;
 };
 
 function makeMoment(
@@ -86,7 +107,19 @@ function makeMoment(
   variant: string,
   slots: TemplateSlots,
   opts: SelectOptions,
+  /** spec §2 (Task 4/5): a library-sourced template that REPLACES the pool pick
+   *  entirely (identityLine on the identity `claim` variant). Still runs
+   *  through fillTemplate so {markName}/{n} resolve the same way. */
+  overrideTemplate?: string | null,
 ): Moment | null {
+  if (overrideTemplate) {
+    return {
+      id: `${type}.${variant}.library`,
+      surface,
+      type,
+      text: fillTemplate(overrideTemplate, slots),
+    };
+  }
   const rng = opts.rng ?? Math.random;
   const picked = pickTemplate(type, variant, opts.lastMomentIds?.[type], rng);
   if (!picked) return null;
@@ -135,7 +168,7 @@ function goalSlots(g: GoalMomentContext, ctx: MomentContext): TemplateSlots {
 
 /** Greeting: slipping-direct > first-week (younger goal wins) > celebration > default rotation (M6). */
 function selectGreeting(ctx: MomentContext, opts: SelectOptions): Moment | null {
-  const slipping = slippingWithWhy(ctx)[0];
+  const slipping = opts.suppressSlipping ? undefined : slippingWithWhy(ctx)[0];
   if (slipping) {
     return makeMoment('greeting', 'whyResurface', 'direct', goalSlots(slipping, ctx), opts);
   }
@@ -191,6 +224,52 @@ type PostLogPick = {
 };
 
 const POSTLOG_PICKS: readonly PostLogPick[] = [
+  // spec §3 (2026-07-24): a comeback log outranks everything — normal check-in,
+  // never scolded, never made to compete with the day's other facts.
+  {
+    variant: 'return',
+    type: 'comeback',
+    bypassGate: true,
+    when: (_ctx, _g, opts) => opts.endsComebackGap === true,
+  },
+  // spec §2 (2026-07-24): account-wide first-week fuel. Once-ever by
+  // construction (the underlying dates/counts can only be true once), so all
+  // four bypass the gate like the identity picks below.
+  {
+    variant: 'firstEver',
+    bypassGate: true,
+    when: (_ctx, _g, opts) => opts.accountFirstVariant === 'firstEver',
+  },
+  {
+    variant: 'firstDayClosed',
+    bypassGate: true,
+    when: (_ctx, _g, opts) => opts.accountFirstVariant === 'firstDayClosed',
+  },
+  {
+    variant: 'dayTwoReturn',
+    bypassGate: true,
+    when: (_ctx, _g, opts) => opts.accountFirstVariant === 'dayTwoReturn',
+  },
+  {
+    variant: 'weekOne',
+    bypassGate: true,
+    when: (_ctx, _g, opts) => opts.accountFirstVariant === 'weekOne',
+  },
+  // spec §2 (2026-07-24): earned identity. Milestones are rare by
+  // construction (identity.ts's thresholds), so both tiers bypass the gate —
+  // they never gamble away.
+  {
+    variant: 'claim',
+    type: 'identity',
+    bypassGate: true,
+    when: (_ctx, _g, opts) => opts.identityMilestone?.tier === 'identity',
+  },
+  {
+    variant: 'fact',
+    type: 'identity',
+    bypassGate: true,
+    when: (_ctx, _g, opts) => opts.identityMilestone?.tier === 'fact',
+  },
   // M1 (PL-3): the first-ever log on a goal is acknowledged, always — it fires
   // once per goal lifetime, so it never rides the 1-in-3 gate. Counted after
   // the log lands: lifetimeLogCount 1 IS the first log.
@@ -234,8 +313,20 @@ function selectPostLog(ctx: MomentContext, opts: SelectOptions): Moment | null {
     if (rng() >= POSTLOG_SPEAK_RATE) return null;
   }
 
-  const slots: TemplateSlots = g ? goalSlots(g, ctx) : { name: ctx.firstName };
-  return makeMoment('postLog', pick.type ?? 'postLog', pick.variant, slots, opts);
+  const pickType = pick.type ?? 'postLog';
+  let slots: TemplateSlots = g ? goalSlots(g, ctx) : { name: ctx.firstName };
+  let overrideTemplate: string | null = null;
+
+  // Identity picks address the MARK, not the goal — MomentContext has no mark
+  // shape, so the caller (evaluatePostLogVoice) threads the name through opts.
+  if (pickType === 'identity') {
+    slots = { name: ctx.firstName, markName: opts.markName, n: opts.identityMilestone?.n ?? null };
+    if (pick.variant === 'claim' && opts.identityLibraryLine) {
+      overrideTemplate = opts.identityLibraryLine;
+    }
+  }
+
+  return makeMoment('postLog', pickType, pick.variant, slots, opts, overrideTemplate);
 }
 
 /** QC2-F: the rest line under a doneForWeek mark on Focus. The caller already

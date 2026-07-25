@@ -142,6 +142,13 @@ export const MOMENT_CONTENT: Record<MomentType, Record<string, readonly string[]
       'Marked. The day noticed.',
       'In the book. Same time tomorrow.',
     ],
+    // Account-wide first-week fuel (spec §2 firstWeek): day-1 acknowledgment
+    // that never repeats, first-week window only. Static single lines by
+    // design, same as the empty-state invitations.
+    firstEver: ['That is the first brick. Everything starts this small.'],
+    firstDayClosed: ['Day one, closed. That is the whole method.'],
+    dayTwoReturn: ['Back again. That is the whole trick.'],
+    weekOne: ['A week of showing up. Keep it boring.'],
   },
   // QC2-F, the rest register. VOICE ONLY: logging is never blocked; a met
   // weekly target never blocks the log. doneForWeek renders on the Focus rest
@@ -182,6 +189,30 @@ export const MOMENT_CONTENT: Record<MomentType, Record<string, readonly string[]
       '{name}, start small. It tends to hold.',
     ],
   },
+  // spec §3 (2026-07-24): the comeback register. A comeback log is a NORMAL
+  // check-in (Decision #4). Outranks every other postLog pick, never scolds
+  // the gap, never counts the missed days.
+  comeback: {
+    return: [
+      'Good. You came back. That was the hard part.',
+      'Back. Nothing to make up, just this one.',
+      'The return is the skill. Logged.',
+    ],
+  },
+  // spec §2 (2026-07-24): earned identity. `fact` speaks early and often;
+  // `claim` fires exactly once, when the log count first proves a pattern.
+  // Once-ever enforcement lives in state/identitySlice, not here.
+  identity: {
+    fact: [
+      '{markName} #{n}. Quietly stacking up.',
+      'That is {n} on {markName}. Real ones.',
+      '{n} times now. The record is building.',
+    ],
+    claim: [
+      '{n} in three weeks. This is becoming who you are.',
+      '{n} logged across weeks. That is not a phase.',
+    ],
+  },
 };
 
 export type TemplateSlots = {
@@ -190,6 +221,10 @@ export type TemplateSlots = {
   why?: string | null;
   runDays?: number | null;
   remaining?: number | null;
+  /** Task 4: identity fact/claim templates address the logged MARK, not a goal. */
+  markName?: string | null;
+  /** Task 4: the milestone count ({n} in identity fact/claim templates). */
+  n?: number | null;
 };
 
 export const WHY_MAX_CHARS = 80;
@@ -219,6 +254,8 @@ export function fillTemplate(template: string, slots: TemplateSlots): string {
   out = out.replace(/\{why\}/g, slots.why ? truncateWhy(slots.why) : '');
   out = out.replace(/\{runDays\}/g, slots.runDays != null ? String(slots.runDays) : '');
   out = out.replace(/\{remaining\}/g, slots.remaining != null ? String(slots.remaining) : '');
+  out = out.replace(/\{markName\}/g, slots.markName?.trim() || 'that mark');
+  out = out.replace(/\{n\}/g, slots.n != null ? String(slots.n) : '');
   return out;
 }
 

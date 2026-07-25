@@ -1,6 +1,7 @@
 // tests/unit/notificationCoherenceGuard.test.ts
 import { readFileSync, readdirSync, statSync, existsSync } from 'fs';
 import { join } from 'path';
+import { MOMENT_CONTENT } from '../../lib/moments/content';
 
 function walk(dir: string): string[] {
   if (!existsSync(dir)) return [];
@@ -34,5 +35,74 @@ describe('notification coherence guards', () => {
       if (banned.some((re) => re.test(src))) offenders.push(f);
     }
     expect(offenders).toEqual([]);
+  });
+});
+
+// Task 4 (spec §2/§3, 2026-07-24): the comeback + earned-identity registers,
+// plus the new account-first postLog rows, walked against the same
+// banned-phrase classes momentContent.test.ts enforces registry-wide, PLUS
+// the ≤60 char pill cap — these three pools render in the postLog pill (or,
+// for comeback, the same short-form surface) but are not `postLog.`-prefixed
+// addresses, so the generic pillEntries filter in momentContent.test.ts does
+// not reach them.
+describe('notification coherence guards — comeback / identity / account-first voice pools', () => {
+  const newPoolEntries: Array<{ address: string; text: string }> = [
+    ...MOMENT_CONTENT.comeback.return!.map((text, i) => ({ address: `comeback.return.${i}`, text })),
+    ...MOMENT_CONTENT.identity.fact!.map((text, i) => ({ address: `identity.fact.${i}`, text })),
+    ...MOMENT_CONTENT.identity.claim!.map((text, i) => ({ address: `identity.claim.${i}`, text })),
+    ...MOMENT_CONTENT.postLog.firstEver!.map((text, i) => ({ address: `postLog.firstEver.${i}`, text })),
+    ...MOMENT_CONTENT.postLog.firstDayClosed!.map((text, i) => ({ address: `postLog.firstDayClosed.${i}`, text })),
+    ...MOMENT_CONTENT.postLog.dayTwoReturn!.map((text, i) => ({ address: `postLog.dayTwoReturn.${i}`, text })),
+    ...MOMENT_CONTENT.postLog.weekOne!.map((text, i) => ({ address: `postLog.weekOne.${i}`, text })),
+  ];
+
+  it('covers every new pool (guard against a future pool that forgets to opt in)', () => {
+    expect(newPoolEntries.length).toBeGreaterThanOrEqual(3 + 3 + 2 + 1 + 1 + 1 + 1);
+  });
+
+  it.each(newPoolEntries.map((e) => [e.address, e.text] as const))(
+    '%s fits the pill (<= 60 chars)',
+    (_address, text) => {
+      expect(text.length).toBeLessThanOrEqual(60);
+    },
+  );
+
+  it.each(newPoolEntries.map((e) => [e.address, e.text] as const))(
+    '%s has no em-dash, en-dash, hyphen-as-dash, or apostrophe',
+    (_address, text) => {
+      expect(text).not.toMatch(/[—–]/);
+      expect(text).not.toMatch(/ - /);
+      expect(text).not.toMatch(/['’]/);
+    },
+  );
+
+  it.each(newPoolEntries.map((e) => [e.address, e.text] as const))(
+    '%s has no exclamation marks',
+    (_address, text) => {
+      expect(text).not.toContain('!');
+    },
+  );
+
+  it.each(newPoolEntries.map((e) => [e.address, e.text] as const))(
+    '%s has no guilt or loss language',
+    (_address, text) => {
+      expect(text).not.toMatch(/\b(lose|lost|losing|streak|guilt|guilty|fail|failed|failure|behind|wasted)\b/i);
+    },
+  );
+
+  it.each(newPoolEntries.map((e) => [e.address, e.text] as const))(
+    '%s has no sycophancy or generic habit-app filler',
+    (_address, text) => {
+      expect(text).not.toMatch(
+        /\b(amazing|awesome|incredible|crushing|killing it|you got this|great job|keep it up|proud of you|superstar|unstoppable)\b/i,
+      );
+      expect(text).not.toMatch(/\b(habitica|streaks|duolingo|fabulous|habitify)\b/i);
+    },
+  );
+
+  it('the comeback register never counts or names the missed days', () => {
+    for (const line of MOMENT_CONTENT.comeback.return!) {
+      expect(line).not.toMatch(/\b(days? (missed|gone|behind)|catch up|where (were|have) you)\b/i);
+    }
   });
 });

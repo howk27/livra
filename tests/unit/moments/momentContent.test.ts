@@ -27,6 +27,8 @@ describe('registry copy rules (walked, same discipline as copyDashRule)', () => 
       'postLog',
       'greetingDefault',
       'rest',
+      'comeback',
+      'identity',
     ];
     for (const t of types) {
       const variants = MOMENT_CONTENT[t];
@@ -107,10 +109,13 @@ describe('registry copy rules (walked, same discipline as copyDashRule)', () => 
     expect(MOMENT_CONTENT.greetingDefault.default!.length).toBeGreaterThanOrEqual(3);
     expect(MOMENT_CONTENT.greetingDefault.default!.length).toBeLessThanOrEqual(5);
     // Everything else that rotates: 2–4 strong variants (empty states are static by design).
+    // Task 4's account-first postLog rows are once-ever, static single lines,
+    // same reasoning as the empty-state invitations (nothing to rotate).
+    const oncePerAccountVariants = new Set(['firstEver', 'firstDayClosed', 'dayTwoReturn', 'weekOne']);
     for (const [type, variants] of Object.entries(MOMENT_CONTENT)) {
       if (type === 'emptyInvitation' || type === 'greetingDefault') continue;
       for (const [variant, pool] of Object.entries(variants)) {
-        if (type === 'postLog' && variant === 'plain') continue;
+        if (type === 'postLog' && (variant === 'plain' || oncePerAccountVariants.has(variant))) continue;
         expect(pool.length).toBeGreaterThanOrEqual(2);
         expect(pool.length).toBeLessThanOrEqual(4);
       }
