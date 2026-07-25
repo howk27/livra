@@ -245,9 +245,12 @@ describe('evaluatePostLogVoice — Task 4: comeback / identity / account-first r
     expect(m!.id.startsWith('comeback.return.')).toBe(true);
   });
 
-  it('identity claim tier speaks and fills {markName}/{n}', () => {
+  it('identity claim tier speaks and fills {markName}/{n} (pool template path)', () => {
+    // A mark name outside MARK_LIBRARY (Task 5 gave 'run' a real identityLine,
+    // which would override the pool template below and swallow {n}).
     const m = evaluatePostLogVoice(
       makeInputs({
+        marks: [makeMark({ name: 'Untracked Custom Mark' })],
         rng: silent,
         identityMilestone: { id: 'identity-12w3', tier: 'identity', n: 15 },
       }),
@@ -256,6 +259,19 @@ describe('evaluatePostLogVoice — Task 4: comeback / identity / account-first r
     expect(m!.type).toBe('identity');
     expect(m!.id.startsWith('identity.claim.')).toBe(true);
     expect(m!.text).toContain('15');
+  });
+
+  it('identity claim tier uses the MARK_LIBRARY identityLine when the mark matches (Task 5)', () => {
+    const m = evaluatePostLogVoice(
+      makeInputs({
+        rng: silent,
+        identityMilestone: { id: 'identity-12w3', tier: 'identity', n: 15 },
+      }),
+    );
+    expect(m).not.toBeNull();
+    expect(m!.type).toBe('identity');
+    expect(m!.id).toBe('identity.claim.library');
+    expect(m!.text).toBe('You are becoming someone who runs.');
   });
 
   it('identity fact tier speaks and names the mark', () => {

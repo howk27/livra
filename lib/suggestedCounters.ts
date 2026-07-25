@@ -51,6 +51,8 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     tags: ['sleep', 'recovery', 'energy', 'marathon', 'performance', 'insomnia', 'rest', 'fatigue', 'tired', 'endurance', 'health', 'athlete'],
     healthKitType: 'sleep',
     frequency_min: 7, frequency_recommended: 7, frequency_max: 7, frequencyKind: 'fixed',
+    identityLine: 'You are becoming someone who protects sleep.',
+    comebackAsk: 'An early night counts today.',
   },
   {
     id: 'stretch', name: 'Stretch', icon: PersonSimpleIcon, emoji: '🧘',
@@ -59,6 +61,8 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     tags: ['flexibility', 'mobility', 'recovery', 'injury', 'yoga', 'marathon', 'run', 'athlete', 'posture', 'soreness', 'tightness'],
     healthKitType: null,
     frequency_min: 3, frequency_recommended: 5, frequency_max: 7, frequencyKind: 'variable',
+    identityLine: 'You are becoming someone who stretches.',
+    comebackAsk: 'Five minutes counts today.',
   },
 
   // FITNESS
@@ -69,6 +73,8 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     tags: ['fitness', 'strength', 'muscle', 'gym', 'marathon', 'lose weight', 'bulk', 'tone', 'training', 'athlete', 'body', 'health', 'endurance', 'triathlon'],
     healthKitType: 'workout',
     frequency_min: 2, frequency_recommended: 3, frequency_max: 5, frequencyKind: 'variable',
+    identityLine: 'You are becoming someone who trains.',
+    comebackAsk: 'A short session counts today.',
   },
   {
     id: 'steps', name: 'Steps', icon: FootprintsIcon, emoji: '👣', timeAffinity: 'daytime',
@@ -85,6 +91,8 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     tags: ['running', 'marathon', '5k', '10k', 'half marathon', 'race', 'cardio', 'jogging', 'endurance', 'triathlon', 'speed', 'pace'],
     healthKitType: null,
     frequency_min: 2, frequency_recommended: 3, frequency_max: 5, frequencyKind: 'variable',
+    identityLine: 'You are becoming someone who runs.',
+    comebackAsk: 'A walk counts today.',
   },
   {
     id: 'swim', name: 'Swim', icon: WavesIcon, emoji: '🏊', timeAffinity: 'daytime',
@@ -93,6 +101,8 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     tags: ['swimming', 'triathlon', 'endurance', 'cardio', 'marathon', 'weight loss', 'low impact', 'fitness', 'athlete', 'laps'],
     healthKitType: null,
     frequency_min: 2, frequency_recommended: 3, frequency_max: 5, frequencyKind: 'variable',
+    identityLine: 'You are becoming someone who swims.',
+    comebackAsk: 'A few laps count today.',
   },
   {
     id: 'cycling', name: 'Cycling', icon: BicycleIcon, emoji: '🚴', timeAffinity: 'daytime',
@@ -119,6 +129,8 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     tags: ['diet', 'eat clean', 'nutrition', 'weight loss', 'meal prep', 'health', 'muscle', 'performance', 'food', 'body'],
     healthKitType: null,
     frequency_min: 3, frequency_recommended: 5, frequency_max: 7, frequencyKind: 'variable',
+    identityLine: 'You are becoming someone who eats with intention.',
+    comebackAsk: 'One balanced meal counts today.',
   },
   {
     id: 'calories', name: 'Calories', icon: FireIcon, emoji: '🔥',
@@ -135,6 +147,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     tags: ['sober', 'sobriety', 'dry january', 'alcohol', 'drinking', 'liver', 'health', 'sleep', 'discipline', 'addiction', 'quit'],
     healthKitType: null,
     frequency_min: 7, frequency_recommended: 7, frequency_max: 7, frequencyKind: 'abstinence',
+    identityLine: 'You are becoming someone who does not drink.',
   },
   {
     id: 'meal-prep', name: 'Meal Prep', icon: BowlFoodIcon, emoji: '🍱',
@@ -143,6 +156,8 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     tags: ['meal prep', 'diet', 'nutrition', 'weight loss', 'cooking', 'food', 'healthy eating', 'discipline', 'budget', 'prep'],
     healthKitType: null,
     frequency_min: 1, frequency_recommended: 2, frequency_max: 3, frequencyKind: 'variable',
+    identityLine: 'You are becoming someone who plans meals ahead.',
+    comebackAsk: 'Prepping one meal counts today.',
   },
   {
     id: 'no-nicotine', name: 'No Nicotine', icon: CigaretteIcon, emoji: '🚭',
@@ -151,6 +166,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     tags: ['smoking', 'vaping', 'quit', 'cigarettes', 'nicotine', 'tobacco', 'vape', 'sober', 'cravings', 'lungs'],
     healthKitType: null,
     frequency_min: 7, frequency_recommended: 7, frequency_max: 7, frequencyKind: 'abstinence',
+    identityLine: 'You are becoming someone who stays nicotine free.',
   },
   {
     id: 'no-caffeine', name: 'Cut Caffeine', icon: CoffeeIcon, emoji: '☕',
@@ -177,6 +193,8 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     tags: ['meditation', 'stress', 'anxiety', 'focus', 'mindfulness', 'mental health', 'calm', 'clarity', 'sleep', 'peace', 'breath'],
     healthKitType: null,
     frequency_min: 3, frequency_recommended: 5, frequency_max: 7, frequencyKind: 'variable',
+    identityLine: 'You are becoming someone who meditates.',
+    comebackAsk: 'Two quiet minutes count today.',
   },
   {
     id: 'journaling', name: 'Journaling', icon: NotePencilIcon, emoji: '📓', timeAffinity: 'evening',
@@ -185,6 +203,8 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     tags: ['journaling', 'reflection', 'gratitude', 'clarity', 'mental health', 'anxiety', 'writing', 'self awareness', 'growth', 'therapy'],
     healthKitType: null,
     frequency_min: 3, frequency_recommended: 5, frequency_max: 7, frequencyKind: 'variable',
+    identityLine: 'You are becoming someone who writes it down.',
+    comebackAsk: 'One line counts today.',
   },
   {
     id: 'gratitude', name: 'Gratitude', icon: HandHeartIcon, emoji: '🙏', timeAffinity: 'evening',
@@ -227,6 +247,8 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     tags: ['reading', 'books', 'learning', 'knowledge', 'growth', 'education', 'career', 'skill', 'vocabulary', 'writing'],
     healthKitType: null,
     frequency_min: 3, frequency_recommended: 5, frequency_max: 7, frequencyKind: 'variable',
+    identityLine: 'You are becoming someone who reads.',
+    comebackAsk: 'One page counts today.',
   },
   {
     id: 'practice', name: 'Practice', icon: MetronomeIcon, emoji: '⚡',
@@ -243,6 +265,8 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     tags: ['study', 'exam', 'school', 'degree', 'certification', 'course', 'learning', 'knowledge', 'career', 'skill'],
     healthKitType: null,
     frequency_min: 3, frequency_recommended: 4, frequency_max: 6, frequencyKind: 'variable',
+    identityLine: 'You are becoming someone who studies.',
+    comebackAsk: 'Ten minutes counts today.',
   },
   {
     id: 'deep-work', name: 'Deep Work', icon: HourglassIcon, emoji: '⏳',
@@ -251,6 +275,8 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     tags: ['deep work', 'focus', 'productivity', 'distraction', 'startup', 'career', 'writing', 'coding', 'flow state', 'output'],
     healthKitType: null,
     frequency_min: 3, frequency_recommended: 4, frequency_max: 6, frequencyKind: 'variable',
+    identityLine: 'You are becoming someone who does deep work.',
+    comebackAsk: 'One short block counts today.',
   },
   {
     id: 'writing', name: 'Writing', icon: PenNibIcon, emoji: '✍️',
@@ -259,6 +285,8 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     tags: ['writing', 'book', 'blog', 'content', 'author', 'copywriting', 'journal', 'script', 'storytelling', 'career', 'side hustle', 'novel'],
     healthKitType: null,
     frequency_min: 3, frequency_recommended: 4, frequency_max: 6, frequencyKind: 'variable',
+    identityLine: 'You are becoming someone who writes.',
+    comebackAsk: 'One paragraph counts today.',
   },
   {
     id: 'language', name: 'Language', icon: GlobeSimpleIcon, emoji: '🗣️',
