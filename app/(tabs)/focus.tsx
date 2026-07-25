@@ -62,7 +62,13 @@ import {
   markWeeklyState,
 } from '../../lib/features';
 import { resolveMarkCategory, resolveMarkIcon, resolveMarkAccent } from '../../lib/markCategoryResolve';
-import { isGoalDoneToday, isMarkDoneToday, pickSpotlightGoalId, pickNextMove } from '../../lib/focusQueue';
+import {
+  buildNextMoveChips,
+  isGoalDoneToday,
+  isMarkDoneToday,
+  pickSpotlightGoalId,
+  pickNextMove,
+} from '../../lib/focusQueue';
 import { isComebackState, endsComebackGap, pickComebackMove, resolveComebackAsk } from '../../lib/comeback';
 import { resolveFirstName } from '../../lib/profile/displayName';
 import { computeWeek } from '../../lib/consistency';
@@ -736,27 +742,23 @@ export default function FocusScreen() {
               // ── Spotlight: the Next Move card (spec §1) ───────────────────
               // Comeback ignores the hero override — it wants the smallest
               // true next step, not whatever was last tapped before the gap.
-              const hero = (
-                comeback
-                  ? pickComebackMove(dueMarks)
-                  : pickNextMove(
-                      marks,
-                      weeklyCountsMap,
-                      todayCountsMap,
-                      heroOverride?.goalId === goal.id ? heroOverride.markId : null,
-                    )
-              ) as Counter | null;
+              const hero = comeback
+                ? pickComebackMove(dueMarks)
+                : pickNextMove(
+                    marks,
+                    weeklyCountsMap,
+                    todayCountsMap,
+                    heroOverride?.goalId === goal.id ? heroOverride.markId : null,
+                  );
               // isGoalDoneToday already guards effectiveSpotlightGoalId against
               // ever selecting a goal with no work left today; defensive only.
               if (!hero) return null;
 
-              const chipMarks = dueMarks.filter((m) => m.id !== hero.id);
-              const chips = chipMarks.slice(0, 6).map((m) => ({
-                id: m.id,
-                name: m.name,
-                doneToday: isMarkDoneToday(m, todayCountsMap.get(m.id) ?? 0),
-              }));
-              const overflowCount = Math.max(0, chipMarks.length - 6);
+              const { chips, overflowCount } = buildNextMoveChips(
+                dueMarks,
+                hero,
+                todayCountsMap,
+              );
               const comebackPresentation = comeback ? { ask: resolveComebackAsk(hero) } : null;
 
               return (

@@ -33,9 +33,13 @@ export function endsComebackGap(events: MarkEvent[], todayStr: string): boolean 
   return isComebackState(events.filter((e) => e.occurred_local_date !== todayStr), todayStr);
 }
 
-/** Easiest due mark: lowest daily ask, tie → first in the given (goal) order. */
-export function pickComebackMove(dueMarks: ComebackMark[]): ComebackMark | null {
-  let best: ComebackMark | null = null;
+/** Easiest due mark: lowest daily ask, tie → first in the given (goal) order.
+ *  No done-today check on purpose: isComebackState requires the last log to be
+ *  3+ days back, so in a comeback nothing has been logged today and every due
+ *  mark is still open. Callers pass week-due marks; the smallest ask among them
+ *  is therefore the smallest TRUE next step. */
+export function pickComebackMove<T extends ComebackMark>(dueMarks: readonly T[]): T | null {
+  let best: T | null = null;
   for (const m of dueMarks) {
     if (best === null || resolveDailyTarget(m) < resolveDailyTarget(best)) best = m;
   }

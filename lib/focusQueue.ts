@@ -76,13 +76,13 @@ export function pickSpotlightGoalId(
  * today, else the first week-due mark in the user's own order with today's bar
  * unmet. Pure view selection — sort_index is never touched.
  */
-export function pickNextMove(
-  orderedMarks: QueueMark[],
+export function pickNextMove<T extends QueueMark>(
+  orderedMarks: readonly T[],
   weeklyCounts: ReadonlyMap<string, number>,
   todayCounts: ReadonlyMap<string, number>,
   overrideMarkId?: string | null,
-): QueueMark | null {
-  const heroable = (m: QueueMark) =>
+): T | null {
+  const heroable = (m: T) =>
     markWeeklyState(m as Pick<Mark, 'weekly_target' | 'frequency_kind'>, weeklyCounts.get(m.id) ?? 0) === 'due' &&
     !isMarkDoneToday(m, todayCounts.get(m.id) ?? 0);
 
@@ -91,4 +91,32 @@ export function pickNextMove(
     if (o && heroable(o)) return o;
   }
   return orderedMarks.find(heroable) ?? null;
+}
+
+/** How many up-next chips the Next Move card shows before it starts counting. */
+export const NEXT_MOVE_CHIP_CAP = 6;
+
+export type NextMoveChip = { id: string; name: string; doneToday: boolean };
+
+/**
+ * The up-next strip under the hero (spec §1): every OTHER due mark on the goal,
+ * capped, with the remainder counted rather than listed. The hero is excluded
+ * because it is already the card — a chip for it would offer the move twice.
+ * Done-today marks stay in the strip (checked, not hidden): the day's shape is
+ * the point, and a vanishing row reads as a mistake.
+ */
+export function buildNextMoveChips<T extends QueueMark & { name: string }>(
+  dueMarks: readonly T[],
+  hero: { id: string } | null,
+  todayCounts: ReadonlyMap<string, number>,
+): { chips: NextMoveChip[]; overflowCount: number } {
+  const rest = hero ? dueMarks.filter((m) => m.id !== hero.id) : [...dueMarks];
+  return {
+    chips: rest.slice(0, NEXT_MOVE_CHIP_CAP).map((m) => ({
+      id: m.id,
+      name: m.name,
+      doneToday: isMarkDoneToday(m, todayCounts.get(m.id) ?? 0),
+    })),
+    overflowCount: Math.max(0, rest.length - NEXT_MOVE_CHIP_CAP),
+  };
 }

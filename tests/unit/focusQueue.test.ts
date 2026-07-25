@@ -1,8 +1,10 @@
 import {
+  buildNextMoveChips,
   isMarkDoneToday,
   isGoalDoneToday,
   pickSpotlightGoalId,
   pickNextMove,
+  NEXT_MOVE_CHIP_CAP,
   type QueueMark,
 } from '../../lib/focusQueue';
 
@@ -121,4 +123,56 @@ describe('pickNextMove', () => {
     expect(pickNextMove(marks, counts({ a: 5, b: 0, c: 0 }), counts({ a: 0, b: 0, c: 0 }))?.id).toBe('b'));
   it('returns null when everything is done today', () =>
     expect(pickNextMove(marks, dueAll, counts({ a: 1, b: 1, c: 1 }))).toBeNull());
+
+  it('an empty mark list has no next move', () =>
+    expect(pickNextMove([], dueAll, counts({}))).toBeNull());
+  it('falls back to the computed order when the override names a mark that is gone', () =>
+    expect(pickNextMove(marks, dueAll, counts({ a: 0, b: 0, c: 0 }), 'deleted')?.id).toBe('a'));
+  it('ignores an override that is done for the WEEK, not just today', () =>
+    expect(pickNextMove(marks, counts({ a: 0, b: 0, c: 5 }), counts({ a: 0, b: 0, c: 0 }), 'c')?.id)
+      .toBe('a'));
 });
+
+describe('buildNextMoveChips — the up-next strip under the hero', () => {
+  const named = (id: string): QueueMark & { name: string } =>
+    ({ id, name: `Mark ${id}`, dailyTarget: 1, weekly_target: 5, frequency_kind: 'variable' });
+  const counts = (o: Record<string, number>) => new Map(Object.entries(o));
+
+  it('excludes the hero — the card already offers that move', () => {
+    const { chips } = buildNextMoveChips([named('a'), named('b')], { id: 'a' }, counts({}));
+    expect(chips.map((c) => c.id)).toEqual(['b']);
+  });
+
+  it('keeps done-today marks in the strip, marked done', () => {
+    const { chips } = buildNextMoveChips(
+      [named('a'), named('b'), named('c')],
+      { id: 'a' },
+      counts({ b: 1 }),
+    );
+    expect(chips).toEqual([
+      { id: 'b', name: 'Mark b', doneToday: true },
+      { id: 'c', name: 'Mark c', doneToday: false },
+    ]);
+  });
+
+  it('caps the strip and counts the remainder', () => {
+    const marks = Array.from({ length: NEXT_MOVE_CHIP_CAP + 4 }, (_, i) => named(`m${i}`));
+    const { chips, overflowCount } = buildNextMoveChips(marks, { id: 'm0' }, counts({}));
+    expect(chips).toHaveLength(NEXT_MOVE_CHIP_CAP);
+    // 9 marks left after the hero, 6 shown.
+    expect(overflowCount).toBe(3);
+    expect(chips.map((c) => c.id)).not.toContain('m0');
+  });
+
+  it('never counts a negative overflow', () => {
+    const { chips, overflowCount } = buildNextMoveChips([named('a')], { id: 'a' }, counts({}));
+    expect(chips).toEqual([]);
+    expect(overflowCount).toBe(0);
+  });
+
+  it('lists every mark when there is no hero to exclude', () => {
+    const { chips } = buildNextMoveChips([named('a'), named('b')], null, counts({}));
+    expect(chips.map((c) => c.id)).toEqual(['a', 'b']);
+  });
+});
+
