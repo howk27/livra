@@ -149,9 +149,14 @@ describe('identity screen is one clean flat form (founder 2026-07-23)', () => {
   });
 
   it('leaves exactly one filled pill, so the screen has a focal point', () => {
+    // The invariant is the ratio, not the headcount: Save changes is the only
+    // filled pill and every other action on the screen is a ghost. Counting
+    // total pills instead would fail every time the screen grows an action
+    // (it did, when Verify email arrived 2026-07-25) without anything about
+    // the focal point having changed.
     const pills = src.match(/<PillButton/g) ?? [];
     const ghosts = src.match(/variant="ghost"/g) ?? [];
-    expect(pills.length).toBe(3);
-    expect(ghosts.length).toBe(2);
+    expect(pills.length).toBeGreaterThanOrEqual(3);
+    expect(pills.length - ghosts.length).toBe(1);
   });
 });

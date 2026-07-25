@@ -26,6 +26,18 @@ import { logger } from '../../lib/utils/logger';
 import { useNotification } from '../../contexts/NotificationContext';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import {
+  describeCodeSent,
+  needsEmailVerification,
+  validateVerificationCode,
+  normalizeVerificationCode,
+  VERIFICATION_CODE_LENGTH,
+} from '../../lib/auth/emailVerification';
+import {
+  fetchEmailVerifiedAt,
+  sendVerificationCode,
+  submitVerificationCode,
+} from '../../lib/auth/emailVerificationService';
+import {
   describeEmailChangeOutcome,
   emailChangeReauthMethod,
   emailChangeRequiresPassword,
@@ -80,6 +92,14 @@ export default function ProfileScreen() {
   // from the password-section field: the two blocks are edited independently.
   const [emailPassword, setEmailPassword] = useState('');
 
+  // Soft email verification (founder 2026-07-25): the door is never blocked, so
+  // proving the address happens here, afterwards. 'idle' shows the ask; the code
+  // field appears only once a code is actually on its way.
+  const [emailVerifiedAt, setEmailVerifiedAt] = useState<string | null>(null);
+  const [verifyStage, setVerifyStage] = useState<'idle' | 'sending' | 'code' | 'verifying'>('idle');
+  const [verifyCode, setVerifyCode] = useState('');
+  const [verifyError, setVerifyError] = useState<string | null>(null);
+
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -120,19 +140,22 @@ export default function ProfileScreen() {
     let cancelled = false;
     (async () => {
       let savedName: string | null = null;
+      let savedVerifiedAt: string | null = null;
       try {
         const { data, error } = await supabase
           .from('profiles')
-          .select('display_name')
+          .select('display_name, email_verified_at')
           .eq('id', user.id)
           .maybeSingle();
         if (error) throw error;
         savedName = data?.display_name ?? null;
+        savedVerifiedAt = data?.email_verified_at ?? null;
       } catch (err) {
         // Non-blocking: metadata fallback below still applies; save still works.
         logger.warn('[Profile] could not load saved profile:', err);
       }
       if (cancelled) return;
+      setEmailVerifiedAt(savedVerifiedAt);
       const initialName = resolveInitialDisplayName(savedName, user.user_metadata);
       if (initialName) {
         setDisplayName(prev => (prev ? prev : initialName));
@@ -221,6 +244,52 @@ export default function ProfileScreen() {
       setSaving(false);
     }
   };
+
+  // ── Soft email verification ──────────────────────────────────────────────
+  // Asking for the code is a plain GoTrue call (it rate-limits); declaring
+  // success is not ours to do. The verify-email edge function checks the code
+  // and stamps profiles.email_verified_at, which the client cannot write.
+  const handleSendVerificationCode = useCallback(async () => {
+    if (!userEmail || verifyStage === 'sending' || verifyStage === 'verifying') return;
+    setVerifyError(null);
+    setVerifyStage('sending');
+    const result = await sendVerificationCode(supabase, userEmail);
+    if (!result.ok) {
+      setVerifyError(result.message);
+      setVerifyStage('idle');
+      return;
+    }
+    setVerifyStage('code');
+  }, [userEmail, verifyStage, supabase]);
+
+  const handleSubmitVerificationCode = useCallback(async () => {
+    if (verifyStage === 'verifying') return;
+    const problem = validateVerificationCode(verifyCode);
+    if (problem) {
+      setVerifyError(problem);
+      return;
+    }
+    setVerifyError(null);
+    setVerifyStage('verifying');
+    const result = await submitVerificationCode(supabase, verifyCode);
+    if (!result.ok) {
+      setVerifyError(result.message);
+      setVerifyStage('code');
+      return;
+    }
+    // Trust the server's own timestamp, then confirm from the row: the banner on
+    // Settings reads the same column on its next visit.
+    setEmailVerifiedAt(result.verifiedAt);
+    setVerifyCode('');
+    setVerifyStage('idle');
+    showSuccess('Your email is verified.');
+    if (user?.id) {
+      const stamped = await fetchEmailVerifiedAt(supabase, user.id);
+      if (stamped) setEmailVerifiedAt(stamped);
+    }
+    // showSuccess is a stable context callback, deliberately omitted: listing it
+    // makes the React compiler drop this memo (same note as pickImage).
+  }, [verifyCode, verifyStage, supabase, user?.id]);
 
   const handleEmailChange = useCallback(async () => {
     if (savingEmail) return;
@@ -312,6 +381,15 @@ export default function ProfileScreen() {
       const outcome = describeEmailChangeOutcome(data?.user, target);
       setEmailOutcome(outcome);
       setEmailDraft(null);
+      // The address moved, so the old proof does not travel with it. A server
+      // trigger on auth.users clears the column; this keeps the screen honest
+      // before the next read lands.
+      if (outcome.status === 'applied') {
+        setEmailVerifiedAt(null);
+        setVerifyStage('idle');
+        setVerifyCode('');
+        setVerifyError(null);
+      }
       // Submit succeeded — collapse back to the calm on-file view. The outcome
       // line (and the pending block for a confirmation flow) still shows below.
       setEmailEditing(false);
@@ -594,6 +672,76 @@ export default function ProfileScreen() {
                 Waiting on {awaitingConfirmation}. Open the confirmation link we sent there and this
                 screen will show the new address.
               </Text>
+            ) : null}
+
+            {/* ── Verify this address (founder 2026-07-25) ──
+                Livra does not hold the door shut: sign-up lets you straight in,
+                so the address is proven here, afterwards. Nothing appears once
+                it is proven, and Apple relay addresses never see this at all —
+                the reward for verifying is that the app stops mentioning it. */}
+            {needsEmailVerification(user, emailVerifiedAt) && !emailEditing ? (
+              <>
+                {verifyStage === 'code' || verifyStage === 'verifying' ? (
+                  <>
+                    <Text style={styles.note}>{describeCodeSent(userEmail)}</Text>
+                    <TextInput
+                      style={[styles.input, styles.stackedInput]}
+                      value={verifyCode}
+                      onChangeText={(t) => {
+                        setVerifyCode(normalizeVerificationCode(t));
+                        setVerifyError(null);
+                      }}
+                      placeholder={`${VERIFICATION_CODE_LENGTH}-digit code`}
+                      placeholderTextColor={c.inkMuted}
+                      keyboardType="number-pad"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      textContentType="oneTimeCode"
+                      autoComplete="one-time-code"
+                      maxLength={VERIFICATION_CODE_LENGTH}
+                      editable={verifyStage !== 'verifying'}
+                      autoFocus
+                      returnKeyType="done"
+                      onSubmitEditing={() => { void handleSubmitVerificationCode(); }}
+                    />
+                    {verifyError ? <Text style={styles.errorText}>{verifyError}</Text> : null}
+                    <View style={styles.actionRow}>
+                      <PillButton
+                        variant="ghost"
+                        label={verifyStage === 'verifying' ? 'Checking…' : 'Verify email'}
+                        onPress={() => { void handleSubmitVerificationCode(); }}
+                        disabled={verifyStage === 'verifying' || !verifyCode.trim()}
+                        style={styles.actionFlex}
+                      />
+                      <TouchableOpacity
+                        onPress={() => { void handleSendVerificationCode(); }}
+                        hitSlop={8}
+                        disabled={verifyStage === 'verifying'}
+                        accessibilityRole="button"
+                        accessibilityLabel="Send a new code"
+                      >
+                        <Text style={styles.cancelText}>Send again</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                ) : (
+                  <>
+                    <Text style={styles.note}>
+                      This address isn’t verified yet. Verifying keeps account mail reaching you.
+                    </Text>
+                    {verifyError ? <Text style={styles.errorText}>{verifyError}</Text> : null}
+                    <View style={styles.actionRow}>
+                      <PillButton
+                        variant="ghost"
+                        label={verifyStage === 'sending' ? 'Sending…' : 'Send me a code'}
+                        onPress={() => { void handleSendVerificationCode(); }}
+                        disabled={verifyStage === 'sending' || !userEmail}
+                        style={styles.actionFlex}
+                      />
+                    </View>
+                  </>
+                )}
+              </>
             ) : null}
 
             {/* ── Password ── folded away by default (founder 2026-07-24):

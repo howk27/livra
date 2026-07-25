@@ -48,6 +48,7 @@ import { useMarksStore } from '../../state/countersSlice';
 import { useGoalsStore } from '../../state/goalsSlice';
 import { getSupabaseClient } from '../../lib/supabase';
 import { isApplePrivateRelayEmail } from '../../lib/auth/accountCredentials';
+import { needsEmailVerification } from '../../lib/auth/emailVerification';
 import { clearSyncCursors } from '../../lib/sync/syncCursors';
 import { resetDatabaseState } from '../../lib/db';
 import { sqliteClearAllGoalsAndLinks } from '../../lib/db/goalsSqlite';
@@ -167,10 +168,10 @@ export default function SettingsScreen() {
 
   const [profileImageUri, setProfileImageUri] = useState<string | null>(null);
   const [profileDisplayName, setProfileDisplayName] = useState<string | null>(null);
+  const [emailVerifiedAt, setEmailVerifiedAt] = useState<string | null>(null);
   const [persistedSyncDiag, setPersistedSyncDiag] = useState<SyncDiagSnapshotV1 | null>(null);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
-  const [resendingVerification, setResendingVerification] = useState(false);
   const [pace, setPaceState] = useState<PaceLevel>('steady');
 
   useEffect(() => {
@@ -200,7 +201,10 @@ export default function SettingsScreen() {
     }
   }, [pace, showSuccess, showError]);
 
-  const emailVerified = !!user?.email_confirmed_at;
+  // The app's own proof, not auth.users.email_confirmed_at: this project
+  // auto-confirms at signup, so that column is stamped for everyone and can
+  // never drive a banner (verified live 2026-07-25).
+  const needsVerification = needsEmailVerification(user, emailVerifiedAt);
   const onPrivateRelay = isApplePrivateRelayEmail(user?.email);
 
   const refreshRotation = useRef(new Animated.Value(0)).current;
@@ -229,12 +233,13 @@ export default function SettingsScreen() {
       try {
         const { data } = await supabase
           .from('profiles')
-          .select('display_name')
+          .select('display_name, email_verified_at')
           .eq('id', user.id)
           .maybeSingle();
         if (cancelled) return;
         setProfileDisplayName(data?.display_name?.trim() || null);
-      } catch { if (!cancelled) setProfileDisplayName(null); }
+        setEmailVerifiedAt(data?.email_verified_at ?? null);
+      } catch { if (!cancelled) { setProfileDisplayName(null); setEmailVerifiedAt(null); } }
     })();
     return () => { cancelled = true; };
   }, [user?.id, supabase]);
@@ -395,20 +400,6 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleResendVerification = async () => {
-    if (!user?.email || resendingVerification) return;
-    setResendingVerification(true);
-    try {
-      const { error } = await supabase.auth.resend({ type: 'signup', email: user.email });
-      if (error) throw error;
-      showSuccess('Verification email sent. Check your inbox.');
-    } catch (e: any) {
-      showError(e?.message || 'Could not send verification email.');
-    } finally {
-      setResendingVerification(false);
-    }
-  };
-
   const handleExportMarks = async () => {
     if (!canExportData(isProUnlocked)) {
       const seePlus = await confirm({
@@ -518,19 +509,24 @@ export default function SettingsScreen() {
           </View>
         </TouchableOpacity>
 
-        {/* ── Email-not-verified nudge ── */}
-        {user && !emailVerified ? (
-          <View style={[styles.verifyBanner, { backgroundColor: c.surface, borderColor: c.borderLight }]}>
+        {/* ── Email-not-verified nudge ──
+            Reads the app's OWN signal (profiles.email_verified_at), because
+            auth.users.email_confirmed_at is stamped at signup by autoconfirm and
+            says nothing. The verify flow itself lives once, in Edit Profile. */}
+        {needsVerification ? (
+          <TouchableOpacity
+            style={[styles.verifyBanner, { backgroundColor: c.surface, borderColor: c.borderLight }]}
+            onPress={() => router.push('/settings/profile' as any)}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Your email is not verified yet. Tap to verify it in Edit Profile."
+          >
             <Envelope size={16} color={c.inkMid} weight="regular" />
             <Text style={[styles.verifyText, { color: c.inkMid }]}>
               Your email isn’t verified yet.
             </Text>
-            <TouchableOpacity onPress={handleResendVerification} disabled={resendingVerification} hitSlop={8}>
-              <Text style={[styles.verifyAction, { color: c.accent }]}>
-                {resendingVerification ? 'Sending…' : 'Resend'}
-              </Text>
-            </TouchableOpacity>
-          </View>
+            <Text style={[styles.verifyAction, { color: c.accent }]}>Verify</Text>
+          </TouchableOpacity>
         ) : onPrivateRelay && !relayNoticeDismissed ? (
           /* ── Apple private-relay nudge: Apple hides the real address ──
              Purely informational — we tell them, we don't enforce it. The whole
