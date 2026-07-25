@@ -48,17 +48,6 @@ export function previousDayGreetingDefaultId(todayStr: string): string | undefin
   return pickTemplate('greetingDefault', 'default', null, dayHashRng(yesterday))?.id;
 }
 
-/**
- * QC2-F: the rest-line counterpart of previousDayGreetingDefaultId. Seeded per
- * mark AND per day, so two done marks need not share a line, the line is stable
- * across re-renders within a day, and yesterday's base pick is excluded — the
- * same stateless anti-repeat the greeting uses.
- */
-export function previousDayRestLineId(todayStr: string, markId: string): string | undefined {
-  const yesterday = yyyyMmDd(addDays(parseISO(todayStr), -1));
-  return pickTemplate('rest', 'doneForWeek', null, dayHashRng(`${yesterday}:${markId}`))?.id;
-}
-
 export type SelectOptions = {
   /** Injectable randomness (postLog gate + rotation) for deterministic tests. */
   rng?: () => number;
@@ -76,12 +65,10 @@ export type SelectOptions = {
   /** QC2-F: this log landed on a mark that was ALREADY done for the week (the
    *  bonus log). Caller-computed, same reason as closesWeekForMark. */
   bonusAfterWeekDone?: boolean;
-  /** QC2-F: the restLine surface speaks only over a doneForWeek mark. The caller
-   *  (focus.tsx showRestLine) owns the markWeeklyState check; this flag carries it. */
-  markDoneForWeek?: boolean;
-  /** spec §2 (Task 4): the milestone THIS log crossed, already filtered for
-   *  once-ever by the caller (state/voiceSlice checks hasFired) — postLogVoice
-   *  stays store-free and just threads whatever it was given. */
+  /** spec §2 (Task 4): the milestone this log EARNED, already resolved against
+   *  the mark's fired ids by the caller (state/voiceSlice feeds identitySlice's
+   *  firedFor into milestoneForLog) — postLogVoice stays store-free and just
+   *  threads whatever it was given. */
   identityMilestone?: IdentityMilestone | null;
   /** Task 4: the logged mark's own name — MomentContext is goal-scoped, so the
    *  identity/account-first picks (mark- or account-scoped) need it separately. */
@@ -329,15 +316,6 @@ function selectPostLog(ctx: MomentContext, opts: SelectOptions): Moment | null {
   return makeMoment('postLog', pickType, pick.variant, slots, opts, overrideTemplate);
 }
 
-/** QC2-F: the rest line under a doneForWeek mark on Focus. The caller already
- *  computed markWeeklyState (the showRestLine predicate); the engine owns the
- *  words. VOICE ONLY — the Log one more affordance next to it is untouched and
- *  logging is never blocked. Silence when the mark is not done for the week. */
-function selectRestLine(_ctx: MomentContext, opts: SelectOptions): Moment | null {
-  if (opts.markDoneForWeek !== true) return null;
-  return makeMoment('restLine', 'rest', 'doneForWeek', {}, opts);
-}
-
 /** Empty states (M4, PL-5): static invitations keyed per surface; emptiness itself
  *  is the true thing to speak about. Two-line surfaces (goals) resolve to their
  *  `.body` line here — screens that need the title use getEmptyStateCopy. */
@@ -373,8 +351,6 @@ export function selectMoment(
       return selectPostLog(ctx, opts);
     case 'emptyState':
       return selectEmptyState(ctx, opts);
-    case 'restLine':
-      return selectRestLine(ctx, opts);
     default:
       return null;
   }

@@ -123,7 +123,7 @@ describe('registry copy rules (walked, same discipline as copyDashRule)', () => 
   });
 
   it('every rest line frames rest as part of the plan, never as scolding (QC2-F)', () => {
-    const restLines = [...MOMENT_CONTENT.rest.doneForWeek!, ...MOMENT_CONTENT.rest.bonusLog!];
+    const restLines = [...MOMENT_CONTENT.rest.bonusLog!];
     for (const line of restLines) {
       // Rest is named, positively: part of the training, not absence of it.
       expect(line).toMatch(/\b(rest|recovery)\b/i);

@@ -3,7 +3,6 @@ import {
   dayHashRng,
   POSTLOG_SPEAK_RATE,
   previousDayGreetingDefaultId,
-  previousDayRestLineId,
   selectMoment,
 } from '../../../lib/moments/select';
 import type { GoalMomentContext, MomentContext } from '../../../lib/moments/types';
@@ -229,59 +228,6 @@ describe('postLog variable-ratio gate + contextual picks', () => {
   it('plain variety otherwise', () => {
     const m = selectMoment('postLog', loggedCtx({ logsToday: 3 }), { rng: speak, goalId: 'g1' });
     expect(m!.id).toContain('plain');
-  });
-});
-
-describe('restLine surface (QC2-F, the done-for-week rest register)', () => {
-  it('speaks a rest doneForWeek line when the mark is done for the week', () => {
-    const m = selectMoment('restLine', emptyCtx, { rng: speak, markDoneForWeek: true })!;
-    expect(m).not.toBeNull();
-    expect(m.type).toBe('rest');
-    expect(m.surface).toBe('restLine');
-    expect(m.id).toContain('rest.doneForWeek');
-    expect(m.text.length).toBeGreaterThan(0);
-  });
-
-  it('stays silent when the caller does not attest doneForWeek (voice only, never assumed)', () => {
-    expect(selectMoment('restLine', emptyCtx, { rng: speak })).toBeNull();
-    expect(selectMoment('restLine', emptyCtx, { rng: speak, markDoneForWeek: false })).toBeNull();
-  });
-
-  it('rotates: never repeats the caller-held last rest id back-to-back', () => {
-    const first = selectMoment('restLine', emptyCtx, { rng: speak, markDoneForWeek: true })!;
-    for (let i = 0; i < 20; i++) {
-      const next = selectMoment('restLine', emptyCtx, {
-        rng: Math.random,
-        markDoneForWeek: true,
-        lastMomentIds: { rest: first.id },
-      })!;
-      expect(next.id).not.toBe(first.id);
-    }
-  });
-
-  describe('stateless daily rotation (the Focus wiring contract)', () => {
-    // The exact call focus.tsx restLineTextFor makes for a given day + mark.
-    const shownOn = (day: string, markId: string) => {
-      const lastId = previousDayRestLineId(day, markId);
-      return selectMoment('restLine', emptyCtx, {
-        rng: dayHashRng(`${day}:${markId}`),
-        markDoneForWeek: true,
-        lastMomentIds: lastId ? { rest: lastId } : undefined,
-      })!;
-    };
-
-    it('is stable across re-renders within the same day', () => {
-      expect(shownOn('2026-07-14', 'm1').id).toBe(shownOn('2026-07-14', 'm1').id);
-    });
-
-    it("never repeats the previous day's base pick for the same mark, across a month", () => {
-      for (let d = 2; d <= 28; d++) {
-        const day = `2026-07-${String(d).padStart(2, '0')}`;
-        const yesterdayBase = previousDayRestLineId(day, 'm1');
-        expect(yesterdayBase).toBeDefined();
-        expect(shownOn(day, 'm1').id).not.toBe(yesterdayBase);
-      }
-    });
   });
 });
 

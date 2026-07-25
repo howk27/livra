@@ -7,8 +7,7 @@ export type Surface =
   | 'momentumBanner'
   | 'goalDetail'
   | 'postLog'
-  | 'emptyState'
-  | 'restLine';
+  | 'emptyState';
 
 /** The six spec moments (M1–M6, docs/superpowers/specs/2026-07-14-psychology-layer-design.md §3)
  *  plus the rest register (QC2-F, founder device note #6). */
