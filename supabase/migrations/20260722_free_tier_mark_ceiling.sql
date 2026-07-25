@@ -1,8 +1,12 @@
 -- Free-tier mark caps (2026-07-22) — per-goal 4 AND account-wide ceiling 6
--- STATUS: NOT YET APPLIED — the founder runs this in the Supabase SQL editor.
---   No agent has access to the live database. Until it is applied, the client
---   (lib/gating.ts) is STRICTER than the server, which is the safe direction:
---   the server still runs the June policy "Free tier: max 3 marks per goal".
+-- APPLIED — the founder ran this by hand in the Supabase SQL editor (2026-07-22),
+--   and it was re-verified live on 2026-07-25 via the Supabase MCP: public.marks
+--   carries EXACTLY ONE restrictive policy, "Free tier: max 4 marks per goal and
+--   6 total", whose check reads (deleted_at IS NOT NULL) OR livra_is_pro(auth.uid())
+--   OR ((goal_id IS NULL OR livra_count_other_marks_for_goal(...) < 4) AND
+--   livra_count_other_active_marks(...) < 6). The June "max 3 marks per goal"
+--   policy is GONE, and public.goals still carries "Free tier: max 2 active goals".
+--   Server and lib/gating.ts now agree; neither is the stricter one.
 --
 -- FOUNDER DECISION (2026-07-22 product intake), replacing every earlier cap:
 --   • active goals            2   (unchanged — public.goals policy, untouched here)
