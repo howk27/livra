@@ -226,25 +226,13 @@ export default function FocusScreen() {
   // ── Next Move session overrides (spec §1) ─────────────────────────────────
   // A tap on a chip seats that mark as the hero without touching sort_index;
   // a tap on a queued row hoists that whole goal into the spotlight seat. Both
-  // are pure VIEW state — the user's own drag order is never mutated — and
-  // both self-clear the instant their target has no work left today, so a
-  // stale override can never pin a done goal/mark open.
+  // are pure VIEW state — the user's own drag order is never mutated. Neither
+  // needs a cleanup effect: overrides whose target has no work left today are
+  // ignored at read time (pickNextMove's heroable guard; the
+  // effectiveSpotlightGoalId memo), and the spotlight-moving handlers below
+  // clear the hero override on every hand-off.
   const [heroOverride, setHeroOverride] = useState<{ goalId: string; markId: string } | null>(null);
   const [spotlightOverride, setSpotlightOverride] = useState<string | null>(null);
-
-  useEffect(() => {
-    setHeroOverride((prev) => {
-      if (!prev) return prev;
-      const mark = activeCounters.find((m) => m.id === prev.markId);
-      if (!mark) return null;
-      return isMarkDoneToday(mark, todayCountsMap.get(mark.id) ?? 0) ? null : prev;
-    });
-    setSpotlightOverride((prev) => {
-      if (!prev) return prev;
-      const marks = marksByGoalId.get(prev) ?? [];
-      return isGoalDoneToday(marks, weeklyCountsMap, todayCountsMap) ? null : prev;
-    });
-  }, [todayCountsMap, activeCounters, marksByGoalId, weeklyCountsMap]);
 
   // Effective spotlight: the override wins only while its goal still has work
   // today; otherwise the computed queue order (drag order) decides.
@@ -255,13 +243,6 @@ export default function FocusScreen() {
     }
     return spotlightGoalId;
   }, [spotlightOverride, spotlightGoalId, marksByGoalId, weeklyCountsMap, todayCountsMap]);
-
-  // Spec §1: the hero override also clears when the spotlight moves off its
-  // goal — otherwise a days-old chip pick would silently reactivate when the
-  // spotlight later returns to that goal.
-  useEffect(() => {
-    setHeroOverride((prev) => (prev && prev.goalId !== effectiveSpotlightGoalId ? null : prev));
-  }, [effectiveSpotlightGoalId]);
 
   // Comeback (spec §3): 2+ full quiet days → the Next Move card presents the
   // easiest due mark with a shrunk ask instead of the normal queue pick. The
@@ -641,7 +622,12 @@ export default function FocusScreen() {
               // Spotlight queue (spec §1): ONE goal renders expanded as the
               // Next Move card at a time — the effective spotlight (computed
               // queue order, or a tapped queued row's override while it still
-              // has work). Every other goal with work left today renders as a
+              // has work). Stale overrides need no cleanup effect: pickNextMove
+              // ignores a hero override with no work left today, the
+              // effectiveSpotlightGoalId memo ignores a done spotlight
+              // override, and every handler that MOVES the spotlight clears
+              // the hero override (spec §1: it clears when the mark is done
+              // or the spotlight changes). Every other goal with work left today renders as a
               // compact queued row — title quiet (inkMid), today's due checks
               // as small circles (the sanctioned Focus progress voice: checks,
               // never fractions or bars), down-caret inviting expansion. A tap
@@ -657,7 +643,10 @@ export default function FocusScreen() {
                   <TouchableOpacity
                     key={goal.id}
                     style={[styles.goalCard, styles.goalCardQueued, { backgroundColor: c.surface }]}
-                    onPress={() => setSpotlightOverride(goal.id)}
+                    onPress={() => {
+                      setSpotlightOverride(goal.id);
+                      setHeroOverride(null);
+                    }}
                     activeOpacity={0.7}
                     accessibilityRole="button"
                     accessibilityLabel={`${goal.title}, up next, ${remainingToday} mark${remainingToday !== 1 ? 's' : ''} left today. Tap to expand.`}
@@ -768,7 +757,10 @@ export default function FocusScreen() {
                   {spotlightOverride === goal.id && (
                     <TouchableOpacity
                       style={styles.expanderRow}
-                      onPress={() => setSpotlightOverride(null)}
+                      onPress={() => {
+                        setSpotlightOverride(null);
+                        setHeroOverride(null);
+                      }}
                       activeOpacity={0.7}
                       accessibilityRole="button"
                       accessibilityLabel={`Collapse ${goal.title}`}

@@ -14,7 +14,7 @@
 // useMotion() gateway whenever the seated mark changes — same gateway
 // MarkRow's day-complete celebration pulse rides, so Reduce Motion collapses
 // it to an instant swap rather than inventing a second animation path.
-import React, { useEffect } from 'react';
+import React, { createElement, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle } from 'react-native-reanimated';
 import { CheckCircle, CircleIcon as Circle } from 'phosphor-react-native';
@@ -58,7 +58,7 @@ export function NextMoveCard({
 
   // The seated mark's own icon/accent — same resolution order the goal-detail
   // medallion and Focus rows use (resolveMarkIcon → category fallback).
-  const HeroIcon = resolveMarkIcon(hero) ?? CATEGORY_MAP[resolveMarkCategory(hero)]?.Icon ?? CATEGORY_MAP.custom.Icon;
+  const heroIcon = resolveMarkIcon(hero) ?? CATEGORY_MAP[resolveMarkCategory(hero)]?.Icon ?? CATEGORY_MAP.custom.Icon;
   const heroAccent = resolveMarkAccent(hero);
 
   // Hero-swap entrance: fade the hero content in whenever the seated mark's
@@ -90,7 +90,7 @@ export function NextMoveCard({
       {/* Hero row */}
       <Animated.View style={[styles.heroRow, heroAnimatedStyle]}>
         <View style={[styles.medallion, { backgroundColor: c.forest }]}>
-          <HeroIcon size={20} color={heroAccent} weight="duotone" />
+          {createElement(heroIcon, { size: 20, color: heroAccent, weight: 'duotone' })}
         </View>
         <View style={styles.heroText}>
           <Text style={[styles.heroName, { color: c.inkDark }]}>{hero.name}</Text>
