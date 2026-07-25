@@ -31,6 +31,10 @@ export type MarkDefinition = {
   frequencyKind: 'variable' | 'fixed' | 'abstinence';
   /** Hero-step time gating (spec 2026-07-11). Absent = anytime. */
   timeAffinity?: 'daytime' | 'evening';
+  /** Earned-identity line spoken at the identity milestone (spec §2). Optional. */
+  identityLine?: string;
+  /** Shrunk comeback ask (spec §3), e.g. 'A walk counts today.' Optional. */
+  comebackAsk?: string;
 };
 
 export type MarkCategory = {
