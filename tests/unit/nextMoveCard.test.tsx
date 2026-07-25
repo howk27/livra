@@ -2,6 +2,7 @@
 import React from 'react';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import { StyleSheet } from 'react-native';
 import { render, fireEvent } from '@testing-library/react-native';
 
 // Mirror the reanimated mock used by tests/unit/markRow.test.tsx /
@@ -138,6 +139,29 @@ describe('NextMoveCard — up-next chips', () => {
   it('renders no +N chip when overflowCount is 0', () => {
     const { queryByText } = render(<NextMoveCard {...baseProps} chips={chips} overflowCount={0} />);
     expect(queryByText(/^\+/)).toBeNull();
+  });
+
+  it('recedes on a comeback but stays tappable (spec §3)', () => {
+    const onChipPress = jest.fn();
+    const { getByText, getByTestId } = render(
+      <NextMoveCard
+        {...baseProps}
+        chips={chips}
+        comeback={{ ask: 'A walk counts today.' }}
+        onChipPress={onChipPress}
+      />,
+    );
+    const flat = StyleSheet.flatten(getByTestId('next-move-chip-strip').props.style);
+    expect(flat.opacity).toBeLessThan(1);
+    // Dimmed is not disabled — the other marks are still one tap away.
+    fireEvent.press(getByText('Stretch'));
+    expect(onChipPress).toHaveBeenCalledWith('stretch');
+  });
+
+  it('is at full strength when there is no comeback', () => {
+    const { getByTestId } = render(<NextMoveCard {...baseProps} chips={chips} />);
+    const flat = StyleSheet.flatten(getByTestId('next-move-chip-strip').props.style);
+    expect(flat.opacity ?? 1).toBe(1);
   });
 });
 

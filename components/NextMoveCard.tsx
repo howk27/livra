@@ -108,9 +108,20 @@ export function NextMoveCard({
         </TouchableOpacity>
       </Animated.View>
 
-      {/* Chip strip: due-today marks excluding the hero */}
+      {/* Chip strip: due-today marks excluding the hero. On a comeback it stays
+          visible and tappable but recedes (spec §3) — the shrunk ask is the
+          only thing being asked for today, and the rest of the day should not
+          argue with it. Held well above a wash so the 11px labels stay
+          readable; the strip is quieter, not disabled. */}
       {showChipStrip && (
-        <View style={[styles.chipStrip, { borderTopColor: c.borderLight }]}>
+        <View
+          testID="next-move-chip-strip"
+          style={[
+            styles.chipStrip,
+            { borderTopColor: c.borderLight },
+            comeback ? styles.chipStripComeback : null,
+          ]}
+        >
           <Text style={[styles.upNext, { color: c.inkMid }]}>up next</Text>
           {chips.map((chip) => (
             <TouchableOpacity
@@ -207,6 +218,9 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
     marginTop: spacing.xs,
     borderTopWidth: 1,
+  },
+  chipStripComeback: {
+    opacity: 0.7,
   },
   upNext: {
     fontFamily: fonts.sans,

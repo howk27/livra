@@ -106,8 +106,7 @@ describe('pickSpotlightGoalId', () => {
 });
 
 describe('pickNextMove', () => {
-  const m = (id: string): QueueMark => ({ id, dailyTarget: 1, weekly_target: 5, frequency_kind: 'variable' });
-  const counts = (o: Record<string, number>) => new Map(Object.entries(o));
+  const m = (id: string) => mark(id, { weekly_target: 5 });
   const marks = [m('a'), m('b'), m('c')];
   const dueAll = counts({ a: 0, b: 0, c: 0 });
 
@@ -134,9 +133,7 @@ describe('pickNextMove', () => {
 });
 
 describe('buildNextMoveChips — the up-next strip under the hero', () => {
-  const named = (id: string): QueueMark & { name: string } =>
-    ({ id, name: `Mark ${id}`, dailyTarget: 1, weekly_target: 5, frequency_kind: 'variable' });
-  const counts = (o: Record<string, number>) => new Map(Object.entries(o));
+  const named = (id: string) => ({ ...mark(id, { weekly_target: 5 }), name: `Mark ${id}` });
 
   it('excludes the hero — the card already offers that move', () => {
     const { chips } = buildNextMoveChips([named('a'), named('b')], { id: 'a' }, counts({}));
