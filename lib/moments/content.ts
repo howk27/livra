@@ -155,7 +155,7 @@ export const MOMENT_CONTENT: Record<MomentType, Record<string, readonly string[]
   // ALREADY done for the week: they chose to move, so honor it and remind
   // gently. Rest is framed as PART of the training, never as absence of it.
   // Mentor register throughout: no guilt, no scolding, nothing playful. (The
-  // doneForWeek pool that rode the Focus rest line retired with that surface —
+  // doneForWeek pool that rode the Focus rest line retired with that surface:
   // M8 replaced the goal mark lists with the Next Move card.)
   rest: {
     bonusLog: [
