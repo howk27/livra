@@ -73,11 +73,16 @@ function accountIncrements(events: MarkEvent[]): MarkEvent[] {
  * Account age = earliest event date, no profile dependency; the whole
  * calculation stays inside the first-week window (earliest log date within 7
  * days of today).
+ *
+ * `closesDayNow` is "this log is the one that finished the day", not merely
+ * "the day is finished" — the caller owns that distinction (QC2-F's bonus-log
+ * rule, applied per day), because a day-one bonus log would otherwise say
+ * "Day one, closed" a second time.
  */
 export function computeAccountFirstVariant(
   events: MarkEvent[],
   todayStr: string,
-  allDoneForDay: boolean,
+  closesDayNow: boolean,
   endsComebackGapFlag: boolean,
 ): AccountFirstVariant {
   if (endsComebackGapFlag) return null;
@@ -92,8 +97,10 @@ export function computeAccountFirstVariant(
 
   if (incs.length === 1) return 'firstEver';
 
+  // isFirstDayWithAnyLog already pins the account to day one (the only log date
+  // there is IS today), which is why no separate age clause is needed here.
   const isFirstDayWithAnyLog = dates.length === 1 && dates[0] === todayStr;
-  if (allDoneForDay && accountAgeDays <= 1 && isFirstDayWithAnyLog) return 'firstDayClosed';
+  if (closesDayNow && isFirstDayWithAnyLog) return 'firstDayClosed';
 
   const todayLogCount = incs.filter((e) => e.occurred_local_date === todayStr).length;
   const isFirstLogToday = todayLogCount === 1;
@@ -170,11 +177,19 @@ export function evaluatePostLogVoice(inputs: PostLogVoiceInputs): Moment | null 
     accountIncrements(inputs.events).filter((e) => e.occurred_local_date === inputs.todayStr)
       .length === 1;
 
+  // The day is closed when every due mark has a log; it CLOSES on the log that
+  // filled the last of them. If this mark already had a log today, everything
+  // else was done before this one landed — a bonus, not the closing move.
+  const markLogsToday = accountIncrements(inputs.events).filter(
+    (e) => e.mark_id === mark.id && e.occurred_local_date === inputs.todayStr,
+  ).length;
+  const closesDayNow = ctx.allDoneForDay && markLogsToday === 1;
+
   // spec §2 (Task 4): account-wide first-week fuel, suppressed by a comeback.
   const accountFirstVariant = computeAccountFirstVariant(
     inputs.events,
     inputs.todayStr,
-    ctx.allDoneForDay,
+    closesDayNow,
     endsComebackGapFlag,
   );
 

@@ -320,6 +320,40 @@ describe('evaluatePostLogVoice — Task 4: comeback / identity / account-first r
     expect(m!.id.startsWith('postLog.firstEver.')).toBe(true);
   });
 
+  describe('firstDayClosed — the log that finishes day one, and only that log', () => {
+    // Day one with two due marks: the account's first log lands on m1
+    // (firstEver), and the log that closes the day is m2's first.
+    const twoMarks = [makeMark(), makeMark({ id: 'm2', name: 'Stretch' })];
+    const firstLog = makeEvent({ id: 'e1' });
+    const closingLog = makeEvent({ id: 'e2', mark_id: 'm2' });
+
+    it('fires on the log that fills the last due mark', () => {
+      const m = evaluatePostLogVoice(
+        makeInputs({
+          markId: 'm2',
+          marks: twoMarks,
+          events: [firstLog, closingLog],
+          rng: silent,
+        }),
+      );
+      expect(m).not.toBeNull();
+      expect(m!.id.startsWith('postLog.firstDayClosed.')).toBe(true);
+    });
+
+    it('does NOT repeat on a day-one bonus log', () => {
+      // Same closed day, one more log on m2: nothing was closed by it.
+      const m = evaluatePostLogVoice(
+        makeInputs({
+          markId: 'm2',
+          marks: twoMarks,
+          events: [firstLog, closingLog, makeEvent({ id: 'e3', mark_id: 'm2' })],
+          rng: silent,
+        }),
+      );
+      expect(m?.id ?? '').not.toContain('firstDayClosed');
+    });
+  });
+
   it('dayTwoReturn fires when yesterday was the only prior log date, within the first week', () => {
     const m = evaluatePostLogVoice(
       makeInputs({
