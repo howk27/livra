@@ -65,6 +65,14 @@ export async function migrateMarkNotesFromAsyncStorage(notesStorageKey: string):
   });
 }
 
+/** Hard-deletes every local mark note. Sign-out / account-switch only — see
+ *  sqliteClearAllGoalsAndLinks for why this is a wipe and not a tombstone. */
+export async function sqliteClearAllMarkNotes(): Promise<void> {
+  if (!markNotesSqliteSupported()) return;
+  const db = await getMarkNotesDb();
+  await db.execAsync('DELETE FROM mark_notes;');
+}
+
 export async function loadAllMarkNotes(): Promise<MarkNote[]> {
   const db = await getMarkNotesDb();
   const rows = await db.getAllAsync<MarkNote>(

@@ -342,6 +342,21 @@ export const useAuth = () => {
     } catch (e) {
       logger.error('[Auth] resetOnboardingState after signOut failed:', e);
     }
+    // The session is gone but the account's data is not: marks, events, goals,
+    // links, notes, XP, momentum records and identity memory all survive a
+    // sign-out. Reads are user-scoped so nothing renders wrong, but the data sits
+    // on the device for whoever signs in next — a privacy leak on a shared or
+    // sold phone. Runs only after the session is actually cleared (a failed
+    // signOut throws above), and never throws itself.
+    try {
+      const { purgeLocalUserData } = await import('../lib/db/purgeLocalUserData');
+      const { failures } = await purgeLocalUserData();
+      if (failures.length > 0) {
+        logger.error('[Auth] local data purge incomplete after signOut:', failures);
+      }
+    } catch (e) {
+      logger.error('[Auth] local data purge after signOut failed:', e);
+    }
   }, [supabase]);
 
   return {

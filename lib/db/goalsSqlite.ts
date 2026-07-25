@@ -120,6 +120,20 @@ type GoalRow = {
  * `target_date` is deliberately NOT persisted — deprecated in favour of
  * deadline_date (types/goal.ts) and absent from the server schema.
  */
+/**
+ * HARD-deletes every local goal and link row. Sign-out / account-switch only.
+ *
+ * Deliberately not a tombstone: a tombstone exists so a DELETION can travel to
+ * the server, and this is not a deletion — the rows still belong to the account
+ * that just signed out and must stay untouched server-side. Nothing here may
+ * ever reach a push.
+ */
+export async function sqliteClearAllGoalsAndLinks(): Promise<void> {
+  if (!goalsSqliteSupported()) return;
+  const db = await getGoalsDb();
+  await db.execAsync('DELETE FROM goal_mark_links; DELETE FROM goals;');
+}
+
 export function rowToGoal(row: GoalRow): Goal {
   let milestones: string[] | undefined;
   if (row.milestones_fired) {

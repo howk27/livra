@@ -67,6 +67,14 @@ export async function migrateGoalNotesFromAsyncStorage(notesStorageKey: string):
   });
 }
 
+/** Hard-deletes every local goal note. Sign-out / account-switch only — see
+ *  sqliteClearAllGoalsAndLinks for why this is a wipe and not a tombstone. */
+export async function sqliteClearAllGoalNotes(): Promise<void> {
+  if (!goalNotesSqliteSupported()) return;
+  const db = await getGoalNotesDb();
+  await db.execAsync('DELETE FROM goal_notes;');
+}
+
 export async function loadAllGoalNotes(): Promise<GoalNote[]> {
   const db = await getGoalNotesDb();
   const rows = await db.getAllAsync<GoalNote>(
