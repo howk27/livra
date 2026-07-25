@@ -95,6 +95,10 @@ export type SelectOptions = {
   /** spec §2 (Task 4): which account-wide first-week milestone this log is,
    *  computed by the caller (evaluatePostLogVoice) from account-wide events. */
   accountFirstVariant?: 'firstEver' | 'firstDayClosed' | 'dayTwoReturn' | 'weekOne' | null;
+  /** spec §1/§3 (Task 7): a comeback gap closed TODAY — the greeting skips the
+   *  whyResurface (slipping-goal) branch for the day the gap ends, so a fresh
+   *  comeback log is never scolded in the same breath it's welcomed back. */
+  suppressSlipping?: boolean;
 };
 
 function makeMoment(
@@ -164,7 +168,7 @@ function goalSlots(g: GoalMomentContext, ctx: MomentContext): TemplateSlots {
 
 /** Greeting: slipping-direct > first-week (younger goal wins) > celebration > default rotation (M6). */
 function selectGreeting(ctx: MomentContext, opts: SelectOptions): Moment | null {
-  const slipping = slippingWithWhy(ctx)[0];
+  const slipping = opts.suppressSlipping ? undefined : slippingWithWhy(ctx)[0];
   if (slipping) {
     return makeMoment('greeting', 'whyResurface', 'direct', goalSlots(slipping, ctx), opts);
   }
