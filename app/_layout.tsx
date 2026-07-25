@@ -25,6 +25,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as Linking from 'expo-linking';
 import { initDatabase, cleanupInvalidBadges } from '../lib/db';
 import { useUIStore } from '../state/uiSlice';
+import { useIdentityStore } from '../state/identitySlice';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { useAuth } from '../hooks/useAuth';
 import { useSync } from '../hooks/useSync';
@@ -150,6 +151,7 @@ export default function RootLayout() {
   }, []);
 
   const loadUIState = useUIStore((state) => state.loadUIState);
+  const loadIdentityState = useIdentityStore((state) => state.loadIdentityState);
   const { user, initialized } = useAuth();
   const { sync } = useSync();
   const router = useRouter();
@@ -458,8 +460,13 @@ export default function RootLayout() {
       loadUIState(user?.id).catch((error) => {
         logger.error('Error loading UI state:', error);
       });
+      // spec §2 (Task 4): once-ever identity milestone memory, same bootstrap
+      // timing as UI state — device-level, no userId dependency.
+      loadIdentityState().catch((error) => {
+        logger.error('Error loading identity state:', error);
+      });
     }
-  }, [initialized, user?.id, loadUIState]);
+  }, [initialized, user?.id, loadUIState, loadIdentityState]);
 
   // Silently re-verify subscription receipt once per 24h on launch.
   // Only runs when the user is known to be pro — skips for free users.

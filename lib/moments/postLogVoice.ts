@@ -2,17 +2,24 @@
 // into the engine call — the same context recipe Focus's momentCtx uses
 // (weekly counts, due marks, lifetime counts), scoped to the mark just logged.
 // No store imports, no I/O: callers (state/voiceSlice) pass live data in.
+import { addDays, daysBetween, parseISO, yyyyMmDd } from '../date';
+import { endsComebackGap } from '../comeback';
 import {
   buildGoalLifetimeLogCounts,
   buildWeeklyCountsMap,
   markWeeklyState,
 } from '../features';
 import type { MomentumSnapshot } from '../goalMomentum';
+import type { IdentityMilestone } from '../identity';
+import { resolveLibraryMark } from '../markCategoryResolve';
 import { logger } from '../utils/logger';
 import type { Mark, MarkEvent } from '../../types';
 import { buildMomentContext, type MomentGoalInput } from './context';
 import { selectMoment, type SelectOptions } from './select';
 import type { Moment } from './types';
+
+/** spec §2 (Task 4): account-wide first-week variant, or null outside it. */
+export type AccountFirstVariant = 'firstEver' | 'firstDayClosed' | 'dayTwoReturn' | 'weekOne' | null;
 
 export type PostLogVoiceInputs = {
   /** The mark that was just (successfully) incremented. */
@@ -33,6 +40,10 @@ export type PostLogVoiceInputs = {
   lastMomentIds?: SelectOptions['lastMomentIds'];
   /** Injectable randomness for the 1-in-3 gate; defaults inside the selector. */
   rng?: () => number;
+  /** spec §2 (Task 4): the milestone THIS log crossed, already filtered for
+   *  once-ever by the caller (state/voiceSlice checks useIdentityStore's
+   *  hasFired before calling in) — this module stays store-free. */
+  identityMilestone?: IdentityMilestone | null;
 };
 
 /** markId → increment total for todayStr (same recipe as Focus's todayCountsMap). */
@@ -47,6 +58,57 @@ export function buildTodayCounts(
     counts[e.mark_id] = (counts[e.mark_id] ?? 0) + (e.amount ?? 1);
   }
   return counts;
+}
+
+/** Non-deleted increments only — the account-wide ledger the first-week
+ *  variants read from (Task 4, spec §2). */
+function accountIncrements(events: MarkEvent[]): MarkEvent[] {
+  return events.filter((e) => !e.deleted_at && e.event_type === 'increment');
+}
+
+/**
+ * spec §2 (Task 4): which account-wide first-week milestone this log
+ * represents, if any. `endsComebackGapFlag` forces this null — a comeback log
+ * is a normal check-in and outranks the first-week story entirely (spec §3).
+ * Account age = earliest event date, no profile dependency; the whole
+ * calculation stays inside the first-week window (earliest log date within 7
+ * days of today).
+ */
+export function computeAccountFirstVariant(
+  events: MarkEvent[],
+  todayStr: string,
+  allDoneForDay: boolean,
+  endsComebackGapFlag: boolean,
+): AccountFirstVariant {
+  if (endsComebackGapFlag) return null;
+
+  const incs = accountIncrements(events);
+  if (incs.length === 0) return null;
+
+  const dates = Array.from(new Set(incs.map((e) => e.occurred_local_date))).sort();
+  const earliestDate = dates[0]!;
+  const accountAgeDays = Math.max(0, daysBetween(todayStr, earliestDate));
+  if (accountAgeDays > 7) return null; // outside the first-week window
+
+  if (incs.length === 1) return 'firstEver';
+
+  const isFirstDayWithAnyLog = dates.length === 1 && dates[0] === todayStr;
+  if (allDoneForDay && accountAgeDays <= 1 && isFirstDayWithAnyLog) return 'firstDayClosed';
+
+  const todayLogCount = incs.filter((e) => e.occurred_local_date === todayStr).length;
+  const isFirstLogToday = todayLogCount === 1;
+  const priorDates = dates.filter((d) => d < todayStr);
+
+  if (isFirstLogToday && priorDates.length === 1) {
+    const yesterday = yyyyMmDd(addDays(parseISO(todayStr), -1));
+    if (priorDates[0] === yesterday) return 'dayTwoReturn';
+  }
+
+  if (isFirstLogToday && earliestDate === yyyyMmDd(addDays(parseISO(todayStr), -6))) {
+    return 'weekOne';
+  }
+
+  return null;
 }
 
 /**
@@ -98,12 +160,38 @@ export function evaluatePostLogVoice(inputs: PostLogVoiceInputs): Moment | null 
   // construction (=== target vs > target); logging itself is never blocked.
   const bonusAfterWeekDone = doneForWeek && weeklyCount > (mark.weekly_target ?? 3);
 
+  // spec §3 (Task 1/4): a comeback log is a normal check-in that outranks
+  // every other postLog pick, computed from the FULL ledger (stripped of
+  // today's own events by endsComebackGap itself).
+  const endsComebackGapFlag = endsComebackGap(inputs.events, inputs.todayStr);
+
+  // spec §2 (Task 4): account-wide first-week fuel, suppressed by a comeback.
+  const accountFirstVariant = computeAccountFirstVariant(
+    inputs.events,
+    inputs.todayStr,
+    ctx.allDoneForDay,
+    endsComebackGapFlag,
+  );
+
+  // spec §2/§5 (Task 4/5): a library identityLine REPLACES the pool template
+  // for the identity `claim` variant only — `fact` always speaks the pool.
+  const identityMilestone = inputs.identityMilestone ?? null;
+  const identityLibraryLine =
+    identityMilestone?.tier === 'identity'
+      ? resolveLibraryMark({ name: mark.name, emoji: mark.emoji })?.identityLine ?? null
+      : null;
+
   return selectMoment('postLog', ctx, {
     rng: inputs.rng,
     goalId: mark.goal_id ?? undefined,
     lastMomentIds: inputs.lastMomentIds,
     closesWeekForMark,
     bonusAfterWeekDone,
+    identityMilestone,
+    markName: mark.name,
+    identityLibraryLine,
+    endsComebackGap: endsComebackGapFlag,
+    accountFirstVariant,
   });
 }
 

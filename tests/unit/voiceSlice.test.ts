@@ -1,5 +1,5 @@
 // PL-4: voice slice — surface gating (analytics truth) + engine wiring from live stores.
-import { formatDate } from '../../lib/date';
+import { addDays, formatDate, parseISO, yyyyMmDd } from '../../lib/date';
 import { getAppDate } from '../../lib/appDate';
 import { maybeShowPostLogVoice, type PostLogVoiceEvaluator } from '../../lib/moments/postLogVoice';
 import { useVoiceStore } from '../../state/voiceSlice';
@@ -40,10 +40,28 @@ const eventToday: MarkEvent = {
   updated_at: new Date().toISOString(),
 } as MarkEvent;
 
+// Task 4: a lone lifetime event IS the account's very first-ever log, which
+// now bypasses the postLog gate entirely (accountFirstVariant 'firstEver').
+// A second event 2 days back keeps these generic gate tests generic: recent
+// enough to stay under the 3-day comeback threshold, but not "yesterday" or
+// "exactly 6 days back" so it does not accidentally read as dayTwoReturn/weekOne.
+const twoDaysAgo = yyyyMmDd(addDays(parseISO(todayStr), -2));
+const eventTwoDaysAgo: MarkEvent = {
+  id: 'e0',
+  user_id: 'u1',
+  mark_id: 'm1',
+  event_type: 'increment',
+  amount: 1,
+  occurred_at: `${twoDaysAgo}T10:00:00.000Z`,
+  occurred_local_date: twoDaysAgo,
+  created_at: `${twoDaysAgo}T10:00:00.000Z`,
+  updated_at: `${twoDaysAgo}T10:00:00.000Z`,
+} as MarkEvent;
+
 beforeEach(() => {
   useVoiceStore.setState({ line: null, surfaceCount: 0, lastMomentIds: {} });
   useMarksStore.setState({ marks: [mark] });
-  useEventsStore.setState({ events: [eventToday] });
+  useEventsStore.setState({ events: [eventToday, eventTwoDaysAgo] });
   useGoalsStore.setState({ goals: [] });
   useMomentumStore.setState({ snapshots: {}, longestRuns: {}, longestRunsHydrated: true });
 });

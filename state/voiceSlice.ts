@@ -4,11 +4,13 @@
 // register as surfaces and render whatever lands here.
 import { create } from 'zustand';
 import { currentWeekDates } from '../lib/features';
+import { milestoneForLog } from '../lib/identity';
 import { evaluatePostLogVoice } from '../lib/moments/postLogVoice';
 import type { Moment, MomentType } from '../lib/moments/types';
 import { useMarksStore } from './countersSlice';
 import { useEventsStore } from './eventsSlice';
 import { useGoalsStore } from './goalsSlice';
+import { useIdentityStore } from './identitySlice';
 import { effectivePersonalBest, useMomentumStore } from './momentumSlice';
 
 export type VoiceLineData = {
@@ -74,6 +76,15 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     const goals = useGoalsStore.getState().goals;
     const { snapshots, longestRuns } = useMomentumStore.getState();
 
+    // spec §2 (Task 4): derive the raw milestone, then filter it through the
+    // once-ever store. postLogVoice.ts stays store-free, so the check lives
+    // here, at the store-glue layer.
+    const rawMilestone = milestoneForLog(markId, events);
+    const identityMilestone =
+      rawMilestone && !useIdentityStore.getState().hasFired(markId, rawMilestone.id)
+        ? rawMilestone
+        : null;
+
     const moment = evaluatePostLogVoice({
       markId,
       todayStr,
@@ -87,11 +98,17 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
         goals.map((g) => [g.id, effectivePersonalBest(longestRuns[g.id], todayStr)]),
       ),
       lastMomentIds: get().lastMomentIds,
+      identityMilestone,
       rng,
     });
 
     if (!moment) return false;
     get().speak(moment);
+    if (moment.type === 'identity' && identityMilestone) {
+      // Fire-and-forget: recordFired never throws (memory already updated
+      // synchronously inside it), and voice must never block the log path.
+      void useIdentityStore.getState().recordFired(markId, identityMilestone.id);
+    }
     return true;
   },
 }));
