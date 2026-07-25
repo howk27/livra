@@ -117,12 +117,21 @@ beforeEach(() => {
 
 // Placeholders after the 2026-07-23 flatten: the change/add copy differs, and
 // the email rests as a greyed on-file value that taps to edit.
+//
+// 2026-07-24: the password block folds behind a disclosure row (founder: three
+// standing password fields made the screen read as "set a password to save
+// anything"), so every password helper opens it first.
+function openPasswordEditor(api: ReturnType<typeof render>) {
+  fireEvent.press(api.getByLabelText(/^(Change password|Set a password)$/));
+}
+
 function changePassword(
   api: ReturnType<typeof render>,
   current: string,
   next: string,
   confirm: string,
 ) {
+  openPasswordEditor(api);
   fireEvent.changeText(api.getByPlaceholderText('Current password'), current);
   fireEvent.changeText(api.getByPlaceholderText('New password'), next);
   fireEvent.changeText(api.getByPlaceholderText('Repeat new password'), confirm);
@@ -130,6 +139,7 @@ function changePassword(
 }
 
 function setPassword(api: ReturnType<typeof render>, next: string, confirm: string) {
+  openPasswordEditor(api);
   fireEvent.changeText(api.getByPlaceholderText('Password (at least 8 characters)'), next);
   fireEvent.changeText(api.getByPlaceholderText('Repeat password'), confirm);
   fireEvent.press(api.getByText('Set password'));
@@ -138,6 +148,15 @@ function setPassword(api: ReturnType<typeof render>, next: string, confirm: stri
 /** Reveal the email TextInput — it rests as a greyed on-file value until tapped. */
 function openEmailEditor(api: ReturnType<typeof render>) {
   fireEvent.press(api.getByLabelText(/Tap to edit/i));
+}
+
+/**
+ * Founder decision 2026-07-24: email is the recovery channel, so an account
+ * that HAS a password proves ownership before changing it. Apple-only accounts
+ * have none and are not asked.
+ */
+function confirmEmailPassword(api: ReturnType<typeof render>, password: string) {
+  fireEvent.changeText(api.getByPlaceholderText('Your password'), password);
 }
 
 describe('loading and signed-out states', () => {
@@ -228,7 +247,12 @@ describe('adding a password (Apple-only account)', () => {
     const api = render(<ProfileScreen />);
     setPassword(api, 'newpassword', 'newpassword');
 
-    await waitFor(() => expect(api.getByPlaceholderText('Current password')).toBeTruthy());
+    // The block folds itself away on success; re-opening it must now present
+    // the CHANGE form, because the account has a password from this point on.
+    await waitFor(() => expect(mockShowSuccess).toHaveBeenCalledWith('Your password is set.'));
+    expect(api.queryByPlaceholderText('Password (at least 8 characters)')).toBeNull();
+    openPasswordEditor(api);
+    expect(api.getByPlaceholderText('Current password')).toBeTruthy();
     expect(api.getByText('Change password')).toBeTruthy();
   });
 
@@ -276,6 +300,7 @@ describe('email change', () => {
     const api = render(<ProfileScreen />);
     openEmailEditor(api);
     fireEvent.changeText(api.getByPlaceholderText('you@example.com'), 'new@example.com');
+    confirmEmailPassword(api, 'oldpassword');
     fireEvent.press(api.getByText('Update email'));
 
     await waitFor(() =>
@@ -289,6 +314,7 @@ describe('email change', () => {
     const api = render(<ProfileScreen />);
     openEmailEditor(api);
     fireEvent.changeText(api.getByPlaceholderText('you@example.com'), 'new@example.com');
+    confirmEmailPassword(api, 'oldpassword');
     fireEvent.press(api.getByText('Update email'));
 
     await waitFor(() => expect(api.getByText(/Your email is now new@example.com/i)).toBeTruthy());
@@ -303,6 +329,7 @@ describe('email change', () => {
     const api = render(<ProfileScreen />);
     openEmailEditor(api);
     fireEvent.changeText(api.getByPlaceholderText('you@example.com'), 'taken@example.com');
+    confirmEmailPassword(api, 'oldpassword');
     fireEvent.press(api.getByText('Update email'));
 
     await waitFor(() =>
@@ -323,5 +350,182 @@ describe('email change', () => {
     mockAuthState.user = { ...emailUser, new_email: 'new@example.com' };
     const { getByText } = render(<ProfileScreen />);
     expect(getByText(/Waiting on new@example.com/i)).toBeTruthy();
+  });
+});
+
+/**
+ * Founder decision 2026-07-24. Email is the account recovery channel: control
+ * it and you can reset the password and take the account. updateUser({email})
+ * checks no password of its own, so the screen must.
+ */
+describe('email change reauthenticates (password accounts)', () => {
+  it('proves the current password BEFORE writing the new email', async () => {
+    mockUpdateUser.mockResolvedValue({
+      data: { user: { email: 'sam@example.com', new_email: 'new@example.com' } },
+      error: null,
+    });
+    const api = render(<ProfileScreen />);
+    openEmailEditor(api);
+    fireEvent.changeText(api.getByPlaceholderText('you@example.com'), 'new@example.com');
+    confirmEmailPassword(api, 'oldpassword');
+    fireEvent.press(api.getByText('Update email'));
+
+    await waitFor(() => expect(mockUpdateUser).toHaveBeenCalled());
+    // Order is the whole point: a write that beats the check protects nothing.
+    expect(mockCalls).toEqual(['signInWithPassword', 'updateUser']);
+    expect(mockSignInWithPassword).toHaveBeenCalledWith({
+      email: 'sam@example.com',
+      password: 'oldpassword',
+    });
+  });
+
+  it('never writes the email when the password is wrong', async () => {
+    mockSignInWithPassword.mockResolvedValue({
+      data: null,
+      error: { message: 'Invalid login credentials' },
+    });
+    const api = render(<ProfileScreen />);
+    openEmailEditor(api);
+    fireEvent.changeText(api.getByPlaceholderText('you@example.com'), 'new@example.com');
+    confirmEmailPassword(api, 'wrongpassword');
+    fireEvent.press(api.getByText('Update email'));
+
+    await waitFor(() => expect(api.getByText(/current password is not right/i)).toBeTruthy());
+    expect(mockUpdateUser).not.toHaveBeenCalled();
+  });
+
+  it('touches no network at all until a password is entered', async () => {
+    const api = render(<ProfileScreen />);
+    openEmailEditor(api);
+    const field = api.getByPlaceholderText('you@example.com');
+    fireEvent.changeText(field, 'new@example.com');
+
+    // The button is inert without a password, the same way it is inert while
+    // the address is unchanged.
+    fireEvent.press(api.getByText('Update email'));
+    expect(mockCalls).toEqual([]);
+
+    // The keyboard "done" path bypasses the button entirely, so the validator
+    // has to hold the line there too, and say why.
+    fireEvent(field, 'submitEditing');
+    await waitFor(() => expect(api.getByText(/Enter your current password/i)).toBeTruthy());
+    expect(mockCalls).toEqual([]);
+  });
+
+  it('asks an Apple-only account for no password at all', async () => {
+    mockAuthState.user = appleUser;
+    mockUpdateUser.mockResolvedValue({
+      data: { user: { email: 'real@example.com' } },
+      error: null,
+    });
+    const api = render(<ProfileScreen />);
+    openEmailEditor(api);
+    // There is no password to prove; demanding one would dead-end them.
+    expect(api.queryByPlaceholderText('Your password')).toBeNull();
+    fireEvent.changeText(api.getByPlaceholderText('you@example.com'), 'real@example.com');
+    fireEvent.press(api.getByText('Update email'));
+
+    await waitFor(() => expect(mockUpdateUser).toHaveBeenCalledWith({ email: 'real@example.com' }));
+    expect(mockCalls).toEqual(['updateUser']);
+    expect(mockSignInWithPassword).not.toHaveBeenCalled();
+  });
+
+  it('keeps the two password fields distinguishable when both blocks are open', () => {
+    const api = render(<ProfileScreen />);
+    openEmailEditor(api);
+    openPasswordEditor(api);
+    // Identical placeholders here would make the user guess which is which.
+    expect(api.getByPlaceholderText('Your password')).toBeTruthy();
+    expect(api.getByPlaceholderText('Current password')).toBeTruthy();
+  });
+});
+
+/**
+ * Founder 2026-07-24: "It's not changing the password every time they want to
+ * update info." Three standing password fields made the whole screen read as a
+ * password form. Name and avatar are never gated.
+ */
+describe('the password block rests folded', () => {
+  it('shows no password fields until the disclosure is opened', () => {
+    const api = render(<ProfileScreen />);
+    expect(api.queryByPlaceholderText('Current password')).toBeNull();
+    expect(api.queryByPlaceholderText('New password')).toBeNull();
+    expect(api.queryByPlaceholderText('Repeat new password')).toBeNull();
+    expect(api.getByLabelText('Change password')).toBeTruthy();
+  });
+
+  it('offers an Apple-only account "Set a password" instead', () => {
+    mockAuthState.user = appleUser;
+    const api = render(<ProfileScreen />);
+    expect(api.getByLabelText('Set a password')).toBeTruthy();
+  });
+
+  it('lets the name be saved without any password anywhere on screen', async () => {
+    const api = render(<ProfileScreen />);
+    await waitFor(() => expect(api.getByDisplayValue('Sam')).toBeTruthy());
+    fireEvent.changeText(api.getByDisplayValue('Sam'), 'Samantha');
+    fireEvent.press(api.getByText('Save changes'));
+
+    await waitFor(() => expect(mockShowSuccess).toHaveBeenCalledWith('Profile updated.'));
+    // A name is a display preference, not an access path: no reauth, and an
+    // Apple account has no password to demand in the first place.
+    expect(mockSignInWithPassword).not.toHaveBeenCalled();
+  });
+
+  it('discards a half-typed password when the block is closed again', () => {
+    const api = render(<ProfileScreen />);
+    openPasswordEditor(api);
+    fireEvent.changeText(api.getByPlaceholderText('New password'), 'halftyped');
+    fireEvent.press(api.getByText('Cancel'));
+
+    expect(api.queryByPlaceholderText('New password')).toBeNull();
+    openPasswordEditor(api);
+    expect(api.getByPlaceholderText('New password').props.value).toBe('');
+  });
+});
+
+/**
+ * Founder 2026-07-24: "Unable to update my name (account created through Apple
+ * Auth)". The name DID save to profiles.display_name, but the Focus greeting
+ * reads the AUTH metadata, which this screen never wrote. Both are written now.
+ */
+describe('saving the name reaches the greeting', () => {
+  it('mirrors the name into the auth metadata the greeting reads', async () => {
+    const api = render(<ProfileScreen />);
+    await waitFor(() => expect(api.getByDisplayValue('Sam')).toBeTruthy());
+    fireEvent.changeText(api.getByDisplayValue('Sam'), 'Samantha');
+    fireEvent.press(api.getByText('Save changes'));
+
+    await waitFor(() =>
+      expect(mockUpdateUser).toHaveBeenCalledWith({ data: { display_name: 'Samantha' } }),
+    );
+    expect(mockShowSuccess).toHaveBeenCalledWith('Profile updated.');
+  });
+
+  it('trims the name before it reaches either store', async () => {
+    const api = render(<ProfileScreen />);
+    await waitFor(() => expect(api.getByDisplayValue('Sam')).toBeTruthy());
+    fireEvent.changeText(api.getByDisplayValue('Sam'), '  Samantha  ');
+    fireEvent.press(api.getByText('Save changes'));
+
+    await waitFor(() =>
+      expect(mockUpdateUser).toHaveBeenCalledWith({ data: { display_name: 'Samantha' } }),
+    );
+  });
+
+  it('says the name saved but the greeting lagged when only the mirror fails', async () => {
+    mockUpdateUser.mockResolvedValue({ data: null, error: { message: 'Network request failed' } });
+    const api = render(<ProfileScreen />);
+    await waitFor(() => expect(api.getByDisplayValue('Sam')).toBeTruthy());
+    fireEvent.changeText(api.getByDisplayValue('Sam'), 'Samantha');
+    fireEvent.press(api.getByText('Save changes'));
+
+    // The stored name IS saved; claiming the whole save failed would be a lie.
+    await waitFor(() =>
+      expect(mockShowError).toHaveBeenCalledWith(
+        'Your name is saved, but the greeting may still show the old one.',
+      ),
+    );
+    expect(mockShowSuccess).not.toHaveBeenCalled();
   });
 });

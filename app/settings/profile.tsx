@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import * as ImagePicker from 'expo-image-picker';
-import { User, Camera, PencilSimple } from 'phosphor-react-native';
+import { User, Camera, PencilSimple, CaretRight } from 'phosphor-react-native';
 import { LivraHeader } from '../../components/ui/LivraHeader';
 import { PillButton } from '../../components/ui/PillButton';
 import { SectionLabel } from '../../components/ui/SectionLabel';
@@ -26,12 +26,13 @@ import { logger } from '../../lib/utils/logger';
 import { useNotification } from '../../contexts/NotificationContext';
 import {
   describeEmailChangeOutcome,
+  emailChangeRequiresPassword,
   hasPasswordIdentity,
   mapEmailChangeError,
   mapPasswordChangeError,
   mapReauthError,
   pendingEmail as pendingEmailOf,
-  validateEmailChange,
+  validateEmailChangeRequest,
   validateNewPassword,
   validatePasswordChange,
   type EmailChangeOutcome,
@@ -73,11 +74,19 @@ export default function ProfileScreen() {
   // a smart default (show what's there) over a second empty box.
   const [emailEditing, setEmailEditing] = useState(false);
 
+  // Proves ownership before an email change on a password account. Separate
+  // from the password-section field: the two blocks are edited independently.
+  const [emailPassword, setEmailPassword] = useState('');
+
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [savingPassword, setSavingPassword] = useState(false);
+  // Founder 2026-07-24: three always-open password fields made the whole screen
+  // read as "you must set a password to save anything". The block now sits
+  // behind a disclosure row, so the resting screen is Name · Email · one link.
+  const [passwordEditing, setPasswordEditing] = useState(false);
   // Identities on the cached session stay stale until the next refresh, so a
   // password added in this session is remembered locally. It only ever makes
   // the screen ASK for more (reauth), never less.
@@ -88,6 +97,9 @@ export default function ProfileScreen() {
   const emailUnchanged =
     !emailValue.trim() || emailValue.trim().toLowerCase() === (userEmail ?? '').trim().toLowerCase();
   const hasPassword = hasPasswordIdentity(user) || passwordJustAdded;
+  // Same rule, read through the named predicate so the security decision lives
+  // in one place: only an account that HAS a password can be asked for it.
+  const emailNeedsPassword = emailChangeRequiresPassword(user) || passwordJustAdded;
   const awaitingConfirmation = pendingEmailOf(user);
 
   // --- Pre-fill display name from the saved profile (same read pattern as
@@ -170,11 +182,31 @@ export default function ProfileScreen() {
   const handleSave = async () => {
     if (!user?.id || !displayName.trim()) return;
     setSaving(true);
+    const nextName = displayName.trim();
     try {
       const { error } = await supabase
         .from('profiles')
-        .upsert({ id: user.id, display_name: displayName.trim() });
+        .upsert({ id: user.id, display_name: nextName });
       if (error) throw error;
+
+      // Founder 2026-07-24, "unable to update my name": profiles.display_name
+      // is the stored name, but the Focus greeting reads the AUTH metadata
+      // (resolveFirstName(user.user_metadata, ...) in app/(tabs)/focus.tsx) —
+      // which only ever held whatever signup or Apple supplied. Saving here
+      // therefore changed nothing the user could SEE. Both are written now,
+      // and updateUser refreshes the cached session user so the greeting
+      // re-renders without a refetch. Apple accounts felt this hardest because
+      // Apple often supplies no name at all.
+      const { error: metaError } = await supabase.auth.updateUser({
+        data: { display_name: nextName },
+      });
+      if (metaError) {
+        // The stored name IS saved; only the greeting's copy lagged. Say that
+        // rather than claiming the whole save failed.
+        logger.error('[Profile] name saved but metadata mirror failed:', metaError);
+        showError('Your name is saved, but the greeting may still show the old one.');
+        return;
+      }
       showSuccess('Profile updated.');
     } catch (err) {
       logger.error('[Profile] save error:', err);
@@ -187,7 +219,12 @@ export default function ProfileScreen() {
   const handleEmailChange = useCallback(async () => {
     if (savingEmail) return;
     setEmailOutcome(null);
-    const problem = validateEmailChange(emailValue, userEmail);
+    const problem = validateEmailChangeRequest({
+      nextEmail: emailValue,
+      currentEmail: userEmail,
+      currentPassword: emailPassword,
+      requiresPassword: emailNeedsPassword,
+    });
     if (problem) {
       setEmailError(problem);
       return;
@@ -196,11 +233,31 @@ export default function ProfileScreen() {
     setSavingEmail(true);
     try {
       const target = emailValue.trim();
+
+      // Email is the recovery channel, so a password account proves ownership
+      // first — updateUser({email}) never checks one on its own, which would
+      // leave an unlocked phone enough to take the account over.
+      if (emailNeedsPassword) {
+        if (!userEmail) {
+          setEmailError('We could not read your email, so we cannot confirm it is you.');
+          return;
+        }
+        const { error: reauthError } = await supabase.auth.signInWithPassword({
+          email: userEmail,
+          password: emailPassword,
+        });
+        if (reauthError) {
+          setEmailError(mapReauthError(reauthError));
+          return;
+        }
+      }
+
       const { data, error } = await supabase.auth.updateUser({ email: target });
       if (error) {
         setEmailError(mapEmailChangeError(error));
         return;
       }
+      setEmailPassword('');
       // Honest by construction: "Confirm email" may be off on this project, in
       // which case the address is already live and no mail was ever sent.
       const outcome = describeEmailChangeOutcome(data?.user, target);
@@ -216,7 +273,15 @@ export default function ProfileScreen() {
     } finally {
       setSavingEmail(false);
     }
-  }, [emailValue, savingEmail, supabase, userEmail, showSuccess]);
+  }, [
+    emailValue,
+    emailPassword,
+    emailNeedsPassword,
+    savingEmail,
+    supabase,
+    userEmail,
+    showSuccess,
+  ]);
 
   const startEmailEdit = useCallback(() => {
     setEmailEditing(true);
@@ -229,6 +294,17 @@ export default function ProfileScreen() {
     setEmailDraft(null);
     setEmailError(null);
     setEmailOutcome(null);
+    setEmailPassword('');
+  }, []);
+
+  // Closing the password block drops whatever was typed — a half-filled
+  // credential form must never survive out of sight.
+  const closePasswordEdit = useCallback(() => {
+    setPasswordEditing(false);
+    setCurrentPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setPasswordError(null);
   }, []);
 
   const handlePasswordSubmit = useCallback(async () => {
@@ -267,6 +343,9 @@ export default function ProfileScreen() {
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
+      // Done — fold the block away again so the screen returns to its calm
+      // resting state rather than sitting on three empty password fields.
+      setPasswordEditing(false);
       if (!hasPassword) setPasswordJustAdded(true);
       showSuccess(hasPassword ? 'Your password is updated.' : 'Your password is set.');
     } catch (e) {
@@ -395,13 +474,37 @@ export default function ProfileScreen() {
                   returnKeyType="done"
                   onSubmitEditing={() => { void handleEmailChange(); }}
                 />
+                {/* Ownership check — email is the recovery channel. Only shown
+                    to accounts that HAVE a password; an Apple-only account has
+                    none to prove and relies on the confirmation link instead. */}
+                {emailNeedsPassword ? (
+                  <TextInput
+                    style={[styles.input, styles.stackedInput]}
+                    value={emailPassword}
+                    onChangeText={(t) => { setEmailPassword(t); setEmailError(null); }}
+                    // "Your password", not "Current password": the password
+                    // block below uses the latter, and both can be open at
+                    // once. Two identical labels would be a guess for the user.
+                    placeholder="Your password"
+                    placeholderTextColor={c.inkMuted}
+                    secureTextEntry
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    editable={!savingEmail}
+                    textContentType="password"
+                  />
+                ) : null}
                 {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
                 <View style={styles.actionRow}>
                   <PillButton
                     variant="ghost"
                     label={savingEmail ? 'Saving…' : 'Update email'}
                     onPress={() => { void handleEmailChange(); }}
-                    disabled={savingEmail || emailUnchanged}
+                    disabled={
+                      savingEmail ||
+                      emailUnchanged ||
+                      (emailNeedsPassword && !emailPassword.trim())
+                    }
                     style={styles.actionFlex}
                   />
                   <TouchableOpacity onPress={cancelEmailEdit} hitSlop={8} disabled={savingEmail}>
@@ -439,9 +542,26 @@ export default function ProfileScreen() {
               </Text>
             ) : null}
 
-            {/* ── Password ── minimal: placeholders carry the labels. */}
+            {/* ── Password ── folded away by default (founder 2026-07-24):
+                standing password fields made the screen read as though every
+                edit required setting one. Placeholders carry the labels. */}
             <SectionLabel style={styles.groupLabel}>PASSWORD</SectionLabel>
 
+            {!passwordEditing ? (
+              <TouchableOpacity
+                style={[styles.input, styles.readonlyField]}
+                onPress={() => { setPasswordEditing(true); setPasswordError(null); }}
+                activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={hasPassword ? 'Change password' : 'Set a password'}
+              >
+                <Text style={styles.readonlyValue}>
+                  {hasPassword ? 'Change password' : 'Set a password'}
+                </Text>
+                <CaretRight size={16} color={c.inkMid} weight="bold" />
+              </TouchableOpacity>
+            ) : (
+            <>
             {hasPassword ? (
               <TextInput
                 style={styles.input}
@@ -487,24 +607,31 @@ export default function ProfileScreen() {
 
             {passwordError ? <Text style={styles.errorText}>{passwordError}</Text> : null}
 
-            <PillButton
-              variant="ghost"
-              label={
-                savingPassword
-                  ? 'Saving…'
-                  : hasPassword
-                    ? 'Change password'
-                    : 'Set password'
-              }
-              onPress={() => { void handlePasswordSubmit(); }}
-              disabled={
-                savingPassword ||
-                (hasPassword && !currentPassword.trim()) ||
-                !newPassword ||
-                !confirmPassword
-              }
-              style={styles.action}
-            />
+            <View style={styles.actionRow}>
+              <PillButton
+                variant="ghost"
+                label={
+                  savingPassword
+                    ? 'Saving…'
+                    : hasPassword
+                      ? 'Change password'
+                      : 'Set password'
+                }
+                onPress={() => { void handlePasswordSubmit(); }}
+                disabled={
+                  savingPassword ||
+                  (hasPassword && !currentPassword.trim()) ||
+                  !newPassword ||
+                  !confirmPassword
+                }
+                style={styles.actionFlex}
+              />
+              <TouchableOpacity onPress={closePasswordEdit} hitSlop={8} disabled={savingPassword}>
+                <Text style={styles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+            </>
+            )}
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>

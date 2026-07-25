@@ -107,6 +107,54 @@ export function validateEmailChange(nextEmail: string, currentEmail?: string | n
   return null;
 }
 
+/**
+ * Founder decision 2026-07-24: which fields a password protects.
+ *
+ * Email is the account RECOVERY channel: whoever controls it can request a
+ * password reset and take the account. Supabase's updateUser({email}) checks
+ * no password of its own, so without this an unlocked phone is enough. Hence
+ * a change of email reauthenticates first, exactly as a password change does.
+ *
+ * Name and avatar are NOT gated: they are display preferences, not access
+ * paths, and an Apple-only account has no password to demand, so gating them
+ * would lock those users out of their own profile.
+ *
+ * Accounts with no password identity (Apple/OAuth) cannot reauthenticate here.
+ * They keep the ungated email change; the confirmation link Supabase sends to
+ * the new address is their gate. Enabling "Secure email change" in the
+ * Supabase dashboard adds a confirmation on the OLD address too, which closes
+ * the takeover vector for those accounts without any client work.
+ */
+export function emailChangeRequiresPassword(user?: CredentialUser | null): boolean {
+  return hasPasswordIdentity(user);
+}
+
+export interface EmailChangeRequest {
+  nextEmail: string;
+  currentEmail?: string | null;
+  currentPassword: string;
+  requiresPassword: boolean;
+}
+
+/**
+ * Returns the first problem with an email-change request, or null when it is
+ * usable. Wraps validateEmailChange with the reauth precondition so the screen
+ * has one call to make.
+ */
+export function validateEmailChangeRequest({
+  nextEmail,
+  currentEmail,
+  currentPassword,
+  requiresPassword,
+}: EmailChangeRequest): string | null {
+  const problem = validateEmailChange(nextEmail, currentEmail);
+  if (problem) return problem;
+  if (requiresPassword && !currentPassword.trim()) {
+    return 'Enter your current password to change your email.';
+  }
+  return null;
+}
+
 export type EmailChangeStatus = 'pending' | 'applied' | 'unknown';
 
 export interface EmailChangeOutcome {

@@ -3,6 +3,7 @@ import {
   MIN_PASSWORD_LENGTH,
   authProviders,
   describeEmailChangeOutcome,
+  emailChangeRequiresPassword,
   hasPasswordIdentity,
   isApplePrivateRelayEmail,
   isEmailAlreadyInUseError,
@@ -11,6 +12,7 @@ import {
   mapReauthError,
   pendingEmail,
   validateEmailChange,
+  validateEmailChangeRequest,
   validateNewPassword,
   validatePasswordChange,
   type CredentialUser,
@@ -229,6 +231,101 @@ describe('copy rules', () => {
     for (const message of messages) {
       expect(message).not.toMatch(/[—–]/);
       expect(message).not.toMatch(/ - /);
+    }
+  });
+});
+
+/**
+ * Founder decision 2026-07-24 — which fields a password protects.
+ * Email is the recovery channel and IS gated. Name/avatar are not: they are
+ * display preferences, and an Apple-only account has no password to demand.
+ */
+describe('emailChangeRequiresPassword', () => {
+  it('demands a password from an account that HAS one', () => {
+    expect(emailChangeRequiresPassword(emailUser)).toBe(true);
+  });
+
+  it('does not demand one from an Apple-only account', () => {
+    // There is nothing to reauthenticate against; asking would dead-end them.
+    expect(emailChangeRequiresPassword(appleUser)).toBe(false);
+  });
+
+  it('treats an unknown user as password-less rather than guessing', () => {
+    expect(emailChangeRequiresPassword(null)).toBe(false);
+    expect(emailChangeRequiresPassword(undefined)).toBe(false);
+    expect(emailChangeRequiresPassword({})).toBe(false);
+  });
+
+  it('follows hasPasswordIdentity exactly — one rule, one place', () => {
+    for (const u of [emailUser, appleUser, {}, null]) {
+      expect(emailChangeRequiresPassword(u)).toBe(hasPasswordIdentity(u));
+    }
+  });
+
+  it('demands a password from a linked Apple+email account', () => {
+    expect(
+      emailChangeRequiresPassword({
+        email: 'sam@example.com',
+        identities: [{ provider: 'apple' }, { provider: 'email' }],
+      }),
+    ).toBe(true);
+  });
+});
+
+describe('validateEmailChangeRequest', () => {
+  const base = { currentEmail: 'sam@example.com', requiresPassword: true };
+
+  it('accepts a new address with the current password supplied', () => {
+    expect(
+      validateEmailChangeRequest({ ...base, nextEmail: 'new@example.com', currentPassword: 'hunter22' }),
+    ).toBeNull();
+  });
+
+  it('refuses a new address with no password when one is required', () => {
+    expect(
+      validateEmailChangeRequest({ ...base, nextEmail: 'new@example.com', currentPassword: '' }),
+    ).toBe('Enter your current password to change your email.');
+  });
+
+  it('treats whitespace as no password', () => {
+    expect(
+      validateEmailChangeRequest({ ...base, nextEmail: 'new@example.com', currentPassword: '   ' }),
+    ).toBe('Enter your current password to change your email.');
+  });
+
+  it('accepts a password-less account with no password supplied', () => {
+    expect(
+      validateEmailChangeRequest({
+        nextEmail: 'new@example.com',
+        currentEmail: 'old@example.com',
+        currentPassword: '',
+        requiresPassword: false,
+      }),
+    ).toBeNull();
+  });
+
+  it('reports the address problem BEFORE asking for a password', () => {
+    // Otherwise a user types a typo, is asked for a password, and only then
+    // learns the address was never valid.
+    expect(
+      validateEmailChangeRequest({ ...base, nextEmail: 'not-an-email', currentPassword: '' }),
+    ).toBe('Please enter a valid email address.');
+    expect(
+      validateEmailChangeRequest({ ...base, nextEmail: 'sam@example.com', currentPassword: '' }),
+    ).toBe('That is already your email.');
+    expect(
+      validateEmailChangeRequest({ ...base, nextEmail: '  ', currentPassword: '' }),
+    ).toBe('Enter the email you want to use.');
+  });
+
+  it('agrees with validateEmailChange on every address question', () => {
+    for (const nextEmail of ['new@example.com', 'not-an-email', 'sam@example.com', '']) {
+      const addressProblem = validateEmailChange(nextEmail, base.currentEmail);
+      if (addressProblem) {
+        expect(
+          validateEmailChangeRequest({ ...base, nextEmail, currentPassword: 'hunter22' }),
+        ).toBe(addressProblem);
+      }
     }
   });
 });
