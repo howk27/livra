@@ -6,6 +6,7 @@ import { useVoiceStore } from '../../state/voiceSlice';
 import { useMarksStore } from '../../state/countersSlice';
 import { useEventsStore } from '../../state/eventsSlice';
 import { useGoalsStore } from '../../state/goalsSlice';
+import { useIdentityStore } from '../../state/identitySlice';
 import { useMomentumStore } from '../../state/momentumSlice';
 import type { Mark, MarkEvent } from '../../types';
 
@@ -112,6 +113,60 @@ describe('voiceSlice.evaluatePostLog', () => {
     useVoiceStore.getState().evaluatePostLog('m1', todayStr, 'Dei', speak);
     useVoiceStore.getState().clearLine();
     expect(useVoiceStore.getState().line).toBeNull();
+  });
+});
+
+describe('identity glue — the fired memory is an input, not an after-filter', () => {
+  // 11 daily logs ending today: account older than the first-week window, no
+  // comeback gap, total past fact-10 and short of the identity bar. The 10th
+  // log is the one that "crossed" — these tests are about the 11th.
+  const dailyLedger = Array.from({ length: 11 }, (_, i) => {
+    const date = yyyyMmDd(addDays(parseISO(todayStr), -(10 - i)));
+    return {
+      id: `d${i}`,
+      user_id: 'u1',
+      mark_id: 'm1',
+      event_type: 'increment',
+      amount: 1,
+      occurred_at: `${date}T10:00:00.000Z`,
+      occurred_local_date: date,
+      created_at: `${date}T10:00:00.000Z`,
+      updated_at: `${date}T10:00:00.000Z`,
+    } as MarkEvent;
+  });
+
+  beforeEach(() => {
+    useEventsStore.setState({ events: dailyLedger });
+    useIdentityStore.setState({ fired: {}, loaded: true });
+  });
+
+  it('records the milestone that was actually spoken', () => {
+    useVoiceStore.getState().registerSurface();
+    expect(useVoiceStore.getState().evaluatePostLog('m1', todayStr, 'Dei', speak)).toBe(true);
+    expect(useIdentityStore.getState().firedFor('m1')).toEqual(['fact-10']);
+  });
+
+  it('records NOTHING when no surface was there to say it', () => {
+    expect(useVoiceStore.getState().evaluatePostLog('m1', todayStr, 'Dei', speak)).toBe(false);
+    expect(useIdentityStore.getState().firedFor('m1')).toEqual([]);
+  });
+
+  it('so the next on-surface log still says it — the milestone survives mark detail', () => {
+    // The crossing log happened on a screen with no VoiceLine (returns false,
+    // records nothing); the milestone is still owed on the very next log.
+    expect(useVoiceStore.getState().evaluatePostLog('m1', todayStr, 'Dei', speak)).toBe(false);
+    useVoiceStore.getState().registerSurface();
+    expect(useVoiceStore.getState().evaluatePostLog('m1', todayStr, 'Dei', speak)).toBe(true);
+    expect(useIdentityStore.getState().firedFor('m1')).toEqual(['fact-10']);
+  });
+
+  it('does not say it twice once it is recorded', () => {
+    useIdentityStore.setState({ fired: { m1: ['fact-10'] } });
+    useVoiceStore.getState().registerSurface();
+    useVoiceStore.getState().evaluatePostLog('m1', todayStr, 'Dei', speak);
+    expect(useIdentityStore.getState().firedFor('m1')).toEqual(['fact-10']);
+    // Whatever Livra says next, it is not the milestone line again.
+    expect(useVoiceStore.getState().line?.momentId ?? '').not.toContain('identity');
   });
 });
 

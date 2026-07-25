@@ -1,6 +1,13 @@
 // Earned identity (spec §2): facts early, identity claims only once true.
-// Pure: derives the milestone THIS log crossed from the event ledger alone.
-// Once-ever enforcement lives in state/identitySlice — not here.
+// Pure: derives the milestone this log EARNED from the event ledger plus the
+// ids this mark has already spoken. Not "crossed": a crossing log that lands
+// while no VoiceLine surface is mounted (mark detail) used to lose its
+// milestone forever, because the next log's total is no longer a threshold.
+// So the question is "what is the highest milestone this mark has earned and
+// not yet said", which the crossing log answers identically and a later log
+// answers as catch-up. The fired ids are the caller's (state/identitySlice
+// persists them); nothing is recorded here, and nothing is recorded for a
+// milestone that was derived but never spoken.
 import type { MarkEvent } from '../types';
 
 export type IdentityMilestone = { id: string; tier: 'fact' | 'identity'; n: number };
@@ -8,6 +15,7 @@ export type IdentityMilestone = { id: string; tier: 'fact' | 'identity'; n: numb
 const FACT_THRESHOLDS = [3, 7, 10, 20, 30, 50];
 const IDENTITY_MIN_LOGS = 12;
 const IDENTITY_MIN_WEEKS = 3;
+export const IDENTITY_MILESTONE_ID = 'identity-12w3';
 
 /** ISO-Monday week key for a yyyy-MM-dd date string (UTC math is safe: the
  *  string IS the local date; no timezone conversion happens here). */
@@ -18,7 +26,16 @@ function mondayWeekKey(dateStr: string): string {
   return d.toISOString().slice(0, 10);
 }
 
-export function milestoneForLog(markId: string, events: MarkEvent[]): IdentityMilestone | null {
+/**
+ * The milestone this mark has earned and not yet spoken, or null when it is
+ * level with its ledger. `firedIds` is the mark's own fired list (identitySlice
+ * shape); pass `[]` for a mark that has never spoken.
+ */
+export function milestoneForLog(
+  markId: string,
+  events: MarkEvent[],
+  firedIds: string[],
+): IdentityMilestone | null {
   let total = 0;
   const weeks = new Set<string>();
   for (const e of events) {
@@ -28,28 +45,36 @@ export function milestoneForLog(markId: string, events: MarkEvent[]): IdentityMi
   }
   if (total === 0) return null;
 
-  // Identity outranks fact when both cross at once. It fires exactly when the
-  // log count FIRST satisfies both bars: at total === 12 with weeks ≥ 3, or on
-  // the log that adds the 3rd week when the count was already past 12.
-  if (weeks.size >= IDENTITY_MIN_WEEKS && total >= IDENTITY_MIN_LOGS) {
-    const crossedNow =
-      total === IDENTITY_MIN_LOGS ||
-      (total > IDENTITY_MIN_LOGS && weeks.size === IDENTITY_MIN_WEEKS && justAddedWeek(markId, events, weeks.size));
-    if (crossedNow) return { id: 'identity-12w3', tier: 'identity', n: total };
+  // Identity outranks fact: while both bars stand satisfied and the claim is
+  // unspoken, it is the answer, whichever log finally asks.
+  if (
+    weeks.size >= IDENTITY_MIN_WEEKS &&
+    total >= IDENTITY_MIN_LOGS &&
+    !firedIds.includes(IDENTITY_MILESTONE_ID)
+  ) {
+    return { id: IDENTITY_MILESTONE_ID, tier: 'identity', n: total };
   }
 
-  if (FACT_THRESHOLDS.includes(total)) return { id: `fact-${total}`, tier: 'fact', n: total };
-  return null;
+  // Highest earned fact ABOVE everything already said. The high-water rule is
+  // what keeps a catch-up from walking back down the ladder: a mark that has
+  // spoken fact-20 never returns to fact-10, even on a log that skipped both.
+  const spoken = firedHighWater(firedIds);
+  const pending = FACT_THRESHOLDS.filter((t) => t <= total && t > spoken);
+  const n = pending[pending.length - 1];
+  return n === undefined ? null : { id: `fact-${n}`, tier: 'fact', n };
 }
 
-/** True when the chronologically-last event is the sole member of its week —
- *  i.e., THIS log opened a new distinct week. */
-function justAddedWeek(markId: string, events: MarkEvent[], _weekCount: number): boolean {
-  const mine = events
-    .filter((e) => !e.deleted_at && e.event_type === 'increment' && e.mark_id === markId)
-    .sort((a, b) => a.occurred_local_date.localeCompare(b.occurred_local_date));
-  const last = mine[mine.length - 1];
-  if (!last) return false;
-  const lastWeek = mondayWeekKey(last.occurred_local_date);
-  return mine.filter((e) => mondayWeekKey(e.occurred_local_date) === lastWeek).length === 1;
+/** The level of the highest milestone already spoken for a mark; 0 for none.
+ *  The identity claim sits at its own log bar, so a later fact must clear it. */
+function firedHighWater(firedIds: string[]): number {
+  let high = 0;
+  for (const id of firedIds) {
+    if (id === IDENTITY_MILESTONE_ID) {
+      high = Math.max(high, IDENTITY_MIN_LOGS);
+      continue;
+    }
+    const n = id.startsWith('fact-') ? Number(id.slice('fact-'.length)) : NaN;
+    if (Number.isFinite(n)) high = Math.max(high, n);
+  }
+  return high;
 }

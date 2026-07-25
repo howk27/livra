@@ -76,14 +76,14 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     const goals = useGoalsStore.getState().goals;
     const { snapshots, longestRuns } = useMomentumStore.getState();
 
-    // spec §2 (Task 4): derive the raw milestone, then filter it through the
-    // once-ever store. postLogVoice.ts stays store-free, so the check lives
-    // here, at the store-glue layer.
-    const rawMilestone = milestoneForLog(markId, events);
-    const identityMilestone =
-      rawMilestone && !useIdentityStore.getState().hasFired(markId, rawMilestone.id)
-        ? rawMilestone
-        : null;
+    // spec §2 (Task 4): the once-ever memory is an INPUT to the derivation, not
+    // a filter over it — a milestone earned while this surface was unmounted is
+    // still owed, and only the fired list can tell the two apart.
+    const identityMilestone = milestoneForLog(
+      markId,
+      events,
+      useIdentityStore.getState().firedFor(markId),
+    );
 
     const moment = evaluatePostLogVoice({
       markId,
@@ -105,6 +105,10 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
     if (!moment) return false;
     get().speak(moment);
     if (moment.type === 'identity' && identityMilestone) {
+      // Both tiers speak as type 'identity' (select.ts: variants claim/fact), so
+      // facts are recorded too — which is what stops a spoken fact from being
+      // offered again as catch-up. Recorded ONLY when a line actually landed: a
+      // milestone that lost to a higher-priority moment stays owed.
       // Fire-and-forget: recordFired never throws (memory already updated
       // synchronously inside it), and voice must never block the log path.
       void useIdentityStore.getState().recordFired(markId, identityMilestone.id);

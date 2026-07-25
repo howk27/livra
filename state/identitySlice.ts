@@ -1,7 +1,7 @@
 // Once-ever memory for earned-identity moments (spec §2, Task 4). Manual
 // AsyncStorage persistence — this repo does not use zustand/persist (see
-// state/uiSlice's pattern). Memory-first: hasFired reads the in-memory map
-// synchronously so postLogVoice filtering (state/voiceSlice) never blocks on
+// state/uiSlice's pattern). Memory-first: firedFor reads the in-memory map
+// synchronously so the postLog derivation (state/voiceSlice) never blocks on
 // I/O; recordFired updates memory first, then writes AsyncStorage
 // best-effort. A lost write just repeats a nice moment once — never blocks
 // or throws, the way logging itself is never blocked by voice (postLogVoice).
@@ -17,9 +17,9 @@ export type IdentityFiredMap = Record<string, string[]>;
 interface IdentityState {
   fired: IdentityFiredMap;
   loaded: boolean;
-  /** Synchronous — the postLog path filters a just-derived milestone with this
-   *  before ever building a Moment, so it must never await I/O. */
-  hasFired: (markId: string, milestoneId: string) => boolean;
+  /** Synchronous — the postLog path feeds this straight into milestoneForLog
+   *  before building a Moment, so it must never await I/O. */
+  firedFor: (markId: string) => string[];
   /** Memory-first, best-effort persist. Never throws: a failed write is a
    *  possible once-more repeat, never a blocked log or a crashed increment. */
   recordFired: (markId: string, milestoneId: string) => Promise<void>;
@@ -31,9 +31,7 @@ export const useIdentityStore = create<IdentityState>((set, get) => ({
   fired: {},
   loaded: false,
 
-  hasFired: (markId, milestoneId) => {
-    return (get().fired[markId] ?? []).includes(milestoneId);
-  },
+  firedFor: (markId) => get().fired[markId] ?? [],
 
   recordFired: async (markId, milestoneId) => {
     const current = get().fired;

@@ -12,16 +12,15 @@ describe('identitySlice — once-ever milestone memory', () => {
     useIdentityStore.setState({ fired: {}, loaded: false });
   });
 
-  it('hasFired is false before anything is recorded', () => {
-    expect(useIdentityStore.getState().hasFired('m1', 'fact-3')).toBe(false);
+  it('firedFor is empty before anything is recorded', () => {
+    expect(useIdentityStore.getState().firedFor('m1')).toEqual([]);
   });
 
-  it('recordFired then hasFired round-trips in memory', async () => {
+  it('recordFired then firedFor round-trips in memory', async () => {
     await useIdentityStore.getState().recordFired('m1', 'fact-3');
-    expect(useIdentityStore.getState().hasFired('m1', 'fact-3')).toBe(true);
-    // A different mark or a different milestone id is unaffected.
-    expect(useIdentityStore.getState().hasFired('m2', 'fact-3')).toBe(false);
-    expect(useIdentityStore.getState().hasFired('m1', 'fact-7')).toBe(false);
+    expect(useIdentityStore.getState().firedFor('m1')).toEqual(['fact-3']);
+    // A different mark is unaffected.
+    expect(useIdentityStore.getState().firedFor('m2')).toEqual([]);
   });
 
   it('recordFired persists to AsyncStorage under the versioned key', async () => {
@@ -43,8 +42,7 @@ describe('identitySlice — once-ever milestone memory', () => {
       JSON.stringify({ m1: ['fact-3', 'identity-12w3'] }),
     );
     await useIdentityStore.getState().loadIdentityState();
-    expect(useIdentityStore.getState().hasFired('m1', 'fact-3')).toBe(true);
-    expect(useIdentityStore.getState().hasFired('m1', 'identity-12w3')).toBe(true);
+    expect(useIdentityStore.getState().firedFor('m1')).toEqual(['fact-3', 'identity-12w3']);
     expect(useIdentityStore.getState().loaded).toBe(true);
   });
 
@@ -58,7 +56,7 @@ describe('identitySlice — once-ever milestone memory', () => {
     const spy = jest.spyOn(AsyncStorage, 'setItem').mockRejectedValueOnce(new Error('disk full'));
     await expect(useIdentityStore.getState().recordFired('m1', 'fact-3')).resolves.toBeUndefined();
     // Memory still updated despite the failed persist.
-    expect(useIdentityStore.getState().hasFired('m1', 'fact-3')).toBe(true);
+    expect(useIdentityStore.getState().firedFor('m1')).toEqual(['fact-3']);
     spy.mockRestore();
   });
 });
