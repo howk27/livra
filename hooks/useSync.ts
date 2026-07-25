@@ -768,6 +768,20 @@ export const useSync = () => {
       // too. Idempotent, respects intentional unlinks (tombstoned pairs untouched),
       // and a cheap no-op when everything is already consistent. Non-fatal.
       try {
+        // FIRST the other direction (2026-07-25): live data shows accounts whose
+        // marks lost goal_id while their links survived — the mirror of the QC1
+        // bug, and unreachable by every existing repair. Restoring goal_id before
+        // the link reconcile also means the link pass sees a consistent mark.
+        const { reconcileMarkGoalIds } = await import('../lib/sync/goalsReconcile');
+        const { repairedMarks } = await reconcileMarkGoalIds(
+          userId,
+          useCountersStore.getState().marks,
+        );
+        if (repairedMarks > 0) {
+          logger.log(`[SYNC] Restored goal_id on ${repairedMarks} mark(s) from surviving links`);
+          await useCountersStore.getState().loadMarks(userId);
+        }
+
         const marks = useCountersStore.getState().marks;
         const { reconcileGoalMarkLinks } = await import('../lib/sync/goalsReconcile');
         const { derivedLinks } = await reconcileGoalMarkLinks(userId, marks);

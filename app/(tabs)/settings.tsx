@@ -50,6 +50,9 @@ import { getSupabaseClient } from '../../lib/supabase';
 import { isApplePrivateRelayEmail } from '../../lib/auth/accountCredentials';
 import { clearSyncCursors } from '../../lib/sync/syncCursors';
 import { resetDatabaseState } from '../../lib/db';
+import { sqliteClearAllGoalsAndLinks } from '../../lib/db/goalsSqlite';
+import { sqliteClearAllGoalNotes } from '../../lib/db/goalNotesSqlite';
+import { sqliteClearAllMarkNotes } from '../../lib/db/markNotesSqlite';
 import { generateAllCountersCSV } from '../../lib/csv';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
@@ -456,6 +459,17 @@ export default function SettingsScreen() {
     if (!ok) return;
     try {
       await resetDatabaseState();
+      // resetDatabaseState only empties the AsyncStorage-backed store (marks,
+      // events, streaks, badges, XP). Goals, their mark links and both note
+      // tables moved to real SQLite in M6-B, so without these they SURVIVED an
+      // action whose own copy promises "permanently deletes all your marks,
+      // goals, and history on this device". Deliberately NOT the full sign-out
+      // purge: this reset keeps the session, onboarding and entitlement.
+      await Promise.all([
+        sqliteClearAllGoalsAndLinks(),
+        sqliteClearAllGoalNotes(),
+        sqliteClearAllMarkNotes(),
+      ]);
       // Reload the in-memory stores so the UI reflects the wipe.
       await Promise.all([
         useMarksStore.getState().loadMarks(user?.id),

@@ -29,7 +29,13 @@
  * on the one-shot goals-backfill flag, and no wholesale rewrite of migrated
  * updated_at (which would break LWW intent).
  */
-import { addGoalMarkLink, loadGoalsForUser, loadLinkForPairIncludingDeleted } from '../db/goalsDb';
+import {
+  addGoalMarkLink,
+  getLinksForMark,
+  loadGoalsForUser,
+  loadLinkForPairIncludingDeleted,
+} from '../db/goalsDb';
+import { execute } from '../db';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -38,6 +44,8 @@ export interface ReconcilableMark {
   id: string;
   goal_id?: string | null;
   deleted_at?: string | null;
+  /** Set when the mark graduated from a completed goal (lib/maintenanceMarks). */
+  maintenance_of?: string | null;
 }
 
 export interface ReconcileResult {
@@ -81,6 +89,73 @@ export async function reconcileGoalMarkLinks(
 
     await addGoalMarkLink({ goal_id: goalId, mark_id: mark.id, user_id: userId, now });
     result.derivedLinks += 1;
+  }
+
+  return result;
+}
+
+export interface MarkGoalIdReconcileResult {
+  /** Marks whose goal_id was restored from a surviving link this run. */
+  repairedMarks: number;
+}
+
+/**
+ * The OTHER direction: restore a live mark's missing goal_id from its surviving
+ * goal_mark_links row.
+ *
+ * WHY BOTH DIRECTIONS EXIST. reconcileGoalMarkLinks above heals the case where
+ * the mark survived and the link did not. Live data (2026-07-25, checked against
+ * the production DB) shows the mirror image is also real: an account whose five
+ * marks all carry `goal_id = NULL` while five live links still point at the live
+ * goal. Nothing could heal that — the client-side backfill re-stamps goal_id
+ * from local data that a reinstall has already lost, and the link→mark direction
+ * did not exist. Those marks come back as standalone daily habits and the goal
+ * loses its cadence, which is exactly what the founder reported on device.
+ *
+ * THE GUARDS, each protecting a real case:
+ *  • Never overwrite an existing goal_id — only a genuinely absent one is
+ *    derivable; the mark's own value is the source of truth when it has one.
+ *  • Skip marks carrying `maintenance_of`: graduation deliberately NULLs goal_id
+ *    and leaves the links in place, so without this the reconcile would drag
+ *    every graduated habit back onto its finished goal.
+ *  • Only ACTIVE goals are restorable. `maintenance_of` has no column on the
+ *    server (verified live), so after a reinstall a graduated mark has no
+ *    provenance left — the completed-goal check is the only guard still standing.
+ *  • Exactly one live link, or skip. A mark linked to two goals has no single
+ *    correct goal_id, and guessing would silently move it.
+ *
+ * Writes goal_id with a fresh updated_at so the repair travels on the next push
+ * and fixes the server too, mirroring how the link direction repairs itself.
+ */
+export async function reconcileMarkGoalIds(
+  userId: string,
+  marks: ReconcilableMark[],
+  now: string = new Date().toISOString(),
+): Promise<MarkGoalIdReconcileResult> {
+  const result: MarkGoalIdReconcileResult = { repairedMarks: 0 };
+  if (!userId || !UUID_RE.test(userId)) return result;
+
+  const candidates = marks.filter(
+    (m) => m && m.id && !m.goal_id && !m.deleted_at && !m.maintenance_of,
+  );
+  if (candidates.length === 0) return result;
+
+  const goals = await loadGoalsForUser(userId);
+  const activeGoalIds = new Set(goals.filter((g) => g.status === 'active').map((g) => g.id));
+  if (activeGoalIds.size === 0) return result;
+
+  for (const mark of candidates) {
+    const links = (await getLinksForMark(mark.id)).filter(
+      (l) => !l.deleted_at && l.user_id === userId && activeGoalIds.has(l.goal_id),
+    );
+    if (links.length !== 1) continue;
+
+    await execute('UPDATE lc_counters SET goal_id = ?, updated_at = ? WHERE id = ?', [
+      links[0].goal_id,
+      now,
+      mark.id,
+    ]);
+    result.repairedMarks += 1;
   }
 
   return result;
