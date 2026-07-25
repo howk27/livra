@@ -35,6 +35,20 @@ export type MarkDefinition = {
   identityLine?: string;
   /** Shrunk comeback ask (spec §3), e.g. 'A walk counts today.' Optional. */
   comebackAsk?: string;
+  /**
+   * Marks that measure the SAME underlying thing share a family, and a goal is
+   * only ever SUGGESTED one of them (lib/goalMarkSuggestions.ts keeps the
+   * highest-ranked and frees the slot for a genuinely different mark).
+   *
+   * Founder 2026-07-24: a running goal was suggested Run AND Steps — one
+   * activity, two rows to log, which reads as busywork and double-counts the
+   * same effort. Absent = nothing else measures this; the mark always competes
+   * on its own.
+   *
+   * This gates SUGGESTION only. Any mark stays addable by hand from the full
+   * library, so a user who genuinely wants both still can.
+   */
+  metricFamily?: string;
 };
 
 export type MarkCategory = {
@@ -83,6 +97,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     tags: ['steps', 'walk', 'marathon', '5k', '10k', 'half marathon', 'race', 'cardio', 'active', 'movement', 'walking', 'running', 'weight loss'],
     healthKitType: 'steps',
     frequency_min: 5, frequency_recommended: 7, frequency_max: 7, frequencyKind: 'variable',
+    metricFamily: 'legwork',
   },
   {
     id: 'run', name: 'Run', icon: PersonSimpleRunIcon, emoji: '🏃', timeAffinity: 'daytime',
@@ -93,6 +108,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     frequency_min: 2, frequency_recommended: 3, frequency_max: 5, frequencyKind: 'variable',
     identityLine: 'You are becoming someone who runs.',
     comebackAsk: 'A walk counts today.',
+    metricFamily: 'legwork',
   },
   {
     id: 'swim', name: 'Swim', icon: WavesIcon, emoji: '🏊', timeAffinity: 'daytime',
@@ -131,6 +147,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     frequency_min: 3, frequency_recommended: 5, frequency_max: 7, frequencyKind: 'variable',
     identityLine: 'You are becoming someone who eats with intention.',
     comebackAsk: 'One balanced meal counts today.',
+    metricFamily: 'eating-adherence',
   },
   {
     id: 'calories', name: 'Calories', icon: FireIcon, emoji: '🔥',
@@ -139,6 +156,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     tags: ['calories', 'weight loss', 'diet', 'cut', 'bulk', 'nutrition', 'food', 'macro', 'fitness', 'body composition'],
     healthKitType: null,
     frequency_min: 5, frequency_recommended: 7, frequency_max: 7, frequencyKind: 'variable',
+    metricFamily: 'eating-adherence',
   },
   {
     id: 'no-alcohol', name: 'No Alcohol', icon: ProhibitIcon, emoji: '🚫',
@@ -158,6 +176,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     frequency_min: 1, frequency_recommended: 2, frequency_max: 3, frequencyKind: 'variable',
     identityLine: 'You are becoming someone who plans meals ahead.',
     comebackAsk: 'Prepping one meal counts today.',
+    metricFamily: 'home-cooking',
   },
   {
     id: 'no-nicotine', name: 'No Nicotine', icon: CigaretteIcon, emoji: '🚭',
@@ -231,6 +250,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     tags: ['focus', 'productivity', 'deep work', 'distraction', 'adhd', 'career', 'study', 'startup', 'business', 'writing', 'coding'],
     healthKitType: null,
     frequency_min: 3, frequency_recommended: 4, frequency_max: 6, frequencyKind: 'variable',
+    metricFamily: 'focused-block',
   },
   {
     id: 'planning', name: 'Planning', icon: CalendarCheckIcon, emoji: '🗓️',
@@ -277,6 +297,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     frequency_min: 3, frequency_recommended: 4, frequency_max: 6, frequencyKind: 'variable',
     identityLine: 'You are becoming someone who does deep work.',
     comebackAsk: 'One short block counts today.',
+    metricFamily: 'focused-block',
   },
   {
     id: 'writing', name: 'Writing', icon: PenNibIcon, emoji: '✍️',
@@ -371,6 +392,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     tags: ['cooking', 'meal prep', 'nutrition', 'diet', 'health', 'money', 'food', 'eating out', 'skills', 'discipline'],
     healthKitType: null,
     frequency_min: 2, frequency_recommended: 3, frequency_max: 5, frequencyKind: 'variable',
+    metricFamily: 'home-cooking',
   },
 
   // RELATIONSHIPS

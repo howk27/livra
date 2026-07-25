@@ -5,11 +5,13 @@ const ids = (title: string) => getMarksForGoal(title).map(m => m.id);
 const cats = (title: string) => getMarksForGoal(title).map(m => m.category);
 
 describe('getMarksForGoal', () => {
-  it('returns run and steps for "Run a marathon"', () => {
-    const marks = getMarksForGoal('Run a marathon');
-    const markIds = marks.map(m => m.id);
+  // Founder 2026-07-24: this used to assert run AND steps together. They are
+  // one metric (see metricFamily 'legwork') and suggesting both turned one
+  // activity into two rows to log. Run outranks Steps on a running title.
+  it('returns run, and NOT steps, for "Run a marathon"', () => {
+    const markIds = ids('Run a marathon');
     expect(markIds).toContain('run');
-    expect(markIds).toContain('steps');
+    expect(markIds).not.toContain('steps');
   });
 
   it('returns saving mark for "Save for a house"', () => {
@@ -96,17 +98,21 @@ describe('getMarksForGoal â€” bare magnitude, no currency symbol', () => {
   });
 
   it('"Run a 5k" is untouched by the magnitude rule', () => {
+    // Guards the DOMAIN, not the roster: a race title must still read as
+    // fitness. `steps` was dropped from this assertion on 2026-07-24 when the
+    // legwork metric family made run/steps mutually exclusive.
     const result = ids('Run a 5k');
     expect(result).toContain('run');
-    expect(result).toContain('steps');
+    expect(cats('Run a 5k')).toContain('Fitness');
+    expect(cats('Run a 5k')).not.toContain('Finance');
   });
 });
 
 describe('getMarksForGoal â€” no regression on race goals', () => {
-  it('"Run a 5k" still returns run and steps', () => {
+  it('"Run a 5k" still ranks run first, and drops its family twin', () => {
     const result = ids('Run a 5k');
     expect(result[0]).toBe('run');
-    expect(result).toContain('steps');
+    expect(result).not.toContain('steps');
   });
 
   it('"Run a 5k" surfaces no Finance marks', () => {
@@ -236,5 +242,66 @@ describe('calculateCommitmentTarget', () => {
 
   it('returns 0 for 0 marks', () => {
     expect(calculateCommitmentTarget('building', 'steady', 0)).toBe(0);
+  });
+});
+
+/**
+ * Metric families (founder 2026-07-24). Two marks that measure the same thing
+ * must never BOTH be suggested — "Run a 5K" offering Run and Steps reads as
+ * busywork and double-counts one effort. The rule gates SUGGESTION only; any
+ * mark stays addable by hand from the full library.
+ */
+describe('getMarksForGoal — one mark per metric family', () => {
+  const familyOf = (id: string) => MARK_LIBRARY.find(m => m.id === id)?.metricFamily;
+
+  it('never suggests two marks from the same family, for any goal title', () => {
+    const titles = [
+      'Run a 5K', 'Run a marathon', 'Get more active', 'Train for a triathlon',
+      'Eat better', 'Lose weight', 'Get lean', 'Cut out sugar',
+      'Build a business', 'Write a book', 'Pass an exam', 'Learn to cook',
+      'Save money', 'Improve mental health', 'Read more books',
+    ];
+    for (const title of titles) {
+      const families = getMarksForGoal(title)
+        .map(m => m.metricFamily)
+        .filter((f): f is string => Boolean(f));
+      expect(new Set(families).size).toBe(families.length);
+    }
+  });
+
+  it('keeps the higher-ranked member of a family, not a fixed winner', () => {
+    // A running title ranks Run above Steps; a walking title flips it.
+    expect(ids('Run a 5K')).toContain('run');
+    expect(ids('Run a 5K')).not.toContain('steps');
+    expect(ids('Walk 10000 steps every day')).toContain('steps');
+    expect(ids('Walk 10000 steps every day')).not.toContain('run');
+  });
+
+  it('frees the dropped slot for a genuinely different mark', () => {
+    // Dropping the family loser must not shrink the list below the cap when
+    // other qualifying marks exist — the filter runs BEFORE the slice.
+    expect(getMarksForGoal('Run a marathon').length).toBe(4);
+  });
+
+  it('leaves family-less marks entirely alone', () => {
+    const noFamily = MARK_LIBRARY.filter(m => !m.metricFamily);
+    expect(noFamily.length).toBeGreaterThan(20);
+    // Sleep and Water share no family and legitimately co-occur.
+    const marathon = ids('Run a marathon');
+    expect(familyOf('sleep')).toBeUndefined();
+    expect(marathon.filter(id => !familyOf(id)).length).toBeGreaterThan(0);
+  });
+
+  it('pairs every family with at least one partner — a lone family is a typo', () => {
+    const counts = new Map<string, number>();
+    for (const mark of MARK_LIBRARY) {
+      if (!mark.metricFamily) continue;
+      counts.set(mark.metricFamily, (counts.get(mark.metricFamily) ?? 0) + 1);
+    }
+    expect(counts.size).toBeGreaterThan(0);
+    for (const [family, count] of counts) {
+      expect({ family, count }).toEqual({ family, count: expect.any(Number) });
+      expect(count).toBeGreaterThanOrEqual(2);
+    }
   });
 });
