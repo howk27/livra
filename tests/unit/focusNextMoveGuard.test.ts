@@ -42,4 +42,20 @@ describe('focus.tsx — Next Move integration guard', () => {
   it('wires the pure isComebackState selector', () => {
     expect(SRC).toContain('isComebackState');
   });
+
+  it('the spotlight card renders NO mark rows below NextMoveCard (spec §1 Decision #1: "No extra rows" — done-for-week marks ask nothing today and appear nowhere on the spotlight card)', () => {
+    // Strip comments first — the explanatory comment above the removed block
+    // legitimately mentions the retired pattern by name; only CODE matters.
+    const codeOnly = SRC.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    const heroStart = codeOnly.indexOf('<NextMoveCard');
+    expect(heroStart).toBeGreaterThan(-1);
+    const cardEnd = codeOnly.indexOf('</View>', heroStart);
+    expect(cardEnd).toBeGreaterThan(-1);
+    const spotlightCardBody = codeOnly.slice(heroStart, cardEnd);
+    // The done-for-week dimmed rows still exist elsewhere (the manually
+    // re-expanded done-today goal card, and Daily Habits) — this only pins
+    // that the spotlight card's own JSX block never reaches for them.
+    expect(spotlightCardBody).not.toContain('doneMarks');
+    expect(spotlightCardBody).not.toContain('renderMarkRow(');
+  });
 });

@@ -748,15 +748,12 @@ export default function FocusScreen() {
                     onOverflowPress={() => router.push(`/goal/${goal.id}` as any)}
                   />
 
-                  {/* Done marks (dimmed) — unchanged */}
-                  {doneMarks.length > 0 && (
-                    <>
-                      <View style={[styles.doneDivider, { backgroundColor: c.borderLight }]} />
-                      {doneMarks.map((mark, idx) =>
-                        renderMarkRow(mark, idx === doneMarks.length - 1, true, false, idx)
-                      )}
-                    </>
-                  )}
+                  {/* spec §1 Decision #1: "No extra rows" — done-for-week
+                      marks ask nothing today and render NOWHERE on the
+                      spotlight card (not even dimmed). They still surface,
+                      unchanged, inside a manually re-expanded done-today
+                      goal's card (the `!isSpotlight` branch above) and in
+                      Daily Habits. Intentionally no doneMarks block here. */}
 
                   {/* Queued-expand = spotlight override (spec §1): only the
                       goal a queued-row tap hoisted into the seat gets a fold
