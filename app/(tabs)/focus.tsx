@@ -256,6 +256,13 @@ export default function FocusScreen() {
     return spotlightGoalId;
   }, [spotlightOverride, spotlightGoalId, marksByGoalId, weeklyCountsMap, todayCountsMap]);
 
+  // Spec §1: the hero override also clears when the spotlight moves off its
+  // goal — otherwise a days-old chip pick would silently reactivate when the
+  // spotlight later returns to that goal.
+  useEffect(() => {
+    setHeroOverride((prev) => (prev && prev.goalId !== effectiveSpotlightGoalId ? null : prev));
+  }, [effectiveSpotlightGoalId]);
+
   // Comeback (spec §3): 2+ full quiet days → the Next Move card presents the
   // easiest due mark with a shrunk ask instead of the normal queue pick. The
   // override is ignored in this state — comeback wants the smallest true next
