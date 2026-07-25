@@ -15,10 +15,16 @@ import { join } from 'path';
 const ROOT = join(__dirname, '../..');
 const SYNC_SRC = readFileSync(join(ROOT, 'hooks/useSync.ts'), 'utf8');
 const TYPES_SRC = readFileSync(join(ROOT, 'types/index.ts'), 'utf8');
-const MIGRATION_SRC = readFileSync(
-  join(ROOT, 'supabase/migrations/20260612_frequency_fields.sql'),
-  'utf8',
-);
+// Every migration that adds a client-owned column to public.marks. A column
+// listed here is held to the same four-leg contract — 20260725 joined because
+// maintenance_of had the identical defect: device-only, so a reinstall dropped
+// the provenance of every graduated habit.
+const MIGRATION_SRC = [
+  'supabase/migrations/20260612_frequency_fields.sql',
+  'supabase/migrations/20260725_marks_maintenance_of.sql',
+]
+  .map((file) => readFileSync(join(ROOT, file), 'utf8'))
+  .join('\n');
 
 /** Columns the migration actually adds to public.marks. */
 const migrationColumns = Array.from(
@@ -51,7 +57,7 @@ const updateSetClause =
   SYNC_SRC.match(/UPDATE lc_counters SET\s*\n([\s\S]*?)WHERE id = \?/)?.[1] ?? '';
 
 describe('mark sync column contract', () => {
-  it('finds the five frequency columns in the migration', () => {
+  it('finds every client-owned mark column added by migration', () => {
     expect(migrationColumns.sort()).toEqual(
       [
         'frequency_kind',
@@ -59,6 +65,7 @@ describe('mark sync column contract', () => {
         'frequency_min',
         'frequency_recommended',
         'weekly_target',
+        'maintenance_of',
       ].sort(),
     );
   });

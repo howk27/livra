@@ -24,8 +24,10 @@ import { uploadAvatar, getAvatarUrl } from '../../lib/storage/avatarStorage';
 import { resolveInitialDisplayName } from '../../lib/profile/displayName';
 import { logger } from '../../lib/utils/logger';
 import { useNotification } from '../../contexts/NotificationContext';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import {
   describeEmailChangeOutcome,
+  emailChangeReauthMethod,
   emailChangeRequiresPassword,
   hasPasswordIdentity,
   mapEmailChangeError,
@@ -100,6 +102,10 @@ export default function ProfileScreen() {
   // Same rule, read through the named predicate so the security decision lives
   // in one place: only an account that HAS a password can be asked for it.
   const emailNeedsPassword = emailChangeRequiresPassword(user) || passwordJustAdded;
+  // An account with no password still has to prove ownership: Apple accounts do
+  // it with a fresh Sign in with Apple, because this project auto-confirms and
+  // never sends a confirmation link (verified live 2026-07-25).
+  const reauthMethod = passwordJustAdded ? 'password' : emailChangeReauthMethod(user);
   const awaitingConfirmation = pendingEmailOf(user);
 
   // --- Pre-fill display name from the saved profile (same read pattern as
@@ -234,9 +240,9 @@ export default function ProfileScreen() {
     try {
       const target = emailValue.trim();
 
-      // Email is the recovery channel, so a password account proves ownership
-      // first — updateUser({email}) never checks one on its own, which would
-      // leave an unlocked phone enough to take the account over.
+      // Email is the recovery channel, so ownership is proved BEFORE the change —
+      // updateUser({email}) never checks anything on its own, which would leave
+      // an unlocked phone enough to take the account over.
       if (emailNeedsPassword) {
         if (!userEmail) {
           setEmailError('We could not read your email, so we cannot confirm it is you.');
@@ -248,6 +254,49 @@ export default function ProfileScreen() {
         });
         if (reauthError) {
           setEmailError(mapReauthError(reauthError));
+          return;
+        }
+      } else if (reauthMethod === 'apple') {
+        // An Apple-only account has no password to prove, and this project runs
+        // with "Confirm email" OFF (verified live 2026-07-25), so no confirmation
+        // link is sent either — the change would otherwise be completely ungated.
+        // A fresh Sign in with Apple is the one proof these accounts can give.
+        if (!(await AppleAuthentication.isAvailableAsync())) {
+          setEmailError('Change your email from the iPhone you sign in with, so Apple can confirm it is you.');
+          return;
+        }
+        let identityToken: string | null = null;
+        try {
+          const credential = await AppleAuthentication.signInAsync({
+            requestedScopes: [AppleAuthentication.AppleAuthenticationScope.EMAIL],
+          });
+          identityToken = credential.identityToken;
+        } catch (appleError) {
+          // ERR_REQUEST_CANCELED is the user backing out — not an error to shout about.
+          const code = (appleError as { code?: string })?.code;
+          if (code !== 'ERR_REQUEST_CANCELED') {
+            logger.warn('[Profile] Apple reauth failed:', appleError);
+            setEmailError('Apple could not confirm it is you. Please try again.');
+          }
+          return;
+        }
+        if (!identityToken) {
+          setEmailError('Apple could not confirm it is you. Please try again.');
+          return;
+        }
+        const { data: reauthData, error: reauthError } = await supabase.auth.signInWithIdToken({
+          provider: 'apple',
+          token: identityToken,
+        });
+        if (reauthError) {
+          setEmailError(mapReauthError(reauthError));
+          return;
+        }
+        // Signing in with a DIFFERENT Apple ID proves nothing about this account
+        // — and has just switched the session to that one. Stop here rather than
+        // move the email of an account whose owner never authorised it.
+        if (reauthData?.user?.id && user?.id && reauthData.user.id !== user.id) {
+          setEmailError('That is a different Apple ID. Sign in with the one this account uses.');
           return;
         }
       }
@@ -277,6 +326,8 @@ export default function ProfileScreen() {
     emailValue,
     emailPassword,
     emailNeedsPassword,
+    reauthMethod,
+    user?.id,
     savingEmail,
     supabase,
     userEmail,
@@ -474,9 +525,12 @@ export default function ProfileScreen() {
                   returnKeyType="done"
                   onSubmitEditing={() => { void handleEmailChange(); }}
                 />
-                {/* Ownership check — email is the recovery channel. Only shown
-                    to accounts that HAVE a password; an Apple-only account has
-                    none to prove and relies on the confirmation link instead. */}
+                {/* Ownership check — email is the recovery channel. A password
+                    account types it here; an Apple account is asked by Apple on
+                    submit, so it gets a heads-up line instead of a field. */}
+                {reauthMethod === 'apple' ? (
+                  <Text style={styles.note}>Apple will confirm it is you before this changes.</Text>
+                ) : null}
                 {emailNeedsPassword ? (
                   <TextInput
                     style={[styles.input, styles.stackedInput]}
@@ -662,6 +716,16 @@ function createStyles(c: ReturnType<typeof themedColors>) {
       color: c.inkMid,
       textAlign: 'center',
       lineHeight: 22,
+    },
+    // Left-aligned sibling of quietLine, for a line that sits inside a card next
+    // to inputs. inkMid for the same contrast reason — inkMuted is banned on
+    // this screen by tests/unit/identityTextContrast.test.ts.
+    note: {
+      fontFamily: fonts.sans,
+      fontSize: fontSize.sm,
+      color: c.inkMid,
+      lineHeight: 20,
+      marginTop: spacing.xs,
     },
     avatarRow: {
       alignItems: 'center',

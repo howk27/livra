@@ -87,6 +87,11 @@ const OPTIONAL_MARK_COLUMNS = [
   'frequency_max',
   'weekly_target',
   'frequency_kind',
+  // Server column added 2026-07-25. Until then graduation's provenance lived
+  // only on the device, so a reinstall turned every maintenance habit into an
+  // anonymous one (goal_id is NULLed at graduation, and this was the only
+  // record of where it came from).
+  'maintenance_of',
 ] as const;
 type OptionalMarkColumn = (typeof OPTIONAL_MARK_COLUMNS)[number];
 
@@ -411,7 +416,7 @@ export const useSync = () => {
       // (goals.tsx falls back to weekly_target 7 — founder device QC 2026-07-22).
       // dailyTarget was worse: pushed since day one, never read back.
       const counterSelect =
-        'id, user_id, name, emoji, color, unit, enable_streak, sort_index, total, last_activity_date, deleted_at, created_at, updated_at, goal_id, dailyTarget, frequency_min, frequency_recommended, frequency_max, weekly_target, frequency_kind';
+        'id, user_id, name, emoji, color, unit, enable_streak, sort_index, total, last_activity_date, deleted_at, created_at, updated_at, goal_id, dailyTarget, frequency_min, frequency_recommended, frequency_max, weekly_target, frequency_kind, maintenance_of';
       // Degrade target: if the live DB is missing any optional column the select
       // 400s, and a failed pull is exactly the reinstall data loss we are fixing.
       const counterSelectLegacy =
@@ -1125,6 +1130,11 @@ export const useSync = () => {
             weekly_target: (c as Counter & { weekly_target?: number | null }).weekly_target ?? null,
             frequency_kind:
               (c as Counter & { frequency_kind?: string | null }).frequency_kind ?? null,
+            // Provenance of a graduated maintenance habit. Same story as the
+            // frequency block: device-only until 2026-07-25, so a reinstall
+            // returned it NULL and the habit forgot which goal it came from.
+            maintenance_of:
+              (c as Counter & { maintenance_of?: string | null }).maintenance_of ?? null,
           };
         });
         
@@ -2128,8 +2138,8 @@ const mergeCounter = async (counter: Counter, existingCountersMap?: Map<string, 
       `INSERT INTO lc_counters (
         id, user_id, name, emoji, color, unit, enable_streak,
         sort_index, total, last_activity_date, deleted_at, created_at, updated_at, dailyTarget, goal_id,
-        frequency_min, frequency_recommended, frequency_max, weekly_target, frequency_kind
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        frequency_min, frequency_recommended, frequency_max, weekly_target, frequency_kind, maintenance_of
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         counter.id,
         counter.user_id,
@@ -2151,6 +2161,7 @@ const mergeCounter = async (counter: Counter, existingCountersMap?: Map<string, 
         (counter as any).frequency_max ?? null,
         (counter as any).weekly_target ?? null,
         (counter as any).frequency_kind ?? null,
+        (counter as any).maintenance_of ?? null,
       ]
     );
     return true; // Counter was inserted
@@ -2269,6 +2280,7 @@ const mergeCounter = async (counter: Counter, existingCountersMap?: Map<string, 
           name = ?, emoji = ?, color = ?, unit = ?, enable_streak = ?,
           sort_index = ?, total = ?, last_activity_date = ?, deleted_at = ?, dailyTarget = ?, goal_id = ?,
           frequency_min = ?, frequency_recommended = ?, frequency_max = ?, weekly_target = ?, frequency_kind = ?,
+          maintenance_of = ?,
           updated_at = ?
         WHERE id = ?`,
         [
@@ -2290,6 +2302,7 @@ const mergeCounter = async (counter: Counter, existingCountersMap?: Map<string, 
           preserveRemote(remoteCounter.frequency_max, existingCounter.frequency_max),
           preserveRemote(remoteCounter.weekly_target, existingCounter.weekly_target),
           preserveRemote(remoteCounter.frequency_kind, existingCounter.frequency_kind),
+          preserveRemote(remoteCounter.maintenance_of, existingCounter.maintenance_of),
           counter.updated_at,
           counter.id,
         ]

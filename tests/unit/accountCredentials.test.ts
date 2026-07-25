@@ -3,6 +3,7 @@ import {
   MIN_PASSWORD_LENGTH,
   authProviders,
   describeEmailChangeOutcome,
+  emailChangeReauthMethod,
   emailChangeRequiresPassword,
   hasPasswordIdentity,
   isApplePrivateRelayEmail,
@@ -326,6 +327,44 @@ describe('validateEmailChangeRequest', () => {
           validateEmailChangeRequest({ ...base, nextEmail, currentPassword: 'hunter22' }),
         ).toBe(addressProblem);
       }
+    }
+  });
+});
+
+/**
+ * VERIFIED LIVE 2026-07-25: the project auto-confirms ("Confirm email" off), so
+ * no confirmation link is ever sent — the gate the Apple-only path used to lean
+ * on does not exist, and "Secure email change" cannot restore it while
+ * confirmations are off. An Apple account therefore proves ownership with a
+ * fresh Sign in with Apple.
+ */
+describe('emailChangeReauthMethod', () => {
+  it('asks a password account for its password', () => {
+    expect(emailChangeReauthMethod(emailUser)).toBe('password');
+  });
+
+  it('asks an Apple-only account for a fresh Apple sign-in', () => {
+    expect(emailChangeReauthMethod(appleUser)).toBe('apple');
+  });
+
+  it('prefers the password when an account has both', () => {
+    expect(
+      emailChangeReauthMethod({
+        email: 'sam@example.com',
+        identities: [{ provider: 'apple' }, { provider: 'email' }],
+      }),
+    ).toBe('password');
+  });
+
+  it('returns none when there is no provable identity at all', () => {
+    expect(emailChangeReauthMethod(null)).toBe('none');
+    expect(emailChangeReauthMethod({})).toBe('none');
+    expect(emailChangeReauthMethod({ identities: [{ provider: 'google' }] })).toBe('none');
+  });
+
+  it('agrees with emailChangeRequiresPassword on every account shape', () => {
+    for (const u of [emailUser, appleUser, {}, null]) {
+      expect(emailChangeReauthMethod(u) === 'password').toBe(emailChangeRequiresPassword(u));
     }
   });
 });

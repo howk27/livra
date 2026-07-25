@@ -119,14 +119,36 @@ export function validateEmailChange(nextEmail: string, currentEmail?: string | n
  * paths, and an Apple-only account has no password to demand, so gating them
  * would lock those users out of their own profile.
  *
- * Accounts with no password identity (Apple/OAuth) cannot reauthenticate here.
- * They keep the ungated email change; the confirmation link Supabase sends to
- * the new address is their gate. Enabling "Secure email change" in the
- * Supabase dashboard adds a confirmation on the OLD address too, which closes
- * the takeover vector for those accounts without any client work.
+ * Accounts with no password identity (Apple/OAuth) cannot answer THIS check.
+ * CORRECTED 2026-07-25: they used to be waved through on the belief that
+ * Supabase's confirmation link gated them. It does not on this project, which
+ * auto-confirms. See emailChangeReauthMethod below for what actually gates them.
  */
 export function emailChangeRequiresPassword(user?: CredentialUser | null): boolean {
   return hasPasswordIdentity(user);
+}
+
+/** How an account can prove ownership before its email, its recovery channel, moves. */
+export type EmailChangeReauthMethod = 'password' | 'apple' | 'none';
+
+/**
+ * VERIFIED LIVE 2026-07-25: this project runs with "Confirm email" OFF, so
+ * Supabase auto-confirms (every signup since mid-June has email_confirmed_at
+ * within ~50ms of created_at) and no confirmation mail is sent. That removes
+ * the gate the comment above assumed for Apple-only accounts: with no password
+ * to reauthenticate and no link to click, an unlocked phone was enough to move
+ * the recovery channel, and enabling "Secure email change" cannot help while
+ * confirmations stay off.
+ *
+ * So an Apple account proves ownership the only way it can: a fresh Sign in
+ * with Apple. The caller must also check the returned identity is the SAME
+ * user, because signInWithIdToken with a different Apple ID signs into that
+ * other account rather than proving anything about this one.
+ */
+export function emailChangeReauthMethod(user?: CredentialUser | null): EmailChangeReauthMethod {
+  if (hasPasswordIdentity(user)) return 'password';
+  if (authProviders(user).includes('apple')) return 'apple';
+  return 'none';
 }
 
 export interface EmailChangeRequest {

@@ -36,6 +36,14 @@ jest.mock('../../components/ui/LivraHeader', () => {
   return { LivraHeader: () => React.createElement(View, null) };
 });
 
+const mockAppleSignIn = jest.fn();
+const mockAppleAvailable = jest.fn();
+jest.mock('expo-apple-authentication', () => ({
+  isAvailableAsync: (...args: any[]) => mockAppleAvailable(...args),
+  signInAsync: (...args: any[]) => mockAppleSignIn(...args),
+  AppleAuthenticationScope: { EMAIL: 'EMAIL', FULL_NAME: 'FULL_NAME' },
+}));
+
 jest.mock('expo-image-picker', () => ({
   launchImageLibraryAsync: jest.fn().mockResolvedValue({ canceled: true }),
   MediaTypeOptions: { Images: 'Images' },
@@ -61,6 +69,7 @@ jest.mock('../../hooks/useAuth', () => ({ useAuth: () => mockAuthState }));
 
 const mockSignInWithPassword = jest.fn();
 const mockUpdateUser = jest.fn();
+const mockSignInWithIdToken = jest.fn();
 const mockCalls: string[] = [];
 const mockMaybeSingle = jest.fn();
 jest.mock('../../lib/supabase', () => ({
@@ -73,6 +82,10 @@ jest.mock('../../lib/supabase', () => ({
       updateUser: (...args: any[]) => {
         mockCalls.push('updateUser');
         return mockUpdateUser(...args);
+      },
+      signInWithIdToken: (...args: any[]) => {
+        mockCalls.push('signInWithIdToken');
+        return mockSignInWithIdToken(...args);
       },
     },
     from: () => ({
@@ -106,6 +119,9 @@ const appleUser = {
 beforeEach(() => {
   mockCalls.length = 0;
   mockSignInWithPassword.mockReset().mockResolvedValue({ data: {}, error: null });
+  mockSignInWithIdToken.mockReset().mockResolvedValue({ data: { user: appleUser }, error: null });
+  mockAppleAvailable.mockReset().mockResolvedValue(true);
+  mockAppleSignIn.mockReset().mockResolvedValue({ identityToken: 'apple-jwt' });
   mockUpdateUser.mockReset().mockResolvedValue({ data: { user: emailUser }, error: null });
   mockMaybeSingle.mockReset().mockResolvedValue({ data: { display_name: 'Sam' }, error: null });
   mockShowSuccess.mockReset();
@@ -412,7 +428,13 @@ describe('email change reauthenticates (password accounts)', () => {
     expect(mockCalls).toEqual([]);
   });
 
-  it('asks an Apple-only account for no password at all', async () => {
+  // REWRITTEN 2026-07-25. This test used to assert that an Apple-only account
+  // changed its email with NO proof of ownership at all, on the assumption that
+  // Supabase's confirmation link was the gate. Checked against the live project:
+  // "Confirm email" is OFF, every signup is auto-confirmed within ~50ms and no
+  // mail is ever sent, so there was no gate -- an unlocked phone could move the
+  // recovery channel. A fresh Sign in with Apple is now that proof.
+  it('asks an Apple-only account for Apple, not for a password', async () => {
     mockAuthState.user = appleUser;
     mockUpdateUser.mockResolvedValue({
       data: { user: { email: 'real@example.com' } },
@@ -420,14 +442,40 @@ describe('email change reauthenticates (password accounts)', () => {
     });
     const api = render(<ProfileScreen />);
     openEmailEditor(api);
-    // There is no password to prove; demanding one would dead-end them.
+    // Still no password field: there is no password to prove.
     expect(api.queryByPlaceholderText('Your password')).toBeNull();
+    expect(api.getByText(/Apple will confirm it is you/i)).toBeTruthy();
     fireEvent.changeText(api.getByPlaceholderText('you@example.com'), 'real@example.com');
     fireEvent.press(api.getByText('Update email'));
 
     await waitFor(() => expect(mockUpdateUser).toHaveBeenCalledWith({ email: 'real@example.com' }));
-    expect(mockCalls).toEqual(['updateUser']);
+    expect(mockAppleSignIn).toHaveBeenCalled();
+    expect(mockCalls).toEqual(['signInWithIdToken', 'updateUser']);
     expect(mockSignInWithPassword).not.toHaveBeenCalled();
+  });
+
+  it('does not change the email when Apple sign-in is cancelled', async () => {
+    mockAuthState.user = appleUser;
+    mockAppleSignIn.mockRejectedValue({ code: 'ERR_REQUEST_CANCELED' });
+    const api = render(<ProfileScreen />);
+    openEmailEditor(api);
+    fireEvent.changeText(api.getByPlaceholderText('you@example.com'), 'real@example.com');
+    fireEvent.press(api.getByText('Update email'));
+
+    await waitFor(() => expect(mockAppleSignIn).toHaveBeenCalled());
+    expect(mockUpdateUser).not.toHaveBeenCalled();
+  });
+
+  it('refuses when a DIFFERENT Apple ID answers -- that proves nothing about this account', async () => {
+    mockAuthState.user = appleUser;
+    mockSignInWithIdToken.mockResolvedValue({ data: { user: { id: 'someone-else' } }, error: null });
+    const api = render(<ProfileScreen />);
+    openEmailEditor(api);
+    fireEvent.changeText(api.getByPlaceholderText('you@example.com'), 'real@example.com');
+    fireEvent.press(api.getByText('Update email'));
+
+    await waitFor(() => expect(api.getByText(/different Apple ID/i)).toBeTruthy());
+    expect(mockUpdateUser).not.toHaveBeenCalled();
   });
 
   it('keeps the two password fields distinguishable when both blocks are open', () => {

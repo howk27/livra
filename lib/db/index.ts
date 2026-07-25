@@ -1272,7 +1272,8 @@ export const initDatabase = async (): Promise<MockDatabase> => {
       frequency_recommended INTEGER,
       frequency_max INTEGER,
       weekly_target INTEGER,
-      frequency_kind TEXT
+      frequency_kind TEXT,
+      maintenance_of TEXT
     );
   `);
   
