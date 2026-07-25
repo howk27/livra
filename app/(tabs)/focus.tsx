@@ -21,7 +21,7 @@ import { Breathing } from '../../components/ui/Breathing';
 // This phosphor version exports the plain circle only as CircleIcon (no
 // legacy `Circle` alias, unlike CheckCircle) — aliased locally to match the
 // naming of its siblings here.
-import { Plus, CaretRight, CaretDown, CheckCircle, CircleIcon as Circle } from 'phosphor-react-native';
+import { Plus, CaretDown, CaretUp, CheckCircle, CircleIcon as Circle } from 'phosphor-react-native';
 import { SectionLabel } from '../../components/ui/SectionLabel';
 import { GoalTitle } from '../../components/ui/GoalTitle';
 import { SpeedDialFAB } from '../../components/ui/SpeedDialFAB';
@@ -608,6 +608,7 @@ export default function FocusScreen() {
                     onPress={() => toggleGoalExpand(goal.id)}
                     activeOpacity={0.7}
                     accessibilityRole="button"
+                    accessibilityState={{ expanded: false }}
                     accessibilityLabel={`${goal.title}, ${allDoneForWeek ? 'all done this week' : 'done for today'}. Tap to expand.`}
                   >
                     <CheckCircle size={20} color={c.accent} weight="fill" />
@@ -620,7 +621,9 @@ export default function FocusScreen() {
                     <Text style={[styles.goalCardDoneMeta, { color: c.inkMid }]}>
                       {allDoneForWeek ? 'All done' : 'Done today'}
                     </Text>
-                    <CaretRight size={16} color={c.inkMuted} weight="bold" />
+                    {/* Down, not right: this row EXPANDS in place, it does not
+                        navigate. Same caret vocabulary as the queued rows. */}
+                    <CaretDown size={16} color={c.inkMuted} weight="bold" />
                   </TouchableOpacity>
                 );
               }
@@ -684,13 +687,24 @@ export default function FocusScreen() {
               if (!isSpotlight) {
                 return (
                   <View key={goal.id} style={[styles.goalCard, { backgroundColor: c.surface }]}>
+                    {/* Founder 2026-07-24, "unable to close it back up": the
+                        header carried a CaretRight, which reads as navigate-
+                        forward, and the "Show less" fold row below is gated to
+                        a spotlight override a done goal never holds — so the
+                        one working affordance (this header) looked like a link
+                        to somewhere else. Caret now points UP, matching the
+                        down-caret that invited the expansion, and an explicit
+                        fold row backs it up. */}
                     <TouchableOpacity
                       onPress={() => toggleGoalExpand(goal.id)}
                       activeOpacity={0.7}
                       style={styles.goalCardHeader}
+                      accessibilityRole="button"
+                      accessibilityState={{ expanded: true }}
+                      accessibilityLabel={`Collapse ${goal.title}`}
                     >
                       <GoalTitle title={goal.title} size="card" color={c.inkDark} style={styles.goalCardTitle} />
-                      <CaretRight size={16} color={c.inkMuted} weight="bold" />
+                      <CaretUp size={16} color={c.inkMuted} weight="bold" />
                     </TouchableOpacity>
 
                     {dueMarks.map((mark, idx) =>
@@ -705,6 +719,16 @@ export default function FocusScreen() {
                         )}
                       </>
                     )}
+
+                    <TouchableOpacity
+                      style={styles.expanderRow}
+                      onPress={() => toggleGoalExpand(goal.id)}
+                      activeOpacity={0.7}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Collapse ${goal.title}`}
+                    >
+                      <Text style={[styles.expanderText, { color: c.accent }]}>Show less</Text>
+                    </TouchableOpacity>
                   </View>
                 );
               }
