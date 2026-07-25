@@ -51,6 +51,6 @@ describe('pickComebackMove', () => {
 describe('resolveComebackAsk', () => {
   it('unknown/custom mark falls back to the generic ask', () =>
     expect(resolveComebackAsk({ name: 'Whittle spoons' })).toBe('The smallest version counts today.'));
-  it('never returns an empty string for a library mark', () =>
-    expect(resolveComebackAsk({ name: 'Run' }).length).toBeGreaterThan(0));
+  it('resolves the library ask for a library mark, not the generic fallback', () =>
+    expect(resolveComebackAsk({ name: 'Run' })).not.toBe('The smallest version counts today.'));
 });

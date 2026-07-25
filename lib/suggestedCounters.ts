@@ -62,7 +62,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     healthKitType: null,
     frequency_min: 3, frequency_recommended: 5, frequency_max: 7, frequencyKind: 'variable',
     identityLine: 'You are becoming someone who stretches.',
-    comebackAsk: 'Five minutes counts today.',
+    comebackAsk: 'Five minutes count today.',
   },
 
   // FITNESS
@@ -266,7 +266,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     healthKitType: null,
     frequency_min: 3, frequency_recommended: 4, frequency_max: 6, frequencyKind: 'variable',
     identityLine: 'You are becoming someone who studies.',
-    comebackAsk: 'Ten minutes counts today.',
+    comebackAsk: 'Ten minutes count today.',
   },
   {
     id: 'deep-work', name: 'Deep Work', icon: HourglassIcon, emoji: '⏳',
