@@ -79,9 +79,13 @@ const isProLimitError = (error: any): boolean => {
  * have yet. The live DB has drifted from supabase/migrations in BOTH directions,
  * so every leg that carries these must degrade (drop the column, keep syncing)
  * instead of aborting — an aborted sync is how a reinstall loses everything.
+ *
+ * `dailyTarget` is deliberately NOT here: public.marks has never had that column
+ * (information_schema, checked live 2026-07-26), so asking for it 400'd every
+ * single marks pull. It is DEVICE-ONLY state — keep it in lc_counters, never in
+ * a server select or push payload. See MARK_SERVER_COLUMNS below.
  */
 const OPTIONAL_MARK_COLUMNS = [
-  'dailyTarget',
   'frequency_min',
   'frequency_recommended',
   'frequency_max',
@@ -110,6 +114,21 @@ const isUnknownColumnError = (error: any): boolean => {
 /** The optional column named by a PGRST204 upsert rejection, if any (push side). */
 const missingOptionalColumnFromError = (error: any): OptionalMarkColumn | null => {
   if (error?.code !== 'PGRST204') return null;
+  const message = typeof error?.message === 'string' ? error.message : '';
+  return OPTIONAL_MARK_COLUMNS.find((column) => message.includes(column)) ?? null;
+};
+
+/**
+ * The optional column named by a SELECT-side rejection, if any (pull side).
+ *
+ * Postgres reports a bad select list as 42703 `column marks.<name> does not
+ * exist`; PostgREST reports its own parse failures as PGRST100/PGRST204. Naming
+ * the column lets the pull drop exactly that one and keep the rest, instead of
+ * collapsing to a legacy select that also discards the columns the server DOES
+ * have — which is how every sync silently threw away the cadence model.
+ */
+const missingOptionalColumnFromSelectError = (error: any): OptionalMarkColumn | null => {
+  if (!isUnknownColumnError(error)) return null;
   const message = typeof error?.message === 'string' ? error.message : '';
   return OPTIONAL_MARK_COLUMNS.find((column) => message.includes(column)) ?? null;
 };
@@ -410,37 +429,59 @@ export const useSync = () => {
       // reinstall. Omitting it here is exactly why the reinstall link-heal never
       // worked — marks came back with a null goal_id, so the reconcile had no
       // source (founder device QC, delete+reinstall shows goals with no marks).
-      // dailyTarget and the five frequency columns (migration 20260612) MUST be
-      // pulled as well. They only ever existed on the device, so a reinstall
+      // The five frequency columns (20260612) and maintenance_of (20260725) MUST
+      // be pulled as well. They only ever existed on the device, so a reinstall
       // returned them NULL and every mark read as a plain daily habit
       // (goals.tsx falls back to weekly_target 7 — founder device QC 2026-07-22).
-      // dailyTarget was worse: pushed since day one, never read back.
-      const counterSelect =
-        'id, user_id, name, emoji, color, unit, enable_streak, sort_index, total, last_activity_date, deleted_at, created_at, updated_at, goal_id, dailyTarget, frequency_min, frequency_recommended, frequency_max, weekly_target, frequency_kind, maintenance_of';
-      // Degrade target: if the live DB is missing any optional column the select
-      // 400s, and a failed pull is exactly the reinstall data loss we are fixing.
-      const counterSelectLegacy =
+      //
+      // dailyTarget is NOT selected: public.marks has never had that column, so
+      // asking for it 400'd every pull and the all-or-nothing fallback below then
+      // dropped the six cadence columns that DO exist — the server had them, the
+      // device kept discarding them (live log, 2026-07-26). It stays device-only.
+      const counterSelectBase =
         'id, user_id, name, emoji, color, unit, enable_streak, sort_index, total, last_activity_date, deleted_at, created_at, updated_at, goal_id';
 
-      let activeCounterSelect = counterSelect;
+      // Columns this run has learned the server does not have. Learned once, then
+      // applied to every later leg (active rows, tombstones, full refresh) — the
+      // same contract the push loop uses via missingOptionalColumnFromError.
+      const unsupportedPullColumns = new Set<OptionalMarkColumn>();
+      const buildCounterSelect = () =>
+        [
+          counterSelectBase,
+          ...OPTIONAL_MARK_COLUMNS.filter((column) => !unsupportedPullColumns.has(column)),
+        ].join(', ');
+
       // PromiseLike: a PostgrestFilterBuilder is a thenable, not a real Promise.
       const selectMarks = async (
         run: (select: string) => PromiseLike<{ data: any[] | null; error: any }>,
       ): Promise<{ data: any[] | null; error: any }> => {
-        const first = await run(activeCounterSelect);
-        if (
-          first.error &&
-          activeCounterSelect !== counterSelectLegacy &&
-          isUnknownColumnError(first.error)
-        ) {
+        let result = await run(buildCounterSelect());
+
+        // Bounded: each pass drops exactly one named column, so at most one retry
+        // per optional column before the error is treated as real.
+        for (let retry = 0; retry < OPTIONAL_MARK_COLUMNS.length && result.error; retry++) {
+          const missingColumn = missingOptionalColumnFromSelectError(result.error);
+          if (!missingColumn || unsupportedPullColumns.has(missingColumn)) break;
           logger.warn(
-            '[SYNC] Remote marks table is missing an optional column; retrying pull without dailyTarget/frequency fields:',
-            first.error?.message,
+            `[SYNC] Remote marks table missing ${missingColumn} column; retrying pull without it`,
           );
-          activeCounterSelect = counterSelectLegacy;
-          return run(activeCounterSelect);
+          unsupportedPullColumns.add(missingColumn);
+          result = await run(buildCounterSelect());
         }
-        return first;
+
+        // Last resort: an unknown-column error we could not attribute to a named
+        // optional column (a renamed base column, say). Fall back to base rather
+        // than abort — a failed pull is the reinstall data loss this path exists
+        // to prevent. Costs the cadence columns, so it is the floor, not step one.
+        if (result.error && isUnknownColumnError(result.error)) {
+          logger.warn(
+            '[SYNC] Unattributable unknown-column error on marks pull; falling back to the base select:',
+            result.error?.message,
+          );
+          result = await run(counterSelectBase);
+        }
+
+        return result;
       };
 
       let remoteCounterRows: any[] = [];
@@ -1115,10 +1156,12 @@ export const useSync = () => {
             created_at: c.created_at,
             updated_at: c.updated_at,
             deleted_at: isDeleted ? (c.deleted_at || new Date().toISOString()) : null,
-            dailyTarget: normalizeDailyTargetInput((c as Counter & { dailyTarget?: number | null }).dailyTarget),
+            // dailyTarget is NOT pushed: public.marks has no such column, so every
+            // upsert paid a PGRST204 rejection + retry to learn that again. It is
+            // device-only state and lives in lc_counters alone.
             // Push goal_id so the mark→goal link survives a reinstall (the
             // server column has existed since 20260609 but was never sent, so
-            // it was always NULL — see counterSelect above).
+            // it was always NULL — see counterSelectBase above).
             goal_id: (c as Counter & { goal_id?: string | null }).goal_id ?? null,
             // Frequency model (migration 20260612). Never pushed before, so the
             // device held the only copy and a reinstall turned every mark into a

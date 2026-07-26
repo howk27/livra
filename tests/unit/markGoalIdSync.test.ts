@@ -10,8 +10,11 @@ import { join } from 'path';
 const SRC = readFileSync(join(__dirname, '../../hooks/useSync.ts'), 'utf8');
 
 describe('marks.goal_id is durable across sync (reinstall link-heal source)', () => {
-  it('is selected on pull (counterSelect)', () => {
-    const select = SRC.match(/const counterSelect\s*=\s*\n?\s*'([^']*)'/);
+  // goal_id lives in the BASE select, not the optional list: it must survive even
+  // the unattributable-error fallback, since that is exactly the degraded pull a
+  // reinstall hits and goal_id is what the link-heal reconstructs from.
+  it('is selected on pull (counterSelectBase)', () => {
+    const select = SRC.match(/const counterSelectBase\s*=\s*\n?\s*'([^']*)'/);
     expect(select).not.toBeNull();
     expect(select![1]).toContain('goal_id');
   });
