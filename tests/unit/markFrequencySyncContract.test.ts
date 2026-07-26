@@ -22,13 +22,21 @@ const TYPES_SRC = readFileSync(join(ROOT, 'types/index.ts'), 'utf8');
 const MIGRATION_SRC = [
   'supabase/migrations/20260612_frequency_fields.sql',
   'supabase/migrations/20260725_marks_maintenance_of.sql',
+  // 20260726 is drift repair, not a new field: 20250211100000 declared
+  // "dailyTarget" and production never got it, so the column had to be added
+  // live. Listed here because that is what makes it server-backed.
+  'supabase/migrations/20260726_marks_daily_target.sql',
 ]
   .map((file) => readFileSync(join(ROOT, file), 'utf8'))
   .join('\n');
 
-/** Columns the migration actually adds to public.marks. */
+/**
+ * Columns the migration actually adds to public.marks. The optional quotes
+ * matter: dailyTarget is camelCase, so it MUST be written "dailyTarget" or
+ * Postgres folds it to dailytarget and the client's select misses it.
+ */
 const migrationColumns = Array.from(
-  MIGRATION_SRC.matchAll(/ADD COLUMN IF NOT EXISTS\s+(\w+)/gi),
+  MIGRATION_SRC.matchAll(/ADD COLUMN IF NOT EXISTS\s+"?(\w+)"?/gi),
 ).map((m) => m[1]);
 
 /** The `Mark = { ... }` block, so we only demand fields the client really owns. */
@@ -81,6 +89,7 @@ describe('mark sync column contract', () => {
         'frequency_recommended',
         'weekly_target',
         'maintenance_of',
+        'dailyTarget',
       ].sort(),
     );
   });
@@ -105,16 +114,14 @@ describe('mark sync column contract', () => {
     expect(updateSetClause).toContain(`${column} = ?`);
   });
 
-  // dailyTarget is DEVICE-ONLY and this assertion is deliberately the inverse of
-  // what it used to be. public.marks has never had the column (information_schema,
-  // checked live 2026-07-26), so selecting it 400'd every marks pull and the
-  // all-or-nothing fallback then discarded the six cadence columns the server DID
-  // have. The old test asserted it round-tripped on both legs, which encoded the
-  // bug. It must live in lc_counters and nowhere near a server payload.
-  it('dailyTarget is device-only: never selected, never pushed, always local', () => {
-    expect(selectedColumns).not.toContain('dailyTarget');
-    expect(counterSelectBase).not.toContain('dailyTarget');
-    expect(pushPayload).not.toMatch(/^\s*dailyTarget:/m);
+  // dailyTarget round-trips on all four legs like any other client-owned column.
+  // It is called out separately because it is the one that broke: 20250211100000
+  // declared it, production never had it, so the pull 400'd every time and the
+  // old all-or-nothing fallback dropped the six cadence columns with it. The
+  // column was added live 2026-07-26 (20260726_marks_daily_target.sql).
+  it('dailyTarget round-trips on both legs', () => {
+    expect(selectedColumns).toContain('dailyTarget');
+    expect(pushPayload).toContain('dailyTarget:');
     expect(insertColumns).toContain('dailyTarget');
     expect(updateSetClause).toContain('dailyTarget = ?');
   });
@@ -136,12 +143,6 @@ describe('optional mark columns degrade instead of aborting the sync', () => {
     for (const column of contractColumns) {
       expect(optionalColumnList).toContain(`'${column}'`);
     }
-  });
-
-  // dailyTarget is not optional-on-the-server, it is absent from the server.
-  // Listing it here would re-arm the retry that used to fire on every sync.
-  it('does not treat dailyTarget as an optional server column', () => {
-    expect(optionalColumns).not.toContain('dailyTarget');
   });
 
   it('retries the push without a column the server rejects (PGRST204)', () => {
@@ -169,8 +170,16 @@ describe('optional mark columns degrade instead of aborting the sync', () => {
 
   it('never lets a NULL remote value wipe a local frequency value on merge', () => {
     expect(SYNC_SRC).toMatch(/const preserveRemote =/);
-    for (const column of contractColumns) {
+    // dailyTarget is excluded on purpose: it predates preserveRemote and has its
+    // own, stricter guard below — a remote 0 or non-number keeps the local value,
+    // where preserveRemote only defends against null/undefined.
+    for (const column of contractColumns.filter((c) => c !== 'dailyTarget')) {
       expect(SYNC_SRC).toContain(`preserveRemote(remoteCounter.${column}`);
     }
+  });
+
+  it('dailyTarget keeps its own local-wins guard rather than preserveRemote', () => {
+    expect(SYNC_SRC).toMatch(/const preservedDaily =/);
+    expect(SYNC_SRC).toMatch(/resolveDailyTarget\(existing as Counter\)/);
   });
 });

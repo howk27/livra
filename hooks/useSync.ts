@@ -80,12 +80,15 @@ const isProLimitError = (error: any): boolean => {
  * so every leg that carries these must degrade (drop the column, keep syncing)
  * instead of aborting — an aborted sync is how a reinstall loses everything.
  *
- * `dailyTarget` is deliberately NOT here: public.marks has never had that column
- * (information_schema, checked live 2026-07-26), so asking for it 400'd every
- * single marks pull. It is DEVICE-ONLY state — keep it in lc_counters, never in
- * a server select or push payload. See MARK_SERVER_COLUMNS below.
+ * `dailyTarget` is the reason this list has to degrade per column rather than as
+ * a block. 20250211100000 declared it, production never got it, so every marks
+ * pull 400'd and the old all-or-nothing fallback dropped the six cadence columns
+ * with it. The column was added live 2026-07-26 (20260726_marks_daily_target.sql)
+ * and it round-trips again — but an older project that never ran that DDL will
+ * now lose only this one column instead of the whole cadence model.
  */
 const OPTIONAL_MARK_COLUMNS = [
+  'dailyTarget',
   'frequency_min',
   'frequency_recommended',
   'frequency_max',
@@ -434,10 +437,10 @@ export const useSync = () => {
       // returned them NULL and every mark read as a plain daily habit
       // (goals.tsx falls back to weekly_target 7 — founder device QC 2026-07-22).
       //
-      // dailyTarget is NOT selected: public.marks has never had that column, so
-      // asking for it 400'd every pull and the all-or-nothing fallback below then
-      // dropped the six cadence columns that DO exist — the server had them, the
-      // device kept discarding them (live log, 2026-07-26). It stays device-only.
+      // dailyTarget rides the optional list too. It 400'd every pull until the
+      // column was added live on 2026-07-26 — and the all-or-nothing fallback that
+      // used to follow discarded the six cadence columns that DID exist along with
+      // it, so the device threw away the whole cadence model on every sync.
       const counterSelectBase =
         'id, user_id, name, emoji, color, unit, enable_streak, sort_index, total, last_activity_date, deleted_at, created_at, updated_at, goal_id';
 
@@ -1156,9 +1159,10 @@ export const useSync = () => {
             created_at: c.created_at,
             updated_at: c.updated_at,
             deleted_at: isDeleted ? (c.deleted_at || new Date().toISOString()) : null,
-            // dailyTarget is NOT pushed: public.marks has no such column, so every
-            // upsert paid a PGRST204 rejection + retry to learn that again. It is
-            // device-only state and lives in lc_counters alone.
+            // The user's per-day completion target. Server column restored live
+            // 2026-07-26 after the drift was found; before that this push paid a
+            // PGRST204 rejection + retry on every sync to re-learn it was absent.
+            dailyTarget: normalizeDailyTargetInput((c as Counter & { dailyTarget?: number | null }).dailyTarget),
             // Push goal_id so the mark→goal link survives a reinstall (the
             // server column has existed since 20260609 but was never sent, so
             // it was always NULL — see counterSelectBase above).
