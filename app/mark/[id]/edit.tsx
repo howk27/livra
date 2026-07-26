@@ -262,12 +262,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: spacing.md,
   },
-  sectionKickerRight: {
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.bold,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
   input: {
     padding: spacing.md,
     borderRadius: borderRadius.md,
@@ -286,48 +280,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-  },
-  unitButtons: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  unitButton: {
-    flex: 1,
-    padding: spacing.md,
-    borderRadius: borderRadius.md,
-    alignItems: 'center',
-    borderWidth: 2,
-  },
-  unitButtonText: {
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.medium,
-    textTransform: 'capitalize',
-  },
-  toggleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: spacing.md,
-    borderRadius: borderRadius.md,
-  },
-  toggleLabel: {
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.medium,
-    marginBottom: spacing.xs,
-  },
-  toggleDescription: {
-    fontSize: fontSize.sm,
-  },
-  toggleSwitch: {
-    width: 50,
-    height: 30,
-    borderRadius: 15,
-    justifyContent: 'center',
-    paddingHorizontal: 2,
-  },
-  toggleThumb: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
   },
 });

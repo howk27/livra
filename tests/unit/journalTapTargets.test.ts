@@ -30,19 +30,42 @@ const MIN_HEIGHT_TARGETS: Array<[string, string]> = [
   ['app/mark/new.tsx', 'dayChip'],
   ['components/journal/JournalComposer.tsx', 'addBtn'],
   ['app/goal/journal/[id].tsx', 'entrySaveBtn'],
+  // Swept 2026-07-25 (k): the secondary touchables the QC3 pass left behind.
+  // They were hitSlop 8 on bare Text/icon children, i.e. ~20-24pt real targets.
+  ['app/goal/journal/[id].tsx', 'entryEditCancelBtn'],
+  ['app/goal/journal/[id].tsx', 'cloudDismissBtn'],
+  ['app/goal/[id].tsx', 'saveTitleBtn'],
+  ['app/goal/[id].tsx', 'journalCloudDismissBtn'],
+];
+
+/**
+ * The four touchables the 2026-07-25 (k) sweep converted from hitSlop to a real
+ * box, keyed by their onPress handler. Scoped deliberately: a whole-file scan
+ * cannot measure a JSX target honestly (a regex cannot tell a nested touchable
+ * from its parent row, and an icon button's size lives on its glyph child, not
+ * in a style block). These four are unambiguous, and they are what regressed.
+ */
+const BOXED_NOT_SLOPPED: Array<[string, string]> = [
+  ['app/goal/journal/[id].tsx', 'onPress={() => setEditing(false)}'],
+  ['app/goal/journal/[id].tsx', 'onPress={() => clearCloudError()}'],
+  ['app/goal/[id].tsx', 'onPress={onSaveTitle}'],
+  ['app/goal/[id].tsx', 'onPress={() => clearCloudError()}'],
 ];
 
 describe('journal / mark-create tap targets reach 44px (QC3 wave2)', () => {
   it.each(MIN_HEIGHT_TARGETS)('%s › %s declares minHeight: 44', (rel, name) => {
     const block = styleBlock(readFileSync(join(ROOT, rel), 'utf8'), name);
+    // Either spelling passes: the literal, or the token the convention prefers
+    // (headerControl.minTarget === 44, pinned by headerControlGeometry.test.ts).
+    if (/minHeight:\s*headerControl\.minTarget/.test(block)) return;
     const m = block.match(/minHeight:\s*(\d+)/);
     expect(m).not.toBeNull();
     expect(Number(m![1])).toBeGreaterThanOrEqual(44);
   });
 
-  // Scoped to the two icon-only touchables in EntryRow (pencil = beginEdit,
-  // trash = onDelete). Other hitSlop=8 buttons on this screen (back arrow,
-  // Cancel, Dismiss) are labeled/large and out of QC3 wave2 scope.
+  // The two icon-only touchables in EntryRow (pencil = beginEdit, trash =
+  // onDelete) keep hitSlop 14 deliberately: they sit in a roomy row where the
+  // slop does not clip, and boxing them would push the row's siblings apart.
   it.each([
     ['edit (pencil)', 'onPress={beginEdit}'],
     ['delete (trash)', 'onPress={() => onDelete(entry.id)}'],
@@ -57,5 +80,16 @@ describe('journal / mark-create tap targets reach 44px (QC3 wave2)', () => {
     for (const side of m!.slice(1)) {
       expect(Number(side)).toBeGreaterThanOrEqual(14);
     }
+  });
+
+  // Drift guard: these four were bare Text/icon children wearing hitSlop 8,
+  // i.e. ~20-24pt of real target. They now carry a styled box instead, and
+  // must not slide back — the box is the convention, the slop was the bug.
+  it.each(BOXED_NOT_SLOPPED)('%s › %s carries a box, not hitSlop', (rel, handler) => {
+    const src = readFileSync(join(ROOT, rel), 'utf8');
+    const line = src.split('\n').find((l) => l.includes(handler));
+    expect(line).toBeDefined();
+    expect(line).not.toMatch(/hitSlop/);
+    expect(line).toMatch(/style=\{styles\.\w+\}/);
   });
 });

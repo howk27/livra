@@ -105,7 +105,7 @@ function JournalEntryRow({
           textAlignVertical="top"
         />
         <View style={styles.entryEditActions}>
-          <TouchableOpacity onPress={() => setEditing(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+          <TouchableOpacity onPress={() => setEditing(false)} style={styles.entryEditCancelBtn} activeOpacity={0.7}>
             <Text style={[styles.entryEditCancel, { color: c.inkMuted }]}>Cancel</Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -254,7 +254,7 @@ export default function GoalJournalScreen() {
           {cloudError ? (
             <View style={[styles.cloudRow, { borderColor: c.borderLight }]}>
               <Text style={[styles.cloudHint, { color: c.inkMid }]}>{cloudError}</Text>
-              <TouchableOpacity onPress={() => clearCloudError()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+              <TouchableOpacity onPress={() => clearCloudError()} style={styles.cloudDismissBtn} activeOpacity={0.7}>
                 <Text style={[styles.cloudDismiss, { color: c.accent }]}>Dismiss</Text>
               </TouchableOpacity>
             </View>
@@ -338,6 +338,13 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   cloudHint: { fontSize: fontSize.sm, fontFamily: fonts.sans, lineHeight: 18 },
+  // Real box, never hitSlop (it clips at the parent's bounds). alignSelf keeps
+  // the 44pt target from stretching across the column the row lays out.
+  cloudDismissBtn: {
+    minHeight: headerControl.minTarget,
+    justifyContent: 'center',
+    alignSelf: 'flex-start',
+  },
   cloudDismiss: { fontSize: fontSize.sm, fontFamily: fonts.sansMedium },
 
   // States
@@ -390,6 +397,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
     gap: spacing.md,
+  },
+  entryEditCancelBtn: {
+    minHeight: headerControl.minTarget,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xs,
   },
   entryEditCancel: { fontSize: fontSize.sm, fontFamily: fonts.sansMedium },
   entrySaveBtn: {

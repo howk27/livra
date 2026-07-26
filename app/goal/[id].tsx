@@ -213,7 +213,7 @@ function GoalIdentity({
             returnKeyType="done"
             onSubmitEditing={onSaveTitle}
           />
-          <TouchableOpacity onPress={onSaveTitle} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <TouchableOpacity onPress={onSaveTitle} style={styles.saveTitleBtn}>
             <Check size={22} color={c.forest} weight="bold" />
           </TouchableOpacity>
         </View>
@@ -663,7 +663,7 @@ function GoalJournalPreview({
       {cloudError ? (
         <View style={styles.journalCloudRow}>
           <Text style={[styles.journalCloudHint, { color: c.inkMid }]}>{cloudError}</Text>
-          <TouchableOpacity onPress={() => clearCloudError()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+          <TouchableOpacity onPress={() => clearCloudError()} style={styles.journalCloudDismissBtn} activeOpacity={0.7}>
             <Text style={[styles.journalCloudDismiss, { color: c.accent }]}>Dismiss</Text>
           </TouchableOpacity>
         </View>
@@ -1204,6 +1204,14 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   titleEditRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm },
+  // Real 44pt box for the 22pt check glyph — never hitSlop, which clips at the
+  // parent's bounds (theme/tokens.ts headerControl).
+  saveTitleBtn: {
+    minWidth: headerControl.minTarget,
+    minHeight: headerControl.minTarget,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   titleInput: {
     flex: 1,
     fontSize: fontSize.xl,
@@ -1365,6 +1373,11 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   journalCloudHint: { fontSize: fontSize.sm, fontFamily: fonts.sans, lineHeight: 18 },
+  journalCloudDismissBtn: {
+    minHeight: headerControl.minTarget,
+    justifyContent: 'center',
+    alignSelf: 'flex-start',
+  },
   journalCloudDismiss: { fontSize: fontSize.sm, fontFamily: fonts.sansMedium },
   journalSkeleton: {
     height: 60,

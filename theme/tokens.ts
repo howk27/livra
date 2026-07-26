@@ -93,7 +93,9 @@ const colorsDark: typeof colors = {
  * Per-category accent palette (warm, muted hues). These are *data* — one
  * recognizable color per mark category — not part of the light/dark semantic
  * roles, so they stay constant across themes. Single source of truth for
- * MarkRow's category map and the AddMarkSheet category picker.
+ * MarkRow's category map, `lib/markCategory.ts`, the paywall benefit rows and
+ * the widget's icon palette (`lib/widgets/widgetIcons.ts`) — the widget reads
+ * these same hexes, so a change here crosses the TS/Swift boundary.
  */
 export const categoryAccents = {
   recovery: '#6B8FA6',
