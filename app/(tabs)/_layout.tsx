@@ -83,6 +83,11 @@ export default function TabLayout() {
             name="focus"
             options={{
               title: 'Focus',
+              // Founder call 2026-07-26: Focus alone wears amber when active —
+              // the sun glyph earns a warm tint the structural tabs don't.
+              // emberInk, not ember: the 10px label under the icon is TEXT and
+              // needs 4.5:1 on the light tab bar (see theme/tokens.ts).
+              tabBarActiveTintColor: tc.emberInk,
               tabBarIcon: ({ focused, color }) => (
                 <FocusIcon focused={focused} color={color as string} />
               ),

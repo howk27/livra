@@ -35,6 +35,12 @@ export const colors = {
   // Everywhere else progress stays forest/mint; ember stays never-a-button-fill,
   // never-chrome.
   progressGradient: ['#D8A658', '#C8913F'] as [string, string],
+  // Ember deep enough to CARRY small text/glyphs on the light chrome surfaces
+  // (5.07:1 on surface, 4.57:1 on linen — `ember` itself is 2.63:1 there and
+  // is barred from that duty). Founder call 2026-07-26: the Focus tab wears
+  // amber, a sanctioned exception to "forest/mint = navigation" for that one
+  // tab. Dark mode reuses the bright dark-ember, which already passes (7.51:1).
+  emberInk: '#8F621F',
   dangerLight: '#FDECEA',
   success: '#2D6A4F',
   borderLight: '#E0DBD4',
@@ -83,6 +89,8 @@ const colorsDark: typeof colors = {
   // Sanctioned VD-1 carve-out (QC3-E) — dark-theme stops. Lighter amber →
   // deeper amber; see the `progressGradient` note in `colors`.
   progressGradient: ['#E0B36A', '#D8A658'] as [string, string],
+  // See `emberInk` in `colors` — dark ember already reads on the dark chrome.
+  emberInk: '#D8A658',
   dangerLight: '#3A2422',
   success: '#5FA585',
   borderLight: '#2A3A35',
