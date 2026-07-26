@@ -53,8 +53,12 @@ export function DoneGoalRow({
     >
       <CheckCircle size={20} color={c.accent} weight="fill" />
       <GoalTitle title={goal.title} size="card" color={c.inkMid} style={styles.goalCardDoneTitle} />
+      {/* "Done this week", not "All done": the fold can hold for DAYS once every
+          mark met its weekly cadence, and a bare "All done" read as the goal
+          never restarting (founder device report 2026-07-26). Name the window
+          so the wait reads as the schedule, not a stall. */}
       <Text style={[styles.goalCardDoneMeta, { color: c.inkMid }]}>
-        {allDoneForWeek ? 'All done' : 'Done today'}
+        {allDoneForWeek ? 'Done this week' : 'Done today'}
       </Text>
       {/* Down, not right: this row EXPANDS in place, it does not navigate.
           Same caret vocabulary as the queued rows. */}
