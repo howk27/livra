@@ -63,7 +63,7 @@ import { getEmptyStateCopy } from '../../../lib/moments/emptyState';
 import { currentWeekDates, markWeeklyState, computeCompletionsThisWeek } from '../../../lib/features';
 import { getAppDate } from '../../../lib/appDate';
 import { formatDate } from '../../../lib/date';
-import { useAppDateStore } from '../../../state/appDateSlice';
+import { useAppDateStore, selectAppDateKey } from '../../../state/appDateSlice';
 import { deriveStreakForMark } from '../../../hooks/useStreaks';
 import { useGoalsStore } from '../../../state/goalsSlice';
 import { CATEGORY_MAP } from '../../../components/ui/MarkRow';
@@ -126,7 +126,7 @@ function MarkDetailContent() {
 
   const [historyExpanded, setHistoryExpanded] = useState(false);
   const undoInFlight = useRef(false);
-  const appDateKey = useAppDateStore((s) => s.debugDateOverride ?? '');
+  const appDateKey = useAppDateStore(selectAppDateKey);
 
   const [healthModalVisible, setHealthModalVisible] = useState(false);
   const [healthStepGoal, setHealthStepGoal] = useState<string>('');

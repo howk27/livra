@@ -29,6 +29,7 @@ import { useIdentityStore } from '../state/identitySlice';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { useAuth } from '../hooks/useAuth';
 import { useSync } from '../hooks/useSync';
+import { useDayRollover } from '../hooks/useDayRollover';
 import { themedColors } from '../theme/tokens';
 import { NotificationProvider } from '../contexts/NotificationContext';
 import { ConfirmHost, ActionSheetHost } from '../components/ui/overlays';
@@ -174,6 +175,10 @@ export default function RootLayout() {
       .map((g) => g.id)
       .join(','),
   );
+
+  // Notices that the day ended while the app was open. Everything day-shaped
+  // used to advance only on a return from the background.
+  useDayRollover();
 
   useEffect(() => {
     if (initialized) {

@@ -6,7 +6,7 @@ import { getMetaValue, setMetaValue } from '../lib/db/meta';
 import { formatDate, daysBetween } from '../lib/date';
 import { getAppDate, getAppDateTime } from '../lib/appDate';
 import { useEventsStore } from '../state/eventsSlice';
-import { useAppDateStore } from '../state/appDateSlice';
+import { useAppDateStore, selectAppDateKey } from '../state/appDateSlice';
 import { computeStreak } from './useStreaks';
 
 type BadgeDefinition = {
@@ -149,7 +149,7 @@ export const badgeTestUtils = {
 };
 
 export const useBadges = (userId?: string) => {
-  const appDateKey = useAppDateStore((s) => s.debugDateOverride ?? '');
+  const appDateKey = useAppDateStore(selectAppDateKey);
   const { getEventsByMark } = useEventsStore();
   const [badgesByCounter, setBadgesByCounter] = useState<BadgeMap>(new Map());
   const [loading, setLoading] = useState(false);

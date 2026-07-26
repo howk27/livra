@@ -14,7 +14,7 @@ import { useIapSubscriptions } from './useIapSubscriptions';
 import { logger } from '../lib/utils/logger';
 import { getCategoryColor } from '../lib/markCategory';
 import { getAppDate, getAppDateTime, isDebugAppDateActive } from '../lib/appDate';
-import { useAppDateStore } from '../state/appDateSlice';
+import { useAppDateStore, selectAppDateKey } from '../state/appDateSlice';
 import {
   canAddMarkToGoal,
   countMarksInGoal,
@@ -57,7 +57,7 @@ export const useMarks = () => {
     lastLoginDate,
     evaluateMarkBadges,
   } = useBadges(user?.id);
-  const appDateKey = useAppDateStore((s) => s.debugDateOverride ?? '');
+  const appDateKey = useAppDateStore(selectAppDateKey);
 
   useEffect(() => {
     if (user?.id) {

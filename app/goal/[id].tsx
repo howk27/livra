@@ -46,7 +46,7 @@ import { useGoalsStore } from '../../state/goalsSlice';
 import { useGoalNotesStore } from '../../state/goalNotesSlice';
 import { useMarksStore } from '../../state/countersSlice';
 import { useEventsStore } from '../../state/eventsSlice';
-import { useAppDateStore } from '../../state/appDateSlice';
+import { useAppDateStore, selectAppDateKey } from '../../state/appDateSlice';
 import { effectivePersonalBest, useMomentumStore } from '../../state/momentumSlice';
 import { deriveIsNewBest, goalAgeDays } from '../../lib/moments/context';
 import { deriveGoalDetailEmptyVariant, getEmptyStateCopy } from '../../lib/moments/emptyState';
@@ -851,7 +851,7 @@ export default function GoalDetailScreen() {
   const getGoalProgress = useGoalsStore(s => s.getGoalProgress);
 
   const allEvents = useEventsStore((s) => s.events);
-  const appDateKey = useAppDateStore((s) => s.debugDateOverride ?? '');
+  const appDateKey = useAppDateStore(selectAppDateKey);
   const momentumSnapshot = useMomentumStore((s) => (id ? s.snapshots[id] : undefined));
   const longestRunEntry = useMomentumStore((s) => (id ? s.longestRuns[id] : undefined));
 

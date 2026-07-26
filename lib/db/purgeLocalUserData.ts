@@ -99,6 +99,10 @@ export const ACCOUNT_SCOPED_STORAGE_KEYS = [
   'livra.onboardingDraft.v1',
   // Auth-owned, cleared on SIGNED_OUT anyway; listed so the guard test sees it.
   'session_expired',
+  // Who this device's data belongs to (lib/db/accountSwitchGuard.ts). Account-
+  // scoped on purpose: once the purge has run there is nothing left to
+  // attribute, and the sign-in guard treats "unknown" as record-don't-wipe.
+  'livra_last_signed_in_user_id_v1',
 ] as const;
 
 /** Key families written one-per-goal or one-per-mark; matched by prefix. */

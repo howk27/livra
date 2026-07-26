@@ -11,16 +11,47 @@ function toYyyyMmDd(d: Date): string {
 
 export type AppDateState = {
   debugDateOverride: string | null;
+  /**
+   * The real local calendar day, as YYYY-MM-DD. Everything that means "today"
+   * keys off this (via `selectAppDateKey`), which is the only reason a screen
+   * open across midnight ever notices.
+   */
+  dayKey: string;
   hydrated: boolean;
   hydrate: () => Promise<void>;
   setDebugDateOverride: (value: string | null) => Promise<void>;
   shiftDebugDateByDays: (delta: number) => Promise<void>;
   useRealDate: () => Promise<void>;
+  /** Re-reads the clock. Returns true only when the day actually turned over. */
+  refreshDayKey: () => boolean;
 };
+
+/**
+ * The invalidation key for anything derived from "today".
+ *
+ * THE BUG THIS REPLACES: every consumer used `debugDateOverride ?? ''`, which in
+ * production is the constant empty string — so a `useMemo` keyed on it computed
+ * `today` ONCE per mount and never again. Leave Livra open (or backgrounded,
+ * where the JS context survives for hours) across midnight and Focus still
+ * showed yesterday: yesterday's counts, yesterday's Next Move, yesterday's
+ * comeback verdict, and a momentum banner for a day that had ended.
+ *
+ * The dev override still wins when set, so simulated-date debugging is
+ * unchanged.
+ */
+export const selectAppDateKey = (s: AppDateState): string => s.debugDateOverride ?? s.dayKey;
 
 export const useAppDateStore = create<AppDateState>((set, get) => ({
   debugDateOverride: null,
+  dayKey: toYyyyMmDd(new Date()),
   hydrated: false,
+
+  refreshDayKey: () => {
+    const next = toYyyyMmDd(new Date());
+    if (next === get().dayKey) return false;
+    set({ dayKey: next });
+    return true;
+  },
 
   hydrate: async () => {
     if (typeof __DEV__ === 'undefined' || !__DEV__) {

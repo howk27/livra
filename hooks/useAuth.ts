@@ -292,6 +292,22 @@ export const useAuth = () => {
         }
       }
 
+      // The sign-IN side of the local-data purge. signOut wipes the device, but
+      // only if it gets to run: kill the app mid-sign-out, or arrive with a
+      // session for a different account, and the previous user's data is still
+      // here. Runs BEFORE setAuthState so no screen renders the outgoing
+      // account's marks and then has them yanked. Only ever purges when the
+      // device is KNOWN to hold someone else's data — see the guard's own note
+      // on why "unknown" must never mean wipe.
+      if (nextSession?.user?.id) {
+        try {
+          const { guardAgainstAccountSwitch } = await import('../lib/db/accountSwitchGuard');
+          await guardAgainstAccountSwitch(nextSession.user.id);
+        } catch (e) {
+          logger.error('[Auth] account-switch guard failed:', e);
+        }
+      }
+
       if (mounted) {
         setAuthState({
           user: nextSession?.user ?? null,

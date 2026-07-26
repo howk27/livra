@@ -12,7 +12,7 @@ import { useMemo } from 'react';
 import type { CounterEvent, MarkEvent, CounterStreak } from '../types';
 import { formatDate, addDays } from '../lib/date';
 import { getAppDate } from '../lib/appDate';
-import { useAppDateStore } from '../state/appDateSlice';
+import { useAppDateStore, selectAppDateKey } from '../state/appDateSlice';
 
 export interface StreakData {
   current: number;
@@ -142,7 +142,7 @@ export const useStreakCalculation = (
   events: CounterEvent[],
   enableStreak: boolean
 ): StreakData | null => {
-  const appDateKey = useAppDateStore((s) => s.debugDateOverride ?? '');
+  const appDateKey = useAppDateStore(selectAppDateKey);
   return useMemo(() => {
     if (!enableStreak) return null;
     return computeStreak(events, getAppDate());

@@ -32,7 +32,7 @@ import { useCounters } from '../../hooks/useCounters';
 import { useAuth } from '../../hooks/useAuth';
 import { useSync } from '../../hooks/useSync';
 import { useEventsStore } from '../../state/eventsSlice';
-import { useAppDateStore } from '../../state/appDateSlice';
+import { useAppDateStore, selectAppDateKey } from '../../state/appDateSlice';
 import { useGoalsStore } from '../../state/goalsSlice';
 import { effectivePersonalBest, useMomentumStore } from '../../state/momentumSlice';
 import { buildMomentContext } from '../../lib/moments/context';
@@ -93,7 +93,7 @@ export default function FocusScreen() {
   useWidgetLogSync(incrementCounter, user?.id);
   const { showError } = useNotification();
   const { sync } = useSync();
-  const appDateKey = useAppDateStore((s) => s.debugDateOverride ?? '');
+  const appDateKey = useAppDateStore(selectAppDateKey);
   const todayStr = useMemo(() => formatDate(getAppDate()), [appDateKey]);
 
   const allEvents = useEventsStore((s) => s.events);

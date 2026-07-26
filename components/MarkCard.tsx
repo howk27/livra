@@ -31,7 +31,7 @@ import type { MarkType } from '@/src/types/counters';
 import { applyOpacity, foregroundForHexBackground } from '@/src/components/icons/color';
 import { getCategoryColorForMark } from '../lib/markCategory';
 import { getAppDate } from '../lib/appDate';
-import { useAppDateStore } from '../state/appDateSlice';
+import { useAppDateStore, selectAppDateKey } from '../state/appDateSlice';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -161,7 +161,7 @@ export const MarkCard: React.FC<MarkCardProps> = ({
   const theme = useEffectiveTheme();
   const themeColors = themedColors(theme);
   const isDark = theme === 'dark';
-  useAppDateStore((s) => s.debugDateOverride ?? '');
+  useAppDateStore(selectAppDateKey);
   const markColor = getCategoryColorForMark({ name: mark.name, color: mark.color }) || themeColors.forest;
   const prefersReducedMotion = useReducedMotion();
 
