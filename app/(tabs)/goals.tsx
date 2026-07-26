@@ -21,7 +21,7 @@ import Animated, {
   runOnJS,
   type SharedValue,
 } from 'react-native-reanimated';
-import { fonts, spacing, radius, themedColors, fontSize, motion } from '../../theme/tokens';
+import { fonts, spacing, radius, themedColors, fontSize, motion, dragHandle } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { LivraHeader } from '../../components/ui/LivraHeader';
 import { SpeedDialFAB } from '../../components/ui/SpeedDialFAB';
@@ -64,10 +64,12 @@ interface ActiveGoalCardProps {
   weeklyDone?: number;
   /** Sum of this week's targets across the goal's marks. */
   weeklyTarget?: number;
+  /** True when a reorder handle floats over this card and must be cleared. */
+  reserveHandleGutter?: boolean;
   onPress: () => void;
 }
 
-function ActiveGoalCard({ goal, marks, progress, threshold, canComplete, readyToClaim = false, hasCommitment = false, weeklyDone = 0, weeklyTarget = 0, onPress }: ActiveGoalCardProps) {
+function ActiveGoalCard({ goal, marks, progress, threshold, canComplete, readyToClaim = false, hasCommitment = false, weeklyDone = 0, weeklyTarget = 0, reserveHandleGutter = false, onPress }: ActiveGoalCardProps) {
   const theme = useEffectiveTheme();
   const c = themedColors(theme);
   const pct = threshold > 0 ? Math.min(100, (progress / threshold) * 100) : 0;
@@ -82,7 +84,11 @@ function ActiveGoalCard({ goal, marks, progress, threshold, canComplete, readyTo
 
   return (
     <TouchableOpacity
-      style={[styles.activeCard, { backgroundColor: cardWash, borderColor: cardBorder }]}
+      style={[
+        styles.activeCard,
+        reserveHandleGutter && styles.activeCardDraggable,
+        { backgroundColor: cardWash, borderColor: cardBorder },
+      ]}
       onPress={onPress}
       activeOpacity={0.85}
     >
@@ -337,6 +343,9 @@ function DraggableRow({
         hasCommitment={progress.target !== null}
         weeklyDone={weekly?.done}
         weeklyTarget={weekly?.target}
+        // Same condition the handle renders on — with one goal there is no
+        // handle, so the card keeps its full width.
+        reserveHandleGutter={count > 1}
         onPress={onPress}
       />
       {count > 1 && (
@@ -651,12 +660,18 @@ const styles = StyleSheet.create({
   },
   dragHandle: {
     position: 'absolute',
-    right: spacing.md,
+    right: dragHandle.inset,
     top: 0,
     bottom: 0,
-    width: 44,
+    width: dragHandle.width,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  /* The handle floats over the card's full height, so a card that sits under
+     one stops short of it. Without this the progress bar and the "Ready to
+     complete" banner ran 36pt underneath the dots (device report 2026-07-25). */
+  activeCardDraggable: {
+    paddingRight: dragHandle.gutter,
   },
 
   // Error banner

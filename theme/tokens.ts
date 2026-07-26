@@ -195,6 +195,30 @@ export const headerControl = {
 } as const;
 
 /**
+ * Reorder-handle geometry for draggable list rows (Goals).
+ *
+ * The handle is absolutely positioned over the FULL HEIGHT of the row, at the
+ * right edge. A card underneath it therefore has to stop before it — otherwise
+ * every full-width element (progress bar, the "Ready to complete" banner and
+ * its caret) runs on underneath the dots. That was a real device report on
+ * 2026-07-25: the card padding was spacing.lg (24) while the handle starts 60pt
+ * from the right edge, so content overlapped it by 36pt. It only showed with
+ * two or more goals, because that is when the handle renders at all.
+ *
+ * `gutter` is what a draggable card must reserve on its right. Derive the
+ * padding from it — never hardcode either number at a call site.
+ * tests/unit/dragHandleGutter.test.ts fails on drift.
+ */
+export const dragHandle = {
+  /** Touch target width, at the HIG minimum. */
+  width: 44,
+  /** Distance from the row's right edge to the handle. */
+  inset: spacing.md,
+  /** Right padding a card under the handle must reserve. */
+  gutter: spacing.md + 44,
+} as const;
+
+/**
  * Touch-target box for a header control. Spread into a `StyleSheet.create`
  * entry rather than re-deriving the numbers:
  *
