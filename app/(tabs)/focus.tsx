@@ -6,7 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Platform,
-  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,6 +18,7 @@ import { useEffectiveTheme, useUIStore } from '../../state/uiSlice';
 import { LivraHeader } from '../../components/ui/LivraHeader';
 import { MarkRow } from '../../components/ui/MarkRow';
 import { Breathing } from '../../components/ui/Breathing';
+import { Skeleton } from '../../components/ui/Skeleton';
 // This phosphor version exports the plain circle only as CircleIcon (no
 // legacy `Circle` alias, unlike CheckCircle) — aliased locally to match the
 // naming of its siblings here.
@@ -34,6 +35,7 @@ import { useSync } from '../../hooks/useSync';
 import { useEventsStore } from '../../state/eventsSlice';
 import { useAppDateStore, selectAppDateKey } from '../../state/appDateSlice';
 import { useGoalsStore } from '../../state/goalsSlice';
+import { useMarksStore } from '../../state/countersSlice';
 import { effectivePersonalBest, useMomentumStore } from '../../state/momentumSlice';
 import { buildMomentContext } from '../../lib/moments/context';
 import {
@@ -165,6 +167,25 @@ export default function FocusScreen() {
     if (!activeGoalIdsKey) return;
     void useGoalsStore.getState().evaluateActiveGoalsMomentum();
   }, [activeGoalIdsKey, todayStr]);
+
+  // Pull to refresh. Focus reads from three places, so a refresh has to touch
+  // all three or the card can redraw from half-stale state: marks, goals, then
+  // the momentum snapshots derived from both. Own flag, not `loading` — that
+  // one drives the skeleton, which would blank a list the user is holding.
+  const [refreshing, setRefreshing] = useState(false);
+  const handleRefresh = useCallback(async () => {
+    if (!user) return;
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        useMarksStore.getState().loadMarks(user.id),
+        useGoalsStore.getState().fetchGoals(user.id),
+      ]);
+      await useGoalsStore.getState().evaluateActiveGoalsMomentum();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [user]);
 
   // ── Weekly state per mark ─────────────────────────────────────────────────
 
@@ -537,6 +558,9 @@ export default function FocusScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={c.inkMuted} />
+        }
       >
         {bannerVisible && bannerText !== '' && (
           <MomentumBanner text={bannerText} onDismiss={handleDismissBanner} />
@@ -546,9 +570,16 @@ export default function FocusScreen() {
         <Text style={[styles.greeting, { color: c.inkDark }]}>{greetingText}</Text>
 
         {/* ── Loading / error states ── */}
+        {/* The greeting has already rendered above, so the wait echoes what is
+            still missing: the Next Move card and the chip strip under it. */}
         {loading && activeCounters.length === 0 && (
-          <View style={styles.loadingState}>
-            <ActivityIndicator size="small" color={c.accent} />
+          <View style={styles.loadingState} accessibilityLabel="Loading your next move">
+            <Skeleton height={148} radius={radius.xl} />
+            <View style={styles.loadingChips}>
+              <Skeleton height={18} width={92} radius={radius.full} />
+              <Skeleton height={18} width={68} radius={radius.full} />
+              <Skeleton height={18} width={80} radius={radius.full} />
+            </View>
           </View>
         )}
         {!loading && error && (
@@ -1023,8 +1054,13 @@ const styles = StyleSheet.create({
   },
 
   loadingState: {
-    paddingVertical: spacing.xxl,
-    alignItems: 'center',
+    marginHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    gap: spacing.md,
+  },
+  loadingChips: {
+    flexDirection: 'row',
+    gap: spacing.sm,
   },
   errorBanner: {
     marginHorizontal: spacing.lg,

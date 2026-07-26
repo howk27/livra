@@ -5,7 +5,7 @@ import {
   ScrollView,
   StyleSheet,
   Platform,
-  ActivityIndicator,
+  RefreshControl,
   TouchableOpacity,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -28,6 +28,7 @@ import { SpeedDialFAB } from '../../components/ui/SpeedDialFAB';
 import { SvgLogo } from '../../components/ui/SvgLogo';
 import { Breathing } from '../../components/ui/Breathing';
 import { SectionLabel } from '../../components/ui/SectionLabel';
+import { Skeleton } from '../../components/ui/Skeleton';
 import { GoalTitle } from '../../components/ui/GoalTitle';
 import { HistoryRow } from '../../components/goals/HistoryRow';
 import { useAuth } from '../../hooks/useAuth';
@@ -439,6 +440,20 @@ export default function GoalsScreen() {
   const active = useMemo(() => getActiveGoals(), [getActiveGoals, goals]);
   const completedCount = useMemo(() => getCompletedGoals().length, [getCompletedGoals, goals]);
 
+  // Pull to refresh. Held on its own flag rather than `isLoading`: the store's
+  // loading flag drives the skeleton, and showing both at once would replace
+  // the list the user is already holding onto with a pair of grey blocks.
+  const [refreshing, setRefreshing] = React.useState(false);
+  const handleRefresh = useCallback(async () => {
+    if (!user) return;
+    setRefreshing(true);
+    try {
+      await fetchGoals(user.id);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [user, fetchGoals]);
+
   // Per-goal "this week" aggregate — same computation Focus uses per mark,
   // summed across each goal's linked marks.
   const marks = useMarksStore((s) => s.marks);
@@ -517,6 +532,9 @@ export default function GoalsScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={c.inkMuted} />
+        }
       >
         {/* Error banner */}
         {error ? (
@@ -538,10 +556,12 @@ export default function GoalsScreen() {
           </View>
         ) : null}
 
-        {/* Loading */}
-        {isLoading && (
-          <View style={styles.loadingState}>
-            <ActivityIndicator size="small" color={c.accent} />
+        {/* Loading — two goal-card blocks, so the wait describes the screen
+            that arrives rather than spinning in the abstract. */}
+        {isLoading && active.length === 0 && (
+          <View style={styles.loadingState} accessibilityLabel="Loading your goals">
+            <Skeleton height={132} radius={radius.lg} />
+            <Skeleton height={132} radius={radius.lg} />
           </View>
         )}
 
@@ -718,8 +738,12 @@ const styles = StyleSheet.create({
 
   // Loading
   loadingState: {
-    paddingVertical: spacing.xxl,
-    alignItems: 'center',
+    // The gutter is carried by each child on this screen (the goal cards get it
+    // from draggableRow), never by the scroll container — see the 2026-07-12
+    // width bug in design-decisions.md.
+    marginHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    gap: spacing.md,
   },
 
   // Empty state
