@@ -27,6 +27,7 @@ import { logger } from '../../lib/utils/logger';
 import { useNotification } from '../../contexts/NotificationContext';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import {
+  RESEND_COOLDOWN_SECONDS,
   describeCodeSent,
   describeResend,
   needsEmailVerification,
@@ -265,7 +266,11 @@ export default function ProfileScreen() {
       setVerifyStage('idle');
       return;
     }
+    // Seed the countdown here rather than in the effect below: setting state
+    // synchronously in an effect body cascades renders (react-hooks lint), and
+    // the full cooldown is exactly what it is worth at this instant anyway.
     setCodeSentAt(Date.now());
+    setResendLeft(RESEND_COOLDOWN_SECONDS);
     setVerifyStage('code');
   }, [userEmail, verifyStage, supabase]);
 
@@ -277,7 +282,6 @@ export default function ProfileScreen() {
     const id = setInterval(() => {
       setResendLeft(resendSecondsLeft(codeSentAt, Date.now()));
     }, 1000);
-    setResendLeft(resendSecondsLeft(codeSentAt, Date.now()));
     return () => clearInterval(id);
   }, [codeSentAt]);
 

@@ -69,12 +69,34 @@ describe('dash rule over copy modules', () => {
   });
 });
 
+/**
+ * JSX text nodes: what sits between a closing `>` and the next opening `<`.
+ * Rough on purpose — it over-collects a little, which is the safe direction for
+ * a guard, and it is only ever asked about dashes.
+ */
+function jsxText(src: string): string[] {
+  return [...src.matchAll(/>([^<>{}]+)</g)].map((m) => m[1]).filter((t) => /\S/.test(t));
+}
+
 describe('dash rule over copy-carrying sources (what the user can read)', () => {
-  it.each(COPY_CARRYING_SOURCES)('%s says nothing to the user with a dash in it', (rel) => {
+  // Em and en dashes never appear in code, so the whole comment-stripped source
+  // is fair game for them.
+  it.each(COPY_CARRYING_SOURCES)('%s shows the user no em-dash or en-dash', (rel) => {
     const offenders = stripComments(read(rel))
       .split('\n')
       .map((line, i) => ({ line, n: i + 1 }))
-      .filter(({ line }) => /[—–]/.test(line) || / - /.test(line));
+      .filter(({ line }) => /[—–]/.test(line));
     expect(offenders.map((o) => `${o.n}: ${o.line.trim()}`)).toEqual([]);
+  });
+
+  // A SPACED HYPHEN is different: ` - ` is also how subtraction is written, and
+  // a line-wise scan cannot tell `nowMs - sentAtMs` from prose. It flagged
+  // exactly that in the resend cooldown's arithmetic, 2026-07-25 (k). So this
+  // half runs over what the user can actually read — string literals and JSX
+  // text — instead of over every line that happens to contain a minus sign.
+  it.each(COPY_CARRYING_SOURCES)('%s uses no hyphen-as-dash in what it says', (rel) => {
+    const src = stripComments(read(rel));
+    expect(literalOffenders(src, / - /)).toEqual([]);
+    expect(jsxText(src).filter((t) => / - /.test(t))).toEqual([]);
   });
 });
