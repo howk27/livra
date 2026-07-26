@@ -3,7 +3,7 @@
  * Pure: takes candidates + a Date so tests control the clock.
  * The hero only ever names the NEXT thing (invitation, never a debt).
  */
-import { MARK_LIBRARY } from './suggestedCounters';
+import { resolveLibraryMark } from './markCategoryResolve';
 
 export type TimeAffinity = 'anytime' | 'daytime' | 'evening';
 
@@ -56,9 +56,24 @@ export function selectNextStep(
   return { kind: 'tomorrow', candidate: mostBehind(notToday) };
 }
 
-/** Emoji-match against MARK_LIBRARY (existing Focus pattern); custom marks are anytime. */
-export function resolveTimeAffinity(emoji: string | null | undefined): TimeAffinity {
-  if (!emoji) return 'anytime';
-  const def = MARK_LIBRARY.find((m) => m.emoji === emoji);
-  return def?.timeAffinity ?? 'anytime';
+/**
+ * The mark's time affinity, resolved through the app's ONE library matcher;
+ * custom and unmatched marks are anytime.
+ *
+ * This used to match on emoji alone, which is the weaker key and silently lost
+ * the gate in three ways resolveLibraryMark already handles: `Mark.emoji` is
+ * OPTIONAL, so a mark without one was never gated at all; a legacy mark whose
+ * emoji was later reassigned (an old '🧘' that once meant meditation) resolved
+ * to the wrong entry; and '🚫' is shared by no-alcohol and no-sugar, so a
+ * collision resolves to whichever is declared first.
+ *
+ * Name-first with an emoji fallback is exactly the rule the rest of the app
+ * uses for the same question (QC2-A) — the affinity lookup had simply never
+ * been brought in line with it.
+ */
+export function resolveTimeAffinity(
+  mark: { name?: string | null; emoji?: string | null } | null | undefined,
+): TimeAffinity {
+  if (!mark) return 'anytime';
+  return resolveLibraryMark({ name: mark.name ?? '', emoji: mark.emoji })?.timeAffinity ?? 'anytime';
 }

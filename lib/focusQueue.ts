@@ -29,7 +29,11 @@ export type QueueMark = Pick<Mark, 'dailyTarget'> & {
   id: string;
   weekly_target?: number | null;
   frequency_kind?: Mark['frequency_kind'];
-  /** Drives hero time-gating (see pickNextMove); absent = anytime. */
+  /**
+   * Drive hero time-gating (see pickNextMove). Resolved name-first with emoji
+   * as fallback, so a mark missing its emoji is still gated.
+   */
+  name?: string | null;
   emoji?: string | null;
 };
 
@@ -115,7 +119,7 @@ export function pickNextMove<T extends QueueMark>(
   if (due.length === 0) return null;
   if (!now) return due[0];
 
-  const feasible = due.filter((m) => isFeasibleNow(resolveTimeAffinity(m.emoji), now));
+  const feasible = due.filter((m) => isFeasibleNow(resolveTimeAffinity(m), now));
   return feasible.length > 0 ? feasible[0] : due[0];
 }
 

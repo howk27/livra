@@ -85,13 +85,25 @@ describe('selectNextStep', () => {
 
 describe('resolveTimeAffinity', () => {
   it('maps a known daytime mark by emoji', () => {
-    expect(resolveTimeAffinity('🏃')).toBe('daytime'); // run
+    expect(resolveTimeAffinity({ name: 'Run', emoji: '🏃' })).toBe('daytime');
   });
   it('maps a known evening mark by emoji', () => {
-    expect(resolveTimeAffinity('🌙')).toBe('evening'); // sleep
+    expect(resolveTimeAffinity({ name: 'Sleep', emoji: '🌙' })).toBe('evening');
   });
   it('defaults custom/unknown to anytime', () => {
-    expect(resolveTimeAffinity('🦖')).toBe('anytime');
+    expect(resolveTimeAffinity({ name: 'Feed the raptor', emoji: '🦖' })).toBe('anytime');
     expect(resolveTimeAffinity(null)).toBe('anytime');
+  });
+
+  // The siblings of the sleep bug: ways the gate used to be skipped silently.
+  it('gates a mark that has NO emoji at all — Mark.emoji is optional', () => {
+    expect(resolveTimeAffinity({ name: 'Sleep' })).toBe('evening');
+    expect(resolveTimeAffinity({ name: 'Run', emoji: null })).toBe('daytime');
+  });
+  it('trusts the name over a stale or reassigned emoji', () => {
+    expect(resolveTimeAffinity({ name: 'Sleep', emoji: '🦖' })).toBe('evening');
+  });
+  it('still resolves an AI-named mark by its copied emoji', () => {
+    expect(resolveTimeAffinity({ name: 'Nightly wind-down', emoji: '🌙' })).toBe('evening');
   });
 });
