@@ -308,6 +308,17 @@ export default function NewGoalScreen() {
           sort_index: 0,
           goal_id: newGoal.id,
           frequency_kind: sugg.frequencyKind,
+          // Cadence. Without these the store falls back to a flat 3/week
+          // (countersSlice: weekly_target ?? frequency_recommended ?? 3), so a
+          // mark the library calls daily — Water, Sleep — came out of THIS
+          // screen asking for 3 and read "done for the week" after three logs,
+          // while the same mark made in onboarding, the AI path or mark/new
+          // carried its real cadence. There is no commitment level on this
+          // screen, so recommended is the honest default, matching mark/new.
+          frequency_min: sugg.frequency_min,
+          frequency_recommended: sugg.frequency_recommended,
+          frequency_max: sugg.frequency_max,
+          weekly_target: sugg.frequency_recommended ?? 3,
         });
         newMarkIds.push(newMark.id);
       }
