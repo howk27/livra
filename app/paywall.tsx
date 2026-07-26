@@ -38,6 +38,7 @@ import { useEffectiveTheme } from '../state/uiSlice';
 import { useIapSubscriptions } from '../hooks/useIapSubscriptions';
 import { MONTHLY_PRODUCT_ID, YEARLY_PRODUCT_ID } from '../lib/iap/iap';
 import { parseLocalizedPrice, priceToNumber } from '../lib/iap/price';
+import { paywallAutoCloseStep } from '../lib/iap/paywallAutoClose';
 import { logger } from '../lib/utils/logger';
 import { getIapService } from '../lib/services/iap/getIapService';
 import { ErrorBoundary } from '../components/ErrorBoundary';
@@ -731,19 +732,29 @@ function PaywallScreenContent() {
   // screen has itself observed, never on arriving already-Pro. `sawLockedRef`
   // is the transition witness — it flips once the screen renders locked, so a
   // subscriber whose entitlement was already resolved on open never trips it.
+  // 2026-07-25: the witness used to arm on `!isProUnlocked`, which is ALSO what
+  // an unresolved entitlement looks like (the hook starts false/'unknown' and
+  // resolves in an effect) — so a subscriber armed it on their first frame and
+  // the resolve immediately closed the screen on them. It now arms only on a
+  // RESOLVED locked reading. Decision + reasoning: lib/iap/paywallAutoClose.ts.
   const sawLockedRef = useRef(false);
   useEffect(() => {
-    if (!isProUnlocked) {
+    const decision = paywallAutoCloseStep({
+      proStatus,
+      isProUnlocked,
+      sawResolvedLock: sawLockedRef.current,
+    });
+    if (decision === 'arm') {
       sawLockedRef.current = true;
       return;
     }
-    if (!sawLockedRef.current) return;
+    if (decision !== 'close') return;
     if (router.canGoBack()) {
       router.back();
     } else {
       router.replace('/(tabs)/focus');
     }
-  }, [isProUnlocked, router]);
+  }, [isProUnlocked, proStatus, router]);
 
   useEffect(() => {
     if (isSubscribed) {
