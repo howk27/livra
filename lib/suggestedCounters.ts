@@ -167,7 +167,20 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     color: '#6B9E8A', unit: 'items', category: 'Health',
     tags: ['hydration', 'water', 'health', 'weight loss', 'energy', 'skin', 'detox', 'marathon', 'performance', 'kidney'],
     healthKitType: null,
-    frequency_min: 5, frequency_recommended: 7, frequency_max: 7, frequencyKind: 'variable',
+    // FIXED, not variable (QC-1058 R3). As `variable` with a min of 5, the
+    // Settings Pace control pulled Water down to 5 days a week at "easing" —
+    // founder: "Water should be an everyday thing regardless of the settings or
+    // people are going to dehydrate." Hydration is not an intensity dial.
+    // Taking Sleep's shape (7/7/7 + `fixed`) fixes both paths at once:
+    // paceWeeklyTarget returns null for every non-variable kind, so Pace skips
+    // this mark entirely, and frequencyWeeklyTarget resolves to 7 at all three
+    // intensities. Due logic is untouched — markWeeklyState reads weekly_target
+    // alone and never branches on kind.
+    //
+    // Steps and Calories still carry this same 5/7/7 range deliberately: only
+    // Water was named, and only Water has the "or people dehydrate" argument.
+    // Calories is the open question — see .reports/QC-1058.md R3.
+    frequency_min: 7, frequency_recommended: 7, frequency_max: 7, frequencyKind: 'fixed',
   },
   {
     id: 'nutrition', name: 'Nutrition', icon: ForkKnifeIcon, emoji: '🥗',
