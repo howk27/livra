@@ -1,5 +1,5 @@
 import { MARK_LIBRARY } from '../../lib/suggestedCounters';
-import { resolveTimeAffinity, isFeasibleNow } from '../../lib/nextStep';
+import { resolveTimeAffinity, isFeasibleNow, isPreferredNow } from '../../lib/nextStep';
 
 /**
  * Audit of the whole library after the sleep bug (founder: "can we verify no
@@ -68,5 +68,60 @@ describe('the tagged marks land in sensible hours', () => {
       .filter((m) => m.timeAffinity === 'daytime')
       .filter((m) => isFeasibleNow(resolveTimeAffinity({ name: m.name, emoji: m.emoji }), at(23)));
     expect(offered.map((m) => m.id)).toEqual([]);
+  });
+
+  it('every morning mark is preferred at 9am and still offerable at 3pm', () => {
+    const morning = tagged.filter((m) => m.timeAffinity === 'morning');
+    expect(morning.length).toBeGreaterThan(0);
+    for (const m of morning) {
+      const affinity = resolveTimeAffinity({ name: m.name, emoji: m.emoji });
+      expect(isPreferredNow(affinity, at(9))).toBe(true);
+      expect(isFeasibleNow(affinity, at(15))).toBe(true);
+    }
+  });
+
+  it('no morning mark is offered at 11pm either — it carries the daytime ceiling', () => {
+    const offered = tagged
+      .filter((m) => m.timeAffinity === 'morning')
+      .filter((m) => isFeasibleNow(resolveTimeAffinity({ name: m.name, emoji: m.emoji }), at(23)));
+    expect(offered.map((m) => m.id)).toEqual([]);
+  });
+});
+
+/**
+ * The 2026-07-25 tagging pass, pinned.
+ *
+ * Founder decision 2: a whole-day STATE is not a move, so it carries no hour.
+ * The danger with that decision is that it is invisible in the data — an
+ * untagged mark looks identical whether it was reasoned about or forgotten.
+ * These two lists are what make the silence legible, so a later pass has to
+ * delete a test on purpose rather than "fill in the gaps" by accident.
+ */
+const WHOLE_DAY_STATES = [
+  'no-alcohol', 'no-nicotine', 'no-caffeine', 'no-sugar', 'no-spend', 'screen-time',
+  'finance', 'saving', 'invest',
+  'water', 'nutrition', 'calories', 'skincare',
+];
+
+/** Untagged because the honest answer is "depends on the person", not because it is a state. */
+const DELIBERATELY_UNBOUND = ['meal-prep', 'side-hustle', 'creative'];
+
+describe('the marks that carry no hour, and why', () => {
+  it.each(WHOLE_DAY_STATES)('%s is a whole-day state and carries no timeAffinity', (id) => {
+    const mark = MARK_LIBRARY.find((m) => m.id === id);
+    expect(mark).toBeDefined();
+    expect(mark!.timeAffinity).toBeUndefined();
+  });
+
+  it.each(DELIBERATELY_UNBOUND)('%s is deliberately unbound and carries no timeAffinity', (id) => {
+    const mark = MARK_LIBRARY.find((m) => m.id === id);
+    expect(mark).toBeDefined();
+    expect(mark!.timeAffinity).toBeUndefined();
+  });
+
+  it('every library mark is either tagged or on one of those lists — no mark decides by default', () => {
+    const accountedFor = new Set([...WHOLE_DAY_STATES, ...DELIBERATELY_UNBOUND]);
+    const undecided = MARK_LIBRARY.filter((m) => !m.timeAffinity && !accountedFor.has(m.id));
+    expect(undecided.map((m) => m.id)).toEqual([]);
   });
 });

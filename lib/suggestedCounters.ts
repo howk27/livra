@@ -12,6 +12,7 @@ import {
   PenNibIcon, GlobeSimpleIcon, BowlFoodIcon,
   CigaretteIcon, CoffeeIcon, SparkleIcon,
 } from 'phosphor-react-native';
+import type { TimeAffinity } from './nextStep';
 
 export type MarkDefinition = {
   id: string;
@@ -29,8 +30,13 @@ export type MarkDefinition = {
   frequency_recommended: number;
   frequency_max: number;
   frequencyKind: 'variable' | 'fixed' | 'abstinence';
-  /** Hero-step time gating (spec 2026-07-11). Absent = anytime. */
-  timeAffinity?: 'daytime' | 'evening';
+  /**
+   * Hero-step time gating (spec 2026-07-11). Absent = anytime, and for a good
+   * third of this library that absence is a DECISION, not an omission — see the
+   * tagging note above MARK_LIBRARY. `anytime` is not writable here for exactly
+   * that reason: there is one way to say it, and it is silence.
+   */
+  timeAffinity?: Exclude<TimeAffinity, 'anytime'>;
   /** Earned-identity line spoken at the identity milestone (spec §2). Optional. */
   identityLine?: string;
   /** Shrunk comeback ask (spec §3), e.g. 'A walk counts today.' Optional. */
@@ -56,6 +62,31 @@ export type MarkCategory = {
   marks: MarkDefinition[];
 };
 
+/**
+ * TIME AFFINITY — the tagging pass of 2026-07-25, and the two founder decisions
+ * that produced it. Read this before adding or changing a `timeAffinity`.
+ *
+ * DECISION 1 — MORNING IS A PREFERENCE, NOT A WINDOW. `morning` promotes a mark
+ * to the front of the Next Move card before 11:00 and does nothing after; it
+ * never hides one (lib/nextStep.ts `isPreferredNow`). That is what makes Cold
+ * Shower expressible without Livra announcing that your morning is over at
+ * 11:01. Only marks that are near-universally done first thing carry it.
+ *
+ * DECISION 2 — A WHOLE-DAY STATE IS NOT A MOVE, SO IT IS NEVER TAGGED. No
+ * Sugar, No Alcohol, No Nicotine, No Spend, Screen Time, Cut Caffeine and the
+ * finance marks are things you HOLD across a day, not things you DO at an hour.
+ * Tagging them would be a category error, not a refinement, so they stay
+ * untagged deliberately and `timeAffinityWholeDay` in
+ * tests/unit/timeAffinityCoverage.test.ts pins that against a future pass that
+ * mistakes the silence for an oversight. Water, Nutrition and Calories are the
+ * same shape (a day's total, checked at its end), as is Skincare — genuinely
+ * twice-daily, which neither bucket can say honestly.
+ *
+ * THE STANDARD FOR TAGGING AT ALL: only when the mark is materially harder or
+ * stranger to do at the wrong hour. Where the honest answer is "depends on the
+ * person" — Side Hustle, Meal Prep, Creative — anytime is the right answer, not
+ * a lazy one.
+ */
 export const MARK_LIBRARY: MarkDefinition[] = [
   // RECOVERY
   {
@@ -69,7 +100,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     comebackAsk: 'An early night counts today.',
   },
   {
-    id: 'stretch', name: 'Stretch', icon: PersonSimpleIcon, emoji: '🧘',
+    id: 'stretch', name: 'Stretch', icon: PersonSimpleIcon, emoji: '🧘', timeAffinity: 'evening',
     description: 'Sessions spent stretching or working on mobility, however short.',
     color: '#7B9EA6', unit: 'sessions', category: 'Recovery',
     tags: ['flexibility', 'mobility', 'recovery', 'injury', 'yoga', 'marathon', 'run', 'athlete', 'posture', 'soreness', 'tightness'],
@@ -234,7 +265,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     frequency_min: 3, frequency_recommended: 5, frequency_max: 7, frequencyKind: 'variable',
   },
   {
-    id: 'breathwork', name: 'Breathwork', icon: WindIcon, emoji: '💨',
+    id: 'breathwork', name: 'Breathwork', icon: WindIcon, emoji: '💨', timeAffinity: 'evening',
     description: 'Each deliberate breathing session you complete.',
     color: '#8A6B7B', unit: 'sessions', category: 'Mindset',
     tags: ['breathwork', 'anxiety', 'stress', 'panic', 'calm', 'focus', 'meditation', 'energy', 'performance', 'sleep'],
@@ -244,7 +275,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
 
   // DEEP WORK
   {
-    id: 'focus', name: 'Focus', icon: TargetIcon, emoji: '🎯',
+    id: 'focus', name: 'Focus', icon: TargetIcon, emoji: '🎯', timeAffinity: 'daytime',
     description: 'Each focused block of work you finish without switching tasks.',
     color: '#8A9E8A', unit: 'sessions', category: 'Deep Work',
     tags: ['focus', 'productivity', 'deep work', 'distraction', 'adhd', 'career', 'study', 'startup', 'business', 'writing', 'coding'],
@@ -253,7 +284,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     metricFamily: 'focused-block',
   },
   {
-    id: 'planning', name: 'Planning', icon: CalendarCheckIcon, emoji: '🗓️',
+    id: 'planning', name: 'Planning', icon: CalendarCheckIcon, emoji: '🗓️', timeAffinity: 'morning',
     description: 'Each time you sit down to plan your day or week.',
     color: '#9E8A6B', unit: 'sessions', category: 'Deep Work',
     tags: ['planning', 'organization', 'productivity', 'career', 'business', 'goals', 'schedule', 'time management', 'project'],
@@ -271,7 +302,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     comebackAsk: 'One page counts today.',
   },
   {
-    id: 'practice', name: 'Practice', icon: MetronomeIcon, emoji: '⚡',
+    id: 'practice', name: 'Practice', icon: MetronomeIcon, emoji: '⚡', timeAffinity: 'daytime',
     description: 'Each practice session on the skill you are working on.',
     color: '#7B6B9E', unit: 'sessions', category: 'Deep Work',
     tags: ['practice', 'skill', 'instrument', 'music', 'coding', 'language', 'art', 'sport', 'mastery', 'daily', 'discipline'],
@@ -279,7 +310,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     frequency_min: 3, frequency_recommended: 4, frequency_max: 6, frequencyKind: 'variable',
   },
   {
-    id: 'study', name: 'Study', icon: GraduationCapIcon, emoji: '🎓',
+    id: 'study', name: 'Study', icon: GraduationCapIcon, emoji: '🎓', timeAffinity: 'daytime',
     description: 'Each study session you complete.',
     color: '#8A9E8A', unit: 'sessions', category: 'Deep Work',
     tags: ['study', 'exam', 'school', 'degree', 'certification', 'course', 'learning', 'knowledge', 'career', 'skill'],
@@ -289,7 +320,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     comebackAsk: 'Ten minutes count today.',
   },
   {
-    id: 'deep-work', name: 'Deep Work', icon: HourglassIcon, emoji: '⏳',
+    id: 'deep-work', name: 'Deep Work', icon: HourglassIcon, emoji: '⏳', timeAffinity: 'morning',
     description: 'Each uninterrupted stretch of deep work you finish.',
     color: '#8A9E8A', unit: 'sessions', category: 'Deep Work',
     tags: ['deep work', 'focus', 'productivity', 'distraction', 'startup', 'career', 'writing', 'coding', 'flow state', 'output'],
@@ -300,7 +331,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     metricFamily: 'focused-block',
   },
   {
-    id: 'writing', name: 'Writing', icon: PenNibIcon, emoji: '✍️',
+    id: 'writing', name: 'Writing', icon: PenNibIcon, emoji: '✍️', timeAffinity: 'daytime',
     description: 'Each writing session, whatever the word count.',
     color: '#7C3AED', unit: 'sessions', category: 'Deep Work',
     tags: ['writing', 'book', 'blog', 'content', 'author', 'copywriting', 'journal', 'script', 'storytelling', 'career', 'side hustle', 'novel'],
@@ -310,7 +341,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     comebackAsk: 'One paragraph counts today.',
   },
   {
-    id: 'language', name: 'Language', icon: GlobeSimpleIcon, emoji: '🗣️',
+    id: 'language', name: 'Language', icon: GlobeSimpleIcon, emoji: '🗣️', timeAffinity: 'daytime',
     description: 'Each session spent learning or practicing the language.',
     color: '#059669', unit: 'sessions', category: 'Deep Work',
     tags: ['language', 'spanish', 'french', 'japanese', 'fluent', 'bilingual', 'travel', 'culture', 'learning', 'skill', 'korean', 'italian', 'portuguese'],
@@ -362,7 +393,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
 
   // DISCIPLINE
   {
-    id: 'cold-shower', name: 'Cold Shower', icon: ShowerIcon, emoji: '🚿',
+    id: 'cold-shower', name: 'Cold Shower', icon: ShowerIcon, emoji: '🚿', timeAffinity: 'morning',
     description: 'Days you take a cold shower.',
     color: '#7B9EA6', unit: 'days', category: 'Discipline',
     tags: ['cold shower', 'discipline', 'energy', 'immune', 'willpower', 'mental toughness', 'habit', 'morning', 'recovery'],
@@ -386,7 +417,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     frequency_min: 3, frequency_recommended: 5, frequency_max: 7, frequencyKind: 'variable',
   },
   {
-    id: 'cooking', name: 'Cooking', icon: CookingPotIcon, emoji: '🍳',
+    id: 'cooking', name: 'Cooking', icon: CookingPotIcon, emoji: '🍳', timeAffinity: 'evening',
     description: 'Each meal you cook instead of buying.',
     color: '#6B9E8A', unit: 'sessions', category: 'Discipline',
     tags: ['cooking', 'meal prep', 'nutrition', 'diet', 'health', 'money', 'food', 'eating out', 'skills', 'discipline'],
@@ -397,7 +428,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
 
   // RELATIONSHIPS
   {
-    id: 'socialize', name: 'Socialize', icon: UsersThreeIcon, emoji: '👥',
+    id: 'socialize', name: 'Socialize', icon: UsersThreeIcon, emoji: '👥', timeAffinity: 'evening',
     description: 'Each time you see or speak to friends.',
     color: '#8A6B7B', unit: 'sessions', category: 'Relationships',
     tags: ['social', 'friends', 'loneliness', 'connection', 'mental health', 'relationships', 'network', 'community'],
@@ -405,7 +436,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     frequency_min: 1, frequency_recommended: 2, frequency_max: 4, frequencyKind: 'variable',
   },
   {
-    id: 'family', name: 'Family Time', icon: HouseIcon, emoji: '🏠',
+    id: 'family', name: 'Family Time', icon: HouseIcon, emoji: '🏠', timeAffinity: 'evening',
     description: 'Each stretch of time you spend with family, phone away.',
     color: '#8A6B7B', unit: 'sessions', category: 'Relationships',
     tags: ['family', 'kids', 'marriage', 'partner', 'parents', 'relationships', 'presence', 'work life balance', 'connection'],
@@ -413,7 +444,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     frequency_min: 2, frequency_recommended: 3, frequency_max: 5, frequencyKind: 'variable',
   },
   {
-    id: 'networking', name: 'Networking', icon: HandshakeIcon, emoji: '🤝',
+    id: 'networking', name: 'Networking', icon: HandshakeIcon, emoji: '🤝', timeAffinity: 'daytime',
     description: 'Each conversation with someone new in your field.',
     color: '#9E8A6B', unit: 'sessions', category: 'Relationships',
     tags: ['networking', 'career', 'business', 'connections', 'job', 'clients', 'professional', 'relationships', 'growth'],
@@ -421,7 +452,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     frequency_min: 1, frequency_recommended: 2, frequency_max: 3, frequencyKind: 'variable',
   },
   {
-    id: 'volunteer', name: 'Volunteer', icon: HeartIcon, emoji: '❤️',
+    id: 'volunteer', name: 'Volunteer', icon: HeartIcon, emoji: '❤️', timeAffinity: 'daytime',
     description: 'Each time you give time to a cause or your community.',
     color: '#8A6B7B', unit: 'sessions', category: 'Relationships',
     tags: ['volunteer', 'community', 'purpose', 'giving', 'social', 'relationships', 'fulfilment', 'impact', 'charity'],

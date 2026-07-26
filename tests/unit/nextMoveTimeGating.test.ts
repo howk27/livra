@@ -62,3 +62,39 @@ describe('pickNextMove time gating', () => {
     expect(pickNextMove([walk], done, noCounts, null, at(9))).toBeNull();
   });
 });
+
+/**
+ * MORNING, added 2026-07-25. The founder's call was a soft preference rather
+ * than a third window: it may promote a mark, it may never hide one. These
+ * tests exist to keep the second half of that sentence true — the failure mode
+ * of a "morning" bucket is that it quietly becomes a curfew.
+ */
+describe('pickNextMove morning preference', () => {
+  // 🚿 is the Cold Shower library mark (timeAffinity: 'morning').
+  const coldShower = { id: 'cold', emoji: '🚿', dailyTarget: 1, weekly_target: 5, frequency_kind: 'variable' as const };
+
+  it('promotes a morning mark over the user order early in the day', () => {
+    const hero = pickNextMove([walk, coldShower], noCounts, noCounts, null, at(8));
+    expect(hero?.id).toBe('cold');
+  });
+
+  it('gives the order straight back after 11:00', () => {
+    const hero = pickNextMove([walk, coldShower], noCounts, noCounts, null, at(11));
+    expect(hero?.id).toBe('walk');
+  });
+
+  it('NEVER hides the morning mark — mid-afternoon it still heroes when it is the only one due', () => {
+    const hero = pickNextMove([coldShower], noCounts, noCounts, null, at(15));
+    expect(hero?.id).toBe('cold');
+  });
+
+  it('does not promote past an explicit tap', () => {
+    const hero = pickNextMove([walk, coldShower], noCounts, noCounts, 'walk', at(8));
+    expect(hero?.id).toBe('walk');
+  });
+
+  it('carries the daytime ceiling: late at night an evening mark wins instead', () => {
+    const hero = pickNextMove([coldShower, journal], noCounts, noCounts, null, at(22));
+    expect(hero?.id).toBe('journal');
+  });
+});

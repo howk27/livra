@@ -1,7 +1,7 @@
 import type { Mark } from '../types';
 import { markWeeklyState } from './features';
 import { resolveDailyTarget } from './markDailyTarget';
-import { isFeasibleNow, resolveTimeAffinity } from './nextStep';
+import { isFeasibleNow, isPreferredNow, resolveTimeAffinity } from './nextStep';
 
 /**
  * Focus Spotlight Queue — pure selectors (founder 2026-07-23).
@@ -119,8 +119,15 @@ export function pickNextMove<T extends QueueMark>(
   if (due.length === 0) return null;
   if (!now) return due[0];
 
-  const feasible = due.filter((m) => isFeasibleNow(resolveTimeAffinity(m), now));
-  return feasible.length > 0 ? feasible[0] : due[0];
+  const timed = due.map((m) => ({ mark: m, affinity: resolveTimeAffinity(m) }));
+  const feasible = timed.filter((t) => isFeasibleNow(t.affinity, now));
+  if (feasible.length === 0) return due[0];
+
+  // MORNING (2026-07-25): a soft preference, applied only among marks that are
+  // already feasible and already in the user's own order. It can move a
+  // morning-shaped mark up; it can never remove one, and after
+  // MORNING_PREFERENCE_END_HOUR it has no effect at all.
+  return (feasible.find((t) => isPreferredNow(t.affinity, now)) ?? feasible[0]).mark;
 }
 
 /** How many up-next chips the Next Move card shows before it starts counting. */
