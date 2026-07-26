@@ -35,13 +35,27 @@ type GoalLike = { id: string; title: string };
 export function DoneGoalRow({
   goal,
   allDoneForWeek,
+  remainingThisWeek,
   onPress,
 }: {
   goal: GoalLike;
   allDoneForWeek: boolean;
+  /** Check-in days still owed across this goal's marks (lib/focusQueue). */
+  remainingThisWeek: number;
   onPress: () => void;
 }) {
   const c = themedColors(useEffectiveTheme());
+  // Three voices, one row (founder 2026-07-26, "adding brain to the goals"):
+  // week finished → "Done this week"; today's part done with days still owed →
+  // "On pace · N more this week" so the fold reads as a schedule holding, not a
+  // stall (the original report was "my goal hasn't restarted in days"). The
+  // bare "Done today" survives only for the degenerate zero-remaining case a
+  // due mark can produce with a 0 cadence. Middle dot per the copy dash rule.
+  const meta = allDoneForWeek
+    ? 'Done this week'
+    : remainingThisWeek > 0
+      ? `On pace · ${remainingThisWeek} more this week`
+      : 'Done today';
   return (
     <TouchableOpacity
       style={[styles.goalCard, styles.goalCardDone, { backgroundColor: c.surface }]}
@@ -49,17 +63,11 @@ export function DoneGoalRow({
       activeOpacity={0.7}
       accessibilityRole="button"
       accessibilityState={{ expanded: false }}
-      accessibilityLabel={`${goal.title}, ${allDoneForWeek ? 'all done this week' : 'done for today'}. Tap to expand.`}
+      accessibilityLabel={`${goal.title}, ${allDoneForWeek ? 'all done this week' : `done for today, ${remainingThisWeek} more check-in${remainingThisWeek !== 1 ? 's' : ''} this week`}. Tap to expand.`}
     >
       <CheckCircle size={20} color={c.accent} weight="fill" />
       <GoalTitle title={goal.title} size="card" color={c.inkMid} style={styles.goalCardDoneTitle} />
-      {/* "Done this week", not "All done": the fold can hold for DAYS once every
-          mark met its weekly cadence, and a bare "All done" read as the goal
-          never restarting (founder device report 2026-07-26). Name the window
-          so the wait reads as the schedule, not a stall. */}
-      <Text style={[styles.goalCardDoneMeta, { color: c.inkMid }]}>
-        {allDoneForWeek ? 'Done this week' : 'Done today'}
-      </Text>
+      <Text style={[styles.goalCardDoneMeta, { color: c.inkMid }]}>{meta}</Text>
       {/* Down, not right: this row EXPANDS in place, it does not navigate.
           Same caret vocabulary as the queued rows. */}
       <CaretDown size={16} color={c.inkMuted} weight="bold" />

@@ -65,6 +65,7 @@ import {
   isGoalDoneToday,
   pickSpotlightGoalId,
   pickNextMove,
+  remainingThisWeek,
 } from '../../lib/focusQueue';
 import { isComebackState, endsComebackGap, pickComebackMove, resolveComebackAsk } from '../../lib/comeback';
 import { resolveFirstName } from '../../lib/profile/displayName';
@@ -643,6 +644,7 @@ export default function FocusScreen() {
                     key={goal.id}
                     goal={goal}
                     allDoneForWeek={allDoneForWeek}
+                    remainingThisWeek={remainingThisWeek(marks, weeklyCountsMap)}
                     onPress={() => toggleGoalExpand(goal.id)}
                   />
                 );

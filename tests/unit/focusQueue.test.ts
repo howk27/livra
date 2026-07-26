@@ -4,9 +4,11 @@ import {
   isGoalDoneToday,
   pickSpotlightGoalId,
   pickNextMove,
+  remainingThisWeek,
   NEXT_MOVE_CHIP_CAP,
   type QueueMark,
 } from '../../lib/focusQueue';
+import { markWeeklyState } from '../../lib/features';
 
 /**
  * Spotlight Queue selectors (founder 2026-07-23): one goal expanded at a time
@@ -42,6 +44,38 @@ describe('isMarkDoneToday', () => {
   it('defaults a missing daily target to 1', () => {
     const m = mark('a', { dailyTarget: undefined as unknown as number });
     expect(isMarkDoneToday(m, 1)).toBe(true);
+  });
+});
+
+describe('remainingThisWeek (the on-pace fold number)', () => {
+  it('sums each mark\'s unmet cadence', () => {
+    const marks = [mark('a', { weekly_target: 3 }), mark('b', { weekly_target: 7 })];
+    expect(remainingThisWeek(marks, counts({ a: 1, b: 2 }))).toBe(2 + 5);
+  });
+
+  it('bonus logs past a met cadence never lend to a sibling mark', () => {
+    const marks = [mark('a', { weekly_target: 3 }), mark('b', { weekly_target: 3 })];
+    // a is over-complete (5 of 3); b still owes all 3 — the fold must say 3, not 1.
+    expect(remainingThisWeek(marks, counts({ a: 5 }))).toBe(3);
+  });
+
+  it('missing weekly_target falls back to 3, matching markWeeklyState', () => {
+    const m = mark('a', { weekly_target: undefined });
+    expect(remainingThisWeek([m], counts({}))).toBe(3);
+    expect(remainingThisWeek([m], counts({ a: 3 }))).toBe(0);
+  });
+
+  it('no marks means nothing owed', () => {
+    expect(remainingThisWeek([], counts({}))).toBe(0);
+  });
+
+  it('reads 0 exactly when every mark is doneForWeek — the fold and the due filter agree', () => {
+    const marks = [mark('a', { weekly_target: 2 }), mark('b', { weekly_target: 3 })];
+    const weekly = counts({ a: 2, b: 3 });
+    expect(remainingThisWeek(marks, weekly)).toBe(0);
+    for (const m of marks) {
+      expect(markWeeklyState(m, weekly.get(m.id) ?? 0)).toBe('doneForWeek');
+    }
   });
 });
 

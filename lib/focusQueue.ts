@@ -43,6 +43,26 @@ export function isMarkDoneToday(mark: QueueMark, todayCount: number): boolean {
 }
 
 /**
+ * Check-in days still owed this week across a goal's marks — the number the
+ * on-pace fold speaks ("On pace · N more this week", founder 2026-07-26).
+ * Per mark: cadence minus the days already banked, floored at zero so bonus
+ * logs past a met cadence never lend to a sibling mark. Same weekly_target
+ * fallback markWeeklyState uses, so the fold and the due filter cannot
+ * disagree about when the week is finished (sum 0 ⟺ every mark doneForWeek).
+ */
+export function remainingThisWeek(
+  marks: readonly QueueMark[],
+  weeklyCounts: ReadonlyMap<string, number>,
+): number {
+  let remaining = 0;
+  for (const m of marks) {
+    const target = m.weekly_target ?? 3;
+    remaining += Math.max(0, target - (weeklyCounts.get(m.id) ?? 0));
+  }
+  return remaining;
+}
+
+/**
  * A goal has no work left TODAY: every week-due mark has met its daily bar
  * today (marks already done for the week ask nothing more). An empty mark
  * list counts as done — there is nothing to spotlight.
