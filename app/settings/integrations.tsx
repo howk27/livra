@@ -8,6 +8,7 @@ import { useEffectiveTheme, useUIStore } from '../../state/uiSlice';
 import { requestPermissions } from '../../lib/health/healthPermissions';
 import type { HealthKitType } from '../../lib/health/healthTypes';
 import { useNotification } from '../../contexts/NotificationContext';
+import { logger } from '../../lib/utils/logger';
 
 const APPLE_HEALTH_RED = '#FF2D55';
 
@@ -51,7 +52,14 @@ export default function IntegrationsScreen() {
       await requestPermissions(HEALTH_CONNECT_TYPES);
       await setHealthConnected(true);
       showSuccess('Apple Health connected.');
-    } catch {
+    } catch (e) {
+      // This used to be a bare `catch {}`: the one screen that knew WHY Apple
+      // Health failed threw the reason away, so a missing entitlement, a
+      // simulator with no Health app and a refused authorization were one
+      // indistinguishable sentence. The copy stays calm; the reason gets logged
+      // so the next device report arrives with evidence attached.
+      const reason = e instanceof Error ? e.message : String(e);
+      logger.error('[Health] connect failed:', reason);
       showError('Apple Health could not be reached. Try Settings → Privacy → Health.');
     } finally {
       setConnecting(false);
