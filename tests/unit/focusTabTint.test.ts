@@ -3,12 +3,19 @@ import { join } from 'path';
 import { themedColors } from '../../theme/tokens';
 
 /**
- * The Focus tab's active tint is amber — a founder-sanctioned exception
- * (2026-07-26) to "forest/mint = navigation" for that one tab — and it must
- * stay READABLE: the 10px tab label is text, so the token needs 4.5:1 against
- * the tab bar surface in both themes. Plain `ember` fails that on light
- * (2.63:1), which is exactly why `emberInk` exists; this guard measures the
- * token so a "simplify back to ember" cleanup fails here instead of on device.
+ * The active tab tint is amber for EVERY tab.
+ *
+ * Founder call 2026-07-26 (b), superseding the 2026-07-26 (a) decision that
+ * scoped amber to Focus alone: "the Focus tab icon goes amber when focused, the
+ * other 2 don't change. Make them change to amber if they are focused." One
+ * active colour across the bar reads as a selection state; three tabs where only
+ * one changes hue reads as a bug, which is exactly how it got reported.
+ *
+ * The contrast half of this guard is unchanged and still the point: the 10px tab
+ * label is TEXT, so the token needs 4.5:1 against the tab bar surface in both
+ * themes. Plain `ember` fails that on light (2.63:1), which is why `emberInk`
+ * exists — and now that amber is on all three tabs, a "simplify back to ember"
+ * cleanup would break three labels instead of one.
  */
 
 const toRgb = (hex: string): [number, number, number] => {
@@ -33,13 +40,20 @@ const AA_BODY = 4.5;
 
 const src = readFileSync(join(__dirname, '../../', 'app/(tabs)/_layout.tsx'), 'utf8');
 
-describe('Focus tab active tint', () => {
-  it('the focus screen overrides the active tint with emberInk', () => {
-    expect(src).toContain('tabBarActiveTintColor: tc.emberInk');
+describe('active tab tint', () => {
+  it('the bar-wide ACTIVE tint is emberInk', () => {
+    expect(src).toMatch(/const ACTIVE = tc\.emberInk;/);
+    expect(src).toContain('tabBarActiveTintColor: ACTIVE');
   });
 
-  it('only the focus tab carries the override — goals/settings stay structural', () => {
-    expect(src.match(/tabBarActiveTintColor: tc\.emberInk/g)).toHaveLength(1);
+  it('no tab re-overrides the active tint, so all three read the same', () => {
+    // A per-screen tabBarActiveTintColor is what made Focus the odd one out.
+    // Any reappearance means one tab has drifted from the other two again.
+    expect(src.match(/tabBarActiveTintColor:/g)).toHaveLength(1);
+  });
+
+  it('forest is no longer the active tint', () => {
+    expect(src).not.toMatch(/const ACTIVE = tc\.forest;/);
   });
 
   it.each(['light', 'dark'] as const)(

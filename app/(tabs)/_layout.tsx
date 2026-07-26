@@ -40,7 +40,13 @@ export default function TabLayout() {
     }
   }, [initialized, loading, isAuthenticated, router]);
 
-  const ACTIVE = tc.forest;
+  // Founder call 2026-07-26 (b), superseding 4f8112e's "Focus alone wears
+  // amber": every tab wears amber when focused. One active colour across the
+  // bar reads as a selection state; three tabs where only one changes hue reads
+  // as a bug, which is how it was reported. emberInk, NOT ember — the 10px
+  // label under the icon is TEXT and plain ember is 2.63:1 on the light tab
+  // bar; emberInk is 5.07:1 light / 7.51:1 dark (theme/tokens.ts).
+  const ACTIVE = tc.emberInk;
   const INACTIVE = tc.inkMuted;
 
   return (
@@ -83,11 +89,8 @@ export default function TabLayout() {
             name="focus"
             options={{
               title: 'Focus',
-              // Founder call 2026-07-26: Focus alone wears amber when active —
-              // the sun glyph earns a warm tint the structural tabs don't.
-              // emberInk, not ember: the 10px label under the icon is TEXT and
-              // needs 4.5:1 on the light tab bar (see theme/tokens.ts).
-              tabBarActiveTintColor: tc.emberInk,
+              // No per-tab tint override any more — ACTIVE above is amber for
+              // the whole bar.
               tabBarIcon: ({ focused, color }) => (
                 <FocusIcon focused={focused} color={color as string} />
               ),
