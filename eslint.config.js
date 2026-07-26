@@ -32,4 +32,17 @@ module.exports = defineConfig([
       '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
     },
   },
+
+  // Supabase edge functions are DENO, not React Native. They import by URL
+  // ('https://deno.land/...', 'jsr:...'), which the RN resolver cannot follow
+  // and was never meant to — every such import was landing as an
+  // import/no-unresolved ERROR, so the repo's error count grew by one for each
+  // new edge function while nothing was actually wrong. Scoped to the folder so
+  // the rule keeps protecting the app code, which does have a real resolver.
+  {
+    files: ['supabase/functions/**/*.ts'],
+    rules: {
+      'import/no-unresolved': 'off',
+    },
+  },
 ]);

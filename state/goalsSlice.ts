@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 import { InteractionManager } from 'react-native';
+import { logger } from '../lib/utils/logger';
 import type { Goal } from '../types/goal';
 import type { TierId, FrequencyId } from '../lib/goalMarkSuggestions';
 import {
@@ -100,7 +101,13 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
       );
       set({ goals, isLoading: false });
     } catch (e) {
-      set({ isLoading: false, error: e instanceof Error ? e.message : 'Failed to load goals' });
+      // `error` is USER-FACING copy, not a diagnostic: both readers
+      // (app/(tabs)/goals.tsx and app/mark/new.tsx) render it straight to the
+      // screen, so it used to put a raw exception message — a Supabase code, a
+      // fetch failure — in front of the user, which says nothing they can act
+      // on. The real message goes to the log, where it can actually be read.
+      logger.error('[Goals] fetchGoals failed:', e);
+      set({ isLoading: false, error: 'Could not load your goals. Try again.' });
     }
   },
 

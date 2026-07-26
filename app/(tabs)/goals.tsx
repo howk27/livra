@@ -30,6 +30,7 @@ import { Breathing } from '../../components/ui/Breathing';
 import { SectionLabel } from '../../components/ui/SectionLabel';
 import { GoalTitle } from '../../components/ui/GoalTitle';
 import { HistoryRow } from '../../components/goals/HistoryRow';
+import { useAuth } from '../../hooks/useAuth';
 import { useGoalsStore } from '../../state/goalsSlice';
 import { useMarksStore } from '../../state/countersSlice';
 import { useEventsStore } from '../../state/eventsSlice';
@@ -426,9 +427,12 @@ export default function GoalsScreen() {
   const c = themedColors(theme);
   const router = useRouter();
 
+  const { user } = useAuth();
+
   const goals = useGoalsStore((s) => s.goals);
   const isLoading = useGoalsStore((s) => s.isLoading);
   const error = useGoalsStore((s) => s.error);
+  const fetchGoals = useGoalsStore((s) => s.fetchGoals);
   const getActiveGoals = useGoalsStore((s) => s.getActiveGoals);
   const getCompletedGoals = useGoalsStore((s) => s.getCompletedGoals);
 
@@ -518,6 +522,19 @@ export default function GoalsScreen() {
         {error ? (
           <View style={[styles.errorBanner, { backgroundColor: applyOpacity(c.danger, 0.13) }]}>
             <Text style={[styles.errorText, { color: c.danger }]}>{error}</Text>
+            {/* A failure the user cannot act on is just an accusation. The
+                retry re-runs the same load the sync path runs. */}
+            {user?.id ? (
+              <TouchableOpacity
+                onPress={() => void fetchGoals(user.id)}
+                disabled={isLoading}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: isLoading }}
+                style={styles.errorRetry}
+              >
+                <Text style={[styles.errorRetryText, { color: c.danger }]}>Try again</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         ) : null}
 
@@ -684,6 +701,19 @@ const styles = StyleSheet.create({
   errorText: {
     fontFamily: fonts.sans,
     fontSize: fontSize[13],
+  },
+  // minHeight, not hitSlop: hitSlop clips at the parent's bounds, and this
+  // control sits inside a padded banner.
+  errorRetry: {
+    minHeight: 44,
+    justifyContent: 'center',
+    alignSelf: 'flex-start',
+  },
+  errorRetryText: {
+    fontFamily: fonts.sans,
+    fontSize: fontSize[13],
+    fontWeight: '600',
+    textDecorationLine: 'underline',
   },
 
   // Loading
