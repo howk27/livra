@@ -3,6 +3,7 @@ import {
   getActiveGoal,
   getActiveGoals,
   calculateGoalProgress,
+  calculateUnlockThreshold,
   goalCommitmentTarget,
   goalWeekFraming,
 } from '../../lib/goalLogic';
@@ -91,6 +92,46 @@ describe('calculateGoalProgress (day-based)', () => {
 
   test('no linked marks means 0', () => {
     expect(calculateGoalProgress(g({}), [ev({})])).toBe(0);
+  });
+});
+
+// ── calculateUnlockThreshold: mark-days, scaled by linked mark count ─────────
+
+describe('calculateUnlockThreshold', () => {
+  // Progress counts one per linked mark per day, so the unlock floor must
+  // scale the same way — a flat 7 under two marks filled in half the claimed
+  // effort (founder device report 2026-07-26: "two marks and 7 check-ins
+  // doesn't add up").
+  const today = () => new Date().toISOString();
+  const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString();
+
+  test('fresh one-mark goal floors at 7', () => {
+    expect(calculateUnlockThreshold(g({ created_at: today(), linked_mark_ids: ['m1'] }))).toBe(7);
+  });
+
+  test('fresh two-mark goal floors at 14 — the floor scales with marks', () => {
+    expect(
+      calculateUnlockThreshold(g({ created_at: today(), linked_mark_ids: ['m1', 'm2'] })),
+    ).toBe(14);
+  });
+
+  test('no linked marks behaves as one mark (never zero)', () => {
+    expect(calculateUnlockThreshold(g({ created_at: today() }))).toBe(7);
+    expect(calculateUnlockThreshold(g({ created_at: today(), linked_mark_ids: [] }))).toBe(7);
+  });
+
+  test('age growth scales by mark count too (20 days, 2 marks → 32)', () => {
+    // floor(20 × 0.8) = 16 mark-days per mark.
+    expect(calculateUnlockThreshold(g({ created_at: daysAgo(20), linked_mark_ids: ['m1'] }))).toBe(16);
+    expect(
+      calculateUnlockThreshold(g({ created_at: daysAgo(20), linked_mark_ids: ['m1', 'm2'] })),
+    ).toBe(32);
+  });
+
+  test('cap is per-mark as well (ancient goal, 2 marks → 730)', () => {
+    expect(
+      calculateUnlockThreshold(g({ created_at: daysAgo(2000), linked_mark_ids: ['m1', 'm2'] })),
+    ).toBe(730);
   });
 });
 

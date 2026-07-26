@@ -98,14 +98,23 @@ export function goalWeekFraming(
   return { week: Math.min(totalWeeks, Math.floor(days / 7) + 1), totalWeeks };
 }
 
-/** Minimum effort (in check-in days) to unlock EARLY manual completion — the
- *  quiet footer path. Distinct from goalCommitmentTarget, which is the full
- *  commitment that triggers the ready-to-claim prompt. */
+/** Minimum effort to unlock EARLY manual completion — the quiet footer path.
+ *  Distinct from goalCommitmentTarget, which is the full commitment that
+ *  triggers the ready-to-claim prompt.
+ *
+ *  Unit: mark-days, the same unit calculateGoalProgress counts (one per linked
+ *  mark per day). A goal with two marks earns up to 2 per day, so every term
+ *  scales by the linked-mark count — a flat 7 read as "7 check-ins" on the
+ *  detail hero while two marks produced 14 a week, and the ring filled in half
+ *  the effort it claimed to ask for (founder device report 2026-07-26).
+ *  calculateCommitmentTarget already multiplies by mark count; this floor now
+ *  agrees with it. */
 export function calculateUnlockThreshold(goal: Goal): number {
+  const markCount = Math.max(1, goal.linked_mark_ids?.length ?? 0);
   const daysSinceCreated = Math.max(
     0,
     Math.floor((Date.now() - new Date(goal.created_at).getTime()) / 86_400_000)
   );
-  const raw = Math.floor(daysSinceCreated * 0.8);
-  return Math.min(365, Math.max(7, raw));
+  const raw = Math.floor(daysSinceCreated * 0.8) * markCount;
+  return Math.min(365 * markCount, Math.max(7 * markCount, raw));
 }
