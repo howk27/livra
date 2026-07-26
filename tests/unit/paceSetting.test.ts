@@ -3,6 +3,7 @@ import {
   getPace,
   setPace,
   paceWeeklyTarget,
+  paceFromFrequency,
   PACE_STORAGE_KEY,
   PACE_LABELS,
 } from '../../lib/paceSetting';
@@ -75,5 +76,17 @@ describe('paceSetting', () => {
     for (const label of Object.values(PACE_LABELS)) {
       expect(label).not.toMatch(/[—–-]/);
     }
+  });
+
+  // CommitmentScreen's frequency picker (light/steady/pushing) and the app's
+  // Pace (easing/steady/push) are the same intensity, named twice. Confirming
+  // a goal at a given frequency now also sets Pace, so mark/new.tsx's
+  // quick-add inherits it — this pins the mapping both directions can rely on.
+  describe('paceFromFrequency', () => {
+    it('maps light/steady/pushing onto easing/steady/push', () => {
+      expect(paceFromFrequency('light')).toBe('easing');
+      expect(paceFromFrequency('steady')).toBe('steady');
+      expect(paceFromFrequency('pushing')).toBe('push');
+    });
   });
 });

@@ -46,6 +46,33 @@ export function commitmentSummary(tier: TierId, frequency: FrequencyId, associat
   return `~${threshold} check-ins over ${weeks} weeks`;
 }
 
+/**
+ * A single mark's own weekly cadence at the intensity the user picked on the
+ * CommitmentScreen (light/steady/pushing) — the same min/recommended/max
+ * range `calculateCommitmentTarget` already draws its aggregate from, just
+ * read per mark instead of summed.
+ *
+ * Founder device report 2026-07-26: "Grow my business" (Networking, Focus)
+ * asked for cadences that didn't match the intensity chosen at creation.
+ * Root cause — app/goal/new.tsx captured `selection.frequency` for the goal's
+ * overall commitment target, but every mark's own `weekly_target` was
+ * hardcoded to `frequency_recommended` regardless of it: a user who picked
+ * "light" or "pushing" got "steady" cadence on every mark anyway. Fixed/
+ * abstinence marks carry min = recommended = max in the library (Sleep,
+ * No Alcohol, …), so they resolve to the same number at every intensity —
+ * no frequencyKind branch needed here.
+ */
+export function frequencyWeeklyTarget(
+  mark: Pick<MarkDefinition, 'frequency_min' | 'frequency_recommended' | 'frequency_max'>,
+  frequency: FrequencyId,
+): number {
+  return frequency === 'light'
+    ? mark.frequency_min
+    : frequency === 'pushing'
+      ? mark.frequency_max
+      : mark.frequency_recommended;
+}
+
 // ─── Suggestion engine ────────────────────────────────────────────────────────
 
 // 4, not 5: a fresh preset goal must leave headroom under the free 4-marks-per-

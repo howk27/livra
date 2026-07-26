@@ -1,4 +1,4 @@
-﻿import { getMarksForGoal, calculateCommitmentTarget } from '../../lib/goalMarkSuggestions';
+﻿import { getMarksForGoal, calculateCommitmentTarget, frequencyWeeklyTarget } from '../../lib/goalMarkSuggestions';
 import { MARK_LIBRARY } from '../../lib/suggestedCounters';
 
 const ids = (title: string) => getMarksForGoal(title).map(m => m.id);
@@ -242,6 +242,36 @@ describe('calculateCommitmentTarget', () => {
 
   it('returns 0 for 0 marks', () => {
     expect(calculateCommitmentTarget('building', 'steady', 0)).toBe(0);
+  });
+});
+
+// ── frequencyWeeklyTarget: per-mark cadence at the chosen intensity ─────────
+//
+// Founder device report 2026-07-26: "Grow my business" marks (Networking,
+// Focus) got the same cadence regardless of the frequency picked on
+// CommitmentScreen. app/goal/new.tsx hardcoded frequency_recommended for
+// every mark no matter what `selection.frequency` was — this is the fix.
+
+describe('frequencyWeeklyTarget', () => {
+  const range = { frequency_min: 2, frequency_recommended: 3, frequency_max: 5 };
+
+  it('light picks the floor', () => {
+    expect(frequencyWeeklyTarget(range, 'light')).toBe(2);
+  });
+
+  it('steady picks the recommendation', () => {
+    expect(frequencyWeeklyTarget(range, 'steady')).toBe(3);
+  });
+
+  it('pushing picks the ceiling', () => {
+    expect(frequencyWeeklyTarget(range, 'pushing')).toBe(5);
+  });
+
+  it('a fixed/abstinence mark (min = recommended = max in the library) resolves the same at every intensity', () => {
+    const flat = { frequency_min: 7, frequency_recommended: 7, frequency_max: 7 };
+    expect(frequencyWeeklyTarget(flat, 'light')).toBe(7);
+    expect(frequencyWeeklyTarget(flat, 'steady')).toBe(7);
+    expect(frequencyWeeklyTarget(flat, 'pushing')).toBe(7);
   });
 });
 

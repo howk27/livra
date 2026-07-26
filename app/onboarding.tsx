@@ -29,6 +29,7 @@ import { resolveMarkAccent, resolveMarkIcon } from '../lib/markCategoryResolve';
 import { colorForSuggestedCounter } from '../lib/markCategory';
 import { defaultDailyTargetForMarkId } from '../lib/markQuantitative';
 import { getMarksForCommitment, CommitmentMarkSelection } from '../lib/onboarding/commitmentEngine';
+import { setPace } from '../lib/paceSetting';
 import { frequencyLabel } from '../components/ui/MarkFrequencyPicker';
 import { logger } from '../lib/utils/logger';
 import { capture } from '../lib/analytics/posthog';
@@ -230,6 +231,13 @@ export default function OnboardingScreen() {
     } = useOnboardingStore.getState();
     const isAIPath = aiPackageDraft !== null && Object.keys(selectedMarkTargets).length > 0;
     const level = commitment ?? 'steady';
+
+    // CommitmentLevel and PaceLevel are the same vocabulary (easing/steady/
+    // push) named twice — the onboarding pace step never used to become the
+    // app's ongoing Pace, so a mark added later (mark/new.tsx's quick-add)
+    // silently reverted to "recommended" no matter what the user chose here.
+    // Best-effort: a storage failure must not block onboarding completion.
+    setPace(level).catch(() => {});
 
     // 1. Mark onboarding complete
     const remoteOk = await completeOnboarding(userId, {

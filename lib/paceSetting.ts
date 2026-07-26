@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { CommitmentLevel } from '../state/onboardingSlice';
+import type { FrequencyId } from './goalMarkSuggestions';
 import type { Mark } from '../types';
 
 /**
@@ -31,6 +32,18 @@ export async function getPace(): Promise<PaceLevel> {
 
 export async function setPace(pace: PaceLevel): Promise<void> {
   await AsyncStorage.setItem(PACE_STORAGE_KEY, pace);
+}
+
+/**
+ * CommitmentScreen's frequency picker (light/steady/pushing) and this app-wide
+ * Pace (easing/steady/push) are the same three-step intensity, named twice —
+ * one deliberate choice, made in the moment. Confirming a goal at a given
+ * frequency now also becomes the app's stored Pace, so a mark added anywhere
+ * ELSE afterward (mark/new.tsx's quick-add from the library) inherits the
+ * intensity the user just chose instead of a fixed "recommended" default.
+ */
+export function paceFromFrequency(frequency: FrequencyId): PaceLevel {
+  return frequency === 'light' ? 'easing' : frequency === 'pushing' ? 'push' : 'steady';
 }
 
 /**

@@ -35,7 +35,8 @@ import { useMarksStore } from '../../state/countersSlice';
 import { useAuth } from '../../hooks/useAuth';
 import { useSettleEntrance } from '../../hooks/useSettleEntrance';
 import { checkProStatus } from '../../lib/iap/iap';
-import { getMarksForGoal } from '../../lib/goalMarkSuggestions';
+import { getMarksForGoal, frequencyWeeklyTarget } from '../../lib/goalMarkSuggestions';
+import { setPace, paceFromFrequency } from '../../lib/paceSetting';
 import { goalPreviewMarks } from '../../lib/creation/creationPreview';
 import { CommitmentScreen, CommitmentSelection } from '../../components/CommitmentScreen';
 import { MarkDefinition } from '../../lib/suggestedCounters';
@@ -318,7 +319,11 @@ export default function NewGoalScreen() {
           frequency_min: sugg.frequency_min,
           frequency_recommended: sugg.frequency_recommended,
           frequency_max: sugg.frequency_max,
-          weekly_target: sugg.frequency_recommended ?? 3,
+          // The intensity chosen right above on CommitmentScreen — not a flat
+          // "recommended" regardless of it. Founder device report 2026-07-26:
+          // "Grow my business" got the same cadence on every mark no matter
+          // what frequency was picked at creation.
+          weekly_target: frequencyWeeklyTarget(sugg, selection.frequency),
         });
         newMarkIds.push(newMark.id);
       }
@@ -328,6 +333,12 @@ export default function NewGoalScreen() {
         const { useGoalsStore: gs } = await import('../../state/goalsSlice');
         await Promise.all(newMarkIds.map(mId => gs.getState().linkMarkToGoal(newGoal.id, mId)));
       }
+
+      // The chosen intensity becomes the app's ongoing Pace (Settings), so a
+      // mark added anywhere else afterward inherits it instead of defaulting
+      // to "recommended". Best-effort: a storage failure must not undo the
+      // goal that was just created.
+      setPace(paceFromFrequency(selection.frequency)).catch(() => {});
 
       router.back();
     } catch (err) {

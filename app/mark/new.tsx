@@ -47,6 +47,7 @@ import {
   weeklyTargetForPreset,
   scheduleForPreset,
 } from '../../lib/markFrequencyPreset';
+import { getPace, paceWeeklyTarget } from '../../lib/paceSetting';
 import { ICON_TYPE_TO_EMOJI, MARK_ICON_OPTIONS, MARK_ICON_PRIMARY } from '../../lib/markIcons';
 import { MarkRowPreview } from '../../components/creation/MarkRowPreview';
 import { cadenceLabel, suggestedCadenceLabel } from '../../lib/creation/creationPreview';
@@ -347,6 +348,22 @@ export default function NewCounterScreen() {
 
     try {
       setLoading(true);
+      // The app's current Pace (Settings — easing/steady/push), not a flat
+      // "recommended" regardless of it. paceWeeklyTarget returns null for a
+      // fixed/abstinence mark (Sleep, No Alcohol, …) since those carry no
+      // variable position; frequency_recommended is the correct constant for
+      // those anyway (min = recommended = max in the library).
+      const pace = await getPace();
+      const weeklyTarget =
+        paceWeeklyTarget(
+          {
+            frequency_kind: pendingSuggestedCounter.frequencyKind,
+            frequency_min: pendingSuggestedCounter.frequency_min,
+            frequency_recommended: pendingSuggestedCounter.frequency_recommended,
+            frequency_max: pendingSuggestedCounter.frequency_max,
+          },
+          pace,
+        ) ?? pendingSuggestedCounter.frequency_recommended;
       const savedMark = await createCounter({
         name: pendingSuggestedCounter.name,
         emoji: pendingSuggestedCounter.emoji,
@@ -357,7 +374,7 @@ export default function NewCounterScreen() {
         user_id: user?.id!,
         dailyTarget,
         frequency_kind: pendingSuggestedCounter.frequencyKind,
-        weekly_target: pendingSuggestedCounter.frequency_recommended ?? 3,
+        weekly_target: weeklyTarget,
         // The per-goal free cap (5, lib/gating.ts) is enforced by createCounter
         // off this goal_id — never reimplemented here.
         ...(linkTargetId ? { goal_id: linkTargetId } : {}),
