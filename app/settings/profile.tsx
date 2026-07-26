@@ -22,6 +22,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { getSupabaseClient } from '../../lib/supabase';
 import { uploadAvatar, getAvatarUrl } from '../../lib/storage/avatarStorage';
 import { resolveInitialDisplayName } from '../../lib/profile/displayName';
+import { saveDisplayName } from '../../lib/profile/saveDisplayName';
 import { logger } from '../../lib/utils/logger';
 import { useNotification } from '../../contexts/NotificationContext';
 import * as AppleAuthentication from 'expo-apple-authentication';
@@ -213,10 +214,11 @@ export default function ProfileScreen() {
     setSaving(true);
     const nextName = displayName.trim();
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .upsert({ id: user.id, display_name: nextName });
-      if (error) throw error;
+      // Not an upsert: PostgREST would put `id` in the ON CONFLICT SET list and
+      // `authenticated` has no UPDATE privilege on it, so every save answered
+      // 42501 permission denied. See lib/profile/saveDisplayName.ts.
+      const saved = await saveDisplayName(supabase, user.id, nextName);
+      if (!saved.ok) throw saved.error;
 
       // Founder 2026-07-24, "unable to update my name": profiles.display_name
       // is the stored name, but the Focus greeting reads the AUTH metadata

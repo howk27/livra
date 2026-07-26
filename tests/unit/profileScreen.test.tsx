@@ -72,6 +72,10 @@ const mockUpdateUser = jest.fn();
 const mockSignInWithIdToken = jest.fn();
 const mockCalls: string[] = [];
 const mockMaybeSingle = jest.fn();
+const mockProfileUpdate = jest.fn();
+const mockProfileInsert = jest.fn();
+/** One matched row by default — the profile row exists for every live account. */
+const mockProfileUpdateResult = jest.fn(() => Promise.resolve({ data: [{ id: 'user-1' }], error: null }));
 jest.mock('../../lib/supabase', () => ({
   getSupabaseClient: () => ({
     auth: {
@@ -88,9 +92,23 @@ jest.mock('../../lib/supabase', () => ({
         return mockSignInWithIdToken(...args);
       },
     },
+    // The name is written with UPDATE ... WHERE id, never an upsert: PostgREST
+    // puts the primary key in an upsert's SET list and `authenticated` has no
+    // UPDATE privilege on profiles.id, so that shape answered 42501 for every
+    // account (proven against production 2026-07-25). This mock deliberately
+    // does NOT expose `upsert` — reintroducing one fails here first.
     from: () => ({
       select: () => ({ eq: () => ({ maybeSingle: mockMaybeSingle }) }),
-      upsert: jest.fn().mockResolvedValue({ error: null }),
+      update: (payload: any) => {
+        mockCalls.push('update');
+        mockProfileUpdate(payload);
+        return { eq: () => ({ select: () => mockProfileUpdateResult() }) };
+      },
+      insert: (payload: any) => {
+        mockCalls.push('insert');
+        mockProfileInsert(payload);
+        return Promise.resolve({ error: null });
+      },
     }),
   }),
 }));
