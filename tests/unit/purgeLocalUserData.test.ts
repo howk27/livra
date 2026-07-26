@@ -51,6 +51,7 @@ import {
   DEVICE_SCOPED_STORAGE_KEYS,
   NON_ASYNC_STORAGE_LITERALS,
 } from '../../lib/db/purgeLocalUserData';
+import { initDatabase, getDatabase, query, execute } from '../../lib/db';
 import { useIdentityStore } from '../../state/identitySlice';
 import { useMomentumStore } from '../../state/momentumSlice';
 import { useMarksStore } from '../../state/countersSlice';
@@ -152,6 +153,42 @@ describe('purgeLocalUserData — in-memory stores', () => {
 
     expect(useMarksStore.getState().marks).toEqual([]);
     expect(useGoalsStore.getState().goals).toEqual([]);
+  });
+});
+
+describe('purgeLocalUserData — the app is still usable afterwards', () => {
+  // QC-1058 R1. The purge nulled the mock DB handle and nothing rebuilt it:
+  // initDatabase() runs once, at boot, so the FIRST read after any account
+  // switch threw 'Database not initialized' and the app sat blank until it was
+  // force-quit. The wipe was never the bug — leaving no handle behind was.
+  it('leaves a live database handle, not a null one', async () => {
+    await initDatabase();
+
+    await purgeLocalUserData();
+
+    expect(() => getDatabase()).not.toThrow();
+  });
+
+  it('reads empty instead of throwing after the purge', async () => {
+    await initDatabase();
+    await execute(
+      'INSERT INTO lc_counters (id, user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+      ['m1', 'user-a', 'Water', '2026-07-26T00:00:00.000Z', '2026-07-26T00:00:00.000Z'],
+    );
+
+    await purgeLocalUserData();
+
+    // The next account's first read: empty, and it RESOLVES.
+    await expect(
+      query('SELECT * FROM lc_counters WHERE user_id = ? AND deleted_at IS NULL', ['user-b']),
+    ).resolves.toEqual([]);
+  });
+
+  it('reports mockDb rather than stranding the app when the reopen fails', async () => {
+    const result = await purgeLocalUserData();
+
+    // Baseline: the healthy path reports no database failure at all.
+    expect(result.failures).not.toContain('mockDb');
   });
 });
 

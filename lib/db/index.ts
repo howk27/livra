@@ -1233,6 +1233,20 @@ export const resetDatabaseState = async (): Promise<void> => {
   } catch (error) {
     logger.warn('[DB] Failed to clear AsyncStorage during reset:', error);
   }
+
+  // A RESET IS NOT A TEARDOWN. Leaving `db` null stranded a running app:
+  // initDatabase() is called exactly once, at boot (app/_layout.tsx), so every
+  // read after a reset threw 'Database not initialized' until the process was
+  // killed. That is the blank screen on every account switch (QC-1058 R1) —
+  // both purge entry points land here, signOut and the sign-in guard — and it
+  // also broke Settings -> Reset all data, which reloads marks from the handle
+  // it had just nulled.
+  //
+  // Reopening is the LAST step, after the wipe, so the fresh handle loads the
+  // emptied storage instead of the rows on their way out. It is allowed to
+  // throw: both callers already catch, and the purge records a `mockDb`
+  // failure and carries on rather than silently handing back a dead handle.
+  await initDatabase();
 };
 
 export const initDatabase = async (): Promise<MockDatabase> => {
