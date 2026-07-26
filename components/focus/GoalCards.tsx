@@ -12,7 +12,7 @@
  * spotlight card's inner padding belongs to NextMoveCard, which is padding only.
  */
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { CaretDown, CaretUp, CheckCircle, CircleIcon as Circle } from 'phosphor-react-native';
 import { fonts, fontSize, spacing, radius, shadow, themedColors } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
@@ -37,12 +37,14 @@ export function DoneGoalRow({
   allDoneForWeek,
   remainingThisWeek,
   onPress,
+  onTitlePress,
 }: {
   goal: GoalLike;
   allDoneForWeek: boolean;
   /** Check-in days still owed across this goal's marks (lib/focusQueue). */
   remainingThisWeek: number;
   onPress: () => void;
+  onTitlePress: () => void;
 }) {
   const c = themedColors(useEffectiveTheme());
   // Three voices, one row (founder 2026-07-26, "adding brain to the goals"):
@@ -66,7 +68,7 @@ export function DoneGoalRow({
       accessibilityLabel={`${goal.title}, ${allDoneForWeek ? 'all done this week' : `done for today, ${remainingThisWeek} more check-in${remainingThisWeek !== 1 ? 's' : ''} this week`}. Tap to expand.`}
     >
       <CheckCircle size={20} color={c.accent} weight="fill" />
-      <GoalTitle title={goal.title} size="card" color={c.inkMid} style={styles.goalCardDoneTitle} />
+      <GoalTitlePress title={goal.title} onPress={onTitlePress} color={c.inkMid} />
       <Text style={[styles.goalCardDoneMeta, { color: c.inkMid }]}>{meta}</Text>
       {/* Down, not right: this row EXPANDS in place, it does not navigate.
           Same caret vocabulary as the queued rows. */}
@@ -85,11 +87,13 @@ export function QueuedGoalRow({
   dueMarks,
   todayCountsMap,
   onPress,
+  onTitlePress,
 }: {
   goal: GoalLike;
   dueMarks: Counter[];
   todayCountsMap: Map<string, number>;
   onPress: () => void;
+  onTitlePress: () => void;
 }) {
   const c = themedColors(useEffectiveTheme());
   const remainingToday = dueMarks.filter(
@@ -104,7 +108,7 @@ export function QueuedGoalRow({
       accessibilityRole="button"
       accessibilityLabel={`${goal.title}, up next, ${remainingToday} mark${remainingToday !== 1 ? 's' : ''} left today. Tap to expand.`}
     >
-      <GoalTitle title={goal.title} size="card" color={c.inkMid} style={styles.goalCardDoneTitle} />
+      <GoalTitlePress title={goal.title} onPress={onTitlePress} color={c.inkMid} />
       <View style={styles.queuedChecks}>
         {dueMarks.slice(0, QUEUED_CHECK_CAP).map((m) =>
           isMarkDoneToday(m, todayCountsMap.get(m.id) ?? 0) ? (
@@ -135,6 +139,7 @@ export function ExpandedGoalCard({
   doneMarks,
   renderMarkRow,
   onToggle,
+  onTitlePress,
 }: {
   goal: GoalLike;
   dueMarks: Counter[];
@@ -147,21 +152,35 @@ export function ExpandedGoalCard({
     celebrateIndex?: number,
   ) => React.ReactNode;
   onToggle: () => void;
+  onTitlePress: () => void;
 }) {
   const c = themedColors(useEffectiveTheme());
   return (
     <View style={[styles.goalCard, { backgroundColor: c.surface }]}>
-      <TouchableOpacity
-        onPress={onToggle}
-        activeOpacity={0.7}
-        style={styles.goalCardHeader}
-        accessibilityRole="button"
-        accessibilityState={{ expanded: true }}
-        accessibilityLabel={`Collapse ${goal.title}`}
-      >
-        <GoalTitle title={goal.title} size="card" color={c.inkDark} style={styles.goalCardTitle} />
-        <CaretUp size={16} color={c.inkMuted} weight="bold" />
-      </TouchableOpacity>
+      {/* The header is no longer ONE target. The title navigates (founder
+          2026-07-26: "user taps on the goal title, opens the goal detail
+          screen" — the spotlight card already did this and the folded rows did
+          not); the caret keeps the collapse. Collapse is still double-served by
+          the FoldRow below, so this cannot regress the 2026-07-24 "unable to
+          close it back up" report. */}
+      <View style={styles.goalCardHeader}>
+        <GoalTitlePress
+          title={goal.title}
+          onPress={onTitlePress}
+          color={c.inkDark}
+          style={styles.goalCardTitle}
+        />
+        <TouchableOpacity
+          onPress={onToggle}
+          activeOpacity={0.7}
+          style={styles.headerCaret}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: true }}
+          accessibilityLabel={`Collapse ${goal.title}`}
+        >
+          <CaretUp size={16} color={c.inkMuted} weight="bold" />
+        </TouchableOpacity>
+      </View>
 
       {dueMarks.map((mark, idx) =>
         renderMarkRow(mark, idx === dueMarks.length - 1 && doneMarks.length === 0, false, false, idx),
@@ -237,6 +256,47 @@ export function SpotlightGoalCard({
   );
 }
 
+/**
+ * The goal title as its OWN touch target, opening the goal detail screen.
+ *
+ * Founder 2026-07-26: "the first 2 goals when I tap on the goal name they open
+ * and close the goal card, however the third goal opens the goal detail screen.
+ * Make them match." The third goal was whichever held the spotlight seat —
+ * NextMoveCard has always made its title a link — while the folded rows and the
+ * expanded header spent the title tap on expand/collapse instead. Same-looking
+ * text, three different outcomes depending on where a goal happened to sit in
+ * the queue. The title is now a link everywhere; the caret and the row body keep
+ * expand/collapse, so nothing lost an affordance.
+ *
+ * `alignSelf: 'stretch'` gives the target the FULL height of the row it sits in
+ * rather than the ~20pt of its own text, clearing 44pt without adding a pixel to
+ * any layout — and without hitSlop, which this codebase bans because it clips at
+ * the parent's bounds (see the headerControl note in PROJECT-CONTEXT).
+ */
+function GoalTitlePress({
+  title,
+  onPress,
+  color,
+  style,
+}: {
+  title: string;
+  onPress: () => void;
+  color: string;
+  style?: StyleProp<ViewStyle>;
+}) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      activeOpacity={0.7}
+      style={[styles.goalTitlePress, style]}
+      accessibilityRole="button"
+      accessibilityLabel={`Open ${title}`}
+    >
+      <GoalTitle title={title} size="card" color={color} />
+    </TouchableOpacity>
+  );
+}
+
 /** The "Show less" row, identical in both cards that offer one. */
 function FoldRow({ label, onPress }: { label: string; onPress: () => void }) {
   const c = themedColors(useEffectiveTheme());
@@ -271,8 +331,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
-  goalCardDoneTitle: {
+  // The title's own target. Stretch, not a minHeight: it inherits whatever
+  // height the row already has (>= 44 from the row's own vertical padding), so
+  // the target is full-height and the layout is byte-identical to before.
+  goalTitlePress: {
     flex: 1,
+    alignSelf: 'stretch',
+    justifyContent: 'center',
+  },
+  // 44pt-wide box so the 16px caret is a real target now that it, and not the
+  // whole header, owns the collapse.
+  headerCaret: {
+    alignSelf: 'stretch',
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+    minWidth: 44,
   },
   goalCardDoneMeta: {
     fontFamily: fonts.sansMedium,

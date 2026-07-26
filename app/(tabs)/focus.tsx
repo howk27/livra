@@ -646,6 +646,7 @@ export default function FocusScreen() {
                     allDoneForWeek={allDoneForWeek}
                     remainingThisWeek={remainingThisWeek(marks, weeklyCountsMap)}
                     onPress={() => toggleGoalExpand(goal.id)}
+                    onTitlePress={() => router.push(`/goal/${goal.id}` as any)}
                   />
                 );
               }
@@ -677,6 +678,7 @@ export default function FocusScreen() {
                       setSpotlightOverride(goal.id);
                       setHeroOverride(null);
                     }}
+                    onTitlePress={() => router.push(`/goal/${goal.id}` as any)}
                   />
                 );
               }
@@ -694,6 +696,7 @@ export default function FocusScreen() {
                     doneMarks={doneMarks}
                     renderMarkRow={renderMarkRow}
                     onToggle={() => toggleGoalExpand(goal.id)}
+                    onTitlePress={() => router.push(`/goal/${goal.id}` as any)}
                   />
                 );
               }
