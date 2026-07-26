@@ -19,7 +19,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle } from 'react-native-reanimated';
 import { CheckCircle, CircleIcon as Circle } from 'phosphor-react-native';
 
-import { fonts, fontSize, spacing, radius, shadow, motion, themedColors, headerControl } from '../theme/tokens';
+import { fonts, fontSize, spacing, radius, motion, themedColors, headerControl } from '../theme/tokens';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { useMotion } from '../hooks/useMotion';
 import { GoalTitle } from './ui/GoalTitle';
@@ -76,14 +76,20 @@ export function NextMoveCard({
   const showChipStrip = chips.length > 0 || overflowCount > 0;
 
   return (
-    <View style={[styles.card, { backgroundColor: c.surface }]}>
+    <View style={styles.card}>
       {/* Goal title — quiet serif, tappable to goal detail */}
       <TouchableOpacity onPress={onGoalPress} activeOpacity={0.7} accessibilityRole="button">
         <GoalTitle title={goalTitle} size="card" color={c.inkMid} style={styles.goalTitle} />
       </TouchableOpacity>
 
-      {/* Microlabel: ember normally, mint + softened copy on a comeback */}
-      <Text style={[styles.microlabel, { color: comeback ? c.mint : c.ember }]}>
+      {/* Microlabel. Both states used to carry their own hue — ember normally,
+          mint on a comeback — and on a light surface both were unreadable at
+          10px: ember 2.63:1, mint 2.14:1, against a 4.5:1 floor. (Dark mode was
+          always fine: 6.89 and 6.74.) `accent` is legible in both themes
+          (12.04:1 / 6.74:1) and is the honest role for a chrome kicker; the
+          state is already carried by the copy, and design-decisions.md holds
+          that mood travels by form, not by hue. */}
+      <Text style={[styles.microlabel, { color: c.accent }]}>
         {comeback ? 'START BACK SMALL' : 'NEXT MOVE'}
       </Text>
 
@@ -158,10 +164,14 @@ export function NextMoveCard({
 }
 
 const styles = StyleSheet.create({
+  // Padding only. The card SHELL — surface color, radius.xl, shadow.card — is
+  // owned by focus.tsx's goalCard wrapper, which is the only place this
+  // component mounts and which also holds the rows rendered after it (the
+  // expander). Carrying a second shell here painted an identical surface with
+  // an identical radius and a shadow that could never be seen: same color, and
+  // clipped by the parent's overflow: hidden.
   card: {
-    borderRadius: radius.xl,
     padding: spacing.lg,
-    ...shadow.card,
   },
   goalTitle: {
     marginBottom: spacing.sm,

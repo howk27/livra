@@ -10,9 +10,16 @@ import { join } from 'path';
  *
  * Source-string guard (cormorantScope pattern): locks the removal/adoption so
  * neither can silently regress.
+ *
+ * 2026-07-25 (k): the four goal states moved out of focus.tsx's map closure
+ * into components/focus/GoalCards.tsx (cyclo 17 -> per-state renderers), so
+ * the retirement checks scan BOTH files — a retired affordance coming back in
+ * the extracted component would otherwise pass unnoticed.
  */
 
-const SRC = readFileSync(join(__dirname, '../../app/(tabs)/focus.tsx'), 'utf8');
+const FOCUS = readFileSync(join(__dirname, '../../app/(tabs)/focus.tsx'), 'utf8');
+const CARDS = readFileSync(join(__dirname, '../../components/focus/GoalCards.tsx'), 'utf8');
+const SRC = FOCUS + CARDS;
 
 describe('focus.tsx — Next Move integration guard', () => {
   it('does not contain the retired "Log one more" bonus affordance', () => {
@@ -31,8 +38,9 @@ describe('focus.tsx — Next Move integration guard', () => {
     expect(SRC).not.toContain('bonusButton');
   });
 
-  it('mounts NextMoveCard', () => {
-    expect(SRC).toContain('NextMoveCard');
+  it('mounts NextMoveCard, via the spotlight renderer', () => {
+    expect(FOCUS).toContain('<SpotlightGoalCard');
+    expect(CARDS).toContain('<NextMoveCard');
   });
 
   it('wires the pure pickNextMove selector', () => {
@@ -43,19 +51,24 @@ describe('focus.tsx — Next Move integration guard', () => {
     expect(SRC).toContain('isComebackState');
   });
 
-  it('the spotlight card renders NO mark rows below NextMoveCard (spec §1 Decision #1: "No extra rows" — done-for-week marks ask nothing today and appear nowhere on the spotlight card)', () => {
-    // Strip comments first — the explanatory comment above the removed block
-    // legitimately mentions the retired pattern by name; only CODE matters.
-    const codeOnly = SRC.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
-    const heroStart = codeOnly.indexOf('<NextMoveCard');
-    expect(heroStart).toBeGreaterThan(-1);
-    const cardEnd = codeOnly.indexOf('</View>', heroStart);
-    expect(cardEnd).toBeGreaterThan(-1);
-    const spotlightCardBody = codeOnly.slice(heroStart, cardEnd);
-    // The done-for-week dimmed rows still exist elsewhere (the manually
-    // re-expanded done-today goal card, and Daily Habits) — this only pins
-    // that the spotlight card's own JSX block never reaches for them.
-    expect(spotlightCardBody).not.toContain('doneMarks');
-    expect(spotlightCardBody).not.toContain('renderMarkRow(');
+  it('the spotlight card renders NO mark rows (spec §1 Decision #1: "No extra rows" — done-for-week marks ask nothing today and appear nowhere on the spotlight card)', () => {
+    // Stronger than the string scan this replaced: SpotlightGoalCard cannot
+    // render a mark row because it is never handed one. The done-for-week rows
+    // still exist elsewhere (the re-expanded done-today card, Daily Habits) —
+    // those go to ExpandedGoalCard, which does take both.
+    const spotlight = CARDS.slice(
+      CARDS.indexOf('export function SpotlightGoalCard'),
+      CARDS.indexOf('/** The "Show less" row'),
+    );
+    expect(spotlight.length).toBeGreaterThan(0);
+    expect(spotlight).not.toContain('doneMarks');
+    expect(spotlight).not.toContain('renderMarkRow');
+
+    const expanded = CARDS.slice(
+      CARDS.indexOf('export function ExpandedGoalCard'),
+      CARDS.indexOf('export function SpotlightGoalCard'),
+    );
+    expect(expanded).toContain('doneMarks');
+    expect(expanded).toContain('renderMarkRow');
   });
 });

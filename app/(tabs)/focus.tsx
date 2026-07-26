@@ -19,12 +19,8 @@ import { LivraHeader } from '../../components/ui/LivraHeader';
 import { MarkRow } from '../../components/ui/MarkRow';
 import { Breathing } from '../../components/ui/Breathing';
 import { Skeleton } from '../../components/ui/Skeleton';
-// This phosphor version exports the plain circle only as CircleIcon (no
-// legacy `Circle` alias, unlike CheckCircle) — aliased locally to match the
-// naming of its siblings here.
-import { Plus, CaretDown, CaretUp, CheckCircle, CircleIcon as Circle } from 'phosphor-react-native';
+import { Plus } from 'phosphor-react-native';
 import { SectionLabel } from '../../components/ui/SectionLabel';
-import { GoalTitle } from '../../components/ui/GoalTitle';
 import { SpeedDialFAB } from '../../components/ui/SpeedDialFAB';
 import { VoiceLine } from '../../components/ui/VoiceLine';
 import { confirm, actionSheet } from '../../components/ui/overlays';
@@ -67,7 +63,6 @@ import { resolveMarkCategory, resolveMarkIcon, resolveMarkAccent } from '../../l
 import {
   buildNextMoveChips,
   isGoalDoneToday,
-  isMarkDoneToday,
   pickSpotlightGoalId,
   pickNextMove,
 } from '../../lib/focusQueue';
@@ -78,7 +73,12 @@ import { logger } from '../../lib/utils/logger';
 import { useNotification } from '../../contexts/NotificationContext';
 import { applyOpacity } from '../../src/components/icons/color';
 import { useWidgetLogSync } from '../../hooks/useWidgetLogSync';
-import { NextMoveCard } from '../../components/NextMoveCard';
+import {
+  DoneGoalRow,
+  QueuedGoalRow,
+  ExpandedGoalCard,
+  SpotlightGoalCard,
+} from '../../components/focus/GoalCards';
 
 import type { Counter } from '../../types';
 
@@ -639,29 +639,12 @@ export default function FocusScreen() {
               const allDoneToday = isGoalDoneToday(marks, weeklyCountsMap, todayCountsMap);
               if (allDoneToday && !isExpanded) {
                 return (
-                  <TouchableOpacity
+                  <DoneGoalRow
                     key={goal.id}
-                    style={[styles.goalCard, styles.goalCardDone, { backgroundColor: c.surface }]}
+                    goal={goal}
+                    allDoneForWeek={allDoneForWeek}
                     onPress={() => toggleGoalExpand(goal.id)}
-                    activeOpacity={0.7}
-                    accessibilityRole="button"
-                    accessibilityState={{ expanded: false }}
-                    accessibilityLabel={`${goal.title}, ${allDoneForWeek ? 'all done this week' : 'done for today'}. Tap to expand.`}
-                  >
-                    <CheckCircle size={20} color={c.accent} weight="fill" />
-                    <GoalTitle
-                      title={goal.title}
-                      size="card"
-                      color={c.inkMid}
-                      style={styles.goalCardDoneTitle}
-                    />
-                    <Text style={[styles.goalCardDoneMeta, { color: c.inkMid }]}>
-                      {allDoneForWeek ? 'All done' : 'Done today'}
-                    </Text>
-                    {/* Down, not right: this row EXPANDS in place, it does not
-                        navigate. Same caret vocabulary as the queued rows. */}
-                    <CaretDown size={16} color={c.inkMuted} weight="bold" />
-                  </TouchableOpacity>
+                  />
                 );
               }
 
@@ -682,38 +665,17 @@ export default function FocusScreen() {
               // itself clears the override and hands the seat back.
               const isSpotlight = goal.id === effectiveSpotlightGoalId;
               if (!isSpotlight && !allDoneToday) {
-                const remainingToday = dueMarks.filter(
-                  (m) => !isMarkDoneToday(m, todayCountsMap.get(m.id) ?? 0),
-                ).length;
                 return (
-                  <TouchableOpacity
+                  <QueuedGoalRow
                     key={goal.id}
-                    style={[styles.goalCard, styles.goalCardQueued, { backgroundColor: c.surface }]}
+                    goal={goal}
+                    dueMarks={dueMarks}
+                    todayCountsMap={todayCountsMap}
                     onPress={() => {
                       setSpotlightOverride(goal.id);
                       setHeroOverride(null);
                     }}
-                    activeOpacity={0.7}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${goal.title}, up next, ${remainingToday} mark${remainingToday !== 1 ? 's' : ''} left today. Tap to expand.`}
-                  >
-                    <GoalTitle
-                      title={goal.title}
-                      size="card"
-                      color={c.inkMid}
-                      style={styles.goalCardDoneTitle}
-                    />
-                    <View style={styles.queuedChecks}>
-                      {dueMarks.slice(0, 6).map((m) =>
-                        isMarkDoneToday(m, todayCountsMap.get(m.id) ?? 0) ? (
-                          <CheckCircle key={m.id} size={14} color={c.accent} weight="regular" />
-                        ) : (
-                          <Circle key={m.id} size={14} color={c.inkMuted} weight="regular" />
-                        ),
-                      )}
-                    </View>
-                    <CaretDown size={16} color={c.inkMuted} weight="bold" />
-                  </TouchableOpacity>
+                  />
                 );
               }
 
@@ -723,50 +685,14 @@ export default function FocusScreen() {
               // header + dimmed done-for-week rows, unchanged.
               if (!isSpotlight) {
                 return (
-                  <View key={goal.id} style={[styles.goalCard, { backgroundColor: c.surface }]}>
-                    {/* Founder 2026-07-24, "unable to close it back up": the
-                        header carried a CaretRight, which reads as navigate-
-                        forward, and the "Show less" fold row below is gated to
-                        a spotlight override a done goal never holds — so the
-                        one working affordance (this header) looked like a link
-                        to somewhere else. Caret now points UP, matching the
-                        down-caret that invited the expansion, and an explicit
-                        fold row backs it up. */}
-                    <TouchableOpacity
-                      onPress={() => toggleGoalExpand(goal.id)}
-                      activeOpacity={0.7}
-                      style={styles.goalCardHeader}
-                      accessibilityRole="button"
-                      accessibilityState={{ expanded: true }}
-                      accessibilityLabel={`Collapse ${goal.title}`}
-                    >
-                      <GoalTitle title={goal.title} size="card" color={c.inkDark} style={styles.goalCardTitle} />
-                      <CaretUp size={16} color={c.inkMuted} weight="bold" />
-                    </TouchableOpacity>
-
-                    {dueMarks.map((mark, idx) =>
-                      renderMarkRow(mark, idx === dueMarks.length - 1 && doneMarks.length === 0, false, false, idx)
-                    )}
-
-                    {doneMarks.length > 0 && (
-                      <>
-                        <View style={[styles.doneDivider, { backgroundColor: c.borderLight }]} />
-                        {doneMarks.map((mark, idx) =>
-                          renderMarkRow(mark, idx === doneMarks.length - 1, true, false, idx)
-                        )}
-                      </>
-                    )}
-
-                    <TouchableOpacity
-                      style={styles.expanderRow}
-                      onPress={() => toggleGoalExpand(goal.id)}
-                      activeOpacity={0.7}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Collapse ${goal.title}`}
-                    >
-                      <Text style={[styles.expanderText, { color: c.accent }]}>Show less</Text>
-                    </TouchableOpacity>
-                  </View>
+                  <ExpandedGoalCard
+                    key={goal.id}
+                    goal={goal}
+                    dueMarks={dueMarks}
+                    doneMarks={doneMarks}
+                    renderMarkRow={renderMarkRow}
+                    onToggle={() => toggleGoalExpand(goal.id)}
+                  />
                 );
               }
 
@@ -796,45 +722,24 @@ export default function FocusScreen() {
               const comebackPresentation = comeback ? { ask: resolveComebackAsk(hero) } : null;
 
               return (
-                <View key={goal.id} style={[styles.goalCard, { backgroundColor: c.surface }]}>
-                  <NextMoveCard
-                    goalTitle={goal.title}
-                    onGoalPress={() => router.push(`/goal/${goal.id}` as any)}
-                    hero={hero}
-                    comeback={comebackPresentation}
-                    onMarkIt={() => handleQuickIncrement(hero.id)}
-                    onHeroLongPress={() => handleMarkLongPress(hero.id, hero.name)}
-                    chips={chips}
-                    overflowCount={overflowCount}
-                    onChipPress={(markId) => setHeroOverride({ goalId: goal.id, markId })}
-                    onOverflowPress={() => router.push(`/goal/${goal.id}` as any)}
-                  />
-
-                  {/* spec §1 Decision #1: "No extra rows" — done-for-week
-                      marks ask nothing today and render NOWHERE on the
-                      spotlight card (not even dimmed). They still surface,
-                      unchanged, inside a manually re-expanded done-today
-                      goal's card (the `!isSpotlight` branch above) and in
-                      Daily Habits. Intentionally no doneMarks block here. */}
-
-                  {/* Queued-expand = spotlight override (spec §1): only the
-                      goal a queued-row tap hoisted into the seat gets a fold
-                      row back to the computed queue order. */}
-                  {spotlightOverride === goal.id && (
-                    <TouchableOpacity
-                      style={styles.expanderRow}
-                      onPress={() => {
-                        setSpotlightOverride(null);
-                        setHeroOverride(null);
-                      }}
-                      activeOpacity={0.7}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Collapse ${goal.title}`}
-                    >
-                      <Text style={[styles.expanderText, { color: c.accent }]}>Show less</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
+                <SpotlightGoalCard
+                  key={goal.id}
+                  goal={goal}
+                  hero={hero}
+                  chips={chips}
+                  overflowCount={overflowCount}
+                  comeback={comebackPresentation}
+                  hoisted={spotlightOverride === goal.id}
+                  onGoalPress={() => router.push(`/goal/${goal.id}` as any)}
+                  onMarkIt={() => handleQuickIncrement(hero.id)}
+                  onHeroLongPress={() => handleMarkLongPress(hero.id, hero.name)}
+                  onChipPress={(markId) => setHeroOverride({ goalId: goal.id, markId })}
+                  onOverflowPress={() => router.push(`/goal/${goal.id}` as any)}
+                  onRelease={() => {
+                    setSpotlightOverride(null);
+                    setHeroOverride(null);
+                  }}
+                />
               );
             })}
           </View>
@@ -938,77 +843,6 @@ const styles = StyleSheet.create({
   sectionLabel: {
     marginBottom: spacing.sm,
     paddingHorizontal: spacing.lg,
-  },
-  goalCard: {
-    marginHorizontal: spacing.lg,
-    marginBottom: spacing.md,
-    borderRadius: radius.xl,
-    overflow: 'hidden',
-    ...shadow.card,
-  },
-  goalCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md + spacing.xs,
-    paddingBottom: spacing.sm,
-  },
-  // Queued goal (spotlight queue) — a compact row for goals waiting their
-  // turn: quiet title, small due-check circles, down-caret. Same card shell
-  // as goalCardDone so the queue reads as one family of folded rows.
-  goalCardQueued: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-  },
-  queuedChecks: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  // Collapsed "all done" goal — a single quiet row so finished goals recede
-  // without leaving the list. Reuses the goalCard shell (shadow + radius) with
-  // a compact single-line row layout.
-  goalCardDone: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-  },
-  goalCardDoneTitle: {
-    flex: 1,
-  },
-  goalCardDoneMeta: {
-    fontFamily: fonts.sansMedium,
-    fontSize: fontSize.sm,
-  },
-  // The goal is the reason this card exists — it anchors the card, above the
-  // greeting (xl) and well clear of body text, not one more white-text row.
-  // Type lives in <GoalTitle>; this is layout-only (row flex + chevron gap).
-  goalCardTitle: {
-    flex: 1,
-    marginRight: spacing.sm,
-  },
-  goalCardMeta: {
-    fontFamily: fonts.sans,
-    fontSize: fontSize.sm,
-  },
-  expanderRow: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-  },
-  expanderText: {
-    fontFamily: fonts.sansMedium,
-    fontSize: fontSize.sm,
-  },
-  doneDivider: {
-    height: 0.5,
-    marginHorizontal: spacing.lg,
-    marginTop: spacing.xs,
   },
   doneMarkWrap: {
     opacity: 0.45,
