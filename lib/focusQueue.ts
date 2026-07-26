@@ -1,6 +1,7 @@
 import type { Mark } from '../types';
 import { markWeeklyState } from './features';
 import { resolveDailyTarget } from './markDailyTarget';
+import { isFeasibleNow, resolveTimeAffinity } from './nextStep';
 
 /**
  * Focus Spotlight Queue — pure selectors (founder 2026-07-23).
@@ -28,6 +29,8 @@ export type QueueMark = Pick<Mark, 'dailyTarget'> & {
   id: string;
   weekly_target?: number | null;
   frequency_kind?: Mark['frequency_kind'];
+  /** Drives hero time-gating (see pickNextMove); absent = anytime. */
+  emoji?: string | null;
 };
 
 /** A mark has met its daily bar today. */
@@ -75,22 +78,45 @@ export function pickSpotlightGoalId(
  * The hero of the Next Move card (spec §1): the override if it still has work
  * today, else the first week-due mark in the user's own order with today's bar
  * unmet. Pure view selection — sort_index is never touched.
+ *
+ * TIME GATING (restored 2026-07-25). Device report: a "Fix my sleep" goal
+ * offered Sleep as the first move of the morning, when it is the last thing
+ * anyone can do. The rule for that already existed and was already specified
+ * (spec 2026-07-11, lib/nextStep.ts): evening marks are not offered before
+ * 16:00, daytime marks not after 20:00. M8's Next Move card replaced the old
+ * hero step and never adopted it, which left `selectNextStep` orphaned — only
+ * its own tests referenced it. So this is a regression against a shipped rule,
+ * not a new preference.
+ *
+ * `now` is optional and the behaviour without it is exactly the old one, so a
+ * caller that has no clock is never silently re-ordered. When nothing is
+ * feasible at this hour the first due mark still heroes: an out-of-hours ask
+ * beats an empty card, and the mark is genuinely still owed today.
  */
 export function pickNextMove<T extends QueueMark>(
   orderedMarks: readonly T[],
   weeklyCounts: ReadonlyMap<string, number>,
   todayCounts: ReadonlyMap<string, number>,
   overrideMarkId?: string | null,
+  now?: Date,
 ): T | null {
   const heroable = (m: T) =>
     markWeeklyState(m as Pick<Mark, 'weekly_target' | 'frequency_kind'>, weeklyCounts.get(m.id) ?? 0) === 'due' &&
     !isMarkDoneToday(m, todayCounts.get(m.id) ?? 0);
 
+  // An explicit tap outranks the clock: if the user chose this mark, that is
+  // the move, even at the wrong hour.
   if (overrideMarkId) {
     const o = orderedMarks.find((m) => m.id === overrideMarkId);
     if (o && heroable(o)) return o;
   }
-  return orderedMarks.find(heroable) ?? null;
+
+  const due = orderedMarks.filter(heroable);
+  if (due.length === 0) return null;
+  if (!now) return due[0];
+
+  const feasible = due.filter((m) => isFeasibleNow(resolveTimeAffinity(m.emoji), now));
+  return feasible.length > 0 ? feasible[0] : due[0];
 }
 
 /** How many up-next chips the Next Move card shows before it starts counting. */

@@ -749,6 +749,9 @@ export default function FocusScreen() {
                     weeklyCountsMap,
                     todayCountsMap,
                     heroOverride?.goalId === goal.id ? heroOverride.markId : null,
+                    // The clock gates evening marks out of the morning (a sleep
+                    // goal offered Sleep at 9am — device report 2026-07-25).
+                    new Date(),
                   );
               // isGoalDoneToday already guards effectiveSpotlightGoalId against
               // ever selecting a goal with no work left today; defensive only.
