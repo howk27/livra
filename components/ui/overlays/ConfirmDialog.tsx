@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Pressable } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Pressable } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import {
   themedColors,
@@ -12,6 +12,7 @@ import {
 import { useEffectiveTheme } from '../../../state/uiSlice';
 import { useMotion } from '../../../hooks/useMotion';
 import { PillButton } from '../PillButton';
+import { OverlayPortal } from './OverlayPortal';
 
 interface ConfirmDialogProps {
   visible: boolean;
@@ -32,6 +33,11 @@ interface ConfirmDialogProps {
  *
  * Motion: overlay fades and the card settles up on present (useMotion → springs
  * collapse to instant under Reduce Motion, so the decision still lands).
+ *
+ * Presentation goes through OverlayPortal, NOT a bare <Modal> — read that file
+ * before changing it. A root-mounted RN Modal cannot present while a
+ * `presentation: 'modal'` route is open, which is what froze every delete in
+ * 1.0.58.
  */
 export function ConfirmDialog({
   visible,
@@ -68,14 +74,8 @@ export function ConfirmDialog({
   }));
 
   return (
-    <Modal
-      testID="confirm-dialog"
-      visible={visible}
-      transparent
-      animationType="none"
-      onRequestClose={onCancel}
-    >
-      <View style={styles.root}>
+    <OverlayPortal visible={visible} onRequestClose={onCancel}>
+      <View style={styles.root} testID="confirm-dialog">
         <Animated.View style={[styles.overlay, overlayStyle]}>
           <Pressable
             style={StyleSheet.absoluteFill}
@@ -115,7 +115,7 @@ export function ConfirmDialog({
           </View>
         </Animated.View>
       </View>
-    </Modal>
+    </OverlayPortal>
   );
 }
 

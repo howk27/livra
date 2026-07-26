@@ -1,5 +1,5 @@
 import React, { useContext, useEffect } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Pressable } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Pressable } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import {
@@ -13,6 +13,7 @@ import {
 import { useEffectiveTheme } from '../../../state/uiSlice';
 import { useMotion } from '../../../hooks/useMotion';
 import type { ActionSheetAction } from './actionSheetController';
+import { OverlayPortal } from './OverlayPortal';
 
 interface LivraActionSheetProps {
   visible: boolean;
@@ -32,6 +33,11 @@ interface LivraActionSheetProps {
  *
  * Motion: scrim fades and the sheet rises from the bottom edge (useMotion →
  * instant under Reduce Motion).
+ *
+ * Presentation goes through OverlayPortal, NOT a bare <Modal> — see that file.
+ * Only focus.tsx (a tab) calls actionSheet() today, so this host never hit the
+ * 1.0.58 freeze, but it is mounted at the root exactly like ConfirmHost and would
+ * fail the moment a modal route called it.
  */
 export function LivraActionSheet({
   visible,
@@ -69,14 +75,8 @@ export function LivraActionSheet({
   const bottomPad = Math.max(insets?.bottom ?? 0, spacing.md);
 
   return (
-    <Modal
-      testID="livra-action-sheet"
-      visible={visible}
-      transparent
-      animationType="none"
-      onRequestClose={onCancel}
-    >
-      <View style={styles.root}>
+    <OverlayPortal visible={visible} onRequestClose={onCancel}>
+      <View style={styles.root} testID="livra-action-sheet">
         <Animated.View style={[styles.overlay, overlayStyle]}>
           <Pressable
             style={StyleSheet.absoluteFill}
@@ -129,7 +129,7 @@ export function LivraActionSheet({
           </TouchableOpacity>
         </Animated.View>
       </View>
-    </Modal>
+    </OverlayPortal>
   );
 }
 
