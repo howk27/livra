@@ -1,9 +1,14 @@
 -- Migration: goal_notes WITH CHECK must also prove the GOAL is yours
--- STATUS: NOT YET APPLIED. Apply by hand in the SQL editor, like every other
---   migration on this project (`supabase db push` is banned here — the remote
---   schema_migrations history is empty, so a push would replay all 20+).
---   Rewrite this header only after re-reading the live policy, not on intent:
---   the 2026-07-22 drift finding proved these headers lie.
+-- STATUS: APPLIED 2026-07-25 (founder, by hand) — VERIFIED LIVE the same day,
+--   not taken on report. `pg_policy` on public.goal_notes returns exactly ONE
+--   policy, "Users manage own goal notes", whose with_check reads:
+--     ((auth.uid() = user_id) AND (EXISTS (SELECT 1 FROM goals g
+--       WHERE ((g.id = goal_notes.goal_id) AND (g.user_id = auth.uid())))))
+--   and whose USING is still the bare (auth.uid() = user_id), which is what
+--   keeps a pre-existing dangling row deletable by its author.
+--   The dangling-row query below returned 0 — nothing to clean up.
+--   (`supabase db push` stays banned: remote schema_migrations is empty, so a
+--   push would replay every migration onto production.)
 --
 -- WHAT IS WRONG (QC3 milestone security note, low severity, no leak)
 --   The FOR ALL policy proves the ROW is yours (user_id = auth.uid()) but never
