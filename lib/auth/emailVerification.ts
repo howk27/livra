@@ -110,3 +110,33 @@ export function describeCodeSent(email?: string | null): string {
     ? `Code sent to ${email} · it expires in about an hour.`
     : 'Code sent · it expires in about an hour.';
 }
+
+/**
+ * How long "Send again" stays quiet after a code goes out.
+ *
+ * GoTrue rate-limits resends server-side and `mapSendCodeError` explains the
+ * refusal honestly, so this is not what protects the endpoint — it is what
+ * stops the user tapping into a refusal they had no way to see coming. A
+ * minute is the shape of the wait GoTrue imposes by default.
+ */
+export const RESEND_COOLDOWN_SECONDS = 60;
+
+/** The resend control's label, counting down while the wait is on. */
+export function describeResend(secondsLeft: number): string {
+  return secondsLeft > 0 ? `Send again in ${secondsLeft}s` : 'Send again';
+}
+
+/**
+ * Seconds still to wait, from when the last code went out.
+ *
+ * Clamped at BOTH ends. Zero is the obvious one. The ceiling matters because a
+ * corrected device clock or a timezone crossing can put "now" behind the send,
+ * which would otherwise compute a wait longer than the cooldown — unbounded,
+ * and counting up. Nobody should wait more than the cooldown they were promised.
+ */
+export function resendSecondsLeft(sentAtMs: number | null, nowMs: number): number {
+  if (sentAtMs === null) return 0;
+  const elapsed = Math.floor((nowMs - sentAtMs) / 1000);
+  const left = RESEND_COOLDOWN_SECONDS - elapsed;
+  return Math.min(RESEND_COOLDOWN_SECONDS, Math.max(0, left));
+}

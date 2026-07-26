@@ -16,7 +16,7 @@ import { User, Camera, PencilSimple, CaretRight } from 'phosphor-react-native';
 import { LivraHeader } from '../../components/ui/LivraHeader';
 import { PillButton } from '../../components/ui/PillButton';
 import { SectionLabel } from '../../components/ui/SectionLabel';
-import { themedColors, fonts, spacing, radius, fontSize } from '../../theme/tokens';
+import { themedColors, fonts, spacing, radius, fontSize, headerControl } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useAuth } from '../../hooks/useAuth';
 import { getSupabaseClient } from '../../lib/supabase';
@@ -28,7 +28,9 @@ import { useNotification } from '../../contexts/NotificationContext';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import {
   describeCodeSent,
+  describeResend,
   needsEmailVerification,
+  resendSecondsLeft,
   validateVerificationCode,
   normalizeVerificationCode,
   VERIFICATION_CODE_LENGTH,
@@ -98,6 +100,8 @@ export default function ProfileScreen() {
   // field appears only once a code is actually on its way.
   const [emailVerifiedAt, setEmailVerifiedAt] = useState<string | null>(null);
   const [verifyStage, setVerifyStage] = useState<'idle' | 'sending' | 'code' | 'verifying'>('idle');
+  const [codeSentAt, setCodeSentAt] = useState<number | null>(null);
+  const [resendLeft, setResendLeft] = useState(0);
   const [verifyCode, setVerifyCode] = useState('');
   const [verifyError, setVerifyError] = useState<string | null>(null);
 
@@ -261,8 +265,21 @@ export default function ProfileScreen() {
       setVerifyStage('idle');
       return;
     }
+    setCodeSentAt(Date.now());
     setVerifyStage('code');
   }, [userEmail, verifyStage, supabase]);
+
+  // Resend cooldown. GoTrue rate-limits the endpoint either way; this exists so
+  // the wait is visible instead of arriving as a refusal after a tap. Ticks
+  // only while a wait is actually on, and stops on its own at zero.
+  useEffect(() => {
+    if (codeSentAt === null) return;
+    const id = setInterval(() => {
+      setResendLeft(resendSecondsLeft(codeSentAt, Date.now()));
+    }, 1000);
+    setResendLeft(resendSecondsLeft(codeSentAt, Date.now()));
+    return () => clearInterval(id);
+  }, [codeSentAt]);
 
   const handleSubmitVerificationCode = useCallback(async () => {
     if (verifyStage === 'verifying') return;
@@ -731,12 +748,19 @@ export default function ProfileScreen() {
                       />
                       <TouchableOpacity
                         onPress={() => { void handleSendVerificationCode(); }}
-                        hitSlop={8}
-                        disabled={verifyStage === 'verifying'}
+                        style={styles.resendBtn}
+                        disabled={verifyStage === 'verifying' || resendLeft > 0}
                         accessibilityRole="button"
-                        accessibilityLabel="Send a new code"
+                        accessibilityState={{ disabled: resendLeft > 0 }}
+                        accessibilityLabel={
+                          resendLeft > 0
+                            ? `Send a new code, available in ${resendLeft} seconds`
+                            : 'Send a new code'
+                        }
                       >
-                        <Text style={styles.cancelText}>Send again</Text>
+                        <Text style={[styles.cancelText, resendLeft > 0 && styles.resendWaiting]}>
+                          {describeResend(resendLeft)}
+                        </Text>
                       </TouchableOpacity>
                     </View>
                   </>
@@ -981,6 +1005,16 @@ function createStyles(c: ReturnType<typeof themedColors>) {
       fontSize: fontSize.md,
       color: c.inkMid,
       paddingHorizontal: spacing.sm,
+    },
+    // A real box, not hitSlop — same convention as the journal controls.
+    resendBtn: {
+      minHeight: headerControl.minTarget,
+      justifyContent: 'center',
+    },
+    // Waiting, not broken: dimmed rather than greyed to a disabled colour, so
+    // the countdown it is showing stays legible.
+    resendWaiting: {
+      opacity: 0.55,
     },
     // 13px carries no large-text allowance, so inkMid (8.47:1) not inkMuted.
     pendingText: {

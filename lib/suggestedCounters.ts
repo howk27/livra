@@ -463,7 +463,7 @@ export const MARK_LIBRARY: MarkDefinition[] = [
   // CREATIVE
   {
     id: 'creative', name: 'Creative', icon: PaintBrushIcon, emoji: '🎨',
-    description: 'Each session spent making something.',
+    description: 'Each session you spend making something, finished or not.',
     color: '#7B6B9E', unit: 'sessions', category: 'Creative',
     tags: ['creative', 'art', 'drawing', 'painting', 'design', 'music', 'writing', 'expression', 'hobby', 'skill', 'side hustle'],
     healthKitType: null,

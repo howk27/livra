@@ -1,8 +1,11 @@
 // Soft email verification (founder call 2026-07-25): let people in, prove the
 // address afterwards. These are the decisions the screens delegate.
 import {
+  RESEND_COOLDOWN_SECONDS,
   VERIFICATION_CODE_LENGTH,
   describeCodeSent,
+  describeResend,
+  resendSecondsLeft,
   isEmailProven,
   mapSendCodeError,
   mapVerifyEmailError,
@@ -111,5 +114,48 @@ describe('confirmation copy', () => {
   it('uses the middle dot separator, never a dash', () => {
     expect(describeCodeSent('dei@example.com')).toContain('·');
     expect(describeCodeSent('dei@example.com')).not.toMatch(/[—–]|\s-\s/);
+  });
+});
+
+// The resend cooldown is a COURTESY, not the rate limit — GoTrue enforces that
+// server-side either way. Its whole job is to make the wait visible instead of
+// letting the user tap into a refusal they could not see coming.
+describe('resend cooldown', () => {
+  const T0 = 1_700_000_000_000;
+
+  it('asks for no wait before a code has ever been sent', () => {
+    expect(resendSecondsLeft(null, T0)).toBe(0);
+  });
+
+  it('starts at the full cooldown the instant a code goes out', () => {
+    expect(resendSecondsLeft(T0, T0)).toBe(RESEND_COOLDOWN_SECONDS);
+  });
+
+  it('counts down as time passes', () => {
+    expect(resendSecondsLeft(T0, T0 + 15_000)).toBe(RESEND_COOLDOWN_SECONDS - 15);
+  });
+
+  it('reaches zero exactly at the cooldown, not a tick late', () => {
+    expect(resendSecondsLeft(T0, T0 + RESEND_COOLDOWN_SECONDS * 1000)).toBe(0);
+  });
+
+  it('never goes negative, however long the screen stays open', () => {
+    expect(resendSecondsLeft(T0, T0 + 86_400_000)).toBe(0);
+  });
+
+  it('survives a clock correction backwards without offering a negative wait', () => {
+    // A user crossing a timezone or a corrected device clock can put "now"
+    // behind the send. Capping at the full cooldown is the honest answer.
+    expect(resendSecondsLeft(T0, T0 - 10_000)).toBeLessThanOrEqual(RESEND_COOLDOWN_SECONDS);
+    expect(resendSecondsLeft(T0, T0 - 10_000)).toBeGreaterThan(0);
+  });
+
+  it('names the wait while it lasts, and stops naming it after', () => {
+    expect(describeResend(42)).toBe('Send again in 42s');
+    expect(describeResend(0)).toBe('Send again');
+  });
+
+  it('uses no dash in the label (copy rule)', () => {
+    expect(describeResend(42)).not.toMatch(/[—–]|\s-\s/);
   });
 });
