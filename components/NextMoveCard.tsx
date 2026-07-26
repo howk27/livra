@@ -20,6 +20,7 @@ import Animated, { useSharedValue, useAnimatedStyle } from 'react-native-reanima
 import { CheckCircle, CircleIcon as Circle } from 'phosphor-react-native';
 
 import { fonts, fontSize, spacing, radius, motion, themedColors, headerControl } from '../theme/tokens';
+import { applyOpacity } from '../src/components/icons/color';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { useMotion } from '../hooks/useMotion';
 import { GoalTitle } from './ui/GoalTitle';
@@ -93,9 +94,14 @@ export function NextMoveCard({
         {comeback ? 'START BACK SMALL' : 'NEXT MOVE'}
       </Text>
 
-      {/* Hero row */}
+      {/* Hero row. The medallion wears the mark's OWN accent as a wash — the
+          same applyOpacity(accent, 0.12) tile MarkRow and GoalCardMedallion
+          use — so the hero shows the mark's color, not chrome green (founder
+          device report 2026-07-26: the solid forest circle swallowed every
+          icon's identity). The iconAccents band is tuned for exactly this
+          wash-over-surface combo (see theme/tokens.ts). */}
       <Animated.View style={[styles.heroRow, heroAnimatedStyle]}>
-        <View style={[styles.medallion, { backgroundColor: c.forest }]}>
+        <View style={[styles.medallion, { backgroundColor: applyOpacity(heroAccent, 0.12) }]}>
           {createElement(heroIcon, { size: 20, color: heroAccent, weight: 'duotone' })}
         </View>
         <View style={styles.heroText}>
