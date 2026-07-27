@@ -39,6 +39,8 @@ describe('GENERATION_ERROR_COPY — covers every GenerationFailReason', () => {
     network_error: true,
     invalid_output: true,
     free_use_exhausted: true,
+    rate_limited_hour: true,
+    rate_limited_day: true,
     rate_limited: true,
   };
   const REASONS = Object.keys(REASON_COVERAGE) as GenerationFailReason[];

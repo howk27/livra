@@ -5,6 +5,9 @@
  */
 
 import { FREE_MARKS_PER_GOAL, FREE_MARK_CEILING } from './gating';
+// Type-only: erased at build time, so this file still has no runtime dependency
+// on the AI module. See GENERATION_ERROR_COPY below for why it is imported.
+import type { GenerationFailReason } from './ai/goalGeneration';
 
 // ─── Momentum at-risk warning copy (Phase 1.3) ──────────────────────────────
 // No dashes. Offer-framed with a rest-out. Rotate, never the same template twice in a row.
@@ -117,14 +120,37 @@ export const MARK_CEILING_MESSAGE =
 // in goalGeneration) so screens that mock the AI module still resolve real copy.
 // goal_too_short is empty: both callers gate the button on MIN_GOAL_LENGTH.
 
-export const GENERATION_ERROR_COPY: Record<string, string> = {
+// KEYED ON THE UNION, NOT ON `string`. b503cfa put an exhaustive
+// `Record<GenerationFailReason, true>` in aiPlanSuggestedAnalytics.test.ts and
+// described it as making a missing string "a TYPE error at npm run type-check".
+// It is not: tsconfig.json EXCLUDES `tests/**`, so tsc never reads that file and
+// the record only constrains the six keys somebody remembered to list. Two new
+// reasons were added here and sailed straight past it.
+//
+// The constraint belongs in a file tsc actually compiles. `import type` is
+// erased at build time, so this keeps the promise in the header above: screens
+// that mock the AI module still resolve real copy, because no runtime import of
+// goalGeneration is created.
+export const GENERATION_ERROR_COPY: Record<GenerationFailReason, string> = {
   low_confidence: 'Couldn’t make sense of that. Try describing your goal in one sentence.',
   free_use_exhausted:
     'You’ve used your free AI plan. Livra+ unlocks unlimited AI goal plans. Or continue manually below.',
-  // Answered by waiting, not by paying, so it must never mention Livra+: a
-  // subscriber who hits it would be sold what they already own.
-  rate_limited:
+  // Answered by waiting, not by paying, so these must never mention Livra+: a
+  // subscriber who hits one would be sold what they already own.
+  //
+  // SPLIT BY WINDOW. "Give it a few minutes" is true of the hourly cap and a LIE
+  // about the daily one. A free user who hits 15/day was being told to wait
+  // minutes for something that resets tomorrow, and would keep retrying for
+  // hours. The server has always known which window it was.
+  rate_limited_hour:
     'That’s a lot of plans in a short time. Give it a few minutes, or continue manually below.',
+  rate_limited_day:
+    'You’ve reached today’s limit for generated plans. It resets tomorrow. Or continue manually below.',
+  // Version-skew fallback only: a client carrying the split reasons can meet a
+  // function still returning the bare string. Deliberately vague about the wait,
+  // because in this case we genuinely do not know which window was hit.
+  rate_limited:
+    'You’ve made a lot of plans recently. Try again a bit later, or continue manually below.',
   invalid_output: 'Something went wrong. Continue manually below.',
   network_error: 'Couldn’t reach Livra AI. Check your connection or continue manually.',
   goal_too_short: '',

@@ -87,6 +87,26 @@ export type GenerationFailReason =
    * from free_use_exhausted — that one is an entitlement wall answered by
    * subscribing, this one is a cooldown answered by waiting, and telling a
    * paying subscriber to subscribe would be nonsense.
+   *
+   * SPLIT BY WINDOW, because "give it a few minutes" is TRUE of the hourly cap
+   * and a LIE about the daily one. claim_ai_generation_slot has always returned
+   * `scope` ('hour' | 'day') and `retry_after_seconds`; the edge function
+   * discarded both and sent a bare `rate_limited`, so a free user who hit 15/day
+   * was told to wait minutes for something that resets tomorrow.
+   *
+   * Split into two REASONS rather than threading a `scope` field through
+   * GenerationResult: the copy table is a Record keyed on this union, so a new
+   * window is a compile error until someone writes words for it. A scope field
+   * would have been a runtime branch nothing checked.
+   */
+  | 'rate_limited_hour'
+  | 'rate_limited_day'
+  /**
+   * VERSION-SKEW FALLBACK — keep this even though nothing should send it once
+   * the function is redeployed. The gate is native to the SERVER: a client
+   * carrying the split reasons can meet a still-deployed v11 that only knows the
+   * bare string, and an unrecognised reason degrades to a generic error. Retiring
+   * this is safe only after the function is confirmed redeployed everywhere.
    */
   | 'rate_limited';
 
@@ -420,6 +440,9 @@ const KNOWN_FAIL_REASONS: ReadonlySet<string> = new Set([
   'network_error',
   'invalid_output',
   'free_use_exhausted',
+  'rate_limited_hour',
+  'rate_limited_day',
+  // Kept for version skew: a new client can meet a not-yet-redeployed function.
   'rate_limited',
 ]);
 

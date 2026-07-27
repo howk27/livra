@@ -339,8 +339,22 @@ Deno.serve(async (req: Request) => {
     console.error('[ai-goal-generation] rate limiter unreachable:', slotError.message);
     return json(200, { ok: false, reason: 'network_error' });
   }
-  if (!(slot as { allowed?: boolean } | null)?.allowed) {
-    return json(200, { ok: false, reason: 'rate_limited' });
+  // THE WINDOW IS PART OF THE ANSWER. claim_ai_generation_slot has always
+  // returned `scope` ('hour' | 'day') alongside retry_after_seconds, and this
+  // handler used to throw both away and send a bare `rate_limited` — whose copy
+  // says "give it a few minutes". True of the hourly cap; a lie about the daily
+  // one, which resets tomorrow. A free user who hit 15/day was told to wait
+  // minutes and would keep retrying for hours.
+  //
+  // Sent as two distinct reasons rather than a scope field so the client's copy
+  // table (a Record keyed on the reason union) cannot compile without words for
+  // each window.
+  const claim = slot as { allowed?: boolean; scope?: string } | null;
+  if (!claim?.allowed) {
+    return json(200, {
+      ok: false,
+      reason: claim?.scope === 'day' ? 'rate_limited_day' : 'rate_limited_hour',
+    });
   }
 
   // 3. Misconfiguration guard — soft failure → client offers manual fallback.

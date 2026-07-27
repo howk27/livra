@@ -75,10 +75,29 @@ describe('ai-goal-generation rate limiting', () => {
   });
 
   it('refuses when the limiter says not allowed', () => {
-    const denyBranch = SOURCE.indexOf("reason: 'rate_limited'");
+    const denyBranch = SOURCE.indexOf('if (!claim?.allowed)');
     expect(denyBranch).toBeGreaterThan(-1);
     expect(openAiCallAt).toBeGreaterThan(-1);
     expect(denyBranch).toBeLessThan(openAiCallAt);
+  });
+
+  /**
+   * THE WINDOW IS PART OF THE ANSWER. claim_ai_generation_slot has always
+   * returned `scope`, and this handler used to throw it away and send a bare
+   * `rate_limited` — whose copy says "give it a few minutes". True of the hourly
+   * cap, a LIE about the daily one, which resets tomorrow. A free user who hit
+   * 15/day was told to wait minutes and would keep retrying for hours.
+   */
+  it('tells the client WHICH window was hit, instead of discarding scope', () => {
+    expect(SOURCE).toMatch(/claim\?\.scope === 'day'/);
+    expect(SOURCE).toContain("'rate_limited_day'");
+    expect(SOURCE).toContain("'rate_limited_hour'");
+  });
+
+  it('never sends the bare rate_limited reason, which cannot be worded honestly', () => {
+    // The generic string survives on the CLIENT as a version-skew fallback, but
+    // a function that can see `scope` has no excuse to send it.
+    expect(SOURCE).not.toMatch(/reason: 'rate_limited'[,\s}]/);
   });
 
   /**
