@@ -121,6 +121,10 @@ export const GENERATION_ERROR_COPY: Record<string, string> = {
   low_confidence: 'Couldn’t make sense of that. Try describing your goal in one sentence.',
   free_use_exhausted:
     'You’ve used your free AI plan. Livra+ unlocks unlimited AI goal plans. Or continue manually below.',
+  // Answered by waiting, not by paying — so it must never mention Livra+, or a
+  // subscriber who hits it gets sold what they already own.
+  rate_limited:
+    'That’s a lot of plans in a short time. Give it a few minutes, or continue manually below.',
   invalid_output: 'Something went wrong. Continue manually below.',
   network_error: 'Couldn’t reach Livra AI. Check your connection or continue manually.',
   goal_too_short: '',

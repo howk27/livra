@@ -81,7 +81,14 @@ export type GenerationFailReason =
   | 'network_error'
   | 'invalid_output'
   /** Server free-use gate: non-Pro user has already spent their free generation. */
-  | 'free_use_exhausted';
+  | 'free_use_exhausted'
+  /**
+   * Server rate limit: too many generations in the last hour or day. Distinct
+   * from free_use_exhausted — that one is an entitlement wall answered by
+   * subscribing, this one is a cooldown answered by waiting, and telling a
+   * paying subscriber to subscribe would be nonsense.
+   */
+  | 'rate_limited';
 
 // ─── Valid icon list ──────────────────────────────────────────────────────────
 
@@ -413,6 +420,7 @@ const KNOWN_FAIL_REASONS: ReadonlySet<string> = new Set([
   'network_error',
   'invalid_output',
   'free_use_exhausted',
+  'rate_limited',
 ]);
 
 /**

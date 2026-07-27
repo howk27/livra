@@ -27,13 +27,21 @@ describe('ai_plan_suggested taxonomy', () => {
 });
 
 describe('GENERATION_ERROR_COPY — covers every GenerationFailReason', () => {
-  const REASONS: GenerationFailReason[] = [
-    'goal_too_short',
-    'low_confidence',
-    'network_error',
-    'invalid_output',
-    'free_use_exhausted',
-  ];
+  /**
+   * Keyed by the union rather than listed as an array, so adding a member to
+   * GenerationFailReason without giving it copy is a TYPE error at `npm run
+   * type-check`, not a silently missing string at runtime. The old array form
+   * accepted a short list quietly.
+   */
+  const REASON_COVERAGE: Record<GenerationFailReason, true> = {
+    goal_too_short: true,
+    low_confidence: true,
+    network_error: true,
+    invalid_output: true,
+    free_use_exhausted: true,
+    rate_limited: true,
+  };
+  const REASONS = Object.keys(REASON_COVERAGE) as GenerationFailReason[];
 
   test.each(REASONS)('%s has a copy entry (string, possibly empty for goal_too_short)', (reason) => {
     expect(typeof GENERATION_ERROR_COPY[reason]).toBe('string');
@@ -41,6 +49,18 @@ describe('GENERATION_ERROR_COPY — covers every GenerationFailReason', () => {
 
   test('free_use_exhausted copy mentions Livra+ and the manual continuation', () => {
     expect(GENERATION_ERROR_COPY.free_use_exhausted).toMatch(/Livra\+/);
+  });
+
+  /**
+   * The two gates are answered differently and must never be confused:
+   * free_use_exhausted is an entitlement wall you answer by subscribing;
+   * rate_limited is a cooldown you answer by waiting. Selling Livra+ to a
+   * subscriber who just hit their hourly window is nonsense, and the copy is
+   * the only thing standing between those two states on screen.
+   */
+  test('rate_limited copy never sells Livra+ — a subscriber can hit it too', () => {
+    expect(GENERATION_ERROR_COPY.rate_limited).not.toMatch(/Livra\+/);
+    expect(GENERATION_ERROR_COPY.rate_limited.length).toBeGreaterThan(0);
   });
 });
 

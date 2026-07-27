@@ -312,6 +312,37 @@ Deno.serve(async (req: Request) => {
     return json(200, { ok: false, reason: 'free_use_exhausted' });
   }
 
+  // 2b. RATE LIMIT — the last gate before anything costs money.
+  //
+  // Placed HERE on purpose: after the cache (a cache hit calls no model, so it
+  // must not consume a slot) and after the entitlement read (a user who is not
+  // allowed to generate at all should be told that, not told to come back
+  // later). Everything past this line can hit OpenAI.
+  //
+  // Free users get a tighter window than Pro. A free user is capped at ONE
+  // created AI goal anyway, so a handful of generations is all a real one needs;
+  // Pro is generous enough that the "unlimited AI goal plans" paywall copy stays
+  // honest, while still being bounded.
+  const limits = isPro ? { hourly: 20, daily: 60 } : { hourly: 5, daily: 15 };
+  const { data: slot, error: slotError } = await admin.rpc('claim_ai_generation_slot', {
+    p_user: user.id,
+    p_hourly_limit: limits.hourly,
+    p_daily_limit: limits.daily,
+  });
+
+  // FAIL CLOSED. If the limiter cannot be reached we do not know how much this
+  // user has already spent, and the whole point of the gate is that the unknown
+  // case is the expensive one. This is why the migration must be applied BEFORE
+  // this function is deployed — until it is, `claim_ai_generation_slot` does not
+  // exist and every generation lands here.
+  if (slotError) {
+    console.error('[ai-goal-generation] rate limiter unreachable:', slotError.message);
+    return json(200, { ok: false, reason: 'network_error' });
+  }
+  if (!(slot as { allowed?: boolean } | null)?.allowed) {
+    return json(200, { ok: false, reason: 'rate_limited' });
+  }
+
   // 3. Misconfiguration guard — soft failure → client offers manual fallback.
   if (!OPENAI_API_KEY) {
     console.error('[ai-goal-generation] OPENAI_API_KEY not set');
