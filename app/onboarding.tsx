@@ -504,8 +504,17 @@ export default function OnboardingScreen() {
                   <Text style={[styles.markName, !selected && { color: c.inkMuted }]}>
                     {mark.name}
                   </Text>
+                  {/*
+                    An every-day mark has no minimum/recommended/maximum to sit
+                    at, so the position suffix is dropped for it. Without this,
+                    Calories read "Every day · minimum" — which invites the user
+                    to think there is a lower setting they were given, and there
+                    is not. Seen rendered in the web viewer, not reasoned about.
+                  */}
                   <Text style={styles.markFreq}>
-                    {frequencyLabel(weeklyTarget)} · {freqPosition}
+                    {mark.frequencyKind === 'variable'
+                      ? `${frequencyLabel(weeklyTarget)} · ${freqPosition}`
+                      : frequencyLabel(weeklyTarget)}
                   </Text>
                 </View>
                 <View

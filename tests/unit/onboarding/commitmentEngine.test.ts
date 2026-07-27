@@ -4,38 +4,73 @@ import { MARK_LIBRARY } from '../../../lib/suggestedCounters';
 describe('getMarksForCommitment', () => {
   const fitnessGoal = 'Run a marathon';
 
-  test('easing returns 2 marks at frequency_min', () => {
+  /**
+   * A variable mark sits at its commitment position; an every-day mark sits at
+   * 7 whatever the commitment. The four tests these replaced all asserted
+   * `frequencyKind === 'variable'` on every returned mark — an invariant that
+   * only ever held because "Run a marathon" happens to rank three variable
+   * marks at the top. They passed vacuously before the exclusion was removed
+   * and passed vacuously after it, which is to say they measured nothing.
+   */
+  const expectedTarget = (
+    mark: { frequencyKind: string; frequency_min: number; frequency_recommended: number; frequency_max: number },
+    commitment: 'easing' | 'steady' | 'push',
+  ) => {
+    if (mark.frequencyKind !== 'variable') return 7;
+    if (commitment === 'easing') return mark.frequency_min;
+    if (commitment === 'steady') return mark.frequency_recommended;
+    return mark.frequency_max;
+  };
+
+  test('easing returns 2 marks, each at its easing position', () => {
     const result = getMarksForCommitment(fitnessGoal, 'easing');
     expect(result.length).toBe(2);
     for (const { mark, weeklyTarget } of result) {
-      expect(mark.frequencyKind).toBe('variable');
-      expect(weeklyTarget).toBe(mark.frequency_min);
+      expect(weeklyTarget).toBe(expectedTarget(mark, 'easing'));
     }
   });
 
-  test('steady returns 2 marks at frequency_recommended', () => {
+  test('steady returns 2 marks, each at its steady position', () => {
     const result = getMarksForCommitment(fitnessGoal, 'steady');
     expect(result.length).toBe(2);
     for (const { mark, weeklyTarget } of result) {
-      expect(mark.frequencyKind).toBe('variable');
-      expect(weeklyTarget).toBe(mark.frequency_recommended);
+      expect(weeklyTarget).toBe(expectedTarget(mark, 'steady'));
     }
   });
 
-  test('push returns 3 marks at frequency_max', () => {
+  test('push returns 3 marks, each at its push position', () => {
     const result = getMarksForCommitment(fitnessGoal, 'push');
     expect(result.length).toBe(3);
     for (const { mark, weeklyTarget } of result) {
-      expect(mark.frequencyKind).toBe('variable');
-      expect(weeklyTarget).toBe(mark.frequency_max);
+      expect(weeklyTarget).toBe(expectedTarget(mark, 'push'));
     }
   });
 
-  test('no fixed or abstinence marks included', () => {
-    const result = getMarksForCommitment(fitnessGoal, 'push');
-    for (const { mark } of result) {
-      expect(mark.frequencyKind).toBe('variable');
+  /**
+   * THE REGRESSION THIS EXISTS FOR. Onboarding used to filter every-day marks
+   * out of the selection entirely, so a weight-loss goal — the most common
+   * thing anyone types — could never be offered anything about food. Sleep and
+   * Water had been silently unofferable the same way.
+   *
+   * Asserted on the returned SET, not on a hardcoded mark id, so a change to
+   * the tag scorer's ranking does not make this fail for the wrong reason.
+   */
+  test('an every-day mark can be suggested, and arrives at 7 at every commitment', () => {
+    const weightLossGoal = 'Lose 15 pounds and keep it off';
+    for (const commitment of ['easing', 'steady', 'push'] as const) {
+      const result = getMarksForCommitment(weightLossGoal, commitment);
+      for (const { mark, weeklyTarget } of result) {
+        if (mark.frequencyKind !== 'variable') {
+          expect(weeklyTarget).toBe(7);
+        }
+      }
     }
+    // and the exclusion is genuinely gone: somewhere in the library there is a
+    // goal whose top marks include an every-day one.
+    const everydayReachable = MARK_LIBRARY.filter((m) => m.frequencyKind !== 'variable')
+      .map((m) => getMarksForCommitment(m.name, 'push'))
+      .some((picks) => picks.some((p) => p.mark.frequencyKind !== 'variable'));
+    expect(everydayReachable).toBe(true);
   });
 
   test('weeklyTarget is within valid range (1–7)', () => {
@@ -58,11 +93,12 @@ describe('getMarksForCommitment', () => {
     }
   });
 
-  test('generic goal uses fallback marks and returns variable kind', () => {
+  test('generic goal still returns a usable set from the fallback marks', () => {
     const result = getMarksForCommitment('something completely random xyzxyz', 'steady');
-    // Falls back to FALLBACK_IDS in goalMarkSuggestions — all should be variable
-    for (const { mark } of result) {
-      expect(mark.frequencyKind).toBe('variable');
+    expect(result.length).toBeGreaterThan(0);
+    for (const { mark, weeklyTarget } of result) {
+      expect(MARK_LIBRARY.some((m) => m.id === mark.id)).toBe(true);
+      expect(weeklyTarget).toBe(expectedTarget(mark, 'steady'));
     }
   });
 
