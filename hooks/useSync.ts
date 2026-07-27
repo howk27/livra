@@ -39,6 +39,7 @@ import { cleanupDuplicateCounters, cleanupOrphanedStreaksAndBadges, cleanupOrpha
 import { mapStreaksToSupabase, mapBadgesToSupabase, mapEventsToSupabase } from '../lib/sync/mappers';
 import { pushGoalsAndLinks, pullGoalsAndLinks } from '../lib/sync/goalsSync';
 import { GOAL_LIMIT_MESSAGE } from '../lib/copy';
+import { FREE_MARK_CEILING } from '../lib/gating';
 import { logger } from '../lib/utils/logger';
 import { formatDate } from '../lib/date';
 import { normalizeDailyTargetInput, resolveDailyTarget } from '../lib/markDailyTarget';
@@ -1239,10 +1240,16 @@ export const useSync = () => {
           if (countersError) {
             if (isProLimitError(countersError)) {
               logger.warn('[SYNC] Free counter limit enforced by server', countersError);
+              // The number here USED TO BE A HARDCODED 3 — the old free tier,
+              // and the number the legacy enforce_free_counter_limit trigger
+              // still counts. The tier the app actually gates on has been
+              // FREE_MARK_CEILING (6) since d9355d7, so this line told a free
+              // user their limit was half what it is, in the one place they see
+              // it: the moment sync refuses their data. Reads from lib/gating
+              // now, so it cannot drift from the cap again.
               setSyncState((prev) => ({
                 ...prev,
-                error:
-                  'Sync blocked: upgrade to Livra+ to keep more than 3 active marks in cloud. Your extra marks remain on this device.',
+                error: `Sync blocked: free keeps ${FREE_MARK_CEILING} marks in the cloud. Livra+ opens unlimited marks. Your extra marks stay on this device.`,
               }));
               limitBlocked = true;
               break;
