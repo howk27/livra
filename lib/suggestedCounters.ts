@@ -177,9 +177,15 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     // intensities. Due logic is untouched — markWeeklyState reads weekly_target
     // alone and never branches on kind.
     //
-    // Steps and Calories still carry this same 5/7/7 range deliberately: only
-    // Water was named, and only Water has the "or people dehydrate" argument.
-    // Calories is the open question — see .reports/QC-1058.md R3.
+    // 2026-07-27: Water is no longer the exception. THE RULE, founder-decided:
+    // a mark that measures a WHOLE-DAY STATE — you either held the standard
+    // today or you did not — is every-day by nature and must not be an
+    // intensity dial. A mark that counts a DISCRETE SESSION (a workout, a run,
+    // a meditation) is legitimately variable. Nutrition, Calories, Cut Caffeine
+    // and Screen Time were all state-shaped and all still variable; they are
+    // now `fixed` alongside this one. Steps and Skincare were weighed and
+    // deliberately LEFT variable — "walk 5 days a week" is a real training plan
+    // and a skincare routine is a personal one, unlike a calorie range.
     frequency_min: 7, frequency_recommended: 7, frequency_max: 7, frequencyKind: 'fixed',
   },
   {
@@ -188,7 +194,10 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     color: '#6B9E8A', unit: 'days', category: 'Health',
     tags: ['diet', 'eat clean', 'nutrition', 'weight loss', 'meal prep', 'health', 'muscle', 'performance', 'food', 'body'],
     healthKitType: null,
-    frequency_min: 3, frequency_recommended: 5, frequency_max: 7, frequencyKind: 'variable',
+    // Whole-day state, not a session — see the rule on `water`. "Days your
+    // eating went the way you planned" is something you either did or did not
+    // do today; a plan you keep 3 days a week is not a plan.
+    frequency_min: 7, frequency_recommended: 7, frequency_max: 7, frequencyKind: 'fixed',
     identityLine: 'You are becoming someone who eats with intention.',
     comebackAsk: 'One balanced meal counts today.',
     metricFamily: 'eating-adherence',
@@ -199,7 +208,10 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     color: '#6B9E8A', unit: 'items', category: 'Health',
     tags: ['calories', 'weight loss', 'diet', 'cut', 'bulk', 'nutrition', 'food', 'macro', 'fitness', 'body composition'],
     healthKitType: null,
-    frequency_min: 5, frequency_recommended: 7, frequency_max: 7, frequencyKind: 'variable',
+    // Whole-day state, not a session — see the rule on `water`. Founder:
+    // "a calorie range kept 5 days a week is not a calorie range." As
+    // `variable` with a min of 5, Pace at "easing" rewrote it to 5.
+    frequency_min: 7, frequency_recommended: 7, frequency_max: 7, frequencyKind: 'fixed',
     metricFamily: 'eating-adherence',
   },
   {
@@ -237,7 +249,11 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     color: '#6B9E8A', unit: 'days', category: 'Health',
     tags: ['caffeine', 'coffee', 'energy drink', 'cut', 'reduce', 'jitters', 'sleep', 'anxiety', 'quit'],
     healthKitType: null,
-    frequency_min: 3, frequency_recommended: 5, frequency_max: 7, frequencyKind: 'variable',
+    // Whole-day state, not a session — see the rule on `water`. "Days you kept
+    // caffeine to the limit you set" is a limit, and a limit you keep 3 days a
+    // week is not a limit. `fixed` rather than `abstinence` because this is a
+    // ceiling the user sets, not going without.
+    frequency_min: 7, frequency_recommended: 7, frequency_max: 7, frequencyKind: 'fixed',
   },
   {
     id: 'skincare', name: 'Skincare', icon: SparkleIcon, emoji: '🧴',
@@ -427,7 +443,12 @@ export const MARK_LIBRARY: MarkDefinition[] = [
     color: '#8A9E8A', unit: 'days', category: 'Discipline',
     tags: ['screen time', 'phone', 'social media', 'distraction', 'sleep', 'focus', 'addiction', 'productivity', 'presence'],
     healthKitType: null,
-    frequency_min: 3, frequency_recommended: 5, frequency_max: 7, frequencyKind: 'variable',
+    // Whole-day state, not a session — see the rule on `water`. "Days you stay
+    // within the screen time you set" is a ceiling, same shape as Cut Caffeine.
+    // This also settles the ⚠️ AMBIGUOUS flag AUDIT_LOG.md:811 raised when the
+    // library was written and nobody ever answered: variable, or every-day?
+    // Every-day. `fixed` not `abstinence` — it is a limit, not going without.
+    frequency_min: 7, frequency_recommended: 7, frequency_max: 7, frequencyKind: 'fixed',
   },
   {
     id: 'cooking', name: 'Cooking', icon: CookingPotIcon, emoji: '🍳', timeAffinity: 'evening',
