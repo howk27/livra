@@ -1,7 +1,20 @@
 -- Migration: mark_notes WITH CHECK must also prove the MARK is yours
--- STATUS: NOT YET APPLIED. Rewrite this header to APPLIED only after reading the
---   verification block at the bottom back from production — not on report. The
---   Supabase MCP still cannot reach jhsxeibhxrvqrgkadyfk (re-checked 2026-07-27).
+-- STATUS: APPLIED 2026-07-27 (founder, by hand).
+--
+-- ⚠️ PROVENANCE: FOUNDER-REPORTED, NOT READ BACK. Stated plainly because this
+--   repo has been burned by headers that claimed more than they had. The founder
+--   confirmed running it; nobody has read pg_policies back.
+--
+--   The instruments that served elsewhere today do NOT reach this. The Supabase
+--   MCP still cannot see jhsxeibhxrvqrgkadyfk (re-checked 2026-07-27), and the
+--   anon REST probe cannot help either: it answers `200 []` for mark_notes both
+--   before and after this change, because a WITH CHECK constrains WRITES by an
+--   AUTHENTICATED user and anon never gets that far. Confirming the deploy of
+--   ai-goal-generation was possible (`supabase functions list` reports a version
+--   number); confirming a policy shape is not.
+--
+--   TO CLOSE THIS PROPERLY, run the one query in the VERIFY block below and
+--   paste the with_check back here. It is one line and needs no setup.
 --
 -- WHAT IS WRONG — the same defect goal_notes was fixed for in
 -- 20260727_goal_notes_goal_ownership.sql, found by asking whether that table was
