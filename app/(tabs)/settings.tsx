@@ -324,8 +324,25 @@ export default function SettingsScreen() {
       Animated.timing(refreshRotation, { toValue: 1, duration: 1000, useNativeDriver: true })
     ).start();
     try {
-      await sync();
-      showSuccess('Data synced successfully!');
+      // bypassThrottle: an explicit tap is a REQUEST, not background I/O. The
+      // 2-minute throttle exists to stop automatic syncs from thrashing; when it
+      // caught a manual tap it resolved without syncing at all and this screen
+      // announced "Data synced successfully!" anyway — an instant green lie on
+      // any second tap inside two minutes.
+      const outcome = await sync({ bypassThrottle: true });
+
+      // ONLY a completed run is announced. The other outcomes resolve rather
+      // than throw, which is why this used to be an unconditional showSuccess:
+      //   failed   network/timeout, which executeSync deliberately swallows
+      //   partial  ran and advanced, but the free-tier cap refused rows
+      //   skipped  nothing ran
+      //
+      // They are NOT re-announced here on purpose. syncState.error carries the
+      // message in every one of those cases and the effect above already toasts
+      // it — saying it twice from one tap is the other half of the same bug.
+      if (outcome.status === 'synced') {
+        showSuccess('Data synced successfully!');
+      }
     } catch (e: any) {
       showError(e.message || 'Failed to sync data');
     } finally {

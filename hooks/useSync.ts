@@ -39,6 +39,31 @@ import { cleanupDuplicateCounters, cleanupOrphanedStreaksAndBadges, cleanupOrpha
 import { mapStreaksToSupabase, mapBadgesToSupabase, mapEventsToSupabase } from '../lib/sync/mappers';
 import { pushGoalsAndLinks, pullGoalsAndLinks } from '../lib/sync/goalsSync';
 import { GOAL_LIMIT_MESSAGE } from '../lib/copy';
+
+/**
+ * What a sync run actually did.
+ *
+ * `sync()` used to resolve with `void`, which made four different non-events
+ * indistinguishable from success at the call site — and settings.tsx duly
+ * announced "Data synced successfully!" for all of them:
+ *
+ *   throttled   the 2-minute throttle resolved without running a sync at all,
+ *               so tapping Data & Sync twice was an instant green lie
+ *   failed      executeSync deliberately does NOT rethrow network/timeout
+ *               errors (they retry on their own), so the promise resolved on a
+ *               push that moved nothing
+ *   partial     the run completed and the cursor advanced, but the free-tier
+ *               goal cap REFUSED rows — a paywall, not a fault
+ *   no-user     nothing to sync
+ *
+ * Non-network errors still THROW, unchanged. This type is only about the cases
+ * that resolve.
+ */
+export type SyncOutcome =
+  | { status: 'synced' }
+  | { status: 'skipped'; reason: 'throttled' | 'no-user' }
+  | { status: 'partial'; message: string }
+  | { status: 'failed'; message: string };
 import { FREE_MARK_CEILING } from '../lib/gating';
 import { logger } from '../lib/utils/logger';
 import { formatDate } from '../lib/date';
@@ -232,11 +257,25 @@ export const useSync = () => {
   });
 
   // Sync lock to prevent concurrent syncs
-  const syncLockRef = useRef<Promise<void> | null>(null);
+  const syncLockRef = useRef<Promise<SyncOutcome> | null>(null);
+
+  /**
+   * Set during a push when the run REFUSED rows but did not fail — today only
+   * the free-tier goal cap. Read once at the end of executeSync.
+   *
+   * It is a ref and not read off syncState because the success path used to
+   * overwrite `error` with null a few hundred lines after the push set it, so
+   * the cap notice survived only as long as the render that happened to land
+   * between the two setSyncState calls. Delivering a message by racing a
+   * re-render is not delivering it.
+   */
+  const runNoticeRef = useRef<string | null>(null);
   // Real-time subscription refs
   const realtimeChannelRef = useRef<any>(null);
   /** Latest `sync()` including throttle bypass — realtime uses this so subscriptions stay current. */
-  const syncFnRef = useRef<((opts?: { bypassThrottle?: boolean }) => Promise<void>) | null>(null);
+  const syncFnRef = useRef<
+    ((opts?: { bypassThrottle?: boolean }) => Promise<SyncOutcome>) | null
+  >(null);
 
   useEffect(() => {
     let mounted = true;
@@ -1650,6 +1689,7 @@ export const useSync = () => {
         // advance so marks keep syncing. goalCapBlocked.ts re-attempts these on
         // every later push, so an upgrade needs no further user action.
         setSyncState((prev) => ({ ...prev, error: GOAL_LIMIT_MESSAGE }));
+        runNoticeRef.current = GOAL_LIMIT_MESSAGE;
       }
 
       await writePushCursor(new Date().toISOString());
@@ -1720,23 +1760,27 @@ export const useSync = () => {
 
   // Debounce ref for rapid sync requests
   const syncDebounceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  type PendingSyncSettle = { resolve: () => void; reject: (reason: unknown) => void };
+  type PendingSyncSettle = {
+    resolve: (outcome: SyncOutcome) => void;
+    reject: (reason: unknown) => void;
+  };
   const pendingSyncRef = useRef<PendingSyncSettle | null>(null);
 
-  const executeSync = useCallback(async () => {
+  const executeSync = useCallback(async (): Promise<SyncOutcome> => {
     const {
       data: { user },
     } = await supabase.auth.getUser();
 
     if (!user) {
       logger.log('No user logged in, skipping sync');
-      return;
+      return { status: 'skipped', reason: 'no-user' };
     }
 
+    runNoticeRef.current = null;
     setSyncState((prev) => ({ ...prev, isSyncing: true, error: null }));
 
       try {
-        await Promise.race([
+        return await Promise.race([
           (async () => {
         await migrateLegacySyncCursor();
 
@@ -1902,19 +1946,28 @@ export const useSync = () => {
         });
         lastSyncTimeRef.current = Date.now();
 
+        // A cap notice set during the push is CARRIED, not cleared. This line
+        // used to be a flat `error: null`, which wiped the free-tier goal
+        // message its own run had just produced.
+        const runNotice = runNoticeRef.current;
+
         setSyncState((prev) => ({
           ...prev,
           isSyncing: false,
           lastSyncedAt: now,
-          error: null,
+          error: runNotice,
           maintenanceWarnings,
           duplicateMarkNameGroupCount,
           lastStreakRecomputeSource,
         }));
-        
+
         // Don't reload counters here - the store is already managed correctly
         // Reloading could bring back deleted counters if there's a timing issue
         // Instead, only reload counters that were actually merged during pullChanges
+
+        return runNotice
+          ? { status: 'partial' as const, message: runNotice }
+          : { status: 'synced' as const };
           })(),
           new Promise<never>((_, reject) =>
             setTimeout(() => reject(createSyncExecutionTimeoutError()), SYNC_EXECUTION_TIMEOUT_MS),
@@ -1976,14 +2029,20 @@ export const useSync = () => {
         }
         
         // For network/timeout errors, don't throw - allow the app to continue
-        // These will automatically retry on the next sync attempt
-        // The error is logged in syncState and can be checked by UI
+        // These will automatically retry on the next sync attempt.
+        //
+        // BUT RESOLVING IS NOT SUCCEEDING. This used to resolve with `void`,
+        // which the caller could not tell apart from a completed sync — so a
+        // push that moved nothing still announced "Data synced successfully!".
+        // The error is in syncState for the banner; the outcome is for the
+        // caller that has to decide what to say.
+        return { status: 'failed', message: errorMessage };
       }
   }, [pullChanges, pushChanges]);
 
   const sync = useCallback(
     async (opts?: { bypassThrottle?: boolean }) => {
-      return new Promise<void>((resolve, reject) => {
+      return new Promise<SyncOutcome>((resolve, reject) => {
         if (syncDebounceTimeoutRef.current) {
           clearTimeout(syncDebounceTimeoutRef.current);
         }
@@ -2006,14 +2065,13 @@ export const useSync = () => {
             logger.log(
               `[SYNC] Throttling sync request (${Math.round((SYNC_THROTTLE_MS - timeSinceLastSync) / 1000)}s remaining)`,
             );
-            settle.resolve();
+            settle.resolve({ status: 'skipped', reason: 'throttled' });
             return;
           }
 
           if (syncLockRef.current) {
             try {
-              await syncLockRef.current;
-              settle.resolve();
+              settle.resolve(await syncLockRef.current);
             } catch (error) {
               settle.reject(error instanceof Error ? error : new Error(String(error)));
             }
@@ -2022,8 +2080,7 @@ export const useSync = () => {
 
           try {
             syncLockRef.current = executeSync();
-            await syncLockRef.current;
-            settle.resolve();
+            settle.resolve(await syncLockRef.current);
           } catch (error) {
             settle.reject(error instanceof Error ? error : new Error(String(error)));
           } finally {
