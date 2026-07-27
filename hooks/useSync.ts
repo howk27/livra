@@ -39,6 +39,11 @@ import { cleanupDuplicateCounters, cleanupOrphanedStreaksAndBadges, cleanupOrpha
 import { mapStreaksToSupabase, mapBadgesToSupabase, mapEventsToSupabase } from '../lib/sync/mappers';
 import { pushGoalsAndLinks, pullGoalsAndLinks } from '../lib/sync/goalsSync';
 import { GOAL_LIMIT_MESSAGE } from '../lib/copy';
+import {
+  readMarkCapBlockedIds,
+  addMarkCapBlockedIds,
+  clearMarkCapBlockedIds,
+} from '../lib/sync/markCapBlocked';
 
 /**
  * What a sync run actually did.
@@ -99,6 +104,30 @@ const isProLimitError = (error: any): boolean => {
     (typeof message === 'string' && message.includes('FREE_COUNTER_LIMIT_REACHED'))
   );
 };
+
+/**
+ * A mark rejection that will repeat IDENTICALLY on every later push — a policy
+ * decision, not a transient fault — and therefore must be quarantined rather
+ * than retried into a permanent stall.
+ *
+ * ⚠️ isProLimitError ALONE IS NOT ENOUGH ANY MORE, and this is easy to miss.
+ * It matches P0001 / FREE_COUNTER_LIMIT_REACHED, which is a plpgsql `raise` —
+ * i.e. the legacy enforce_free_counter_limit TRIGGER, dropped 2026-07-27
+ * (20260727_drop_legacy_free_counter_trigger.sql). The surviving enforcement is
+ * the RESTRICTIVE RLS layer, and a WITH CHECK failure raises 42501, which that
+ * predicate has never matched. AUDIT_LOG.md flagged exactly this in 2026-06 and
+ * called it "acceptable for a defense-in-depth backstop" — true while the
+ * trigger was still there to catch it first, false the moment it was dropped.
+ *
+ * 42501 IS NOT EXCLUSIVELY THE CAP. Any RLS refusal on marks raises it. That is
+ * deliberate here: whatever the policy, the row will be refused the same way
+ * forever, and the choice is between quarantining it (the sync continues, the
+ * row stays on the device, each later push re-attempts it) and the behaviour
+ * this replaces (the cursor never advances and NOTHING syncs again, silently).
+ * A wrong quarantine costs a retry per sync. A wrong throw costs the account.
+ */
+const isQuarantinableMarkRejection = (error: any): boolean =>
+  isProLimitError(error) || error?.code === '42501';
 
 /**
  * Optional columns on public.marks that the client owns but the server may not
@@ -1108,11 +1137,32 @@ export const useSync = () => {
         if (pid && typeof pid === 'string' && isValidUUID(pid)) dirtyChildParentMarkIds.add(pid);
       }
 
-      const parentsMissingFromPushSet = [...dirtyChildParentMarkIds].filter((id) => !countersMap.has(id));
-      if (parentsMissingFromPushSet.length > 0) {
+      // Marks the server refused under the free-tier ceiling on an EARLIER run.
+      // They have to be re-attempted independently of the cursor, because the
+      // whole point of quarantining instead of throwing is that the cursor
+      // ADVANCES PAST THEM — so "dirty since the cursor" will never name them
+      // again. Same rule the deleted-counter push already follows: rows that
+      // must outlive the cursor are re-queried by id every run.
+      const capBlockedMarkIds = await readMarkCapBlockedIds();
+
+      // KEPT SEPARATE ON PURPOSE. parentsMissingFromPushSet means exactly "ids
+      // of parents that dirty children referenced and the push set lacked", and
+      // three call sites feed it to classifyMissingParentsForSyncLog to explain
+      // WHY a child had no parent. A cap-blocked mark is not a missing parent,
+      // so folding the two together would quietly corrupt that diagnostic. Only
+      // the augmentation query takes the union.
+      const parentsMissingFromPushSet = [...dirtyChildParentMarkIds].filter(
+        (id) => !countersMap.has(id),
+      );
+
+      const idsMissingFromPushSet = Array.from(
+        new Set([...parentsMissingFromPushSet, ...capBlockedMarkIds]),
+      ).filter((id) => isValidUUID(id) && !countersMap.has(id));
+
+      if (idsMissingFromPushSet.length > 0) {
         const chunk = 80;
-        for (let i = 0; i < parentsMissingFromPushSet.length; i += chunk) {
-          const slice = parentsMissingFromPushSet.slice(i, i + chunk);
+        for (let i = 0; i < idsMissingFromPushSet.length; i += chunk) {
+          const slice = idsMissingFromPushSet.slice(i, i + chunk);
           const ph = slice.map(() => '?').join(',');
           const rows = await query<Counter>(
             `SELECT * FROM lc_counters WHERE user_id = ? AND id IN (${ph}) AND (deleted_at IS NULL OR deleted_at = '')`,
@@ -1122,12 +1172,26 @@ export const useSync = () => {
             countersMap.set(r.id, r);
           }
         }
-        logger.log('[SYNC] Augmented counter push set with active parents required by dirty children', {
+        logger.log('[SYNC] Augmented counter push set with rows required outside the cursor', {
           dirtyChildParentCount: dirtyChildParentMarkIds.size,
-          addedActiveParentsNotInDirtyCounterQuery: parentsMissingFromPushSet.filter((id) =>
-            countersMap.has(id),
-          ).length,
-          sampleAddedParentIds: parentsMissingFromPushSet.filter((id) => countersMap.has(id)).slice(0, 5),
+          capBlockedCount: capBlockedMarkIds.length,
+          addedNotInDirtyCounterQuery: idsMissingFromPushSet.filter((id) => countersMap.has(id))
+            .length,
+          sampleAddedIds: idsMissingFromPushSet.filter((id) => countersMap.has(id)).slice(0, 5),
+        });
+      }
+
+      // A blocked mark that has since been DELETED — or that no longer exists at
+      // all — leaves the list here. Without this it would be re-queried and
+      // re-attempted for the life of the install, since nothing else ever
+      // removes an id that cannot succeed. A blocked mark that was deleted is
+      // still IN countersMap (as a tombstone) and is deliberately left alone:
+      // its tombstone push reduces the count and will simply succeed.
+      const vanishedBlockedIds = capBlockedMarkIds.filter((id) => !countersMap.has(id));
+      if (vanishedBlockedIds.length > 0) {
+        await clearMarkCapBlockedIds(vanishedBlockedIds);
+        logger.log('[SYNC] Dropped cap-blocked mark ids that no longer exist locally', {
+          count: vanishedBlockedIds.length,
         });
       }
 
@@ -1163,6 +1227,11 @@ export const useSync = () => {
       // Push counters FIRST (most critical - includes deletions)
       // This ensures deletions are synced before other operations
       let limitBlocked = false;
+      /**
+       * Marks the ceiling refused THIS run. Quarantined rather than fatal: see
+       * lib/sync/markCapBlocked.ts for why a throw here wedged the entire sync.
+       */
+      const refusedMarkIds = new Set<string>();
       /** Active counter ids included in successful upsert batches (deleted_at null in payload). */
       const activeParentIdsUpsertedThisRun = new Set<string>();
       if (allCounters.length > 0) {
@@ -1277,8 +1346,8 @@ export const useSync = () => {
           }
 
           if (countersError) {
-            if (isProLimitError(countersError)) {
-              logger.warn('[SYNC] Free counter limit enforced by server', countersError);
+            if (isQuarantinableMarkRejection(countersError)) {
+              logger.warn('[SYNC] Server refused mark(s) by policy', countersError);
               // The number here USED TO BE A HARDCODED 3 — the old free tier,
               // and the number the legacy enforce_free_counter_limit trigger
               // still counts. The tier the app actually gates on has been
@@ -1286,12 +1355,37 @@ export const useSync = () => {
               // user their limit was half what it is, in the one place they see
               // it: the moment sync refuses their data. Reads from lib/gating
               // now, so it cannot drift from the cap again.
-              setSyncState((prev) => ({
-                ...prev,
-                error: `Sync blocked: free keeps ${FREE_MARK_CEILING} marks in the cloud. Livra+ opens unlimited marks. Your extra marks stay on this device.`,
-              }));
+              // ISOLATE, DO NOT ABORT. A batch upsert cannot say WHICH mark the
+              // ceiling refused, so re-push this batch one row at a time and keep
+              // only the genuine refusals. That is the same move the goal push
+              // has made since M6-B. It costs one request per row, but ONLY on
+              // the rejection path, and a capped account is by definition small.
+              //
+              // Everything that succeeds here still enters
+              // activeParentIdsUpsertedThisRun, so its events/streaks/badges push
+              // normally. A refused mark never enters it, so its children are
+              // held back by the parent-confirmation rule that already exists —
+              // no new mechanism, and no child orphaned against a missing parent.
+              logger.warn('[SYNC] Free mark ceiling refused mark(s) at push — isolating per mark');
+              for (const row of batch) {
+                const { error: rowError } = await supabase
+                  .from('marks')
+                  .upsert(stripUnsupported([row]) as any[], { onConflict: 'id' });
+
+                if (!rowError) {
+                  if (row.deleted_at == null || String(row.deleted_at).trim() === '') {
+                    activeParentIdsUpsertedThisRun.add(row.id);
+                  }
+                  continue;
+                }
+                // Only the ceiling is quarantinable. Anything else is a real
+                // failure and must still abort, or this becomes the "swallow and
+                // advance the cursor" option that silently loses rows.
+                if (!isQuarantinableMarkRejection(rowError)) throw rowError;
+                refusedMarkIds.add(row.id);
+              }
               limitBlocked = true;
-              break;
+              continue;
             }
             const parsed = parseError(countersError);
             if (parsed.isNetworkError || parsed.shouldRetry) {
@@ -1314,6 +1408,17 @@ export const useSync = () => {
           }
         }
 
+        // Remember what was refused, forget what finally got through. Anything
+        // in this run's push set that was NOT refused either succeeded or was
+        // never blocked, so clearing it is safe and is what lets an upgrade (or
+        // a deletion that frees a slot) drain the quarantine with no user action.
+        if (refusedMarkIds.size > 0) {
+          await addMarkCapBlockedIds([...refusedMarkIds]);
+        }
+        await clearMarkCapBlockedIds(
+          countersToPush.filter((c) => !refusedMarkIds.has(c.id)).map((c) => c.id),
+        );
+
         if (!limitBlocked) {
           if (deletedInAllCounters.length > 0) {
             logger.log(`[SYNC] ✅ Successfully pushed ${deletedInAllCounters.length} deleted counter(s) to Supabase`);
@@ -1323,8 +1428,26 @@ export const useSync = () => {
         }
       }
 
+      // THE POISON PILL ENDED HERE. This used to be
+      // `throw new Error('SYNC_PRO_COUNTER_LIMIT')`, so writePushCursor never
+      // ran, the cursor never advanced, and EVERY later sync replayed the same
+      // batch and hit the same refusal — carrying every unrelated event, streak,
+      // badge, goal and link queued behind it into the same permanent stall.
+      // Nothing the user could do cleared it except deleting the mark.
+      //
+      // The refused ids are quarantined instead (above), everything else goes,
+      // and the cursor advances. Each later push re-queries them by id, outside
+      // the cursor, so an upgrade or a freed slot carries them up on its own.
+      //
+      // The message is a PAYWALL, not a fault — the same call the goal cap made:
+      // it is surfaced, but it does not fail the sync.
       if (limitBlocked) {
-        throw new Error('SYNC_PRO_COUNTER_LIMIT');
+        const message = `Sync blocked: free keeps ${FREE_MARK_CEILING} marks in the cloud. Livra+ opens unlimited marks. Your extra marks stay on this device.`;
+        setSyncState((prev) => ({ ...prev, error: message }));
+        runNoticeRef.current = message;
+        logger.warn('[SYNC] Free-tier ceiling refused mark(s); quarantined for re-attempt', {
+          refused: refusedMarkIds.size,
+        });
       }
 
       /** Parents allowed for child upsert this run: successful active upserts ∪ remote active read (chunked). */

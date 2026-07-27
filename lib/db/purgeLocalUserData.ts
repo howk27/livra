@@ -81,6 +81,10 @@ export const ACCOUNT_SCOPED_STORAGE_KEYS = [
   'livra_sync_diag_v1',
   'sync_retry_queue',
   'sync_goal_cap_blocked_ids',
+  // Same class as the goal list above: ids the SERVER refused for THIS account.
+  // Carrying them into the next sign-in would make the new account re-query mark
+  // ids that were never its own.
+  'sync_mark_cap_blocked_ids',
   'sync_goals_backfill_done',
   // Entitlement and profile of the account that left.
   '@livra_iap_receipt',
