@@ -682,15 +682,31 @@ export default function SettingsScreen() {
         {/* ── SUPPORT ── */}
         <SectionLabel style={styles.sectionLabel}>SUPPORT</SectionLabel>
         <SettingsCard>
+          {/*
+            Both rows go to the same inbox, separated by subject line rather than
+            destination. "Help Center" used to open https://livralife.com/help,
+            which 404s — a dead end for anyone who needs help on day one, and a
+            routine Guideline 1.5 rejection when App Review taps it. The support
+            mailbox is the only support channel that actually exists, so it is
+            the one both rows point at. Restore a real help page here if one is
+            ever published; the App Store Support URL field is separate and must
+            be an http(s) URL, so it cannot use this address.
+          */}
           <SettingsRow
             icon={Question}
-            label="Help Center"
-            onPress={() => Linking.openURL('https://livralife.com/help').catch(() => {})}
+            label="Get Help"
+            onPress={() =>
+              Linking.openURL('mailto:support@livralife.com?subject=Livra%20Help').catch(() => {})
+            }
           />
           <SettingsRow
             icon={ChatText}
             label="Send Feedback"
-            onPress={() => Linking.openURL('mailto:support@livralife.com').catch(() => {})}
+            onPress={() =>
+              Linking.openURL('mailto:support@livralife.com?subject=Livra%20Feedback').catch(
+                () => {},
+              )
+            }
           />
           <SettingsRow
             icon={Star}
