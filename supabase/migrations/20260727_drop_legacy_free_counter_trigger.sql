@@ -1,11 +1,19 @@
--- STATUS: NOT YET APPLIED. STEP 1 is read-only and must be read before STEP 2.
--- Rewrite this header to APPLIED only after STEP 3 has been read back from
--- production, not on report.
+-- STATUS: APPLIED 2026-07-27 (founder, by hand).
 --
--- ⚠️ APPLY THIS ONLY AFTER THE 1.0.59 BUILD IS CUT, OR AT LEAST ONLY WHEN YOU
--- ARE READY TO WATCH IT. It removes an enforcement layer. That is the correct
--- direction, but it is the kind of change worth doing with attention rather
--- than in a batch.
+-- ⚠️ PROVENANCE, STATED PLAINLY BECAUSE THIS PROJECT HAS BEEN BURNED BY HEADERS
+-- THAT OVERSTATED THEMSELVES. This header was reconciled on 2026-07-27, AFTER
+-- the fact, on two pieces of evidence:
+--   1. the founder confirmed running STEP 2 when asked directly;
+--   2. the 2026-07-27 session handoff records STEP 3's output — "all four
+--      policies confirmed surviving" — which only exists if STEP 2 ran.
+-- What did NOT happen: no orchestrator read pg_proc/pg_trigger back itself. The
+-- Supabase MCP cannot reach jhsxeibhxrvqrgkadyfk, and a trigger is invisible to
+-- the anon REST probe that serves for tables. If you want this closed to the
+-- standard the rest of this repo holds, re-run STEP 3 and say so here.
+--
+-- The header sat at NOT YET APPLIED for a full session while state.json
+-- described the drop as done. Reconciled rather than left to rot, because the
+-- next person to read this file would have had to re-derive the contradiction.
 --
 -- WHY: the free tier is enforced TWICE and the two layers disagree about both
 -- the number and the table.
@@ -102,6 +110,27 @@ order by tablename, policyname;
 -- is a pure RENAME whose header claims "counters gone" — something re-created
 -- it, most likely a by-hand re-run of 20250211100000_core_livra_sync_schema.sql.
 -- Once this trigger is gone, nothing reads it at all.
+--
+-- TWO THINGS CONFIRMED 2026-07-27, which narrow this but do not close it:
+--
+--   * NO CLIENT READS IT. `.from('counters')` appears ZERO times in the repo.
+--     Every one of the ~40 files matching /counters/ is the LOCAL SQLite table
+--     name for marks (hooks/useCounters.ts, lib/db/index.ts) — a naming
+--     collision that makes this look far more alive in a grep than it is. With
+--     the trigger dropped, the server-side reader count is now zero.
+--
+--   * IT IS STILL ON THE API SURFACE. An anon REST probe of
+--     /rest/v1/counters answers HTTP 200 [] — granted to anon, then emptied by
+--     RLS. Contrast ai_generation_events, which answers 42501 because its
+--     migration revokes the grants outright. So counters is not leaking (RLS
+--     returns nothing), but it is a vestigial table PostgREST still publishes,
+--     and it will keep showing up in schema introspection and in any future
+--     audit as though it mattered.
+--
+-- STILL UNANSWERED, and still needs SQL: its ROW COUNT. anon cannot see it —
+-- [] here means "RLS gave you nothing", not "the table is empty". That number is
+-- the whole decision: 0 → drop it in its own migration; > 0 → it holds data
+-- nobody has looked at, and that is a conversation before it is a DROP.
 --
 -- Dropping a table that might hold real rows is NOT something to fold into this
 -- migration. Run query 1 of .reports/server-qc-diagnostic-2026-07-26.sql first:

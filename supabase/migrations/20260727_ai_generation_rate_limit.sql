@@ -1,6 +1,24 @@
--- STATUS: NOT YET APPLIED. Apply by hand, then rewrite this header to APPLIED
--- only after reading the verification block at the bottom back from production
--- — not on report. The Supabase MCP still cannot reach jhsxeibhxrvqrgkadyfk.
+-- STATUS: APPLIED 2026-07-27 — VERIFIED BY INSTRUMENT 2026-07-27, not on report.
+--
+-- Both halves were confirmed live before this header was rewritten. The MCP
+-- still cannot reach jhsxeibhxrvqrgkadyfk, so two other instruments were used:
+--
+--   TABLE   an anon REST probe of /rest/v1/ai_generation_events returns
+--           HTTP 401 {"code":"42501","message":"permission denied for table
+--           ai_generation_events"}. That is the CORRECT shape and it proves two
+--           things at once: the table EXISTS (a missing table answers PGRST205,
+--           not 42501) and the `revoke all` below took, since anon cannot even
+--           reach it to be filtered by RLS. Compare public.mark_notes, which
+--           answers HTTP 200 [] — granted, then emptied by RLS.
+--
+--   FUNCTION `supabase functions list --project-ref jhsxeibhxrvqrgkadyfk` shows
+--           ai-goal-generation v11 ACTIVE, updated 2026-07-27T01:11:11Z — the
+--           deploy that carries the gate.
+--
+-- NOT verified this way: claim_ai_generation_slot's own definition, its
+-- SECURITY DEFINER flag, and its grants. Those need SQL — the commented block at
+-- the bottom. The table being unreachable to anon is strong evidence the grant
+-- half of this migration ran, but it is evidence, not a read-back.
 --
 -- ⚠️ THE EDGE FUNCTION MUST BE DEPLOYED IN THE SAME PASS. Order matters and it
 -- is not symmetric:
