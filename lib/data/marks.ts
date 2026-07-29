@@ -45,6 +45,46 @@ export async function fetchMarksForGoal(goalId: string): Promise<MarkRow[]> {
   return (data ?? []) as unknown as MarkRow[];
 }
 
+/**
+ * Every live goal's marks, grouped by goal id, resolved through live links. This
+ * is the LIST-screen equivalent of `fetchMarksForGoal` (Goals/Focus render many
+ * goals at once and cannot call `useMarks` in a loop). A mark serving several
+ * goals appears under each (Spec D-6). Link `goal_id` is aliased to `gid` in the
+ * select so the T6 source guard (no `.goal_id` access) stays valid.
+ */
+export async function fetchMarksByGoal(): Promise<Record<string, MarkRow[]>> {
+  const client = dataClient();
+
+  const { data: links, error: linkError } = await client
+    .from('goal_mark_links')
+    .select('gid:goal_id, mid:mark_id')
+    .is('deleted_at', null);
+  if (linkError) throw toDataError(linkError);
+
+  const rows = (links ?? []) as unknown as { gid: string; mid: string }[];
+  if (rows.length === 0) return {};
+
+  const markIds = [...new Set(rows.map((row) => row.mid))];
+  const { data, error } = await client
+    .from('marks')
+    .select(selectList(MARK_COLUMNS))
+    .in('id', markIds)
+    .is('deleted_at', null)
+    .order('sort_index', { ascending: true });
+  if (error) throw toDataError(error);
+
+  const byId = new Map<string, MarkRow>(
+    ((data ?? []) as unknown as MarkRow[]).map((mark) => [mark.id, mark]),
+  );
+  const grouped: Record<string, MarkRow[]> = {};
+  for (const row of rows) {
+    const mark = byId.get(row.mid);
+    if (!mark) continue; // link points at a soft-deleted mark
+    (grouped[row.gid] ??= []).push(mark);
+  }
+  return grouped;
+}
+
 /** Every live mark the user owns, each exactly once. */
 export async function fetchMarksForUser(): Promise<MarkRow[]> {
   const { data, error } = await dataClient()
@@ -75,6 +115,17 @@ export function useMarks(goalId: string) {
     queryKey: queryKeys.marksForGoal(userId, goalId),
     queryFn: () => fetchMarksForGoal(goalId),
     enabled: userId !== '' && goalId !== '',
+    staleTime: MARKS_STALE_TIME,
+  });
+}
+
+export function useMarksByGoal() {
+  const { user } = useAuth();
+  const userId = user?.id ?? '';
+  return useQuery({
+    queryKey: queryKeys.marksByGoal(userId),
+    queryFn: fetchMarksByGoal,
+    enabled: userId !== '',
     staleTime: MARKS_STALE_TIME,
   });
 }

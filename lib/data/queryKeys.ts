@@ -25,6 +25,8 @@ export const queryKeys = {
   marks: (userId: string) => [ROOT, userId, 'marks'] as const,
   marksForGoal: (userId: string, goalId: string) =>
     [ROOT, userId, 'marks', 'by-goal', goalId] as const,
+  // Marks grouped by goal for the list screens (Goals/Focus).
+  marksByGoal: (userId: string) => [ROOT, userId, 'marks', 'by-goal-map'] as const,
   mark: (userId: string, markId: string) => [ROOT, userId, 'marks', 'by-id', markId] as const,
 
   checkins: (userId: string, markId: string) => [ROOT, userId, 'checkins', markId] as const,

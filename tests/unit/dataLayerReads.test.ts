@@ -10,7 +10,7 @@ import { setSupabaseClientOverride } from '@/lib/supabase';
 import { MARK_COLUMNS } from '@/lib/data/client';
 import { toDataError, isRetriableDataError, DATA_ERROR_RETRIABLE } from '@/lib/data/errors';
 import { fetchGoals, fetchGoal } from '@/lib/data/goals';
-import { fetchMarksForGoal, fetchMarksForUser, fetchMark } from '@/lib/data/marks';
+import { fetchMarksForGoal, fetchMarksForUser, fetchMark, fetchMarksByGoal } from '@/lib/data/marks';
 import { fetchCheckins, fetchTodayCheckins, fetchUserCheckins } from '@/lib/data/checkins';
 import { fetchGoalNotes } from '@/lib/data/notes';
 
@@ -103,6 +103,24 @@ describe('marks reads resolve through goal_mark_links', () => {
     const client = install([{ data: [{ id: 'm1' }], error: null }]);
     await expect(fetchMarksForUser()).resolves.toEqual([{ id: 'm1' }]);
     expect(client.__fromTables).toEqual(['marks']);
+  });
+
+  it('fetchMarksByGoal groups marks by goal via links (aliased gid/mid)', async () => {
+    const client = install([
+      { data: [{ gid: 'g1', mid: 'm1' }, { gid: 'g1', mid: 'm2' }, { gid: 'g2', mid: 'm1' }], error: null },
+      { data: [{ id: 'm1', name: 'Run' }, { id: 'm2', name: 'Stretch' }], error: null },
+    ]);
+    const grouped = await fetchMarksByGoal();
+    expect(client.__fromTables).toEqual(['goal_mark_links', 'marks']);
+    // A mark serving two goals appears under each (D-6).
+    expect(grouped.g1.map((m) => m.name)).toEqual(['Run', 'Stretch']);
+    expect(grouped.g2.map((m) => m.name)).toEqual(['Run']);
+  });
+
+  it('fetchMarksByGoal short-circuits with no links', async () => {
+    const client = install([{ data: [], error: null }]);
+    await expect(fetchMarksByGoal()).resolves.toEqual({});
+    expect(client.__fromTables).toEqual(['goal_mark_links']);
   });
 
   it('fetchMark returns a single mark', async () => {
