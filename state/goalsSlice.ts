@@ -14,6 +14,7 @@ import {
   getLinksForMark,
 } from '../lib/db/goalsDb';
 import { canAddGoal } from '../lib/gating';
+import { bridgeInvalidate } from '@/lib/data/bridge';
 import { capture } from '../lib/analytics/posthog';
 import { ANALYTICS_EVENTS } from '../lib/analytics/events';
 import { evaluateGoalMomentum } from '../lib/goalMomentumStore';
@@ -259,6 +260,8 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
     await upsertGoals(updates);
     const map = new Map(updates.map(g => [g.id, g]));
     set(s => ({ goals: s.goals.map(g => map.get(g.id) ?? g) }));
+    // PHASE-2 BRIDGE: delete in Phase 3
+    bridgeInvalidate('goals');
   },
 
   linkMarkToGoal: async (goalId, markId) => {
