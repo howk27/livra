@@ -11,7 +11,7 @@ import { MARK_COLUMNS } from '@/lib/data/client';
 import { toDataError, isRetriableDataError, DATA_ERROR_RETRIABLE } from '@/lib/data/errors';
 import { fetchGoals, fetchGoal } from '@/lib/data/goals';
 import { fetchMarksForGoal, fetchMarksForUser, fetchMark } from '@/lib/data/marks';
-import { fetchCheckins, fetchTodayCheckins } from '@/lib/data/checkins';
+import { fetchCheckins, fetchTodayCheckins, fetchUserCheckins } from '@/lib/data/checkins';
 import { fetchGoalNotes } from '@/lib/data/notes';
 
 // The entity modules import `@/hooks/useAuth` at module scope for their hooks; the
@@ -121,6 +121,12 @@ describe('checkins reads mark_events', () => {
   it('fetchTodayCheckins reads mark_events by local date', async () => {
     const client = install([{ data: [{ id: 'e1' }], error: null }]);
     await expect(fetchTodayCheckins('2026-07-29')).resolves.toEqual([{ id: 'e1' }]);
+    expect(client.__fromTables).toEqual(['mark_events']);
+  });
+
+  it('fetchUserCheckins reads every live mark_event for the user', async () => {
+    const client = install([{ data: [{ id: 'e1' }, { id: 'e2' }], error: null }]);
+    await expect(fetchUserCheckins()).resolves.toEqual([{ id: 'e1' }, { id: 'e2' }]);
     expect(client.__fromTables).toEqual(['mark_events']);
   });
 });

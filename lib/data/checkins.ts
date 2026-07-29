@@ -36,6 +36,20 @@ export async function fetchCheckins(markId: string): Promise<MarkEventRow[]> {
   return (data ?? []) as unknown as MarkEventRow[];
 }
 
+/** Every live check-in the user owns, newest first. This is the query-layer
+ * equivalent of the old `eventsSlice.events` array — Goals and Focus read it for
+ * weekly-completion math and then filter by mark/week in memory, exactly as before.
+ * (Phase 4 makes counts derived; this preserves parity in the meantime.) */
+export async function fetchUserCheckins(): Promise<MarkEventRow[]> {
+  const { data, error } = await dataClient()
+    .from('mark_events')
+    .select(selectList(MARK_EVENT_COLUMNS))
+    .is('deleted_at', null)
+    .order('occurred_at', { ascending: false });
+  if (error) throw toDataError(error);
+  return (data ?? []) as unknown as MarkEventRow[];
+}
+
 /** Every live check-in the user logged on a given local date (default: today). */
 export async function fetchTodayCheckins(localDate: string): Promise<MarkEventRow[]> {
   const { data, error } = await dataClient()
@@ -46,6 +60,17 @@ export async function fetchTodayCheckins(localDate: string): Promise<MarkEventRo
     .order('occurred_at', { ascending: false });
   if (error) throw toDataError(error);
   return (data ?? []) as unknown as MarkEventRow[];
+}
+
+export function useUserCheckins() {
+  const { user } = useAuth();
+  const userId = user?.id ?? '';
+  return useQuery({
+    queryKey: queryKeys.userCheckins(userId),
+    queryFn: fetchUserCheckins,
+    enabled: userId !== '',
+    staleTime: CHECKINS_STALE_TIME,
+  });
 }
 
 export function useCheckins(markId: string) {

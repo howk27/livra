@@ -20,9 +20,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { Stack, useRouter, usePathname, useGlobalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { QueryClient } from '@tanstack/react-query';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
-import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as Linking from 'expo-linking';
 import { initDatabase, cleanupInvalidBadges } from '../lib/db';
@@ -55,6 +53,12 @@ import {
 import { requestLivraLocalNotificationReschedule } from '../services/livraLocalNotificationOwner';
 import { getSupabaseClient } from '../lib/supabase';
 import { initNetworkOnlineManager } from '../lib/data/connectivity';
+import {
+  queryClient,
+  asyncStoragePersister,
+  QUERY_CACHE_BUSTER,
+  QUERY_CACHE_MAX_AGE,
+} from '../lib/data/queryClient';
 import { getMilestonesToFire, MILESTONE_COPY } from '../lib/goalMilestones';
 import { getAppDate } from '../lib/appDate';
 import { checkProStatus } from '../lib/iap/iap';
@@ -66,31 +70,8 @@ import { initAnalytics, identify, resetAnalytics, screenTrack } from '../lib/ana
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
-// M9 Phase 1 — the read layer's cache. Defaults chosen so a persisted read
-// survives a day offline; per-entity `staleTime` in lib/data/* overrides the floor.
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 60 * 1000,
-      gcTime: 24 * 60 * 60 * 1000,
-      retry: 2,
-      refetchOnReconnect: true,
-    },
-  },
-});
-
-// Bump this string on any cached-shape change so a persisted cache from an older
-// shape is discarded rather than rehydrated into new code. Phase 5's cutover
-// depends on being able to force exactly this.
-const QUERY_CACHE_BUSTER = 'livra-data-v1';
-const QUERY_CACHE_MAX_AGE = 24 * 60 * 60 * 1000;
-
-// Persist the query cache to AsyncStorage so reads are available offline. The
-// outbox is NOT persisted here — Phase 4 owns it with its own durability.
-const asyncStoragePersister = createAsyncStoragePersister({
-  storage: AsyncStorage,
-  key: 'livra-rq-cache',
-});
+// M9 — the read layer's QueryClient + persister live in lib/data/queryClient.ts
+// (imported at the top) so store actions can reach the same instance for bridges.
 
 Notifications.setNotificationHandler({
   handleNotification: async (notification) => {

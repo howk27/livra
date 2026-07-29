@@ -28,6 +28,9 @@ export const queryKeys = {
   mark: (userId: string, markId: string) => [ROOT, userId, 'marks', 'by-id', markId] as const,
 
   checkins: (userId: string, markId: string) => [ROOT, userId, 'checkins', markId] as const,
+  // Every live check-in the user owns — the query-layer equivalent of the old
+  // eventsSlice `events` array that Goals/Focus read for weekly-completion math.
+  userCheckins: (userId: string) => [ROOT, userId, 'checkins', 'all'] as const,
   todayCheckins: (userId: string, localDate: string) =>
     [ROOT, userId, 'checkins', 'today', localDate] as const,
 
