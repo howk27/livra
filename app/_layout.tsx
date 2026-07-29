@@ -20,7 +20,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { Stack, useRouter, usePathname, useGlobalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient } from '@tanstack/react-query';
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
+import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as Linking from 'expo-linking';
 import { initDatabase, cleanupInvalidBadges } from '../lib/db';
@@ -52,6 +54,7 @@ import {
 } from '../services/behaviorNotifications';
 import { requestLivraLocalNotificationReschedule } from '../services/livraLocalNotificationOwner';
 import { getSupabaseClient } from '../lib/supabase';
+import { initNetworkOnlineManager } from '../lib/data/connectivity';
 import { getMilestonesToFire, MILESTONE_COPY } from '../lib/goalMilestones';
 import { getAppDate } from '../lib/appDate';
 import { checkProStatus } from '../lib/iap/iap';
@@ -63,7 +66,31 @@ import { initAnalytics, identify, resetAnalytics, screenTrack } from '../lib/ana
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
-const queryClient = new QueryClient();
+// M9 Phase 1 — the read layer's cache. Defaults chosen so a persisted read
+// survives a day offline; per-entity `staleTime` in lib/data/* overrides the floor.
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60 * 1000,
+      gcTime: 24 * 60 * 60 * 1000,
+      retry: 2,
+      refetchOnReconnect: true,
+    },
+  },
+});
+
+// Bump this string on any cached-shape change so a persisted cache from an older
+// shape is discarded rather than rehydrated into new code. Phase 5's cutover
+// depends on being able to force exactly this.
+const QUERY_CACHE_BUSTER = 'livra-data-v1';
+const QUERY_CACHE_MAX_AGE = 24 * 60 * 60 * 1000;
+
+// Persist the query cache to AsyncStorage so reads are available offline. The
+// outbox is NOT persisted here — Phase 4 owns it with its own durability.
+const asyncStoragePersister = createAsyncStoragePersister({
+  storage: AsyncStorage,
+  key: 'livra-rq-cache',
+});
 
 Notifications.setNotificationHandler({
   handleNotification: async (notification) => {
@@ -144,6 +171,9 @@ export default function RootLayout() {
       SplashScreen.hideAsync().catch(() => {});
     }
   }, [fontsLoaded]);
+
+  // M9 Phase 1 — drive React Query's online state from real device connectivity.
+  useEffect(() => initNetworkOnlineManager(), []);
 
   // Biometric lock retired with the Privacy & Security screen (QC 2026-07-12).
   // Clear any stored flag so a re-added lock never inherits stale state.
@@ -573,7 +603,14 @@ export default function RootLayout() {
   return (
     <ErrorBoundary>
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <QueryClientProvider client={queryClient}>
+        <PersistQueryClientProvider
+          client={queryClient}
+          persistOptions={{
+            persister: asyncStoragePersister,
+            buster: QUERY_CACHE_BUSTER,
+            maxAge: QUERY_CACHE_MAX_AGE,
+          }}
+        >
           <ExperimentsProvider>
             <NotificationProvider>
               <View style={{ flex: 1 }}>
@@ -584,7 +621,7 @@ export default function RootLayout() {
               </View>
             </NotificationProvider>
           </ExperimentsProvider>
-        </QueryClientProvider>
+        </PersistQueryClientProvider>
       </GestureHandlerRootView>
     </ErrorBoundary>
   );
