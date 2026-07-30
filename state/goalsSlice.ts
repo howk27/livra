@@ -195,11 +195,17 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
     }
 
     set(s => ({ goals: s.goals.map(g => (g.id === id ? updated : g)) }));
+    // PHASE-2 BRIDGE: delete in Phase 3
+    // Goal edits (title, target date, milestones) reach the query-backed goal
+    // detail through this funnel — refresh the goals reads so they reflect it.
+    bridgeInvalidate('goals');
   },
 
   deleteGoal: async (id) => {
     await removeGoal(id);
     set(s => ({ goals: s.goals.filter(g => g.id !== id) }));
+    // PHASE-2 BRIDGE: delete in Phase 3
+    bridgeInvalidate('goals');
   },
 
   completeGoal: async (id) => {
@@ -245,6 +251,10 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
     useMarksStore.getState().convertMarksToMaintenance(id).catch((err: unknown) =>
       console.warn('[Maintenance] convertMarksToMaintenance failed:', err)
     );
+    // PHASE-2 BRIDGE: delete in Phase 3
+    // Completion flips status AND converts the goal's marks to maintenance, so
+    // refresh both query-backed reads (Goals list drops it; marks change).
+    bridgeInvalidate('goals', 'marks');
   },
 
   reorderGoals: async (orderedIds) => {
@@ -278,6 +288,10 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
           : g
       ),
     }));
+    // PHASE-2 BRIDGE: delete in Phase 3
+    // The goal-detail marks list resolves THROUGH LINKS (useMarks), so a new link
+    // must refresh the marks reads for the mark to appear.
+    bridgeInvalidate('marks');
   },
 
   unlinkMarkFromGoal: async (goalId, markId) => {
@@ -289,6 +303,8 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
           : g
       ),
     }));
+    // PHASE-2 BRIDGE: delete in Phase 3
+    bridgeInvalidate('marks');
   },
 
   creditMarkToGoals: async (markId) => {

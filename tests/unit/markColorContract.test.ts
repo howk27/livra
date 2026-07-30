@@ -320,7 +320,10 @@ describe('goal detail can link and unlink marks (QC4-L)', () => {
   });
 
   it('uses the real gate rather than its own cap', () => {
-    expect(src).toMatch(/canAddMarkToGoal\(isProUnlocked, countMarksInGoal\(marks, id \?\? ''\)\)/);
+    // M9 Phase 2: the per-goal count comes from this goal's live linked marks
+    // (resolved THROUGH LINKS via useMarks), not countMarksInGoal(marks) which
+    // reads the retired mark.goal_id. The real gate (canAddMarkToGoal) is unchanged.
+    expect(src).toMatch(/canAddMarkToGoal\(isProUnlocked, linkedMarks\.length\)/);
     expect(src).toMatch(/from '\.\.\/\.\.\/lib\/gating'/);
   });
 

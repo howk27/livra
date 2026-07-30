@@ -9,6 +9,7 @@ import {
   TextInput,
   Modal,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -40,12 +41,19 @@ import {
   headerControlBoxLeading,
   headerControlBoxTrailing,
 } from '../../theme/tokens';
-import type { Mark, GoalNote } from '../../types';
+import type { Mark, MarkEvent, GoalNote, FrequencyKind } from '../../types';
+import type { Goal } from '../../types/goal';
+import type { GoalRow, MarkRow, MarkEventRow } from '@/lib/data/types';
+import type { TierId, FrequencyId } from '../../lib/goalMarkSuggestions';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useGoalsStore } from '../../state/goalsSlice';
 import { useGoalNotesStore } from '../../state/goalNotesSlice';
 import { useMarksStore } from '../../state/countersSlice';
-import { useEventsStore } from '../../state/eventsSlice';
+// M9 Phase 2: goal-detail READS come from lib/data/ (React Query); WRITES still
+// flow through the stores above (updateMark / link / goal edit-complete-delete).
+import { useGoal, useGoals } from '@/lib/data/goals';
+import { useMarks, useMarksByGoal, useMarksForUser } from '@/lib/data/marks';
+import { useUserCheckins } from '@/lib/data/checkins';
 import { useAppDateStore, selectAppDateKey } from '../../state/appDateSlice';
 import { effectivePersonalBest, useMomentumStore } from '../../state/momentumSlice';
 import { deriveIsNewBest, goalAgeDays } from '../../lib/moments/context';
@@ -56,7 +64,7 @@ import { resolveDailyTarget } from '../../lib/markDailyTarget';
 import { useCounters } from '../../hooks/useCounters';
 import { useAuth } from '../../hooks/useAuth';
 import { useIapSubscriptions } from '../../hooks/useIapSubscriptions';
-import { canAddMarkToGoal, countMarksInGoal } from '../../lib/gating';
+import { canAddMarkToGoal } from '../../lib/gating';
 import { MARK_PER_GOAL_LIMIT_MESSAGE } from '../../lib/copy';
 import { useMotion } from '../../hooks/useMotion';
 import { useNotification } from '../../contexts/NotificationContext';
@@ -79,7 +87,12 @@ import {
   resolveMarkAccent,
 } from '../../lib/markCategoryResolve';
 import { logger } from '../../lib/utils/logger';
-import { goalWeekFraming } from '../../lib/goalLogic';
+import {
+  goalWeekFraming,
+  calculateGoalProgress,
+  calculateUnlockThreshold,
+  goalCommitmentTarget,
+} from '../../lib/goalLogic';
 import { ringFraction } from '../../lib/goalRingProgress';
 import { applyOpacity } from '../../src/components/icons/color';
 import { JournalComposer } from '../../components/journal/JournalComposer';
@@ -96,6 +109,127 @@ const RING_ICON_OFFSET = (RING_SIZE - RING_ICON_SIZE) / 2;
 
 type ThemeColors = ReturnType<typeof themedColors>;
 type GoalEvents = Parameters<typeof buildWeeklyCountsMap>[1];
+
+// ── M9 Phase 2: query-layer seam ──────────────────────────────────────────────
+// This screen READS from lib/data/ (React Query) but its child sections and the
+// pure progress/weekly helpers are typed against the old domain models in `types/`.
+// The strangler seam is bridged HERE: query rows (GoalRow/MarkRow/MarkEventRow) are
+// mapped to the old `Goal`/`Mark`/`MarkEvent` shapes so rendering stays byte-for-byte
+// identical. Adapters mirror app/(tabs)/goals.tsx (Task 1) — kept local, not shared,
+// on purpose; Phase 3 deletes both copies with the seam. Writes still flow through
+// the stores. Marks resolve THROUGH LINKS (useMarks / useMarksByGoal), never goal_id.
+
+/** Stable empty references so an unresolved query keeps memo identity. */
+const EMPTY_MARK_ROWS: MarkRow[] = [];
+const EMPTY_MARKS_BY_GOAL: Record<string, MarkRow[]> = {};
+const EMPTY_CHECKIN_ROWS: MarkEventRow[] = [];
+const EMPTY_GOAL_ROWS: GoalRow[] = [];
+
+type GoalProgress = {
+  progress: number;
+  threshold: number;
+  target: number | null;
+  canComplete: boolean;
+  readyToClaim: boolean;
+};
+
+/** Mirrors the old store's not-found fallback (goalsSlice.getGoalProgress). */
+const ZERO_PROGRESS: GoalProgress = {
+  progress: 0,
+  threshold: 7,
+  target: null,
+  canComplete: false,
+  readyToClaim: false,
+};
+
+function toGoal(row: GoalRow, linkedMarkIds: string[]): Goal {
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    title: row.title,
+    description: row.description ?? undefined,
+    icon: row.icon ?? undefined,
+    color: row.color ?? undefined,
+    sort_index: row.sort_index,
+    status: row.status as Goal['status'],
+    target_mark_count: row.target_mark_count,
+    current_mark_count: row.current_mark_count,
+    deadline_date: row.deadline_date,
+    // The server dropped `target_date`; the old store kept it in lock-step with
+    // `deadline_date`, so mirroring it keeps the rendered deadline identical.
+    target_date: row.deadline_date,
+    completed_at: row.completed_at,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    milestones_fired: Array.isArray(row.milestones_fired)
+      ? (row.milestones_fired as string[])
+      : undefined,
+    banked_momentum_days: row.banked_momentum_days,
+    // Projected from live goal_mark_links (via useMarks), exactly as the old store
+    // projected it on fetch — the link-based read this phase preserves.
+    linked_mark_ids: linkedMarkIds,
+    tier: (row.tier ?? undefined) as TierId | undefined,
+    frequency: (row.frequency ?? undefined) as FrequencyId | undefined,
+    deleted_at: row.deleted_at,
+  };
+}
+
+function toMark(row: MarkRow): Mark {
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    name: row.name,
+    emoji: row.emoji ?? undefined,
+    color: row.color ?? undefined,
+    unit: (row.unit ?? 'sessions') as Mark['unit'],
+    enable_streak: row.enable_streak ?? false,
+    sort_index: row.sort_index ?? 0,
+    total: row.total ?? 0,
+    last_activity_date: row.last_activity_date ?? undefined,
+    deleted_at: row.deleted_at,
+    created_at: row.created_at ?? '',
+    updated_at: row.updated_at ?? '',
+    maintenance_of: row.maintenance_of,
+    frequency_min: row.frequency_min,
+    frequency_recommended: row.frequency_recommended,
+    frequency_max: row.frequency_max,
+    weekly_target: row.weekly_target,
+    dailyTarget: row.dailyTarget,
+    frequency_kind: row.frequency_kind as FrequencyKind | null,
+  };
+}
+
+function toMarkEvent(row: MarkEventRow): MarkEvent {
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    mark_id: row.mark_id,
+    event_type: row.event_type as MarkEvent['event_type'],
+    amount: row.amount ?? 1,
+    occurred_at: row.occurred_at,
+    occurred_local_date: row.occurred_local_date,
+    meta: (row.meta ?? undefined) as Record<string, unknown> | undefined,
+    deleted_at: row.deleted_at,
+    created_at: row.created_at ?? '',
+    updated_at: row.updated_at ?? '',
+  };
+}
+
+/** Exact reproduction of the old `goalsSlice.getGoalProgress` selector, computed
+ *  over query data instead of store state. Same three lib functions, same
+ *  arithmetic — the rendered ring numbers must not move. */
+function computeGoalProgress(goal: Goal, events: MarkEvent[], marks: MarkRow[]): GoalProgress {
+  const progress = calculateGoalProgress(goal, events, marks);
+  const unlock = calculateUnlockThreshold(goal);
+  const target = goalCommitmentTarget(goal);
+  return {
+    progress,
+    threshold: target ?? unlock,
+    target,
+    canComplete: progress >= unlock,
+    readyToClaim: target !== null && progress >= target,
+  };
+}
 
 // ── Sections (QC2-C retry #1, fallow complexity gate) ───────────────────────
 // The screen body decomposes into small same-file components per the FU-6
@@ -265,14 +399,16 @@ function LinkMarkSheet({
   c,
   visible,
   candidates,
-  goalTitleById,
+  heldByTitleForMark,
   onPick,
   onClose,
 }: {
   c: ThemeColors;
   visible: boolean;
   candidates: Mark[];
-  goalTitleById: (goalId: string | null | undefined) => string | undefined;
+  // M9 Phase 2: the candidate's current goal is resolved THROUGH LINKS by the
+  // parent (never `mark.goal_id`), so the sheet takes the title by mark id.
+  heldByTitleForMark: (markId: string) => string | undefined;
   onPick: (markId: string) => void;
   onClose: () => void;
 }) {
@@ -293,7 +429,7 @@ function LinkMarkSheet({
                 // Batch 2: the mark's own accent (unique per icon), not the
                 // category's — five marks in a goal must be tellable apart.
                 const accent = resolveMarkAccent({ name: mark.name, emoji: mark.emoji, color: mark.color });
-                const heldBy = goalTitleById(mark.goal_id);
+                const heldBy = heldByTitleForMark(mark.id);
                 return (
                   <TouchableOpacity
                     key={mark.id}
@@ -838,9 +974,17 @@ export default function GoalDetailScreen() {
 
   const { isProUnlocked } = useIapSubscriptions();
 
-  const goal = useGoalsStore(s => s.goals.find(g => g.id === id));
-  const goals = useGoalsStore(s => s.goals);
-  const marks = useMarksStore(s => s.marks);
+  const goalId = id ?? '';
+
+  // ── Reads: lib/data/ query layer (M9 Phase 2) ─────────────────────────────
+  const goalQuery = useGoal(goalId);
+  const marksQuery = useMarks(goalId);          // this goal's marks, THROUGH LINKS (T6)
+  const allMarksQuery = useMarksForUser();      // every live mark — link candidates
+  const marksByGoalQuery = useMarksByGoal();    // link map — held-by / previous goal
+  const checkinsQuery = useUserCheckins();      // events for weekly + progress math
+  const goalsQuery = useGoals();                // other goals' titles for the link sheet
+
+  // ── Writes: still the old stores (untouched; bridged on persist) ──────────
   const updateMark = useMarksStore(s => s.updateMark);
   const linkMarkToGoal = useGoalsStore(s => s.linkMarkToGoal);
   const unlinkMarkFromGoal = useGoalsStore(s => s.unlinkMarkFromGoal);
@@ -848,9 +992,25 @@ export default function GoalDetailScreen() {
   const updateGoalTargetDate = useGoalsStore(s => s.updateGoalTargetDate);
   const completeGoal = useGoalsStore(s => s.completeGoal);
   const deleteGoal = useGoalsStore(s => s.deleteGoal);
-  const getGoalProgress = useGoalsStore(s => s.getGoalProgress);
 
-  const allEvents = useEventsStore((s) => s.events);
+  const goalRow = goalQuery.data ?? null;
+  const linkedMarkRows = marksQuery.data ?? EMPTY_MARK_ROWS;
+  const allMarkRows = allMarksQuery.data ?? EMPTY_MARK_ROWS;
+  const marksByGoalMap = marksByGoalQuery.data ?? EMPTY_MARKS_BY_GOAL;
+  const checkinRows = checkinsQuery.data ?? EMPTY_CHECKIN_ROWS;
+  const goalRows = goalsQuery.data ?? EMPTY_GOAL_ROWS;
+
+  // Adapt query rows to the old domain models the sections + pure helpers expect.
+  const linkedMarkIds = useMemo(() => linkedMarkRows.map((m) => m.id), [linkedMarkRows]);
+  const goal = useMemo<Goal | undefined>(
+    () => (goalRow ? toGoal(goalRow, linkedMarkIds) : undefined),
+    [goalRow, linkedMarkIds],
+  );
+  // This goal's linked marks (old Mark shape); sort_index order comes from the query.
+  const linkedMarks = useMemo<Mark[]>(() => linkedMarkRows.map(toMark), [linkedMarkRows]);
+  // The user's live check-ins as MarkEvent[] — the array the old eventsSlice exposed.
+  const allEvents = useMemo<MarkEvent[]>(() => checkinRows.map(toMarkEvent), [checkinRows]);
+
   const appDateKey = useAppDateStore(selectAppDateKey);
   const momentumSnapshot = useMomentumStore((s) => (id ? s.snapshots[id] : undefined));
   const longestRunEntry = useMomentumStore((s) => (id ? s.longestRuns[id] : undefined));
@@ -880,40 +1040,59 @@ export default function GoalDetailScreen() {
     setEditingTitle(false);
   }, [titleDraft, id, updateGoalTitle]);
 
-  const linkedMarks = useMemo(
-    () => marks.filter(m => m.goal_id === id && !m.deleted_at),
-    [marks, id],
+  // QC4-L: candidates to link = every live mark not already linked to this goal.
+  // M9 Phase 2: resolved THROUGH LINKS (all live marks minus this goal's linked
+  // set), never `mark.goal_id`. A candidate already linked to another goal MOVES —
+  // the sheet names that goal (heldByTitleForMark) rather than doing it quietly.
+  const linkedIdSet = useMemo(() => new Set(linkedMarkIds), [linkedMarkIds]);
+  const linkCandidates = useMemo<Mark[]>(
+    () => allMarkRows.filter((m) => !linkedIdSet.has(m.id)).map(toMark),
+    [allMarkRows, linkedIdSet],
   );
 
-  // QC4-L: candidates to link = every live mark not already on this goal. A
-  // mark carries one goal_id, so a candidate already on another goal MOVES —
-  // the sheet names that goal rather than letting it happen quietly.
-  const linkCandidates = useMemo(
-    () => marks.filter(m => !m.deleted_at && m.goal_id !== id),
-    [marks, id],
+  // markId → the goal currently holding it, from the live link map (useMarksByGoal),
+  // so "moves it here" reads goal_mark_links, not the retired goal_id column.
+  const markHolderGoalId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const [gid, list] of Object.entries(marksByGoalMap)) {
+      for (const m of list) if (!map.has(m.id)) map.set(m.id, gid);
+    }
+    return map;
+  }, [marksByGoalMap]);
+
+  const goalTitleByGoalId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const g of goalRows) map.set(g.id, g.title);
+    return map;
+  }, [goalRows]);
+
+  const heldByTitleForMark = useCallback(
+    (markId: string) => {
+      const gid = markHolderGoalId.get(markId);
+      return gid ? goalTitleByGoalId.get(gid) : undefined;
+    },
+    [markHolderGoalId, goalTitleByGoalId],
   );
 
-  const goalTitleById = useCallback(
-    (goalId: string | null | undefined) =>
-      goalId ? goals.find(g => g.id === goalId)?.title : undefined,
-    [goals],
-  );
-
-  // The real gate from lib/gating.ts — free is 4 marks per goal, Livra+ lifts
-  // it. Control itself is never premium: unlink, manage and choose stay free at
-  // any tier; only the cap on how many is a Livra+ line.
-  // Only the PER-GOAL cap applies here: linking moves a mark that already exists,
-  // so the account-wide ceiling (FREE_MARK_CEILING) cannot be crossed by linking.
+  // The real gate from lib/gating.ts — free is 4 marks per goal, Livra+ lifts it.
+  // Control itself is never premium: unlink, manage and choose stay free at any
+  // tier; only the cap on how many is a Livra+ line. Only the PER-GOAL cap applies
+  // here (linking moves an existing mark, so the account ceiling can't be crossed);
+  // the count is this goal's live linked marks (through links, not goal_id).
   const canLinkMore = useMemo(
-    () => canAddMarkToGoal(isProUnlocked, countMarksInGoal(marks, id ?? '')),
-    [isProUnlocked, marks, id],
+    () => canAddMarkToGoal(isProUnlocked, linkedMarks.length),
+    [isProUnlocked, linkedMarks.length],
   );
 
-  // M4 (PL-5): a goal that never had a mark gets day-one copy; a goal whose
-  // marks were all deleted (or that has logged history) gets the return copy.
+  // M4 (PL-5): a goal that never had a mark gets day-one copy; a goal whose marks
+  // were all removed gets the return copy. deriveGoalDetailEmptyVariant filters by
+  // goal_id, which query marks do not carry — but the store `marks` it read were
+  // already deleted-filtered, so it resolved to firstRun exactly when the empty
+  // state shows (no live marks on the goal). Query marks yield the same firstRun,
+  // so the rendered empty copy is unchanged.
   const emptyMarksLine = useMemo(
-    () => getEmptyStateCopy('goalDetail', deriveGoalDetailEmptyVariant(id ?? '', marks, allEvents)).body,
-    [id, marks, allEvents],
+    () => getEmptyStateCopy('goalDetail', deriveGoalDetailEmptyVariant(goalId, allMarkRows, allEvents)).body,
+    [goalId, allMarkRows, allEvents],
   );
 
   // ── Weekly state (same machinery Focus uses) ──────────────────────────────
@@ -971,7 +1150,11 @@ export default function GoalDetailScreen() {
   const handleLinkExisting = useCallback(
     async (markId: string) => {
       setShowLinkSheet(false);
-      const previousGoalId = marks.find(m => m.id === markId)?.goal_id ?? null;
+      // Which goal currently holds this mark — resolved THROUGH LINKS (the live
+      // goal_mark_links map), not the retired `mark.goal_id`. Same move semantics:
+      // a mark on another goal is unlinked there first. The `updateMark` below still
+      // writes the legacy goal_id column so non-migrated surfaces stay in step.
+      const previousGoalId = markHolderGoalId.get(markId) ?? null;
       try {
         if (previousGoalId && previousGoalId !== id) {
           await unlinkMarkFromGoal(previousGoalId, markId);
@@ -983,7 +1166,7 @@ export default function GoalDetailScreen() {
         showError('Could not link that mark. Try again.');
       }
     },
-    [marks, id, unlinkMarkFromGoal, updateMark, linkMarkToGoal, showError],
+    [markHolderGoalId, id, unlinkMarkFromGoal, updateMark, linkMarkToGoal, showError],
   );
 
   // The honest version. Unlinking leaves every logged event intact on the mark
@@ -1011,6 +1194,26 @@ export default function GoalDetailScreen() {
     [id, unlinkMarkFromGoal, updateMark, showError],
   );
 
+  // Progress reproduced from query data (replaces the retired goalsSlice.getGoalProgress
+  // selector). Same three lib functions over the same inputs — the ring must not move.
+  const goalProgress = useMemo<GoalProgress>(
+    () => (goal ? computeGoalProgress(goal, allEvents, linkedMarkRows) : ZERO_PROGRESS),
+    [goal, allEvents, linkedMarkRows],
+  );
+
+  // First-load gate (M9 Phase 2): the goal and its marks come from the query layer
+  // now, so hold the missing-entity guard until those first fetches settle —
+  // otherwise a cold open would flash "Goal not found" before the goal resolves.
+  // Background refetches (bridges, pull-to-refresh) keep isLoading false, so they
+  // never blank the screen.
+  if (goalQuery.isLoading || marksQuery.isLoading) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: c.linen, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator color={c.inkMuted} />
+      </SafeAreaView>
+    );
+  }
+
   if (!goal) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: c.linen, alignItems: 'center', justifyContent: 'center' }}>
@@ -1022,7 +1225,7 @@ export default function GoalDetailScreen() {
     );
   }
 
-  const { progress, threshold, canComplete, readyToClaim } = getGoalProgress(id!);
+  const { progress, threshold, canComplete, readyToClaim } = goalProgress;
   const framing = goalWeekFraming(goal);
   const weekLabel = framing ? `week ${framing.week} of ${framing.totalWeeks}` : null;
 
@@ -1055,7 +1258,10 @@ export default function GoalDetailScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn}>
           <X size={22} color={c.inkDark} weight="bold" />
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => setEditingTitle(true)} style={styles.headerBtnRight}>
+        <TouchableOpacity
+          onPress={() => { setTitleDraft(goal.title); setEditingTitle(true); }}
+          style={styles.headerBtnRight}
+        >
           <PencilSimple size={20} color={c.inkMuted} weight="duotone" />
         </TouchableOpacity>
       </View>
@@ -1121,7 +1327,7 @@ export default function GoalDetailScreen() {
         c={c}
         visible={showLinkSheet}
         candidates={linkCandidates}
-        goalTitleById={goalTitleById}
+        heldByTitleForMark={heldByTitleForMark}
         onPick={(markId) => { void handleLinkExisting(markId); }}
         onClose={() => setShowLinkSheet(false)}
       />
