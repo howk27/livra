@@ -32,6 +32,8 @@ import { useGoalNotesStore } from '../../../state/goalNotesSlice';
 // bridgeGoalNoteRemoved (see lib/data/bridge.ts).
 import { useGoal } from '@/lib/data/goals';
 import { useGoalNotes } from '@/lib/data/notes';
+import { asDataError } from '@/lib/data/errors';
+import { dataErrorCopy } from '@/lib/copy';
 import { useAuth } from '../../../hooks/useAuth';
 import { getAppDate } from '../../../lib/appDate';
 import { formatDate } from '../../../lib/date';
@@ -164,9 +166,7 @@ export default function GoalJournalScreen() {
   const notesQuery = useGoalNotes(id ?? '');
   const goal = goalQuery.data ?? null;
   const loading = notesQuery.isLoading;
-  const readError = notesQuery.error
-    ? 'Could not load your journal entries. Check your connection and try again.'
-    : null;
+  const readError = dataErrorCopy(asDataError(notesQuery.error));
 
   // Writes still go through the store; its cloud-backup hint stays with them.
   const cloudError = useGoalNotesStore((s) => s.goalNotesCloudError);

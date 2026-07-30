@@ -38,7 +38,10 @@ interface RetryQueueItem {
 import { cleanupDuplicateCounters, cleanupOrphanedStreaksAndBadges, cleanupOrphanedEvents } from '../lib/db/cleanup';
 import { mapStreaksToSupabase, mapBadgesToSupabase, mapEventsToSupabase } from '../lib/sync/mappers';
 import { pushGoalsAndLinks, pullGoalsAndLinks } from '../lib/sync/goalsSync';
-import { GOAL_LIMIT_MESSAGE } from '../lib/copy';
+import { GOAL_LIMIT_MESSAGE, DATA_ERROR_COPY, dataErrorCopy } from '../lib/copy';
+// M9 Phase 3, T3: the classifier lives beside the existing sync-error helpers
+// (isProLimitError / isQuarantinableMarkRejection) rather than replacing them.
+import { toDataError } from '../lib/data/errors';
 import {
   readMarkCapBlockedIds,
   addMarkCapBlockedIds,
@@ -2098,9 +2101,19 @@ export const useSync = () => {
         ]);
       } catch (error) {
         const parsedError = parseError(error || 'Unknown error occurred during sync');
+        // M9 Phase 3, T3 — THIS is the line T3 was filed against. `parsedError.message`
+        // is raw server text and it went straight into `syncState.error`, which
+        // `app/(tabs)/settings.tsx` hands to `showError()` — so a Postgres string
+        // reached the user as a toast. Classified copy replaces it; the raw text
+        // still goes to the logger a few lines below, which is where it belongs.
+        //
+        // Fixed at the WRITE site, not the render site, because the render site only
+        // ever had a string — re-parsing it in the UI is what the spec forbids.
+        const classified = toDataError(error);
+        const userFacing = dataErrorCopy(classified) ?? DATA_ERROR_COPY.unknown;
         const errorMessage = (parsedError.isNetworkError || parsedError.shouldRetry)
-          ? `${parsedError.message}. Sync will retry automatically.`
-          : parsedError.message;
+          ? `${userFacing} Sync will retry automatically.`
+          : userFacing;
         
         setSyncState((prev) => ({
           ...prev,

@@ -35,6 +35,8 @@ import { useAuth } from '../../hooks/useAuth';
 import { useGoalsStore } from '../../state/goalsSlice';
 import { useGoals } from '@/lib/data/goals';
 import { useMarksByGoal } from '@/lib/data/marks';
+import { asDataError } from '@/lib/data/errors';
+import { dataErrorCopy } from '@/lib/copy';
 import { useUserCheckins } from '@/lib/data/checkins';
 import { currentWeekDates, computeCompletionsThisWeek } from '../../lib/features';
 import {
@@ -603,10 +605,11 @@ export default function GoalsScreen() {
   const completedCount = useMemo(() => getCompletedGoals(goals).length, [goals]);
 
   // The gate below (`isLoading && active.length === 0`) shows the skeleton only on
-  // an empty first load; a query error renders the store's fixed user-facing copy,
-  // never the raw DataError.
+  // an empty first load. The error line is the CLASSIFIED copy (M9 Phase 3, T3) —
+  // one source for every data failure in the app, instead of a per-screen string
+  // that says "try again" whether the cause was offline, expired or refused.
   const isLoading = goalsQuery.isLoading;
-  const error = goalsQuery.error ? 'Could not load your goals. Try again.' : null;
+  const error = dataErrorCopy(asDataError(goalsQuery.error));
 
   // Pull to refresh. Held on its own flag rather than `isLoading`: the loading flag
   // drives the skeleton, and showing both at once would replace the list the user

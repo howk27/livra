@@ -17,8 +17,11 @@ import { logger } from '@/lib/utils/logger';
  */
 export type DataErrorKind =
   | 'network' // request never reached the server (offline / fetch failure)
-  | 'unauthorized' // no session, 401/403, or RLS refusal (Postgres 42501)
+  | 'auth_expired' // the SESSION is gone — 401 / PGRST301. Answered by signing in.
+  | 'permission' // the server REFUSED a permitted-looking request — Postgres 42501.
+  | 'limit_reached' // an explicit free-tier raise — P0001 / FREE_COUNTER_LIMIT_REACHED
   | 'not_found' // an expected single row was absent
+  | 'conflict' // unique violation (23505) — the row is already there
   | 'server' // PostgREST/Postgres returned an error that is none of the above
   | 'unknown'; // unclassified — the honest default, never a guess
 
@@ -42,19 +45,32 @@ export interface DataError {
  */
 export const DATA_ERROR_RETRIABLE: Record<DataErrorKind, boolean> = {
   network: true,
-  unauthorized: false,
+  auth_expired: false,
+  // A refusal repeats identically until something changes server-side. Retrying it
+  // is the poison-pill shape this project already paid for once (2026-07-26).
+  permission: false,
+  limit_reached: false,
   not_found: false,
+  // The row is already there — a retry would refuse again, and it is not a failure
+  // worth chasing.
+  conflict: false,
   server: true,
   unknown: false,
 };
 
-/** Safe default messages. Not user copy (Phase 3 owns that) — just a legible label. */
+/**
+ * Safe LOG labels — not user copy. User copy is `DATA_ERROR_COPY` in `lib/copy.ts`
+ * (one exhaustive record per concern, both in shipped modules `tsc` reads).
+ */
 const SAFE_MESSAGE: Record<DataErrorKind, string> = {
   network: 'The device is offline or the request could not reach the server.',
-  unauthorized: 'The request was not permitted for the current session.',
+  auth_expired: 'The session is missing or expired.',
+  permission: 'The server refused the request (RLS or grant).',
+  limit_reached: 'A free-tier limit refused the write.',
   not_found: 'The requested record was not found.',
+  conflict: 'A row with that identity already exists.',
   server: 'The server rejected the request.',
-  unknown: 'An unexpected error occurred while reading data.',
+  unknown: 'An unexpected error occurred.',
 };
 
 export function isDataError(value: unknown): value is DataError {
@@ -70,6 +86,20 @@ export function isDataError(value: unknown): value is DataError {
 
 export function isRetriableDataError(error: DataError): boolean {
   return DATA_ERROR_RETRIABLE[error.kind];
+}
+
+/**
+ * Narrow a React Query `error` (typed `Error`, actually a `DataError` because every
+ * `queryFn` throws through `toDataError`) for copy lookup.
+ *
+ * PURE — it never logs. `toDataError` is the classify-and-log entry point and runs
+ * once, where the failure happens; this runs on every render of a failed screen, so
+ * logging here would write the same line hundreds of times.
+ */
+export function asDataError(raw: unknown): DataError | null {
+  if (raw === null || raw === undefined) return null;
+  if (isDataError(raw)) return raw;
+  return { kind: 'unknown', message: SAFE_MESSAGE.unknown };
 }
 
 /** Postgres/PostgREST error code, if the raw value carries one. */
@@ -94,6 +124,19 @@ function errorMessage(raw: unknown): string {
   return String(raw);
 }
 
+/** PostgREST puts the plpgsql message in `message` and the rest in `details`/`hint`. */
+function errorDetail(raw: unknown): string {
+  if (typeof raw !== 'object' || raw === null) return '';
+  const parts: string[] = [];
+  for (const field of ['details', 'hint'] as const) {
+    if (field in raw) {
+      const v = (raw as Record<string, unknown>)[field];
+      if (typeof v === 'string') parts.push(v);
+    }
+  }
+  return parts.join(' ');
+}
+
 function isNetworkFailure(raw: unknown): boolean {
   const name = errorName(raw);
   if (name === 'AuthRetryableFetchError' || name === 'FunctionsFetchError') return true;
@@ -104,16 +147,42 @@ function isNetworkFailure(raw: unknown): boolean {
   );
 }
 
+/**
+ * The explicit free-tier raise, as `enforce_free_counter_limit` emits it. Postgres
+ * gives every `RAISE EXCEPTION` without an explicit SQLSTATE the code `P0001`, so
+ * the code alone says only "a trigger raised"; the sentinel in the message is what
+ * identifies WHICH one. Both must match — a bare `P0001` is a `server` error.
+ */
+function isFreeTierRaise(raw: unknown): boolean {
+  if (errorCode(raw) !== 'P0001') return false;
+  const text = `${errorMessage(raw)} ${errorDetail(raw)}`;
+  return /FREE_COUNTER_LIMIT_REACHED/i.test(text) || /free tier/i.test(text);
+}
+
 function classify(raw: unknown): DataErrorKind {
   if (isNetworkFailure(raw)) return 'network';
+  if (isFreeTierRaise(raw)) return 'limit_reached';
 
   const code = errorCode(raw);
   if (code) {
-    // Postgres permission denied (RLS) and PostgREST auth failures.
-    if (code === '42501' || code === 'PGRST301' || code === '401') return 'unauthorized';
+    // The SESSION is gone. Distinct from 42501 below, and the distinction is the
+    // whole point: this one is answered by signing in, that one is not.
+    if (code === 'PGRST301' || code === '401') return 'auth_expired';
+    // Postgres "permission denied" — a policy or grant refused a request that the
+    // client had every reason to believe was allowed.
+    //
+    // 42501 IS NOT EXCLUSIVELY THE FREE-TIER CAP. That judgement is recorded in
+    // fec1618 and stands: the restrictive RLS layer raises it, and so would a real
+    // permission bug. Copy for this kind must not claim to know which.
+    if (code === '42501') return 'permission';
     // PostgREST "no rows" from `.single()`.
     if (code === 'PGRST116') return 'not_found';
-    // Any other PostgREST error, or a 5-char SQLSTATE, is a real server error.
+    // Unique violation — for our writes (client-generated uuids) this means the row
+    // is already there, which is usually a replay, not a failure.
+    if (code === '23505') return 'conflict';
+    // Any other PostgREST error, or a 5-char SQLSTATE, is a real server error. This
+    // deliberately absorbs PGRST205 (table missing — a schema/deploy skew the user
+    // cannot act on) and 23503 (foreign key / parent-missing).
     if (/^PGRST/.test(code) || /^[0-9A-Z]{5}$/.test(code)) return 'server';
   }
   return 'unknown';
@@ -126,7 +195,7 @@ function classify(raw: unknown): DataErrorKind {
 export function toDataError(raw: unknown): DataError {
   if (isDataError(raw)) return raw;
   const kind = classify(raw);
-  logger.error('[data] read failed', {
+  logger.error('[data] request failed', {
     kind,
     name: errorName(raw) || undefined,
     code: errorCode(raw) || undefined,

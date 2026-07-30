@@ -8,6 +8,9 @@ import { FREE_MARKS_PER_GOAL, FREE_MARK_CEILING } from './gating';
 // Type-only: erased at build time, so this file still has no runtime dependency
 // on the AI module. See GENERATION_ERROR_COPY below for why it is imported.
 import type { GenerationFailReason } from './ai/goalGeneration';
+// Type-only for the same reason: the exhaustiveness constraint on DATA_ERROR_COPY
+// must sit in a file tsc reads, and this keeps lib/copy.ts runtime-free of lib/data.
+import type { DataErrorKind } from './data/errors';
 
 // ─── Momentum at-risk warning copy (Phase 1.3) ──────────────────────────────
 // No dashes. Offer-framed with a rest-out. Rotate, never the same template twice in a row.
@@ -155,6 +158,47 @@ export const GENERATION_ERROR_COPY: Record<GenerationFailReason, string> = {
   network_error: 'Couldn’t reach Livra AI. Check your connection or continue manually.',
   goal_too_short: '',
 } as const;
+
+// ─── Data-layer failure copy (M9 Phase 3, T3) ────────────────────────────────
+//
+// THE ONLY user-facing words for a failed read or write. A raw error never leaves
+// `lib/data/` (Spec §6): `toDataError` classifies it and the raw text goes to the
+// logger, then a screen asks for the line below. `tests/unit/errorClassifier.test.ts`
+// fails if a screen renders `error.message` into UI instead.
+//
+// KEYED ON THE UNION, in a file `tsc` compiles, for the same reason GENERATION_ERROR_COPY
+// above lives here rather than in a test: `tsconfig.json` excludes `tests/**`.
+// `import type` is erased, so this adds no runtime dependency on the data layer.
+// CONFIRMED 2026-07-30: deleting `conflict` from this record produces
+// `lib/copy.ts TS2741: Property 'conflict' is missing`, the same failure b503cfa's
+// test-file record could not produce.
+//
+// Each line says what happened and what to do about it, and none of them apologises
+// or guesses. Two deliberate restraints:
+//   · `permission` does NOT claim to be the free-tier cap. 42501 comes from the
+//     restrictive RLS layer AND from a genuine permission bug (fec1618), so naming
+//     the cap would be a confident lie in the second case.
+//   · `network` promises no later sync. The offline queue is Phase 4; until it
+//     exists, "it will sync when you're back" is not true of a write.
+export const DATA_ERROR_COPY: Record<DataErrorKind, string> = {
+  network: 'No connection. Check your network and try again.',
+  auth_expired: 'Your session ended. Sign in again to pick up where you left off.',
+  // No dash: `tests/unit/copyDashRule.test.ts` bans em and en dashes in this file,
+  // and it caught this line on the first run.
+  permission:
+    'That change was not allowed. You may be at a free plan limit. If not, sign in again and retry.',
+  limit_reached: 'You’re at a free plan limit. Free up a slot, or Livra+ opens unlimited goals and marks.',
+  not_found: 'That’s not here anymore. It may have been removed on another device.',
+  conflict: 'That’s already saved. Pull down to refresh and it will show up.',
+  server: 'Livra couldn’t finish that. Try again in a moment.',
+  unknown: 'That didn’t go through. Try again.',
+} as const;
+
+/** The user-facing line for a classified data failure. Screens call THIS, never `.message`. */
+export function dataErrorCopy(error: { kind: DataErrorKind } | null | undefined): string | null {
+  if (!error) return null;
+  return DATA_ERROR_COPY[error.kind] ?? DATA_ERROR_COPY.unknown;
+}
 
 /** Inline exhausted panel on /goal/suggest. Honest, never a wall: manual stays free. */
 export const AI_EXHAUSTED_COPY = {

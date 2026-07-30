@@ -160,7 +160,11 @@ describe('notes reads goal_notes', () => {
 describe('errors never leak raw text', () => {
   it('a Postgres error becomes a typed DataError and is thrown', async () => {
     install([{ data: null, error: { code: '42501', message: 'permission denied for table marks' } }]);
-    await expect(fetchGoals()).rejects.toMatchObject({ kind: 'unauthorized' });
+    // M9 Phase 3 (T3) SPLIT the old `unauthorized` kind: 42501 is a REFUSAL
+    // (`permission`) and is answered by nothing the user can type, while a missing
+    // session is `auth_expired` and is answered by signing in. This assertion used
+    // to read 'unauthorized' and was updated with the split, not around it.
+    await expect(fetchGoals()).rejects.toMatchObject({ kind: 'permission' });
     // The thrown value carries NO raw Postgres text.
     await install([{ data: null, error: { code: '42501', message: 'permission denied for table marks' } }]);
     try {
@@ -172,7 +176,12 @@ describe('errors never leak raw text', () => {
   });
 
   it('classifies the seed set of failures', () => {
-    expect(toDataError({ code: '42501' }).kind).toBe('unauthorized');
+    expect(toDataError({ code: '42501' }).kind).toBe('permission');
+    expect(toDataError({ code: 'PGRST301' }).kind).toBe('auth_expired');
+    expect(toDataError({ code: '23505' }).kind).toBe('conflict');
+    expect(toDataError({ code: 'P0001', message: 'FREE_COUNTER_LIMIT_REACHED' }).kind).toBe(
+      'limit_reached',
+    );
     expect(toDataError({ code: 'PGRST116' }).kind).toBe('not_found');
     expect(toDataError({ code: 'PGRST200' }).kind).toBe('server');
     expect(toDataError(new TypeError('Network request failed')).kind).toBe('network');
@@ -181,10 +190,20 @@ describe('errors never leak raw text', () => {
 
   it('retriability is defined for every kind (exhaustive)', () => {
     expect(Object.keys(DATA_ERROR_RETRIABLE).sort()).toEqual(
-      ['network', 'not_found', 'server', 'unauthorized', 'unknown'].sort(),
+      [
+        'network',
+        'auth_expired',
+        'permission',
+        'limit_reached',
+        'not_found',
+        'conflict',
+        'server',
+        'unknown',
+      ].sort(),
     );
     expect(isRetriableDataError({ kind: 'network', message: '' })).toBe(true);
-    expect(isRetriableDataError({ kind: 'unauthorized', message: '' })).toBe(false);
+    expect(isRetriableDataError({ kind: 'permission', message: '' })).toBe(false);
+    expect(isRetriableDataError({ kind: 'auth_expired', message: '' })).toBe(false);
   });
 });
 

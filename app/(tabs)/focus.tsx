@@ -85,6 +85,8 @@ import type { Goal } from '../../types/goal';
 import { useMarksForUser, useMarksByGoal } from '@/lib/data/marks';
 import { useUserCheckins } from '@/lib/data/checkins';
 import { useGoals } from '@/lib/data/goals';
+import { asDataError } from '@/lib/data/errors';
+import { dataErrorCopy } from '@/lib/copy';
 // `MarkRow` here is the components/ui/MarkRow VALUE import; the data-layer row
 // type is aliased to avoid the name collision.
 import type { GoalRow, MarkRow as MarkRowData, MarkEventRow } from '@/lib/data/types';
@@ -185,11 +187,12 @@ export default function FocusScreen() {
   const goalsQuery = useGoals();
   const marksByGoalQuery = useMarksByGoal();
 
-  // `loading` gated the skeleton on marks-loading (old countersSlice.loading);
-  // `error` surfaced the store's error string — now the query's safe DataError
-  // message (never raw Postgres). Both preserve the existing render paths.
+  // `loading` gated the skeleton on marks-loading (old countersSlice.loading).
+  // `error` renders the CLASSIFIED line for the failure (M9 Phase 3, T3). It used
+  // to render `marksQuery.error.message`, which is the data layer's LOG label —
+  // safe, but written for a logger, not for a person reading a Focus screen.
   const loading = marksQuery.isLoading;
-  const error = marksQuery.error ? marksQuery.error.message : null;
+  const error = dataErrorCopy(asDataError(marksQuery.error));
 
   const counters = useMemo<Counter[]>(
     () => (marksQuery.data ?? EMPTY_MARK_ROWS).map(toMark),
