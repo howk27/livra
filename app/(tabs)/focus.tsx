@@ -28,7 +28,6 @@ import { confirm, actionSheet } from '../../components/ui/overlays';
 import { useCounters } from '../../hooks/useCounters';
 import { useAuth } from '../../hooks/useAuth';
 import { useSync } from '../../hooks/useSync';
-import { useEventsStore } from '../../state/eventsSlice';
 import { useAppDateStore, selectAppDateKey } from '../../state/appDateSlice';
 import { useGoalsStore } from '../../state/goalsSlice';
 import { useMarksStore } from '../../state/countersSlice';
@@ -51,7 +50,6 @@ import { getAppDate } from '../../lib/appDate';
 import { getActiveGoals } from '../../lib/goalLogic';
 import { formatDate } from '../../lib/date';
 import { resolveDailyTarget } from '../../lib/markDailyTarget';
-import { partitionMarks } from '../../lib/maintenanceMarks';
 import { dayJustCompleted } from '../../lib/motionTriggers';
 import {
   currentWeekDates,
@@ -81,7 +79,96 @@ import {
   SpotlightGoalCard,
 } from '../../components/focus/GoalCards';
 
-import type { Counter } from '../../types';
+import type { Counter, Mark, MarkEvent, FrequencyKind } from '../../types';
+import type { Goal } from '../../types/goal';
+// M9 Phase 2 Task 4 — reads come from the query layer; writes stay in the stores.
+import { useMarksForUser, useMarksByGoal } from '@/lib/data/marks';
+import { useUserCheckins } from '@/lib/data/checkins';
+import { useGoals } from '@/lib/data/goals';
+// `MarkRow` here is the components/ui/MarkRow VALUE import; the data-layer row
+// type is aliased to avoid the name collision.
+import type { GoalRow, MarkRow as MarkRowData, MarkEventRow } from '@/lib/data/types';
+import type { TierId, FrequencyId } from '../../lib/goalMarkSuggestions';
+
+// ── Strangler seam (M9 Phase 2 Task 4) ──────────────────────────────────────
+// Query rows are adapted to the old domain models so every derivation, the pure
+// focusQueue selectors, and the JSX render identically. Adapters mirror goal
+// detail / mark detail (Tasks 2–3) verbatim — kept local, deleted with the seam
+// in Phase 3. Marks resolve to goals THROUGH goal_mark_links (useMarksByGoal),
+// never mark.goal_id.
+const EMPTY_MARK_ROWS: MarkRowData[] = [];
+const EMPTY_CHECKIN_ROWS: MarkEventRow[] = [];
+const EMPTY_GOAL_ROWS: GoalRow[] = [];
+const EMPTY_MARKS_BY_GOAL: Record<string, MarkRowData[]> = {};
+
+function toMark(row: MarkRowData): Mark {
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    name: row.name,
+    emoji: row.emoji ?? undefined,
+    color: row.color ?? undefined,
+    unit: (row.unit ?? 'sessions') as Mark['unit'],
+    enable_streak: row.enable_streak ?? false,
+    sort_index: row.sort_index ?? 0,
+    total: row.total ?? 0,
+    last_activity_date: row.last_activity_date ?? undefined,
+    deleted_at: row.deleted_at,
+    created_at: row.created_at ?? '',
+    updated_at: row.updated_at ?? '',
+    maintenance_of: row.maintenance_of,
+    frequency_min: row.frequency_min,
+    frequency_recommended: row.frequency_recommended,
+    frequency_max: row.frequency_max,
+    weekly_target: row.weekly_target,
+    dailyTarget: row.dailyTarget,
+    frequency_kind: row.frequency_kind as FrequencyKind | null,
+  };
+}
+
+function toMarkEvent(row: MarkEventRow): MarkEvent {
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    mark_id: row.mark_id,
+    event_type: row.event_type as MarkEvent['event_type'],
+    amount: row.amount ?? 1,
+    occurred_at: row.occurred_at,
+    occurred_local_date: row.occurred_local_date,
+    meta: (row.meta ?? undefined) as Record<string, unknown> | undefined,
+    deleted_at: row.deleted_at,
+    created_at: row.created_at ?? '',
+    updated_at: row.updated_at ?? '',
+  };
+}
+
+function toGoal(row: GoalRow, linkedMarkIds: string[]): Goal {
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    title: row.title,
+    description: row.description ?? undefined,
+    icon: row.icon ?? undefined,
+    color: row.color ?? undefined,
+    sort_index: row.sort_index,
+    status: row.status as Goal['status'],
+    target_mark_count: row.target_mark_count,
+    current_mark_count: row.current_mark_count,
+    deadline_date: row.deadline_date,
+    target_date: row.deadline_date,
+    completed_at: row.completed_at,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    milestones_fired: Array.isArray(row.milestones_fired)
+      ? (row.milestones_fired as string[])
+      : undefined,
+    banked_momentum_days: row.banked_momentum_days,
+    linked_mark_ids: linkedMarkIds,
+    tier: (row.tier ?? undefined) as TierId | undefined,
+    frequency: (row.frequency ?? undefined) as FrequencyId | undefined,
+    deleted_at: row.deleted_at,
+  };
+}
 
 export default function FocusScreen() {
   const theme = useEffectiveTheme();
@@ -90,7 +177,24 @@ export default function FocusScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ logMarkId?: string }>();
   const { user } = useAuth();
-  const { counters, loading, error, incrementCounter, deleteCounter } = useCounters();
+  // Writes stay in the stores; every read below comes from the query layer.
+  const { incrementCounter, deleteCounter } = useCounters();
+
+  const marksQuery = useMarksForUser();
+  const checkinsQuery = useUserCheckins();
+  const goalsQuery = useGoals();
+  const marksByGoalQuery = useMarksByGoal();
+
+  // `loading` gated the skeleton on marks-loading (old countersSlice.loading);
+  // `error` surfaced the store's error string — now the query's safe DataError
+  // message (never raw Postgres). Both preserve the existing render paths.
+  const loading = marksQuery.isLoading;
+  const error = marksQuery.error ? marksQuery.error.message : null;
+
+  const counters = useMemo<Counter[]>(
+    () => (marksQuery.data ?? EMPTY_MARK_ROWS).map(toMark),
+    [marksQuery.data],
+  );
 
   // Reconcile logs tapped in the iOS 17+ interactive widget (AppIntent queue).
   useWidgetLogSync(incrementCounter, user?.id);
@@ -99,7 +203,10 @@ export default function FocusScreen() {
   const appDateKey = useAppDateStore(selectAppDateKey);
   const todayStr = useMemo(() => formatDate(getAppDate()), [appDateKey]);
 
-  const allEvents = useEventsStore((s) => s.events);
+  const allEvents = useMemo<MarkEvent[]>(
+    () => (checkinsQuery.data ?? EMPTY_CHECKIN_ROWS).map(toMarkEvent),
+    [checkinsQuery.data],
+  );
 
   const uniqueCounters = useMemo(() => {
     const map = new Map<string, Counter>();
@@ -127,7 +234,18 @@ export default function FocusScreen() {
     return map;
   }, [allEvents, todayStr]);
 
-  const goals = useGoalsStore((s) => s.goals);
+  // Goals with linked_mark_ids projected from live goal_mark_links (useMarksByGoal),
+  // exactly as the old store projected them on fetch — the link-based read this
+  // phase preserves.
+  const goalRows = goalsQuery.data ?? EMPTY_GOAL_ROWS;
+  const marksByGoalRows = marksByGoalQuery.data ?? EMPTY_MARKS_BY_GOAL;
+  const goals = useMemo<Goal[]>(
+    () =>
+      goalRows.map((g) =>
+        toGoal(g, (marksByGoalRows[g.id] ?? EMPTY_MARK_ROWS).map((m) => m.id)),
+      ),
+    [goalRows, marksByGoalRows],
+  );
   // Focus lists EVERY active goal, in canonical sort_index order (the
   // Goals-screen drag order). It used to `.slice(0, 2)` — a free-era artifact:
   // free is capped at 2 goals, so the slice was invisible there, but it
@@ -179,6 +297,12 @@ export default function FocusScreen() {
     setRefreshing(true);
     try {
       await Promise.all([
+        // The query-backed reads the screen renders (T6 verify gesture).
+        marksQuery.refetch(),
+        checkinsQuery.refetch(),
+        goalsQuery.refetch(),
+        marksByGoalQuery.refetch(),
+        // Momentum snapshots still derive from the stores, so refresh them too.
         useMarksStore.getState().loadMarks(user.id),
         useGoalsStore.getState().fetchGoals(user.id),
       ]);
@@ -186,7 +310,7 @@ export default function FocusScreen() {
     } finally {
       setRefreshing(false);
     }
-  }, [user]);
+  }, [user, marksQuery, checkinsQuery, goalsQuery, marksByGoalQuery]);
 
   // ── Weekly state per mark ─────────────────────────────────────────────────
 
@@ -218,15 +342,32 @@ export default function FocusScreen() {
 
   // ── Grouped marks ─────────────────────────────────────────────────────────
 
+  // A goal's marks, resolved THROUGH goal_mark_links (useMarksByGoal), never
+  // mark.goal_id — the link-based association the plan's device check confirmed.
   const marksForGoal = useCallback(
-    (goalId: string) => activeCounters.filter((m) => m.goal_id === goalId),
-    [activeCounters],
+    (goalId: string): Counter[] => (marksByGoalRows[goalId] ?? EMPTY_MARK_ROWS).map(toMark),
+    [marksByGoalRows],
   );
 
-  // loose = no goal and not a maintenance habit; maintenance graduates to its own section.
-  const { loose: goallessMarks, maintenance: maintenanceMarks } = useMemo(
-    () => partitionMarks(activeCounters),
+  // The set of marks attached to ANY goal, from live links. partitionMarks keyed
+  // off the retiring mark.goal_id; links are the truth now (T6).
+  const linkedMarkIdSet = useMemo(() => {
+    const set = new Set<string>();
+    for (const rows of Object.values(marksByGoalRows)) {
+      for (const m of rows) set.add(m.id);
+    }
+    return set;
+  }, [marksByGoalRows]);
+
+  // maintenance graduates to its own section (checked first, exactly as
+  // partitionMarks did); loose = attached to no goal and not a maintenance habit.
+  const maintenanceMarks = useMemo(
+    () => activeCounters.filter((m) => m.maintenance_of),
     [activeCounters],
+  );
+  const goallessMarks = useMemo(
+    () => activeCounters.filter((m) => !m.maintenance_of && !linkedMarkIdSet.has(m.id)),
+    [activeCounters, linkedMarkIdSet],
   );
 
   // ── Spotlight queue (founder 2026-07-23) ──────────────────────────────────
