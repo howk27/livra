@@ -65,9 +65,16 @@ import { getAppDate } from '../../../lib/appDate';
 import { formatDate } from '../../../lib/date';
 import { useAppDateStore, selectAppDateKey } from '../../../state/appDateSlice';
 import { deriveStreakForMark } from '../../../hooks/useStreaks';
-import { useGoalsStore } from '../../../state/goalsSlice';
 import { CATEGORY_MAP } from '../../../components/ui/MarkRow';
 import { resolveCounterIconType } from '@/src/components/icons/IconResolver';
+// M9 Phase 2 Task 3 — reads come from the query layer; writes stay in the stores.
+import { useMark, useMarksForUser, useMarksByGoal } from '@/lib/data/marks';
+import { useUserCheckins } from '@/lib/data/checkins';
+import { useGoals } from '@/lib/data/goals';
+import type { GoalRow, MarkRow, MarkEventRow } from '@/lib/data/types';
+import type { Mark, MarkEvent, FrequencyKind } from '../../../types';
+import type { Goal } from '../../../types/goal';
+import type { TierId, FrequencyId } from '../../../lib/goalMarkSuggestions';
 
 function toLocalDateStr(d: Date): string {
   return formatDate(d);
@@ -107,6 +114,88 @@ export default function MarkDetailScreen() {
   return <MarkDetailContent key={id ?? '__no_id__'} />;
 }
 
+// ── Strangler seam (M9 Phase 2 Task 3) ──────────────────────────────────────
+// Query rows (MarkRow/MarkEventRow/GoalRow) are adapted to the old domain models
+// so every derivation and the JSX below render identically. Adapters mirror
+// app/goal/[id].tsx (Task 2) verbatim — kept local, not shared, on purpose;
+// Phase 3 deletes both copies with the seam. Writes still flow through the stores.
+// Goals resolve THROUGH LINKS (useMarksByGoal), never `mark.goal_id`.
+
+/** Stable empty references so an unresolved query keeps memo identity. */
+const EMPTY_MARK_ROWS: MarkRow[] = [];
+const EMPTY_CHECKIN_ROWS: MarkEventRow[] = [];
+const EMPTY_GOAL_ROWS: GoalRow[] = [];
+const EMPTY_MARKS_BY_GOAL: Record<string, MarkRow[]> = {};
+
+function toMark(row: MarkRow): Mark {
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    name: row.name,
+    emoji: row.emoji ?? undefined,
+    color: row.color ?? undefined,
+    unit: (row.unit ?? 'sessions') as Mark['unit'],
+    enable_streak: row.enable_streak ?? false,
+    sort_index: row.sort_index ?? 0,
+    total: row.total ?? 0,
+    last_activity_date: row.last_activity_date ?? undefined,
+    deleted_at: row.deleted_at,
+    created_at: row.created_at ?? '',
+    updated_at: row.updated_at ?? '',
+    maintenance_of: row.maintenance_of,
+    frequency_min: row.frequency_min,
+    frequency_recommended: row.frequency_recommended,
+    frequency_max: row.frequency_max,
+    weekly_target: row.weekly_target,
+    dailyTarget: row.dailyTarget,
+    frequency_kind: row.frequency_kind as FrequencyKind | null,
+  };
+}
+
+function toMarkEvent(row: MarkEventRow): MarkEvent {
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    mark_id: row.mark_id,
+    event_type: row.event_type as MarkEvent['event_type'],
+    amount: row.amount ?? 1,
+    occurred_at: row.occurred_at,
+    occurred_local_date: row.occurred_local_date,
+    meta: (row.meta ?? undefined) as Record<string, unknown> | undefined,
+    deleted_at: row.deleted_at,
+    created_at: row.created_at ?? '',
+    updated_at: row.updated_at ?? '',
+  };
+}
+
+function toGoal(row: GoalRow, linkedMarkIds: string[]): Goal {
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    title: row.title,
+    description: row.description ?? undefined,
+    icon: row.icon ?? undefined,
+    color: row.color ?? undefined,
+    sort_index: row.sort_index,
+    status: row.status as Goal['status'],
+    target_mark_count: row.target_mark_count,
+    current_mark_count: row.current_mark_count,
+    deadline_date: row.deadline_date,
+    target_date: row.deadline_date,
+    completed_at: row.completed_at,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    milestones_fired: Array.isArray(row.milestones_fired)
+      ? (row.milestones_fired as string[])
+      : undefined,
+    banked_momentum_days: row.banked_momentum_days,
+    linked_mark_ids: linkedMarkIds,
+    tier: (row.tier ?? undefined) as TierId | undefined,
+    frequency: (row.frequency ?? undefined) as FrequencyId | undefined,
+    deleted_at: row.deleted_at,
+  };
+}
+
 function MarkDetailContent() {
   const theme = useEffectiveTheme();
   const c = themedColors(theme);
@@ -116,10 +205,23 @@ function MarkDetailContent() {
   const params = useLocalSearchParams<{ id: string }>();
   const id = typeof params.id === 'string' ? params.id : params.id?.[0];
 
-  const { counters, loading, incrementCounter, decrementCounter, resetCounter, deleteCounter, updateMark } = useCounters();
+  // Writes stay in the stores; every read below comes from the query layer.
+  const { incrementCounter, decrementCounter, resetCounter, deleteCounter, updateMark } = useCounters();
   const { showError } = useNotification();
-  const allEvents = useEventsStore((state) => state.events || []);
-  const counter = id ? counters.find((c) => c.id === id) : null;
+
+  const markQuery = useMark(id ?? '');
+  const allMarksQuery = useMarksForUser();
+  const checkinsQuery = useUserCheckins();
+  const goalsQuery = useGoals();
+  const marksByGoalQuery = useMarksByGoal();
+  const loading = markQuery.isLoading;
+
+  const markRow = markQuery.data ?? null;
+  const counter = useMemo(() => (markRow ? toMark(markRow) : null), [markRow]);
+  const allEvents = useMemo<MarkEvent[]>(
+    () => (checkinsQuery.data ?? EMPTY_CHECKIN_ROWS).map(toMarkEvent),
+    [checkinsQuery.data],
+  );
   // QC2-A: shared resolver — name-first, emoji fallback (immune to library
   // emoji collisions like '🚫').
   const libraryMark = counter ? resolveLibraryMark(counter) : undefined;
@@ -159,9 +261,9 @@ function MarkDetailContent() {
     [events, todayStr],
   );
 
-  const allActiveCounters = useMemo(
-    () => counters.filter((c) => !c.deleted_at),
-    [counters],
+  const allActiveCounters = useMemo<Mark[]>(
+    () => (allMarksQuery.data ?? EMPTY_MARK_ROWS).map(toMark),
+    [allMarksQuery.data],
   );
 
   const allLoggedToday = useMemo(() => {
@@ -214,18 +316,26 @@ function MarkDetailContent() {
     : recentActivity.slice(0, HISTORY_COLLAPSED_DAYS);
   const hiddenHistoryCount = recentActivity.length - HISTORY_COLLAPSED_DAYS;
 
-  // Goals linked to this mark
-  const goals = useGoalsStore(s => s.goals);
-  const linkedGoals = useMemo(
-    () => goals.filter(g => g.linked_mark_ids?.includes(id ?? '') && g.status !== 'completed' && g.status !== 'expired'),
-    [goals, id],
+  // Goals linked to this mark, resolved THROUGH goal_mark_links (useMarksByGoal),
+  // never mark.goal_id. `workingTowardGoal` (the hero "Working toward" line) was the
+  // single goal_id goal; under links-as-truth (T6) it becomes the first active
+  // linked goal — identical in the common one-goal-per-mark case, and it retires
+  // the last goal_id read on this screen.
+  const goalRows = goalsQuery.data ?? EMPTY_GOAL_ROWS;
+  const marksByGoal = marksByGoalQuery.data ?? EMPTY_MARKS_BY_GOAL;
+  const linkedGoals = useMemo<Goal[]>(
+    () =>
+      goalRows
+        .filter(
+          (g) =>
+            g.status !== 'completed' &&
+            g.status !== 'expired' &&
+            (marksByGoal[g.id] ?? EMPTY_MARK_ROWS).some((m) => m.id === id),
+        )
+        .map((g) => toGoal(g, (marksByGoal[g.id] ?? EMPTY_MARK_ROWS).map((m) => m.id))),
+    [goalRows, marksByGoal, id],
   );
-  const workingTowardGoal = useMemo(
-    () => counter?.goal_id
-      ? (goals.find(g => g.id === counter.goal_id && g.status !== 'completed' && g.status !== 'expired') ?? null)
-      : null,
-    [goals, counter?.goal_id],
-  );
+  const workingTowardGoal = linkedGoals[0] ?? null;
 
   // Log button animation
   const logBtnScale = useSharedValue(1);
