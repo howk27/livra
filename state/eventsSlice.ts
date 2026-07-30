@@ -8,6 +8,8 @@ import { subDays } from 'date-fns';
 import { logger } from '../lib/utils/logger';
 import { reconcileMarkTotalWithPersistedEvents } from '../lib/db/markTotalReconciliation';
 import { useMarksStore } from './countersSlice';
+// PHASE-2 BRIDGE: delete in Phase 3 — mirror check-in writes into the query cache.
+import { bridgeCheckinAdded, bridgeCheckinRemoved } from '../lib/data/bridge';
 
 interface EventsState {
   events: MarkEvent[];
@@ -141,14 +143,19 @@ export const useEventsStore = create<EventsState>((set, get) => ({
       throw error;
     }
 
+    // PHASE-2 BRIDGE: delete in Phase 3 — only after the persist succeeds, so a
+    // failed write never leaves a phantom row in the query cache.
+    bridgeCheckinAdded(event);
+
     return event;
   },
 
   deleteEvent: async (id) => {
-    const row = await queryFirst<{ counter_id: string; user_id: string }>(
-      'SELECT counter_id, user_id FROM lc_events WHERE id = ?',
-      [id],
-    );
+    const row = await queryFirst<{
+      counter_id: string;
+      user_id: string;
+      occurred_local_date: string;
+    }>('SELECT counter_id, user_id, occurred_local_date FROM lc_events WHERE id = ?', [id]);
     const now = getAppDateTime().toISOString();
     await execute('UPDATE lc_events SET deleted_at = ?, updated_at = ? WHERE id = ?', [
       now,
@@ -159,6 +166,16 @@ export const useEventsStore = create<EventsState>((set, get) => ({
     set((state) => ({
       events: state.events.filter((e) => e.id !== id),
     }));
+
+    // PHASE-2 BRIDGE: delete in Phase 3 — mirror the removal into the query cache.
+    if (row?.counter_id && row.user_id) {
+      bridgeCheckinRemoved({
+        userId: row.user_id,
+        markId: row.counter_id,
+        eventId: id,
+        localDate: row.occurred_local_date,
+      });
+    }
 
     if (row?.counter_id && row.user_id) {
       try {
