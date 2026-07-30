@@ -68,7 +68,6 @@ import {
 import { isComebackState, endsComebackGap, pickComebackMove, resolveComebackAsk } from '../../lib/comeback';
 import { resolveFirstName } from '../../lib/profile/displayName';
 import { computeWeek } from '../../lib/consistency';
-import { logger } from '../../lib/utils/logger';
 import { useNotification } from '../../contexts/NotificationContext';
 import { applyOpacity } from '../../src/components/icons/color';
 import { useWidgetLogSync } from '../../hooks/useWidgetLogSync';
@@ -86,7 +85,8 @@ import { useMarksForUser, useMarksByGoal } from '@/lib/data/marks';
 import { useUserCheckins } from '@/lib/data/checkins';
 import { useGoals } from '@/lib/data/goals';
 import { asDataError } from '@/lib/data/errors';
-import { dataErrorCopy } from '@/lib/copy';
+import { dataErrorCopy, DATA_ERROR_COPY } from '@/lib/copy';
+import { useCheckin } from '../../hooks/useCheckin';
 // `MarkRow` here is the components/ui/MarkRow VALUE import; the data-layer row
 // type is aliased to avoid the name collision.
 import type { GoalRow, MarkRow as MarkRowData, MarkEventRow } from '@/lib/data/types';
@@ -179,8 +179,10 @@ export default function FocusScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ logMarkId?: string }>();
   const { user } = useAuth();
-  // Writes stay in the stores; every read below comes from the query layer.
-  const { incrementCounter, deleteCounter } = useCounters();
+  // Reads come from the query layer (Phase 2). The CHECK-IN write is a mutation
+  // (Phase 3 Task 2); mark deletion is still a store write until Task 4.
+  const { deleteCounter } = useCounters();
+  const { logCheckin } = useCheckin();
 
   const marksQuery = useMarksForUser();
   const checkinsQuery = useUserCheckins();
@@ -200,7 +202,7 @@ export default function FocusScreen() {
   );
 
   // Reconcile logs tapped in the iOS 17+ interactive widget (AppIntent queue).
-  useWidgetLogSync(incrementCounter, user?.id);
+  useWidgetLogSync(logCheckin, user?.id);
   const { showError } = useNotification();
   const { sync } = useSync();
   const appDateKey = useAppDateStore(selectAppDateKey);
@@ -570,13 +572,13 @@ export default function FocusScreen() {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       }
       try {
-        await incrementCounter(markId, user.id, 1);
+        await logCheckin(markId, user.id, 1);
       } catch (error: unknown) {
-        logger.error('Error incrementing mark:', error);
-        showError('Could not log that. Try again.');
+        // The raw error stayed in the data layer; this is the classified line.
+        showError(dataErrorCopy(asDataError(error)) ?? DATA_ERROR_COPY.unknown);
       }
     },
-    [user?.id, incrementCounter, showError],
+    [user?.id, logCheckin, showError],
   );
 
   // Widget deep-link fallback (iOS 16, or any tap routed through the app):

@@ -55,7 +55,17 @@ export interface GoalsState {
   /** Called after a mark is logged. Credits linked goals at most once per mark
    *  per local day (extra reps stay on the mark), evaluates Momentum, and checks
    *  deadline expiry. Never auto-completes on count. Non-blocking by convention. */
-  creditMarkToGoals: (markId: string) => Promise<void>;
+  /** `sourceEvents`: the mark's event list when the caller already holds one
+   * (M9 Phase 3 — the query cache replaced `eventsSlice` as the check-in source). */
+  creditMarkToGoals: (
+    markId: string,
+    sourceEvents?: readonly {
+      mark_id: string;
+      event_type: string;
+      occurred_local_date: string;
+      deleted_at?: string | null;
+    }[],
+  ) => Promise<void>;
   checkGoalCompletion: (goalId: string) => Promise<void>;
   updateGoalTargetDate: (id: string, date: string | null) => Promise<void>;
   updateGoalTitle: (id: string, newTitle: string) => Promise<void>;
@@ -307,7 +317,7 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
     bridgeInvalidate('marks');
   },
 
-  creditMarkToGoals: async (markId) => {
+  creditMarkToGoals: async (markId, sourceEvents) => {
     const links = await getLinksForMark(markId);
     if (!links.length) return;
 
@@ -316,11 +326,14 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
     const toUpdate: Goal[] = [];
 
     // One credit per mark per local day: the just-logged event is already in the
-    // events store, so a second increment today means this log earns no credit.
+    // list below, so a second increment today means this log earns no credit.
     // Extra reps still land on the mark itself (counters, streaks, bests).
-    const { useEventsStore } = require('../state/eventsSlice');
-    const events: { mark_id: string; event_type: string; occurred_local_date: string; deleted_at?: string | null }[] =
-      useEventsStore.getState().events ?? [];
+    //
+    // M9 Phase 3 Task 2: check-ins now land in the React Query cache, not
+    // `eventsSlice`, so `hooks/useCheckin.ts` passes the list it read from there.
+    // Without it this dedupe would see no earlier event today and credit twice.
+    const events: readonly { mark_id: string; event_type: string; occurred_local_date: string; deleted_at?: string | null }[] =
+      sourceEvents ?? (require('../state/eventsSlice').useEventsStore.getState().events ?? []);
     const todayIncrements = events.filter(
       e => e.mark_id === markId && e.event_type === 'increment' && !e.deleted_at
     );

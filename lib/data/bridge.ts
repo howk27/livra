@@ -14,6 +14,10 @@
 
 import { queryClient } from '@/lib/data/queryClient';
 import { queryKeys } from '@/lib/data/queryKeys';
+import {
+  applyCheckinToCaches,
+  removeCheckinFromCaches as applyRemoval,
+} from '@/lib/data/mutations/checkins';
 import type { MarkEvent, GoalNote } from '@/types';
 import type { MarkEventRow, GoalNoteRow } from '@/lib/data/types';
 
@@ -67,35 +71,17 @@ function toRow(event: MarkEvent): MarkEventRow {
   };
 }
 
-/** Prepend `row` newest-first, replacing any existing entry with the same id
- * (idempotent: a real refetch carrying the same id must not double it). */
-function upsertRow(existing: MarkEventRow[] | undefined, row: MarkEventRow): MarkEventRow[] | undefined {
-  if (existing === undefined) return existing; // patch only what's already cached
-  return [row, ...existing.filter((e) => e.id !== row.id)];
-}
-
-function removeRow(existing: MarkEventRow[] | undefined, id: string): MarkEventRow[] | undefined {
-  if (existing === undefined) return existing;
-  return existing.filter((e) => e.id !== id);
-}
+// M9 Phase 3 Task 2: the cache-patch primitives moved to
+// `lib/data/mutations/checkins.ts`, where the real mutation needs them. Both write
+// paths are alive at once during Phase 3 — the store path for the events nothing
+// has migrated yet, the mutation for check-ins — and two implementations of "put
+// this row in the three caches" would be two chances to disagree. These stay as
+// thin delegations until Task 6 deletes the bridge entirely.
 
 // PHASE-2 BRIDGE: delete in Phase 3
 /** Mirror a freshly-logged check-in into the three check-in caches. */
 export function bridgeCheckinAdded(event: MarkEvent): void {
-  const row = toRow(event);
-  const userId = event.user_id;
-  queryClient.setQueryData<MarkEventRow[]>(
-    queryKeys.checkins(userId, event.mark_id),
-    (old) => upsertRow(old, row),
-  );
-  queryClient.setQueryData<MarkEventRow[]>(
-    queryKeys.userCheckins(userId),
-    (old) => upsertRow(old, row),
-  );
-  queryClient.setQueryData<MarkEventRow[]>(
-    queryKeys.todayCheckins(userId, event.occurred_local_date),
-    (old) => upsertRow(old, row),
-  );
+  applyCheckinToCaches(queryClient, toRow(event));
 }
 
 // PHASE-2 BRIDGE: delete in Phase 3
@@ -106,19 +92,7 @@ export function bridgeCheckinRemoved(params: {
   eventId: string;
   localDate: string;
 }): void {
-  const { userId, markId, eventId, localDate } = params;
-  queryClient.setQueryData<MarkEventRow[]>(
-    queryKeys.checkins(userId, markId),
-    (old) => removeRow(old, eventId),
-  );
-  queryClient.setQueryData<MarkEventRow[]>(
-    queryKeys.userCheckins(userId),
-    (old) => removeRow(old, eventId),
-  );
-  queryClient.setQueryData<MarkEventRow[]>(
-    queryKeys.todayCheckins(userId, localDate),
-    (old) => removeRow(old, eventId),
-  );
+  applyRemoval(queryClient, params);
 }
 
 // ─── Goal-note cache patch (M9 Phase 2) — the check-in exception, second entity ──

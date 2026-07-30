@@ -62,11 +62,12 @@ import { deriveGoalDetailEmptyVariant, getEmptyStateCopy } from '../../lib/momen
 import { getAppDate } from '../../lib/appDate';
 import { formatDate } from '../../lib/date';
 import { resolveDailyTarget } from '../../lib/markDailyTarget';
-import { useCounters } from '../../hooks/useCounters';
+import { useCheckin } from '../../hooks/useCheckin';
 import { useAuth } from '../../hooks/useAuth';
 import { useIapSubscriptions } from '../../hooks/useIapSubscriptions';
 import { canAddMarkToGoal } from '../../lib/gating';
-import { MARK_PER_GOAL_LIMIT_MESSAGE } from '../../lib/copy';
+import { MARK_PER_GOAL_LIMIT_MESSAGE, dataErrorCopy, DATA_ERROR_COPY } from '../../lib/copy';
+import { asDataError } from '../../lib/data/errors';
 import { useMotion } from '../../hooks/useMotion';
 import { useNotification } from '../../contexts/NotificationContext';
 import { confirm } from '../../components/ui/overlays';
@@ -974,7 +975,9 @@ export default function GoalDetailScreen() {
   const c = themedColors(theme);
   const { user } = useAuth();
   const userId = user?.id;
-  const { incrementCounter } = useCounters();
+  // M9 Phase 3 Task 2: the check-in write is a mutation. This screen used
+  // `useCounters()` for nothing else, so the store hook is gone from it entirely.
+  const { logCheckin } = useCheckin();
   const { showError } = useNotification();
 
   const { isProUnlocked } = useIapSubscriptions();
@@ -1129,13 +1132,13 @@ export default function GoalDetailScreen() {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       }
       try {
-        await incrementCounter(markId, userId, 1);
+        await logCheckin(markId, userId, 1);
       } catch (error: unknown) {
-        logger.error('Error incrementing mark:', error);
-        showError('Could not log that. Try again.');
+        // The raw error stayed in the data layer; this is the classified line.
+        showError(dataErrorCopy(asDataError(error)) ?? DATA_ERROR_COPY.unknown);
       }
     },
-    [userId, incrementCounter, showError],
+    [userId, logCheckin, showError],
   );
 
   // QC4-L: a mark reaches a goal through TWO records — `mark.goal_id` (what

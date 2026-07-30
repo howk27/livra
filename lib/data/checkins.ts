@@ -5,7 +5,7 @@
 // We read the EVENTS, never `marks.total`: the stored total becomes derived in
 // Phase 4, and reading it here would bake in the very drift this milestone removes.
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, type QueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { dataClient, MARK_EVENT_COLUMNS, selectList } from '@/lib/data/client';
 import { queryKeys } from '@/lib/data/queryKeys';
@@ -60,6 +60,29 @@ export async function fetchTodayCheckins(localDate: string): Promise<MarkEventRo
     .order('occurred_at', { ascending: false });
   if (error) throw toDataError(error);
   return (data ?? []) as unknown as MarkEventRow[];
+}
+
+/**
+ * The check-ins for one mark AS THE CACHE CURRENTLY HOLDS THEM.
+ *
+ * M9 Phase 3 Task 2. The post-log side effects — badge progress and goal credit —
+ * used to read their event list from `eventsSlice`, the SQLite store. That store no
+ * longer receives check-ins, so they read it here instead. The optimistic patch in
+ * `useLogCheckinMutation.onMutate` lands BEFORE the effects run, so this returns
+ * exactly what the store used to: the just-logged event included.
+ *
+ * Prefers the per-mark key (complete for that mark by construction) and falls back
+ * to filtering the all-events list, because Focus and Goals fetch only the latter.
+ */
+export function readCachedCheckins(
+  client: QueryClient,
+  userId: string,
+  markId: string,
+): MarkEventRow[] {
+  const perMark = client.getQueryData<MarkEventRow[]>(queryKeys.checkins(userId, markId));
+  if (perMark) return perMark;
+  const all = client.getQueryData<MarkEventRow[]>(queryKeys.userCheckins(userId));
+  return (all ?? []).filter((e) => e.mark_id === markId);
 }
 
 export function useUserCheckins() {

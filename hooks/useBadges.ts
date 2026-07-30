@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { MarkBadge, BadgeCode } from '../types';
+import { MarkBadge, BadgeCode, MarkEvent } from '../types';
 import { query, execute } from '../lib/db';
 import { getMetaValue, setMetaValue } from '../lib/db/meta';
 import { formatDate, daysBetween } from '../lib/date';
@@ -314,9 +314,20 @@ export const useBadges = (userId?: string) => {
   );
 
   const evaluateMarkBadges = useCallback(
-    async (markId: string, uid: string): Promise<BadgeProgress[]> => {
-      const events = getEventsByMark(markId).filter(
-        (event) => event.event_type === 'increment' && !event.deleted_at
+    async (
+      markId: string,
+      uid: string,
+      /**
+       * M9 Phase 3 Task 2 — the event list to score, when the caller already holds
+       * one. Check-ins now land in the React Query cache rather than `eventsSlice`,
+       * so `hooks/useCheckin.ts` passes what it read from there; omitting it keeps
+       * the old store-backed behaviour for every caller still on that path.
+       */
+      sourceEvents?: readonly MarkEvent[]
+    ): Promise<BadgeProgress[]> => {
+      const events = (sourceEvents ?? getEventsByMark(markId)).filter(
+        (event) =>
+          event.mark_id === markId && event.event_type === 'increment' && !event.deleted_at
       );
 
       const activityDates = uniqueSortedDates(

@@ -177,6 +177,22 @@ export const useMarks = () => {
     ]
   );
 
+  // ── RETIRED 2026-07-30, M9 Phase 3 Task 2 — NO SCREEN CALLS THIS ─────────────
+  //
+  // `incrementMark` / `decrementMark` / `resetMark` below are UNREACHABLE from the
+  // UI. Focus, goal detail, mark detail and the widget drain all log through
+  // `hooks/useCheckin.ts` → `lib/data/mutations/checkins.ts` now. They are left on
+  // disk because Phase 5 deletes this whole file with the SQLite stores, and
+  // nothing is removed until its replacement is proven (standing invariant 5).
+  //
+  // What went with them, deliberately:
+  //   • the `marks.total` write and its `recentUpdates` optimistic map — one row
+  //     per check-in means there is no second value to keep in step;
+  //   • `updateStreakInDB` — `lc_streaks` is read only by the sync layer this phase
+  //     orphans, and the displayed streak is already derived from the event list;
+  //   • the defensive `linkMarkToGoal` block below, which read `mark.goal_id`.
+  //
+  // `countersSlice.recentUpdates` still exists and is now written by nothing.
   const incrementMark = useCallback(
     async (markId: string, userId: string, amount: number = 1) => {
       logger.log('[INCREMENT] ===== START INCREMENT =====', {

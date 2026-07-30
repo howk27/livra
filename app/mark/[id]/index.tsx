@@ -51,7 +51,9 @@ import { SectionLabel } from '../../../components/ui/SectionLabel';
 import { confirm } from '../../../components/ui/overlays';
 import { useNotification } from '../../../contexts/NotificationContext';
 import { useCounters } from '../../../hooks/useCounters';
-import { useEventsStore } from '../../../state/eventsSlice';
+import { useCheckin } from '../../../hooks/useCheckin';
+import { dataErrorCopy, DATA_ERROR_COPY } from '../../../lib/copy';
+import { asDataError } from '../../../lib/data/errors';
 import { LoadingScreen } from '../../../components/LoadingScreen';
 import { useAuth } from '../../../hooks/useAuth';
 import { logger } from '../../../lib/utils/logger';
@@ -205,8 +207,11 @@ function MarkDetailContent() {
   const params = useLocalSearchParams<{ id: string }>();
   const id = typeof params.id === 'string' ? params.id : params.id?.[0];
 
-  // Writes stay in the stores; every read below comes from the query layer.
-  const { incrementCounter, decrementCounter, resetCounter, deleteCounter, updateMark } = useCounters();
+  // M9 Phase 3 Task 2: check-in and undo are mutations. Mark delete and edit are
+  // still store writes until Task 4. `decrementCounter` and `resetCounter` were
+  // destructured here and never called — they went with the increment.
+  const { deleteCounter, updateMark } = useCounters();
+  const { logCheckin, undoCheckin } = useCheckin();
   const { showError } = useNotification();
 
   const markQuery = useMark(id ?? '');
@@ -384,9 +389,9 @@ function MarkDetailContent() {
       withSpring(1, { damping: 18, stiffness: 300 }),
     );
 
-    incrementCounter(id, user.id, 1).catch((error) => {
-      logger.error('increment failed:', error);
-      showError('Could not update mark');
+    logCheckin(id, user.id, 1).catch((error) => {
+      // The raw error stayed in the data layer; this is the classified line.
+      showError(dataErrorCopy(asDataError(error)) ?? DATA_ERROR_COPY.unknown);
     });
 
     // Check if all marks done after this log (check after short delay for state to update)
@@ -407,23 +412,27 @@ function MarkDetailContent() {
     undoInFlight.current = true;
     if (Platform.OS !== 'web') await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-    // Find the most recent increment event for today and delete it
-    const todayIncrements = events
-      .filter((e) => e.event_type === 'increment' && e.occurred_local_date === todayStr && !e.deleted_at)
-      .sort((a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime());
+    // The most recent increment logged today, taken from the CACHED ROWS rather
+    // than the adapted domain list: the undo mutation needs the row itself so a
+    // failed undo can restore the cache exactly as it was.
+    const lastRow = (checkinsQuery.data ?? EMPTY_CHECKIN_ROWS)
+      .filter(
+        (e) =>
+          e.mark_id === id &&
+          e.event_type === 'increment' &&
+          e.occurred_local_date === todayStr &&
+          !e.deleted_at,
+      )
+      .sort((a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime())[0];
 
-    const lastEvent = todayIncrements[0];
-    if (!lastEvent) {
+    if (!lastRow) {
       undoInFlight.current = false;
       return;
     }
 
-    useEventsStore
-      .getState()
-      .deleteEvent(lastEvent.id)
+    undoCheckin(lastRow)
       .catch((error) => {
-        logger.error('undo failed:', error);
-        showError('Could not undo');
+        showError(dataErrorCopy(asDataError(error)) ?? DATA_ERROR_COPY.unknown);
       })
       .finally(() => {
         undoInFlight.current = false;
