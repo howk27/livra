@@ -8,6 +8,7 @@ import {
   TextInput,
   Platform,
   KeyboardAvoidingView,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -25,8 +26,12 @@ import {
 } from '../../../theme/tokens';
 import type { GoalNote } from '../../../types';
 import { useEffectiveTheme } from '../../../state/uiSlice';
-import { useGoalsStore } from '../../../state/goalsSlice';
 import { useGoalNotesStore } from '../../../state/goalNotesSlice';
+// M9 Phase 2: journal READS come from lib/data/ (React Query); WRITES still go
+// through goalNotesSlice, bridged into the cache by bridgeGoalNoteUpserted /
+// bridgeGoalNoteRemoved (see lib/data/bridge.ts).
+import { useGoal } from '@/lib/data/goals';
+import { useGoalNotes } from '@/lib/data/notes';
 import { useAuth } from '../../../hooks/useAuth';
 import { getAppDate } from '../../../lib/appDate';
 import { formatDate } from '../../../lib/date';
@@ -37,6 +42,9 @@ import { confirm } from '../../../components/ui/overlays';
 type ThemeColors = ReturnType<typeof themedColors>;
 
 const ENTRY_MAX_LEN = 1000;
+
+/** Stable empty reference so an unresolved query keeps memo identity. */
+const EMPTY_NOTE_ROWS: GoalNote[] = [];
 
 /** 'yyyy-MM-dd' → local-safe "Wed, Jul 15" (parse as local midnight, no UTC shift). */
 function dayLabel(localDate: string): string {
@@ -149,24 +157,27 @@ export default function GoalJournalScreen() {
   const { user } = useAuth();
   const noteUserId = user?.id ?? 'local';
 
-  const goal = useGoalsStore((s) => s.goals.find((g) => g.id === id));
-  const loading = useGoalNotesStore((s) => s.loading);
-  const entriesAll = useGoalNotesStore((s) => s.entries);
+  // Reads: lib/data/ query layer (M9 Phase 2). `useGoalNotes` returns this goal's
+  // entries already scoped and ordered `created_at desc, id desc` — the same total
+  // order the store sorted client-side — so no filter or sort is needed here.
+  const goalQuery = useGoal(id ?? '');
+  const notesQuery = useGoalNotes(id ?? '');
+  const goal = goalQuery.data ?? null;
+  const loading = notesQuery.isLoading;
+  const readError = notesQuery.error
+    ? 'Could not load your journal entries. Check your connection and try again.'
+    : null;
+
+  // Writes still go through the store; its cloud-backup hint stays with them.
   const cloudError = useGoalNotesStore((s) => s.goalNotesCloudError);
   const clearCloudError = useGoalNotesStore((s) => s.clearGoalNotesCloudError);
   const addGoalNote = useGoalNotesStore((s) => s.addGoalNote);
   const editGoalNote = useGoalNotesStore((s) => s.editGoalNote);
   const deleteGoalNote = useGoalNotesStore((s) => s.deleteGoalNote);
 
-  // Newest-first, grouped by local_date preserving that order.
+  // Grouped by local_date, preserving the newest-first order they arrive in.
   const dayGroups = useMemo(() => {
-    const rows = entriesAll
-      .filter((n) => n.goal_id === id)
-      .sort((a, b) =>
-        a.created_at !== b.created_at
-          ? b.created_at.localeCompare(a.created_at)
-          : b.id.localeCompare(a.id),
-      );
+    const rows: GoalNote[] = notesQuery.data ?? EMPTY_NOTE_ROWS;
     const groups: { date: string; entries: GoalNote[] }[] = [];
     for (const row of rows) {
       const last = groups[groups.length - 1];
@@ -177,7 +188,7 @@ export default function GoalJournalScreen() {
       }
     }
     return groups;
-  }, [entriesAll, id]);
+  }, [notesQuery.data]);
 
   const handleAdd = useCallback(
     async (text: string) => {
@@ -211,6 +222,19 @@ export default function GoalJournalScreen() {
     },
     [deleteGoalNote],
   );
+
+  // First-load gate (M9 Phase 2): the goal comes from the query layer now, so hold
+  // the missing-entity guard until that first fetch settles — otherwise a cold open
+  // would flash "Goal not found." before the goal resolves. Entering from goal
+  // detail this is already a cache hit (same query key); background refetches keep
+  // isLoading false, so they never blank the screen. Mirrors app/goal/[id].tsx.
+  if (goalQuery.isLoading) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: c.linen, alignItems: 'center', justifyContent: 'center' }]}>
+        <ActivityIndicator color={c.inkMuted} />
+      </SafeAreaView>
+    );
+  }
 
   if (!goal) {
     return (
@@ -256,6 +280,22 @@ export default function GoalJournalScreen() {
               <Text style={[styles.cloudHint, { color: c.inkMid }]}>{cloudError}</Text>
               <TouchableOpacity onPress={() => clearCloudError()} style={styles.cloudDismissBtn} activeOpacity={0.7}>
                 <Text style={[styles.cloudDismiss, { color: c.accent }]}>Dismiss</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
+          {/* M9 Phase 2: reads can now fail on their own (the store's load never
+              surfaced one). Same row shape as the cloud hint, with a retry instead
+              of a dismiss — dismissing a failed read would just hide an empty list. */}
+          {readError ? (
+            <View style={[styles.cloudRow, { borderColor: c.borderLight }]}>
+              <Text style={[styles.cloudHint, { color: c.inkMid }]}>{readError}</Text>
+              <TouchableOpacity
+                onPress={() => void notesQuery.refetch()}
+                style={styles.cloudDismissBtn}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.cloudDismiss, { color: c.accent }]}>Try again</Text>
               </TouchableOpacity>
             </View>
           ) : null}

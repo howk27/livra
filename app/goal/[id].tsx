@@ -54,6 +54,7 @@ import { useMarksStore } from '../../state/countersSlice';
 import { useGoal, useGoals } from '@/lib/data/goals';
 import { useMarks, useMarksByGoal, useMarksForUser } from '@/lib/data/marks';
 import { useUserCheckins } from '@/lib/data/checkins';
+import { useGoalNotes } from '@/lib/data/notes';
 import { useAppDateStore, selectAppDateKey } from '../../state/appDateSlice';
 import { effectivePersonalBest, useMomentumStore } from '../../state/momentumSlice';
 import { deriveIsNewBest, goalAgeDays } from '../../lib/moments/context';
@@ -124,6 +125,7 @@ const EMPTY_MARK_ROWS: MarkRow[] = [];
 const EMPTY_MARKS_BY_GOAL: Record<string, MarkRow[]> = {};
 const EMPTY_CHECKIN_ROWS: MarkEventRow[] = [];
 const EMPTY_GOAL_ROWS: GoalRow[] = [];
+const EMPTY_NOTE_ROWS: GoalNote[] = [];
 
 type GoalProgress = {
   progress: number;
@@ -773,11 +775,14 @@ function GoalJournalPreview({
   userId: string;
   onViewAll: () => void;
 }) {
-  const loading = useGoalNotesStore((s) => s.loading);
-  const recent = useGoalNotesStore((s) => s.getEntriesForGoal(goalId, 3));
-  const totalForGoal = useGoalNotesStore(
-    (s) => s.entries.filter((n) => n.goal_id === goalId).length,
-  );
+  // M9 Phase 2: the preview reads goal notes from the query layer, exactly as the
+  // full journal screen does, so the two surfaces can never disagree about the
+  // entry list. Writes still go through the store (bridged into the cache).
+  const notesQuery = useGoalNotes(goalId);
+  const notes = notesQuery.data ?? EMPTY_NOTE_ROWS;
+  const loading = notesQuery.isLoading;
+  const recent = useMemo(() => notes.slice(0, 3), [notes]);
+  const totalForGoal = notes.length;
   const cloudError = useGoalNotesStore((s) => s.goalNotesCloudError);
   const clearCloudError = useGoalNotesStore((s) => s.clearGoalNotesCloudError);
   const addGoalNote = useGoalNotesStore((s) => s.addGoalNote);

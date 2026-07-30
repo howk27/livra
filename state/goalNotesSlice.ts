@@ -25,6 +25,8 @@ import {
 } from '../lib/db/goalNotesSupabase';
 import { getSupabaseClient } from '../lib/supabase';
 import { getAppDateTime } from '../lib/appDate';
+// PHASE-2 BRIDGE: delete in Phase 3 — mirror journal writes into the query cache.
+import { bridgeGoalNoteUpserted, bridgeGoalNoteRemoved } from '../lib/data/bridge';
 
 /** Matches only real Supabase UUIDs — 'local' or similar strings return false. */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -172,6 +174,10 @@ export const useGoalNotesStore = create<GoalNotesState>((set, get) => ({
       await persistGoalNotes(entries);
     }
 
+    // PHASE-2 BRIDGE: delete in Phase 3 — after the local persist, so a failed
+    // write never leaves a phantom entry in the query cache.
+    bridgeGoalNoteUpserted(note);
+
     if (UUID_RE.test(userId)) {
       cloudInsertGoalNote(note)
         .then(() => set({ goalNotesCloudError: null }))
@@ -209,6 +215,10 @@ export const useGoalNotesStore = create<GoalNotesState>((set, get) => ({
       await persistGoalNotes(updated);
     }
 
+    // PHASE-2 BRIDGE: delete in Phase 3 — an edit re-upserts by id; created_at is
+    // unchanged, so the entry keeps its position.
+    bridgeGoalNoteUpserted(note);
+
     if (UUID_RE.test(userId)) {
       cloudUpdateGoalNote(note)
         .then(() => set({ goalNotesCloudError: null }))
@@ -238,6 +248,13 @@ export const useGoalNotesStore = create<GoalNotesState>((set, get) => ({
     } else {
       await persistGoalNotes(updated);
     }
+
+    // PHASE-2 BRIDGE: delete in Phase 3 — mirror the removal into the query cache.
+    bridgeGoalNoteRemoved({
+      userId: toDelete.user_id,
+      goalId: toDelete.goal_id,
+      noteId: id,
+    });
 
     if (UUID_RE.test(toDelete.user_id)) {
       cloudDeleteGoalNote(id, toDelete.user_id)

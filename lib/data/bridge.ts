@@ -14,8 +14,8 @@
 
 import { queryClient } from '@/lib/data/queryClient';
 import { queryKeys } from '@/lib/data/queryKeys';
-import type { MarkEvent } from '@/types';
-import type { MarkEventRow } from '@/lib/data/types';
+import type { MarkEvent, GoalNote } from '@/types';
+import type { MarkEventRow, GoalNoteRow } from '@/lib/data/types';
 
 export type BridgeEntity = 'goals' | 'marks' | 'checkins' | 'notes';
 
@@ -118,5 +118,56 @@ export function bridgeCheckinRemoved(params: {
   queryClient.setQueryData<MarkEventRow[]>(
     queryKeys.todayCheckins(userId, localDate),
     (old) => removeRow(old, eventId),
+  );
+}
+
+// ─── Goal-note cache patch (M9 Phase 2) — the check-in exception, second entity ──
+//
+// `goal_notes` has EXACTLY the asymmetry that made invalidate wrong for check-ins,
+// and it is stated in the store's own header: local SQLite (AsyncStorage on web) is
+// AUTHORITATIVE, Supabase is a best-effort backup whose failure only sets
+// `goalNotesCloudError`. `cloudInsertGoalNote` is fired and NOT awaited, so an
+// invalidate→refetch would race — or entirely outrun — the insert and return a list
+// without the entry the user just typed; offline it would never appear at all.
+// So goal notes get the same Option-A treatment, for the same measured reason.
+//
+// `GoalNoteRow` and the domain `GoalNote` are field-for-field identical (all seven
+// columns, none nullable), so there is no adapter here — the assignment below is the
+// compile-time proof, and it breaks if either shape drifts.
+
+/** Newest-first, matching `fetchGoalNotes`' `created_at desc, id desc`. */
+function byNoteNewest(a: GoalNoteRow, b: GoalNoteRow): number {
+  if (a.created_at !== b.created_at) return b.created_at.localeCompare(a.created_at);
+  return b.id.localeCompare(a.id);
+}
+
+function upsertNote(
+  existing: GoalNoteRow[] | undefined,
+  note: GoalNoteRow,
+): GoalNoteRow[] | undefined {
+  if (existing === undefined) return existing; // patch only what's already cached
+  return [note, ...existing.filter((n) => n.id !== note.id)].sort(byNoteNewest);
+}
+
+// PHASE-2 BRIDGE: delete in Phase 3
+/** Mirror a written or edited journal entry into its goal's note cache. */
+export function bridgeGoalNoteUpserted(note: GoalNote): void {
+  const row: GoalNoteRow = note;
+  queryClient.setQueryData<GoalNoteRow[]>(
+    queryKeys.goalNotes(note.user_id, note.goal_id),
+    (old) => upsertNote(old, row),
+  );
+}
+
+// PHASE-2 BRIDGE: delete in Phase 3
+/** Drop a deleted journal entry from its goal's note cache. */
+export function bridgeGoalNoteRemoved(params: {
+  userId: string;
+  goalId: string;
+  noteId: string;
+}): void {
+  const { userId, goalId, noteId } = params;
+  queryClient.setQueryData<GoalNoteRow[]>(queryKeys.goalNotes(userId, goalId), (old) =>
+    old === undefined ? old : old.filter((n) => n.id !== noteId),
   );
 }

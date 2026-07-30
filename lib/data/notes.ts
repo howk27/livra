@@ -22,7 +22,13 @@ export async function fetchGoalNotes(goalId: string): Promise<GoalNoteRow[]> {
     .from('goal_notes')
     .select(selectList(GOAL_NOTE_COLUMNS))
     .eq('goal_id', goalId)
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false })
+    // Tiebreak by id so the order is TOTAL. The store this replaces sorted
+    // `created_at desc, id desc` client-side; without the second key two entries
+    // written in the same millisecond would come back in server-arbitrary order and
+    // could swap between renders. (This repo has already seen a whole table share
+    // one `created_at` to the microsecond — 2026-07-29.)
+    .order('id', { ascending: false });
   if (error) throw toDataError(error);
   return (data ?? []) as unknown as GoalNoteRow[];
 }
