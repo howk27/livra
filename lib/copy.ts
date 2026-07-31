@@ -201,13 +201,16 @@ export function dataErrorCopy(error: { kind: DataErrorKind } | null | undefined)
 }
 
 /**
- * M9 Phase 3 — the same table, for a failure that DEFINITELY happened.
+ * M9 Phase 3. The same table, for a failure that DEFINITELY happened.
  *
  * `dataErrorCopy` is nullable because a read query has no error most of the time.
  * A `catch` block is the opposite case: something failed, the surface has to say
  * something, and `?? fallback` at every call site is four chances to pick a
  * different fallback. The nullable path survives only because `throw undefined` is
  * legal JavaScript, not because "no error" is a state a catch can be in.
+ *
+ * (No dash in this comment: the rule at the top of DATA_ERROR_COPY covers the
+ * whole file, and it caught this on the full-suite run.)
  */
 export function caughtErrorCopy(error: unknown): string {
   const classified = asDataError(error);

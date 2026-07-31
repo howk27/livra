@@ -8,8 +8,13 @@ import { subDays } from 'date-fns';
 import { logger } from '../lib/utils/logger';
 import { reconcileMarkTotalWithPersistedEvents } from '../lib/db/markTotalReconciliation';
 import { useMarksStore } from './countersSlice';
-// PHASE-2 BRIDGE: delete in Phase 3 — mirror check-in writes into the query cache.
-import { bridgeCheckinAdded, bridgeCheckinRemoved } from '../lib/data/bridge';
+
+// M9 Phase 3 Task 6 — THE CHECK-IN BRIDGE IS GONE, because the path that needed
+// it is gone. `addEvent`/`deleteEvent` are reached only from the increment
+// functions in `hooks/useCounters.ts`, and those now have NO callers: check-ins
+// run through `hooks/useCheckin.ts` → `lib/data/mutations/checkins.ts`, which
+// writes to Supabase and owns its own cache. The functions below still compile
+// and still write SQLite; nothing calls them. Phase 5 deletes them with the hook.
 
 interface EventsState {
   events: MarkEvent[];
@@ -143,10 +148,6 @@ export const useEventsStore = create<EventsState>((set, get) => ({
       throw error;
     }
 
-    // PHASE-2 BRIDGE: delete in Phase 3 — only after the persist succeeds, so a
-    // failed write never leaves a phantom row in the query cache.
-    bridgeCheckinAdded(event);
-
     return event;
   },
 
@@ -166,16 +167,6 @@ export const useEventsStore = create<EventsState>((set, get) => ({
     set((state) => ({
       events: state.events.filter((e) => e.id !== id),
     }));
-
-    // PHASE-2 BRIDGE: delete in Phase 3 — mirror the removal into the query cache.
-    if (row?.counter_id && row.user_id) {
-      bridgeCheckinRemoved({
-        userId: row.user_id,
-        markId: row.counter_id,
-        eventId: id,
-        localDate: row.occurred_local_date,
-      });
-    }
 
     if (row?.counter_id && row.user_id) {
       try {

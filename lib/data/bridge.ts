@@ -1,25 +1,30 @@
 // lib/data/bridge.ts
 //
-// M9 Phase 2 — TEMPORARY write→read bridge. While both systems are live, a screen
-// that READS from a query but WRITES through an old store shows a stale value until
-// the query refetches. Store write actions call `bridgeInvalidate(...)` so the
-// relevant query keys refetch immediately.
+// M9 — the LAST REMNANT of the Phase 2 write→read bridge.
 //
-// Every call site is marked `// PHASE-2 BRIDGE: delete in Phase 3`. Phase 3 gives
-// the data layer real mutations and deletes all of this.
+// Phase 2 needed this because a screen READ from a query but WROTE through an old
+// store: the write landed in SQLite, the read came from Supabase, and without a
+// nudge the screen showed a stale value. Phase 3 replaced every one of those
+// writes with a real mutation that reaches Supabase and owns its own cache, so
+// the bridge is gone — except here.
 //
-// Entity-scoped and user-AGNOSTIC on purpose: keys are `['livra', userId, entity, …]`,
-// so matching on `queryKey[2]` invalidates the entity for whoever is signed in
-// without threading a user id through store internals.
+// WHAT IS LEFT, AND WHY. `goalsSlice.linkMarkToGoal` / `unlinkMarkFromGoal` still
+// have four callers on surfaces this task did not migrate: `app/goal/new.tsx`,
+// `app/mark/new.tsx`, `app/onboarding.tsx` and `lib/goals/createFromAIPackage.ts`
+// (plus a defensive call in the dead increment path of `hooks/useCounters.ts`).
+// Those write links to SQLite, so the migrated screens still need the nudge.
+//
+// ⚠️ THE NUDGE IS KNOWN-WEAK, and it is why this is temporary rather than a
+// design. Invalidate→refetch reads Supabase, which does not have the row until
+// sync pushes it — the same reason invalidate was wrong for check-ins and goal
+// notes. It helps when sync has already pushed and does nothing when it has not.
+// The fix is to migrate those four callers, NOT to make this cleverer.
+//
+// Entity-scoped and user-AGNOSTIC on purpose: keys are `['livra', userId, entity,
+// …]`, so matching on `queryKey[2]` invalidates the entity for whoever is signed
+// in without threading a user id through store internals.
 
 import { queryClient } from '@/lib/data/queryClient';
-import { queryKeys } from '@/lib/data/queryKeys';
-import {
-  applyCheckinToCaches,
-  removeCheckinFromCaches as applyRemoval,
-} from '@/lib/data/mutations/checkins';
-import type { MarkEvent, GoalNote } from '@/types';
-import type { MarkEventRow, GoalNoteRow } from '@/lib/data/types';
 
 export type BridgeEntity = 'goals' | 'marks' | 'checkins' | 'notes';
 
@@ -37,119 +42,4 @@ export function bridgeInvalidate(...entities: BridgeEntity[]): void {
       );
     },
   });
-}
-
-// ─── Check-in cache patch (M9 Phase 2, founder decision 2026-07-29, Option A) ───
-//
-// Check-ins are the ONE entity where invalidate is the wrong bridge. The write
-// lands in SQLite and the query reads from Supabase, so invalidate→refetch would
-// hit Supabase BEFORE sync has pushed and return the OLD rows — the count visibly
-// reverts, and offline the check-in never appears at all (the spec requires
-// offline check-ins to look identical to online ones). Instead we mirror the
-// store's optimistic write into the query cache directly. The event carries a
-// client-generated id, so when the real row later arrives from Supabase a refetch
-// replaces it by id with no duplicate.
-//
-// Only EXISTING cache entries are patched (`oldData === undefined` → skip): a
-// screen that has not fetched yet will include the event on its first fetch, and
-// seeding a fresh single-item list would masquerade as a complete list.
-
-/** The store's `MarkEvent` as the query layer's `mark_events` Row. */
-function toRow(event: MarkEvent): MarkEventRow {
-  return {
-    id: event.id,
-    user_id: event.user_id,
-    mark_id: event.mark_id,
-    event_type: event.event_type,
-    amount: event.amount,
-    occurred_at: event.occurred_at,
-    occurred_local_date: event.occurred_local_date,
-    meta: (event.meta ?? null) as MarkEventRow['meta'],
-    created_at: event.created_at,
-    updated_at: event.updated_at,
-    deleted_at: event.deleted_at ?? null,
-  };
-}
-
-// M9 Phase 3 Task 2: the cache-patch primitives moved to
-// `lib/data/mutations/checkins.ts`, where the real mutation needs them. Both write
-// paths are alive at once during Phase 3 — the store path for the events nothing
-// has migrated yet, the mutation for check-ins — and two implementations of "put
-// this row in the three caches" would be two chances to disagree. These stay as
-// thin delegations until Task 6 deletes the bridge entirely.
-
-// PHASE-2 BRIDGE: delete in Phase 3
-/** Mirror a freshly-logged check-in into the three check-in caches. */
-export function bridgeCheckinAdded(event: MarkEvent): void {
-  applyCheckinToCaches(queryClient, toRow(event));
-}
-
-// PHASE-2 BRIDGE: delete in Phase 3
-/** Drop a check-in from the caches after an undo / soft-delete. */
-export function bridgeCheckinRemoved(params: {
-  userId: string;
-  markId: string;
-  eventId: string;
-  localDate: string;
-}): void {
-  applyRemoval(queryClient, params);
-}
-
-// ─── Goal-note cache patch (M9 Phase 2) — the check-in exception, second entity ──
-//
-// `goal_notes` has EXACTLY the asymmetry that made invalidate wrong for check-ins,
-// and it is stated in the store's own header: local SQLite (AsyncStorage on web) is
-// AUTHORITATIVE, Supabase is a best-effort backup whose failure only sets
-// `goalNotesCloudError`. `cloudInsertGoalNote` is fired and NOT awaited, so an
-// invalidate→refetch would race — or entirely outrun — the insert and return a list
-// without the entry the user just typed; offline it would never appear at all.
-// So goal notes get the same Option-A treatment, for the same measured reason.
-//
-// `GoalNoteRow` and the domain `GoalNote` WERE field-for-field identical (seven
-// columns, none nullable), so there was no adapter here — the assignment below was
-// the compile-time proof that they had not drifted.
-//
-// THEY DRIFTED, AND IT CAUGHT IT: `goal_notes.deleted_at` was added 2026-07-30 so
-// the journal's delete could archive instead of hard-delete, and this line went red
-// with TS2741 on the next `tsc`. That is the guard doing its job, not a nuisance.
-// The store-side `GoalNote` is deliberately NOT extended to match — the store is
-// what Task 6 retires, and teaching a dying model about tombstones is work that
-// gets deleted with it. A note being mirrored into cache is by construction live,
-// so `deleted_at` is null here and nowhere else.
-
-/** Newest-first, matching `fetchGoalNotes`' `created_at desc, id desc`. */
-function byNoteNewest(a: GoalNoteRow, b: GoalNoteRow): number {
-  if (a.created_at !== b.created_at) return b.created_at.localeCompare(a.created_at);
-  return b.id.localeCompare(a.id);
-}
-
-function upsertNote(
-  existing: GoalNoteRow[] | undefined,
-  note: GoalNoteRow,
-): GoalNoteRow[] | undefined {
-  if (existing === undefined) return existing; // patch only what's already cached
-  return [note, ...existing.filter((n) => n.id !== note.id)].sort(byNoteNewest);
-}
-
-// PHASE-2 BRIDGE: delete in Phase 3
-/** Mirror a written or edited journal entry into its goal's note cache. */
-export function bridgeGoalNoteUpserted(note: GoalNote): void {
-  const row: GoalNoteRow = { ...note, deleted_at: null };
-  queryClient.setQueryData<GoalNoteRow[]>(
-    queryKeys.goalNotes(note.user_id, note.goal_id),
-    (old) => upsertNote(old, row),
-  );
-}
-
-// PHASE-2 BRIDGE: delete in Phase 3
-/** Drop a deleted journal entry from its goal's note cache. */
-export function bridgeGoalNoteRemoved(params: {
-  userId: string;
-  goalId: string;
-  noteId: string;
-}): void {
-  const { userId, goalId, noteId } = params;
-  queryClient.setQueryData<GoalNoteRow[]>(queryKeys.goalNotes(userId, goalId), (old) =>
-    old === undefined ? old : old.filter((n) => n.id !== noteId),
-  );
 }

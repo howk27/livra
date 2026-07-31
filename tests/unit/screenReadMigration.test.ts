@@ -235,12 +235,23 @@ const BRIDGE_FILES = [
   'state/goalsSlice.ts',
 ];
 
-/** file → number of `PHASE-2 BRIDGE` markers, measured 2026-07-30. */
+/**
+ * file → number of `PHASE-2 BRIDGE` markers.
+ *
+ * M9 Phase 3 Task 6 took this from 18 to 2. It is a RATCHET: every number here
+ * may fall and none may rise, because a new marker means a write went back onto
+ * the store path this phase exists to empty.
+ *
+ * The two that remain are `goalsSlice.linkMarkToGoal` / `unlinkMarkFromGoal`,
+ * which still serve four unmigrated creation surfaces (`app/goal/new.tsx`,
+ * `app/mark/new.tsx`, `app/onboarding.tsx`, `lib/goals/createFromAIPackage.ts`).
+ * They go to zero when those callers move — see `lib/data/bridge.ts`.
+ */
 const EXPECTED_BRIDGE_MARKERS: Record<string, number> = {
-  'lib/data/bridge.ts': 5, // 1 header + 4 exported bridge fns
-  'state/eventsSlice.ts': 3, // import + addEvent + deleteEvent
-  'state/goalNotesSlice.ts': 4, // import + add + edit + delete
-  'state/goalsSlice.ts': 6, // updateGoal, deleteGoal, completeGoal, reorder, link, unlink
+  'lib/data/bridge.ts': 0, // stripped to `bridgeInvalidate` alone
+  'state/eventsSlice.ts': 0, // check-ins run through hooks/useCheckin.ts
+  'state/goalNotesSlice.ts': 0, // both journal surfaces write through mutations
+  'state/goalsSlice.ts': 2, // link + unlink only; the other four are migrated
 };
 
 function bridgeMarkerLines(relPath: string): number[] {

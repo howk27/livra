@@ -47,9 +47,11 @@ const MIN_HEIGHT_TARGETS: Array<[string, string]> = [
  */
 const BOXED_NOT_SLOPPED: Array<[string, string]> = [
   ['app/goal/journal/[id].tsx', 'onPress={() => setEditing(false)}'],
-  ['app/goal/journal/[id].tsx', 'onPress={() => clearCloudError()}'],
+  // M9 Phase 3: the store's cloud-error hint became a local write-error state.
+  // Same control, same box, same 44pt rule; only the handler was renamed.
+  ['app/goal/journal/[id].tsx', 'onPress={() => setWriteError(null)}'],
   ['app/goal/[id].tsx', 'onPress={onSaveTitle}'],
-  ['app/goal/[id].tsx', 'onPress={() => clearCloudError()}'],
+  ['app/goal/[id].tsx', 'onPress={() => setWriteError(null)}'],
 ];
 
 describe('journal / mark-create tap targets reach 44px (QC3 wave2)', () => {
