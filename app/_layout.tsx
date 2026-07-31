@@ -53,6 +53,7 @@ import {
 import { requestLivraLocalNotificationReschedule } from '../services/livraLocalNotificationOwner';
 import { getSupabaseClient } from '../lib/supabase';
 import { initNetworkOnlineManager } from '../lib/data/connectivity';
+import { startOutbox } from '../lib/data/outbox';
 import {
   queryClient,
   asyncStoragePersister,
@@ -155,6 +156,11 @@ export default function RootLayout() {
 
   // M9 Phase 1 — drive React Query's online state from real device connectivity.
   useEffect(() => initNetworkOnlineManager(), []);
+
+  // M9 Phase 4 — the offline outbox: load the persisted queue and wire its drain
+  // triggers (start, reconnect, foreground). The write-success trigger lives in
+  // the mutations themselves.
+  useEffect(() => startOutbox(queryClient), []);
 
   // Biometric lock retired with the Privacy & Security screen (QC 2026-07-12).
   // Clear any stored flag so a re-added lock never inherits stale state.

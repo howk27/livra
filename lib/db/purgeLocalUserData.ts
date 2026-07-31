@@ -25,6 +25,7 @@ import { sqliteClearAllGoalsAndLinks } from './goalsSqlite';
 import { sqliteClearAllGoalNotes } from './goalNotesSqlite';
 import { sqliteClearAllMarkNotes } from './markNotesSqlite';
 import { clearPendingWidgetLogs } from '../widgets/widgetLogQueue';
+import { clearOutboxAll } from '../data/outbox';
 import { syncWidgetData } from '../widgets/widgetSync';
 import { useMarksStore } from '../../state/countersSlice';
 import { useEventsStore } from '../../state/eventsSlice';
@@ -73,6 +74,10 @@ export const ACCOUNT_SCOPED_STORAGE_KEYS = [
   'livra_bn_last_foreground_v1',
   'livra_mw_last_templates_v1',
   'livra_reengage_last_v1',
+  // The offline outbox (M9 Phase 4, lib/data/outbox.ts): queued rows belong to
+  // the account that wrote them and must never flush under the next sign-in.
+  // The in-memory queue is cleared by the clearOutboxAll() step below.
+  'livra-outbox-v1',
   // Sync state — a new account must not inherit another's watermark, its
   // blocked-goal ids, or its unsent retry queue.
   'last_synced_at',
@@ -279,6 +284,11 @@ export async function purgeLocalUserData(): Promise<PurgeLocalUserDataResult> {
 
   // 4. Memory: the stores above read from what we just emptied.
   failures.push(...resetInMemoryStores());
+
+  // 4b. The offline outbox (M9 Phase 4): its storage key is in the sweep above,
+  // but its in-memory queue would re-persist — and later FLUSH — the signed-out
+  // account's rows. clearOutboxAll never throws.
+  await clearOutboxAll();
 
   // 5. The widget, which lives in the App Group and not in AsyncStorage — the
   // home screen keeps showing the signed-out account's goals and marks until

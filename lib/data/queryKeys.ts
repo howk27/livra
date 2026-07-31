@@ -29,6 +29,9 @@ export const queryKeys = {
   marksByGoal: (userId: string) => [ROOT, userId, 'marks', 'by-goal-map'] as const,
   mark: (userId: string, markId: string) => [ROOT, userId, 'marks', 'by-id', markId] as const,
 
+  // Prefix of every check-in key shape below — invalidating it refreshes the
+  // per-mark, all-events and today views at once (the outbox flusher's refresh).
+  checkinsRoot: (userId: string) => [ROOT, userId, 'checkins'] as const,
   checkins: (userId: string, markId: string) => [ROOT, userId, 'checkins', markId] as const,
   // Every live check-in the user owns — the query-layer equivalent of the old
   // eventsSlice `events` array that Goals/Focus read for weekly-completion math.
