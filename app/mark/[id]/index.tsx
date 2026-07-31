@@ -72,6 +72,7 @@ import { resolveCounterIconType } from '@/src/components/icons/IconResolver';
 // M9 Phase 2 Task 3 — reads come from the query layer; writes stay in the stores.
 import { useMark, useMarksForUser, useMarksByGoal } from '@/lib/data/marks';
 import { useUserCheckins } from '@/lib/data/checkins';
+import { totalsByMark } from '@/lib/data/derived';
 import { useGoals } from '@/lib/data/goals';
 import type { GoalRow, MarkRow, MarkEventRow } from '@/lib/data/types';
 import type { Mark, MarkEvent, FrequencyKind } from '../../../types';
@@ -130,7 +131,9 @@ const EMPTY_CHECKIN_ROWS: MarkEventRow[] = [];
 const EMPTY_GOAL_ROWS: GoalRow[] = [];
 const EMPTY_MARKS_BY_GOAL: Record<string, MarkRow[]> = {};
 
-function toMark(row: MarkRow): Mark {
+// `total` is DERIVED from the event log (M9 Phase 4) — the stored `marks.total`
+// left the client contract; Phase 3 had already stopped maintaining it.
+function toMark(row: MarkRow, totals: ReadonlyMap<string, number>): Mark {
   return {
     id: row.id,
     user_id: row.user_id,
@@ -140,7 +143,7 @@ function toMark(row: MarkRow): Mark {
     unit: (row.unit ?? 'sessions') as Mark['unit'],
     enable_streak: row.enable_streak ?? false,
     sort_index: row.sort_index ?? 0,
-    total: row.total ?? 0,
+    total: totals.get(row.id) ?? 0,
     last_activity_date: row.last_activity_date ?? undefined,
     deleted_at: row.deleted_at,
     created_at: row.created_at ?? '',
@@ -229,7 +232,16 @@ function MarkDetailContent() {
   const loading = markQuery.isLoading;
 
   const markRow = markQuery.data ?? null;
-  const counter = useMemo(() => (markRow ? toMark(markRow) : null), [markRow]);
+  // All-time totals derived from the events (Phase 4) — feeds the adapters in
+  // place of the retired stored `marks.total`.
+  const markTotals = useMemo(
+    () => totalsByMark(checkinsQuery.data ?? EMPTY_CHECKIN_ROWS),
+    [checkinsQuery.data],
+  );
+  const counter = useMemo(
+    () => (markRow ? toMark(markRow, markTotals) : null),
+    [markRow, markTotals],
+  );
   const allEvents = useMemo<MarkEvent[]>(
     () => (checkinsQuery.data ?? EMPTY_CHECKIN_ROWS).map(toMarkEvent),
     [checkinsQuery.data],
@@ -274,8 +286,8 @@ function MarkDetailContent() {
   );
 
   const allActiveCounters = useMemo<Mark[]>(
-    () => (allMarksQuery.data ?? EMPTY_MARK_ROWS).map(toMark),
-    [allMarksQuery.data],
+    () => (allMarksQuery.data ?? EMPTY_MARK_ROWS).map((row) => toMark(row, markTotals)),
+    [allMarksQuery.data, markTotals],
   );
 
   const allLoggedToday = useMemo(() => {

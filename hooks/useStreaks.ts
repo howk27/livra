@@ -10,120 +10,17 @@
  */
 import { useMemo } from 'react';
 import type { CounterEvent, MarkEvent, CounterStreak } from '../types';
-import { formatDate, addDays } from '../lib/date';
 import { getAppDate } from '../lib/appDate';
 import { useAppDateStore, selectAppDateKey } from '../state/appDateSlice';
+import { deriveStreak, type StreakData } from '../lib/data/derived';
 
-export interface StreakData {
-  current: number;
-  longest: number;
-  lastDate?: string;
-}
+// The streak MATH moved to `lib/data/derived.ts` (M9 Phase 4 Task 1) so the
+// derivation lives with the data layer and survives Phase 5's deletion of the old
+// system. This module keeps its whole export surface and delegates.
+export type { StreakData } from '../lib/data/derived';
 
-export const computeStreak = (events: CounterEvent[], today?: Date): StreakData => {
-  // CRITICAL: Use device local time consistently
-  // formatDate uses local timezone (date-fns format uses local time by default)
-  const now = today || getAppDate();
-  const todayStr = formatDate(now);
-  
-  // Get unique dates with activity (increment events only)
-  // CRITICAL: Ensure all dates are normalized to local timezone strings (yyyy-MM-dd)
-  // occurred_local_date should always be in local timezone format
-  const activityDates = new Set(
-    events
-      .filter((e) => {
-        if (!e || e.event_type !== 'increment' || e.deleted_at || !e.occurred_local_date) {
-          return false;
-        }
-        // Validate that occurred_local_date is in correct format (yyyy-MM-dd)
-        // This ensures timezone consistency
-        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-        return dateRegex.test(e.occurred_local_date);
-      })
-      .map((e) => {
-        // Normalize date string - ensure it's in yyyy-MM-dd format (local timezone)
-        const dateStr = e.occurred_local_date!;
-        // If already in correct format, use it
-        if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-          return dateStr;
-        }
-        // Otherwise, parse and reformat using local timezone
-        try {
-          return formatDate(new Date(dateStr));
-        } catch {
-          return dateStr; // Fallback to original if parsing fails
-        }
-      })
-      .filter((date): date is string => Boolean(date))
-  );
-
-  if (activityDates.size === 0) {
-    return { current: 0, longest: 0 };
-  }
-
-  // Sort dates
-  const sortedDates = Array.from(activityDates).sort();
-  const lastDate = sortedDates[sortedDates.length - 1];
-
-  // Parse a YYYY-MM-DD string as local noon to avoid UTC-midnight timezone boundary issues.
-  const localNoon = (dateStr: string) => new Date(dateStr + 'T12:00:00');
-
-  // Calculate current streak (counting backwards from today)
-  let currentStreak = 0;
-
-  // Check if there's activity today or yesterday (allow 1-day gap)
-  const daysSinceLastActivity = Math.floor(
-    (localNoon(todayStr).getTime() - localNoon(lastDate).getTime()) / (1000 * 60 * 60 * 24)
-  );
-
-  if (daysSinceLastActivity > 1) {
-    currentStreak = 0;
-  } else {
-    let checkDate = localNoon(lastDate);
-    let safetyCounter = 0;
-    const MAX_STREAK_DAYS = 1000;
-
-    while (activityDates.has(formatDate(checkDate)) && safetyCounter < MAX_STREAK_DAYS) {
-      currentStreak++;
-      checkDate = addDays(checkDate, -1);
-      safetyCounter++;
-    }
-  }
-
-  // Calculate longest streak
-  let longestStreak = 0;
-  let tempStreak = 0;
-  let prevDate: Date | null = null;
-
-  sortedDates.forEach((dateStr) => {
-    const currentDate = localNoon(dateStr);
-
-    if (!prevDate) {
-      tempStreak = 1;
-    } else {
-      const daysDiff = Math.floor(
-        (currentDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24)
-      );
-
-      if (daysDiff === 1) {
-        tempStreak++;
-      } else {
-        longestStreak = Math.max(longestStreak, tempStreak);
-        tempStreak = 1;
-      }
-    }
-
-    prevDate = currentDate;
-  });
-  
-  longestStreak = Math.max(longestStreak, tempStreak);
-
-  return {
-    current: currentStreak,
-    longest: longestStreak,
-    lastDate,
-  };
-};
+export const computeStreak = (events: CounterEvent[], today?: Date): StreakData =>
+  deriveStreak(events, today || getAppDate());
 
 /** Canonical streak for a mark from live event history (same “today” as the rest of the app). */
 export function deriveStreakForMark(

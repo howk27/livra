@@ -62,6 +62,7 @@ import { useCompleteGoal } from '../../hooks/useCompleteGoal';
 import { useGoal, useGoals } from '@/lib/data/goals';
 import { useMarks, useMarksByGoal, useMarksForUser } from '@/lib/data/marks';
 import { useUserCheckins } from '@/lib/data/checkins';
+import { totalsByMark } from '@/lib/data/derived';
 import { useGoalNotes } from '@/lib/data/notes';
 import { useAppDateStore, selectAppDateKey } from '../../state/appDateSlice';
 import { effectivePersonalBest, useMomentumStore } from '../../state/momentumSlice';
@@ -185,7 +186,9 @@ function toGoal(row: GoalRow, linkedMarkIds: string[]): Goal {
   };
 }
 
-function toMark(row: MarkRow): Mark {
+// `total` is DERIVED from the event log (M9 Phase 4) — the stored `marks.total`
+// left the client contract; Phase 3 had already stopped maintaining it.
+function toMark(row: MarkRow, totals: ReadonlyMap<string, number>): Mark {
   return {
     id: row.id,
     user_id: row.user_id,
@@ -195,7 +198,7 @@ function toMark(row: MarkRow): Mark {
     unit: (row.unit ?? 'sessions') as Mark['unit'],
     enable_streak: row.enable_streak ?? false,
     sort_index: row.sort_index ?? 0,
-    total: row.total ?? 0,
+    total: totals.get(row.id) ?? 0,
     last_activity_date: row.last_activity_date ?? undefined,
     deleted_at: row.deleted_at,
     created_at: row.created_at ?? '',
@@ -1043,8 +1046,15 @@ export default function GoalDetailScreen() {
     () => (goalRow ? toGoal(goalRow, linkedMarkIds) : undefined),
     [goalRow, linkedMarkIds],
   );
+  // All-time totals derived from the events (Phase 4) — feeds the adapters in
+  // place of the retired stored `marks.total`; the hero medallion's dominantMark
+  // pick reads these.
+  const markTotals = useMemo(() => totalsByMark(checkinRows), [checkinRows]);
   // This goal's linked marks (old Mark shape); sort_index order comes from the query.
-  const linkedMarks = useMemo<Mark[]>(() => linkedMarkRows.map(toMark), [linkedMarkRows]);
+  const linkedMarks = useMemo<Mark[]>(
+    () => linkedMarkRows.map((row) => toMark(row, markTotals)),
+    [linkedMarkRows, markTotals],
+  );
   // The user's live check-ins as MarkEvent[] — the array the old eventsSlice exposed.
   const allEvents = useMemo<MarkEvent[]>(() => checkinRows.map(toMarkEvent), [checkinRows]);
 
@@ -1089,8 +1099,8 @@ export default function GoalDetailScreen() {
   // the sheet names that goal (heldByTitleForMark) rather than doing it quietly.
   const linkedIdSet = useMemo(() => new Set(linkedMarkIds), [linkedMarkIds]);
   const linkCandidates = useMemo<Mark[]>(
-    () => allMarkRows.filter((m) => !linkedIdSet.has(m.id)).map(toMark),
-    [allMarkRows, linkedIdSet],
+    () => allMarkRows.filter((m) => !linkedIdSet.has(m.id)).map((row) => toMark(row, markTotals)),
+    [allMarkRows, linkedIdSet, markTotals],
   );
 
   // markId → the goal currently holding it, from the live link map (useMarksByGoal),

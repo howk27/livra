@@ -84,6 +84,7 @@ import type { Goal } from '../../types/goal';
 import { useMarksForUser, useMarksByGoal } from '@/lib/data/marks';
 import { useUserCheckins } from '@/lib/data/checkins';
 import { useGoals } from '@/lib/data/goals';
+import { totalsByMark } from '@/lib/data/derived';
 import { asDataError } from '@/lib/data/errors';
 import { caughtErrorCopy, dataErrorCopy } from '@/lib/copy';
 import { useCheckin } from '../../hooks/useCheckin';
@@ -104,7 +105,9 @@ const EMPTY_CHECKIN_ROWS: MarkEventRow[] = [];
 const EMPTY_GOAL_ROWS: GoalRow[] = [];
 const EMPTY_MARKS_BY_GOAL: Record<string, MarkRowData[]> = {};
 
-function toMark(row: MarkRowData): Mark {
+// `total` is DERIVED from the event log (M9 Phase 4) — the stored `marks.total`
+// left the client contract; Phase 3 had already stopped maintaining it.
+function toMark(row: MarkRowData, totals: ReadonlyMap<string, number>): Mark {
   return {
     id: row.id,
     user_id: row.user_id,
@@ -114,7 +117,7 @@ function toMark(row: MarkRowData): Mark {
     unit: (row.unit ?? 'sessions') as Mark['unit'],
     enable_streak: row.enable_streak ?? false,
     sort_index: row.sort_index ?? 0,
-    total: row.total ?? 0,
+    total: totals.get(row.id) ?? 0,
     last_activity_date: row.last_activity_date ?? undefined,
     deleted_at: row.deleted_at,
     created_at: row.created_at ?? '',
@@ -200,9 +203,16 @@ export default function FocusScreen() {
   const loading = marksQuery.isLoading;
   const error = dataErrorCopy(asDataError(marksQuery.error));
 
+  // All-time totals derived from the events this screen already fetches; feeds
+  // the adapters in place of the retired stored `marks.total`.
+  const markTotals = useMemo(
+    () => totalsByMark(checkinsQuery.data ?? EMPTY_CHECKIN_ROWS),
+    [checkinsQuery.data],
+  );
+
   const counters = useMemo<Counter[]>(
-    () => (marksQuery.data ?? EMPTY_MARK_ROWS).map(toMark),
-    [marksQuery.data],
+    () => (marksQuery.data ?? EMPTY_MARK_ROWS).map((row) => toMark(row, markTotals)),
+    [marksQuery.data, markTotals],
   );
 
   // Reconcile logs tapped in the iOS 17+ interactive widget (AppIntent queue).
@@ -354,8 +364,9 @@ export default function FocusScreen() {
   // A goal's marks, resolved THROUGH goal_mark_links (useMarksByGoal), never
   // mark.goal_id — the link-based association the plan's device check confirmed.
   const marksForGoal = useCallback(
-    (goalId: string): Counter[] => (marksByGoalRows[goalId] ?? EMPTY_MARK_ROWS).map(toMark),
-    [marksByGoalRows],
+    (goalId: string): Counter[] =>
+      (marksByGoalRows[goalId] ?? EMPTY_MARK_ROWS).map((row) => toMark(row, markTotals)),
+    [marksByGoalRows, markTotals],
   );
 
   // The set of marks attached to ANY goal, from live links. partitionMarks keyed

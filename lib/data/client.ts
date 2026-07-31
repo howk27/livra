@@ -63,6 +63,11 @@ export const GOAL_COLUMNS = [
 // are the truth (Phase 0 / T6), and Phase 5 drops the column. Selecting it here
 // is exactly the bug this milestone removes; the Phase 1 guard test pins its
 // absence.
+//
+// `total` is ALSO deliberately absent (M9 Phase 4): the all-time total is derived
+// from `mark_events` (`lib/data/derived.ts`), and Phase 3 already stopped writing
+// the stored column, so selecting it would read a value nothing maintains. The
+// server column stays, unread, as a diagnostic (spec §12.3).
 export const MARK_COLUMNS = [
   'id',
   'user_id',
@@ -70,7 +75,6 @@ export const MARK_COLUMNS = [
   'emoji',
   'color',
   'unit',
-  'total',
   'sort_index',
   'enable_streak',
   'last_activity_date',

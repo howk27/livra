@@ -39,6 +39,7 @@ import { useMarksByGoal } from '@/lib/data/marks';
 import { asDataError } from '@/lib/data/errors';
 import { caughtErrorCopy, dataErrorCopy } from '@/lib/copy';
 import { useUserCheckins } from '@/lib/data/checkins';
+import { totalsByMark } from '@/lib/data/derived';
 import { currentWeekDates, computeCompletionsThisWeek } from '../../lib/features';
 import {
   getActiveGoals,
@@ -125,7 +126,9 @@ function toGoal(row: GoalRow, linkedMarkIds: string[]): Goal {
   };
 }
 
-function toMark(row: MarkRow): Mark {
+// `total` is DERIVED from the event log (M9 Phase 4) — the stored `marks.total`
+// left the client contract; Phase 3 had already stopped maintaining it.
+function toMark(row: MarkRow, totals: ReadonlyMap<string, number>): Mark {
   return {
     id: row.id,
     user_id: row.user_id,
@@ -135,7 +138,7 @@ function toMark(row: MarkRow): Mark {
     unit: (row.unit ?? 'sessions') as Mark['unit'],
     enable_streak: row.enable_streak ?? false,
     sort_index: row.sort_index ?? 0,
-    total: row.total ?? 0,
+    total: totals.get(row.id) ?? 0,
     last_activity_date: row.last_activity_date ?? undefined,
     deleted_at: row.deleted_at,
     created_at: row.created_at ?? '',
@@ -674,12 +677,18 @@ export default function GoalsScreen() {
   // dominant-mark medallion (same resolution as the goal-detail hero). Grouped
   // through goal_mark_links and adapted to the old Mark shape the medallion expects.
   const marksByGoal = useMemo(() => {
+    // Derived all-time totals feed the adapter (Phase 4) — this is what keeps the
+    // medallion's dominant-mark pick moving after `marks.total` went read-dead.
+    const markTotals = totalsByMark(checkinRows);
     const map = new Map<string, Mark[]>();
     for (const goal of active) {
-      map.set(goal.id, (marksByGoalMap[goal.id] ?? []).map(toMark));
+      map.set(
+        goal.id,
+        (marksByGoalMap[goal.id] ?? []).map((row) => toMark(row, markTotals)),
+      );
     }
     return map;
-  }, [active, marksByGoalMap]);
+  }, [active, marksByGoalMap, checkinRows]);
 
   // Per-goal progress, computed once here (reproduces the retired store selector).
   const progressByGoal = useMemo(() => {
