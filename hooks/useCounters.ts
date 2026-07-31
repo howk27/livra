@@ -380,16 +380,7 @@ export const useMarks = () => {
           logger.error('[INCREMENT] Error evaluating badges after increment:', error);
         });
 
-        import('../lib/xpEngine').then(({ awardMarkXP }) => {
-          awardMarkXP(userId, markId, today)
-            .then((result) => {
-              const { useXPStore } = require('../state/xpSlice');
-              useXPStore.getState().applyXPResult(result);
-            })
-            .catch((err: unknown) => {
-              logger.error('[XP] awardMarkXP failed:', err);
-            });
-        });
+        // XP deleted in M9 Phase 5A (spec §4.4).
 
         // Fire-and-forget: credit linked goals, then reconcile at-risk warnings. Never blocks logging.
         setTimeout(() => {

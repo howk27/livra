@@ -233,18 +233,8 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
     };
     await upsertGoals([completed]);
 
-    // Fire-and-forget XP (anti-cheat: must be ≥ 14 days old)
+    // XP deleted in M9 Phase 5A (spec §4.4).
     const goalAgeDays = (Date.now() - new Date(completing.created_at).getTime()) / 86_400_000;
-    if (goalAgeDays >= 14 && completing.user_id) {
-      import('../lib/xpEngine').then(({ awardGoalXP }) => {
-        awardGoalXP(completing.user_id, completing.id)
-          .then(result => {
-            const { useXPStore } = require('./xpSlice');
-            useXPStore.getState().applyXPResult(result);
-          })
-          .catch((err: unknown) => console.warn('[XP] awardGoalXP failed:', err));
-      });
-    }
 
     set(s => ({
       goals: s.goals.map(g => (g.id === completed.id ? completed : g)),

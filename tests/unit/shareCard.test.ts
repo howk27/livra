@@ -6,7 +6,6 @@ import { DEFAULT_SHARE_CARD_STYLE } from '../../lib/sharing/shareCardThemes';
 const defaultProps = {
   goalTitle: 'Run a 5K',
   completedDate: '2026-05-29',
-  levelTitle: 'Focused',
   daysTaken: 42,
 };
 
@@ -24,11 +23,6 @@ describe('GoalCompletionShareCard', () => {
   it('renders days taken', () => {
     const { getByText } = render(React.createElement(GoalCompletionShareCard, defaultProps));
     expect(getByText('42 days')).toBeTruthy();
-  });
-
-  it('renders level title', () => {
-    const { getByText } = render(React.createElement(GoalCompletionShareCard, defaultProps));
-    expect(getByText('Focused')).toBeTruthy();
   });
 
   it('renders targetDateLabel when provided', () => {
@@ -54,23 +48,14 @@ describe('GoalCompletionShareCard', () => {
 });
 
 describe('GoalCompletionShareCard styling', () => {
+  // XP deleted in M9 Phase 5A: the card renders no level badge in any style,
+  // so `showBadge` is inert and the levelTitle prop is gone.
   const base = {
     goalTitle: 'Run a 5K',
     completedDate: '2026-05-29',
-    levelTitle: 'Focused',
     daysTaken: 42,
     bankedMomentumDays: 12,
   };
-
-  it('hides the level badge when showBadge is false', () => {
-    const { queryByText } = render(
-      React.createElement(GoalCompletionShareCard, {
-        ...base,
-        style: { ...DEFAULT_SHARE_CARD_STYLE, showBadge: false },
-      })
-    );
-    expect(queryByText('Focused')).toBeNull();
-  });
 
   it('hides the date/days meta when showDate is false', () => {
     const { queryByText } = render(

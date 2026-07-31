@@ -33,7 +33,6 @@ import { useGoalsStore } from '../../state/goalsSlice';
 import { useGoalNotesStore } from '../../state/goalNotesSlice';
 import { useDailyTrackingStore } from '../../state/dailyTrackingSlice';
 import { useCheckinsStore } from '../../state/checkinsSlice';
-import { useXPStore } from '../../state/xpSlice';
 import { useFeaturesStore } from '../../state/featuresSlice';
 import { useMomentumStore } from '../../state/momentumSlice';
 import { useIdentityStore } from '../../state/identitySlice';
@@ -221,8 +220,6 @@ function resetInMemoryStores(): string[] {
     ['markNotes', () =>
       useDailyTrackingStore.setState({ dailyLogs: [], loading: false, notesCloudError: null })],
     ['checkins', () => useCheckinsStore.setState({ checkins: [], loading: false, error: null })],
-    ['xp', () =>
-      useXPStore.setState({ totalXP: 0, currentLevel: 1, pendingLevelUp: null, loading: false })],
     ['skipTokens', () => useFeaturesStore.setState({ skipTokens: [], loading: false })],
     ['momentum', () =>
       useMomentumStore.setState({ snapshots: {}, longestRuns: {}, longestRunsHydrated: false })],

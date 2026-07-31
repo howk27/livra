@@ -62,7 +62,6 @@ import { getMilestonesToFire, MILESTONE_COPY } from '../lib/goalMilestones';
 import { getAppDate } from '../lib/appDate';
 import { checkProStatus } from '../lib/iap/iap';
 import { reVerifyProOnLaunch } from '../lib/iap/iapReVerify';
-import { useXPStore } from '../state/xpSlice';
 import { useGoalCompletionStore } from '../state/goalCompletionStore';
 import { GoalCompletionOverlay } from '../components/overlays/GoalCompletionOverlay';
 import { initAnalytics, identify, resetAnalytics, screenTrack } from '../lib/analytics/posthog';
@@ -531,7 +530,6 @@ export default function RootLayout() {
           useEventsStore.getState().loadEvents(undefined, user.id);
           await useGoalsStore.getState().loadGoals(user.id);
           checkAndFireMilestones().catch(() => {});
-          await useXPStore.getState().loadXP(user.id);
         } catch (error) {
           logger.error('[App] Error loading local stores after login:', error);
         }
@@ -633,8 +631,9 @@ function RootNavigator() {
         />
       </Stack>
       <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
-      {/* XP surfaces hidden for beta — accrual still runs (see decisions.md 2026-07-11).
-          Re-enable by restoring the LevelUpModal render on pendingLevelUp. */}
+      {/* XP deleted in M9 Phase 5A (spec §4.4): surfaces were hidden for beta
+          2026-07-11 and xp_events never existed server-side, so a reinstall
+          reset everyone to level 1 anyway. */}
       {goalCompletionShow && <GoalCompletionOverlay />}
     </>
   );

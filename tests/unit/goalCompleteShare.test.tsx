@@ -20,15 +20,6 @@ jest.mock('../../state/goalsSlice', () => ({
   ),
 }));
 
-jest.mock('../../state/xpSlice', () => ({
-  useXPStore: jest.fn((fn: any) => fn({ totalXP: 1000 })),
-}));
-
-jest.mock('../../lib/xpEngine', () => ({
-  getLevelForXP: () => 4,
-  LEVEL_TITLES: ['Beginner', 'Committed', 'Consistent', 'Focused'],
-}));
-
 jest.mock('expo-haptics', () => ({
   notificationAsync: jest.fn(),
   impactAsync: jest.fn(),

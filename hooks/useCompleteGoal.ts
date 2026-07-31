@@ -27,9 +27,6 @@ import { capture } from '../lib/analytics/posthog';
 import { ANALYTICS_EVENTS } from '../lib/analytics/events';
 import { logger } from '../lib/utils/logger';
 
-/** A goal cannot earn XP until it has been alive this long (anti-cheat). */
-const XP_MIN_GOAL_AGE_DAYS = 14;
-
 export interface CompleteGoalTarget {
   id: string;
   user_id: string;
@@ -46,18 +43,8 @@ export function useCompleteGoal(userId: string) {
       // The only step allowed to fail loudly. Everything below is consequence.
       await mutation.mutateAsync({ goalId: goal.id, bankedMomentumDays: bankedDays });
 
+      // XP deleted in M9 Phase 5A (spec §4.4).
       const goalAgeDays = (Date.now() - new Date(goal.created_at).getTime()) / 86_400_000;
-
-      if (goalAgeDays >= XP_MIN_GOAL_AGE_DAYS && goal.user_id) {
-        import('../lib/xpEngine')
-          .then(({ awardGoalXP }) =>
-            awardGoalXP(goal.user_id, goal.id).then((result) => {
-              const { useXPStore } = require('../state/xpSlice');
-              useXPStore.getState().applyXPResult(result);
-            }),
-          )
-          .catch((error: unknown) => logger.error('[completeGoal] awardGoalXP failed', error));
-      }
 
       capture(ANALYTICS_EVENTS.GOAL_COMPLETED, {
         goal_id: goal.id,

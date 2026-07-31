@@ -134,16 +134,7 @@ export function useCheckin(): UseCheckinResult {
           logger.error('[checkin] badge evaluation failed', error);
         });
 
-        import('../lib/xpEngine')
-          .then(({ awardMarkXP }) =>
-            awardMarkXP(userId, markId, today).then((result) => {
-              const { useXPStore } = require('../state/xpSlice');
-              useXPStore.getState().applyXPResult(result);
-            }),
-          )
-          .catch((error: unknown) => {
-            logger.error('[checkin] awardMarkXP failed', error);
-          });
+        // XP deleted in M9 Phase 5A (spec §4.4).
 
         // Goal credit and momentum. STILL A SQLITE WRITE: `creditMarkToGoals`
         // updates `current_mark_count` / `banked_momentum_days` in the local goals

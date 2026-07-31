@@ -21,8 +21,6 @@ function formatDate(dateStr: string): string {
 export interface GoalCompletionShareCardProps {
   goalTitle: string;
   completedDate: string; // 'YYYY-MM-DD'
-  /** XP level badge text. Omitted while XP surfaces are hidden for beta. */
-  levelTitle?: string;
   daysTaken: number; // always provided — computed from created_at
   targetDateLabel?: string; // only when goal had a target_date
   bankedMomentumDays?: number | null; // Momentum banked at completion (Phase 1.4)
@@ -33,7 +31,6 @@ export interface GoalCompletionShareCardProps {
 export function GoalCompletionShareCard({
   goalTitle,
   completedDate,
-  levelTitle,
   daysTaken,
   targetDateLabel,
   bankedMomentumDays,
@@ -69,12 +66,6 @@ export function GoalCompletionShareCard({
             {style.showMomentum && bankedLine != null ? (
               <Text style={[styles.metaText, { color: colors.muted }]}>{bankedLine}</Text>
             ) : null}
-          </View>
-        ) : null}
-
-        {style.showBadge && levelTitle ? (
-          <View style={[styles.levelBadge, { borderColor: colors.accent }]}>
-            <Text style={[styles.levelBadgeText, { color: colors.accent }]}>{levelTitle}</Text>
           </View>
         ) : null}
       </View>
@@ -132,18 +123,6 @@ const styles = StyleSheet.create({
   metaText: {
     fontSize: fontSize.sm,
     textAlign: 'center',
-  },
-  levelBadge: {
-    borderWidth: 1,
-    borderRadius: borderRadius.full,
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.lg,
-    marginTop: spacing.sm,
-  },
-  levelBadgeText: {
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
-    letterSpacing: 0.5,
   },
   bottomSection: {
     alignItems: 'center',

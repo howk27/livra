@@ -35,8 +35,6 @@ const PREVIEW_SCALE = PREVIEW_WIDTH / CARD_WIDTH;
 export interface SharePreviewModalCardProps {
   goalTitle: string;
   completedDate: string;
-  /** XP level badge text. Omitted while XP surfaces are hidden for beta. */
-  levelTitle?: string;
   daysTaken: number;
   targetDateLabel?: string;
   bankedMomentumDays?: number | null;
