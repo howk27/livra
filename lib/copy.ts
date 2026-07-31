@@ -10,7 +10,7 @@ import { FREE_MARKS_PER_GOAL, FREE_MARK_CEILING } from './gating';
 import type { GenerationFailReason } from './ai/goalGeneration';
 // Type-only for the same reason: the exhaustiveness constraint on DATA_ERROR_COPY
 // must sit in a file tsc reads, and this keeps lib/copy.ts runtime-free of lib/data.
-import type { DataErrorKind } from './data/errors';
+import { asDataError, type DataErrorKind } from './data/errors';
 
 // ─── Momentum at-risk warning copy (Phase 1.3) ──────────────────────────────
 // No dashes. Offer-framed with a rest-out. Rotate, never the same template twice in a row.
@@ -198,6 +198,20 @@ export const DATA_ERROR_COPY: Record<DataErrorKind, string> = {
 export function dataErrorCopy(error: { kind: DataErrorKind } | null | undefined): string | null {
   if (!error) return null;
   return DATA_ERROR_COPY[error.kind] ?? DATA_ERROR_COPY.unknown;
+}
+
+/**
+ * M9 Phase 3 — the same table, for a failure that DEFINITELY happened.
+ *
+ * `dataErrorCopy` is nullable because a read query has no error most of the time.
+ * A `catch` block is the opposite case: something failed, the surface has to say
+ * something, and `?? fallback` at every call site is four chances to pick a
+ * different fallback. The nullable path survives only because `throw undefined` is
+ * legal JavaScript, not because "no error" is a state a catch can be in.
+ */
+export function caughtErrorCopy(error: unknown): string {
+  const classified = asDataError(error);
+  return (classified && dataErrorCopy(classified)) || DATA_ERROR_COPY.unknown;
 }
 
 /** Inline exhausted panel on /goal/suggest. Honest, never a wall: manual stays free. */

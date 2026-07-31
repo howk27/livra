@@ -37,7 +37,7 @@ import {
   useEditGoalNoteMutation,
 } from '@/lib/data/mutations/notes';
 import { asDataError } from '@/lib/data/errors';
-import { dataErrorCopy } from '@/lib/copy';
+import { caughtErrorCopy, dataErrorCopy } from '@/lib/copy';
 import { useAuth } from '../../../hooks/useAuth';
 import { getAppDate } from '../../../lib/appDate';
 import { formatDate } from '../../../lib/date';
@@ -215,7 +215,7 @@ export default function GoalJournalScreen() {
         await appendNote.mutateAsync({ goalId: id, userId: noteUserId, localDate, text });
         setWriteError(null);
       } catch (error) {
-        setWriteError(dataErrorCopy(asDataError(error)));
+        setWriteError(caughtErrorCopy(error));
         // RETHROWN on purpose: `JournalComposer` clears its draft only when this
         // resolves, so swallowing here would wipe the entry the save just lost.
         throw error;
@@ -231,7 +231,7 @@ export default function GoalJournalScreen() {
         await editNote.mutateAsync({ noteId, goalId: id, text });
         setWriteError(null);
       } catch (error) {
-        setWriteError(dataErrorCopy(asDataError(error)));
+        setWriteError(caughtErrorCopy(error));
         throw error;
       }
     },
@@ -257,7 +257,7 @@ export default function GoalJournalScreen() {
         setWriteError(null);
       } catch (error) {
         // The optimistic removal has already rolled back by here.
-        setWriteError(dataErrorCopy(asDataError(error)));
+        setWriteError(caughtErrorCopy(error));
       }
     },
     [id, deleteNote],

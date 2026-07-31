@@ -1,0 +1,85 @@
+// hooks/useCompleteGoal.ts
+//
+// M9 Phase 3 Task 6 — the app-layer replacement for `goalsSlice.completeGoal`.
+//
+// `lib/data/mutations/goals.ts` `completeGoal` writes the goal row and NOTHING
+// else, deliberately. Everything the store did after that write is app
+// orchestration, and it lives here — the same split `hooks/useCheckin.ts` made for
+// badges, and for the same reason: a failed XP award must not read to the user as
+// a failed completion.
+//
+// WHAT MOVED, UNCHANGED IN BEHAVIOUR:
+//   • XP, still gated on the 14-day anti-cheat rule and still fire-and-forget
+//   • the GOAL_COMPLETED analytics event, with the same three properties
+//   • clearing the momentum snapshot
+//   • converting the goal's marks to maintenance habits (Phase 3.2)
+//
+// ORDER MATTERS IN ONE PLACE: `bankedMomentumDays` is read BEFORE the write and
+// the snapshot is cleared AFTER it. The store read it from
+// `useMomentumStore.snapshots[id]` and so does this — the data layer does not read
+// Zustand, which is why the mutation takes the number as an input.
+
+import { useCallback } from 'react';
+import { useCompleteGoalMutation } from '../lib/data/mutations/goals';
+import { useMomentumStore } from '../state/momentumSlice';
+import { useMarksStore } from '../state/countersSlice';
+import { capture } from '../lib/analytics/posthog';
+import { ANALYTICS_EVENTS } from '../lib/analytics/events';
+import { logger } from '../lib/utils/logger';
+
+/** A goal cannot earn XP until it has been alive this long (anti-cheat). */
+const XP_MIN_GOAL_AGE_DAYS = 14;
+
+export interface CompleteGoalTarget {
+  id: string;
+  user_id: string;
+  created_at: string;
+}
+
+export function useCompleteGoal(userId: string) {
+  const mutation = useCompleteGoalMutation(userId);
+
+  const completeGoal = useCallback(
+    async (goal: CompleteGoalTarget) => {
+      const bankedDays = Math.max(0, useMomentumStore.getState().snapshots[goal.id]?.days ?? 0);
+
+      // The only step allowed to fail loudly. Everything below is consequence.
+      await mutation.mutateAsync({ goalId: goal.id, bankedMomentumDays: bankedDays });
+
+      const goalAgeDays = (Date.now() - new Date(goal.created_at).getTime()) / 86_400_000;
+
+      if (goalAgeDays >= XP_MIN_GOAL_AGE_DAYS && goal.user_id) {
+        import('../lib/xpEngine')
+          .then(({ awardGoalXP }) =>
+            awardGoalXP(goal.user_id, goal.id).then((result) => {
+              const { useXPStore } = require('../state/xpSlice');
+              useXPStore.getState().applyXPResult(result);
+            }),
+          )
+          .catch((error: unknown) => logger.error('[completeGoal] awardGoalXP failed', error));
+      }
+
+      capture(ANALYTICS_EVENTS.GOAL_COMPLETED, {
+        goal_id: goal.id,
+        banked_momentum_days: bankedDays,
+        goal_age_days: Math.round(goalAgeDays),
+      });
+
+      useMomentumStore.getState().clearSnapshot(goal.id);
+
+      // The goal is done, but its habits carry on as maintenance marks. Still a
+      // SQLite write (`countersSlice`), which is why the mutation invalidates the
+      // marks reads as well as the goals reads — a goals-only refresh would leave
+      // the marks showing their pre-conversion shape.
+      useMarksStore
+        .getState()
+        .convertMarksToMaintenance(goal.id)
+        .catch((error: unknown) =>
+          logger.error('[completeGoal] convertMarksToMaintenance failed', error),
+        );
+    },
+    [mutation],
+  );
+
+  return { completeGoal, isCompleting: mutation.isPending };
+}

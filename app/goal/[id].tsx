@@ -46,9 +46,17 @@ import type { Goal } from '../../types/goal';
 import type { GoalRow, MarkRow, MarkEventRow } from '@/lib/data/types';
 import type { TierId, FrequencyId } from '../../lib/goalMarkSuggestions';
 import { useEffectiveTheme } from '../../state/uiSlice';
-import { useGoalsStore } from '../../state/goalsSlice';
-import { useGoalNotesStore } from '../../state/goalNotesSlice';
 import { useMarksStore } from '../../state/countersSlice';
+// M9 Phase 3: goal + note + link writes are mutations now; `goalsSlice` and
+// `goalNotesSlice` are gone from this screen, and with them the write→read bridge.
+import {
+  useArchiveGoalMutation,
+  useEditGoalMutation,
+  useRenameGoalMutation,
+} from '@/lib/data/mutations/goals';
+import { useLinkMarkMutation, useUnlinkMarkMutation } from '@/lib/data/mutations/marks';
+import { useAppendGoalNoteMutation } from '@/lib/data/mutations/notes';
+import { useCompleteGoal } from '../../hooks/useCompleteGoal';
 // M9 Phase 2: goal-detail READS come from lib/data/ (React Query); WRITES still
 // flow through the stores above (updateMark / link / goal edit-complete-delete).
 import { useGoal, useGoals } from '@/lib/data/goals';
@@ -66,7 +74,7 @@ import { useCheckin } from '../../hooks/useCheckin';
 import { useAuth } from '../../hooks/useAuth';
 import { useIapSubscriptions } from '../../hooks/useIapSubscriptions';
 import { canAddMarkToGoal } from '../../lib/gating';
-import { MARK_PER_GOAL_LIMIT_MESSAGE, dataErrorCopy, DATA_ERROR_COPY } from '../../lib/copy';
+import { MARK_PER_GOAL_LIMIT_MESSAGE, dataErrorCopy, caughtErrorCopy } from '../../lib/copy';
 import { asDataError } from '../../lib/data/errors';
 import { useMotion } from '../../hooks/useMotion';
 import { useNotification } from '../../contexts/NotificationContext';
@@ -784,16 +792,25 @@ function GoalJournalPreview({
   const loading = notesQuery.isLoading;
   const recent = useMemo(() => notes.slice(0, 3), [notes]);
   const totalForGoal = notes.length;
-  const cloudError = useGoalNotesStore((s) => s.goalNotesCloudError);
-  const clearCloudError = useGoalNotesStore((s) => s.clearGoalNotesCloudError);
-  const addGoalNote = useGoalNotesStore((s) => s.addGoalNote);
+  // M9 Phase 3: same swap as the full journal screen. `goalNotesCloudError` meant
+  // "saved here, the backup failed"; a rejected write now means it was not saved.
+  const appendNote = useAppendGoalNoteMutation();
+  const [writeError, setWriteError] = useState<string | null>(null);
 
   const handleAddNote = async (text: string) => {
+    if (userId === '') return;
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     }
     const localDate = formatDate(getAppDate());
-    await addGoalNote(goalId, userId, localDate, text);
+    try {
+      await appendNote.mutateAsync({ goalId, userId, localDate, text });
+      setWriteError(null);
+    } catch (error) {
+      setWriteError(caughtErrorCopy(error));
+      // Rethrown so `JournalComposer` keeps the draft it would otherwise clear.
+      throw error;
+    }
   };
 
   return (
@@ -802,10 +819,10 @@ function GoalJournalPreview({
 
       <JournalComposer c={c} onAdd={handleAddNote} inputMinHeight={72} />
 
-      {cloudError ? (
+      {writeError ? (
         <View style={styles.journalCloudRow}>
-          <Text style={[styles.journalCloudHint, { color: c.inkMid }]}>{cloudError}</Text>
-          <TouchableOpacity onPress={() => clearCloudError()} style={styles.journalCloudDismissBtn} activeOpacity={0.7}>
+          <Text style={[styles.journalCloudHint, { color: c.inkMid }]}>{writeError}</Text>
+          <TouchableOpacity onPress={() => setWriteError(null)} style={styles.journalCloudDismissBtn} activeOpacity={0.7}>
             <Text style={[styles.journalCloudDismiss, { color: c.accent }]}>Dismiss</Text>
           </TouchableOpacity>
         </View>
@@ -992,14 +1009,26 @@ export default function GoalDetailScreen() {
   const checkinsQuery = useUserCheckins();      // events for weekly + progress math
   const goalsQuery = useGoals();                // other goals' titles for the link sheet
 
-  // ── Writes: still the old stores (untouched; bridged on persist) ──────────
+  // ── Writes: lib/data/ mutations (M9 Phase 3) ──────────────────────────────
+  // Each reaches Supabase directly and invalidates its own reads, so no bridge is
+  // involved. `completeGoal` keeps its orchestration chain (XP, analytics,
+  // momentum, maintenance) in `useCompleteGoal` — the mutation writes the row only.
+  const renameGoal = useRenameGoalMutation(userId ?? '');
+  const editGoal = useEditGoalMutation(userId ?? '');
+  const archiveGoal = useArchiveGoalMutation(userId ?? '');
+  const linkMark = useLinkMarkMutation(userId ?? '');
+  const unlinkMark = useUnlinkMarkMutation(userId ?? '');
+  const { completeGoal } = useCompleteGoal(userId ?? '');
+
+  // STILL THE STORE, DELIBERATELY: `marks.goal_id` is the legacy association column
+  // this milestone retires, but SIX non-migrated subsystems still READ it —
+  // `lib/widgets/widgetSync.ts:49` (the iOS widget's per-goal grouping),
+  // `state/countersSlice.ts:273` (maintenance conversion), `lib/gating.ts:46`,
+  // `lib/features.ts:118`, `lib/moments/emptyState.ts:49`,
+  // `lib/notifications/reengageNudge.ts:76`. Dropping the write here would silently
+  // break all six. The LINK is the truth (the mutations never write `goal_id`);
+  // this is a dual-write to a dying column, and Phase 5 removes it with them.
   const updateMark = useMarksStore(s => s.updateMark);
-  const linkMarkToGoal = useGoalsStore(s => s.linkMarkToGoal);
-  const unlinkMarkFromGoal = useGoalsStore(s => s.unlinkMarkFromGoal);
-  const updateGoalTitle = useGoalsStore(s => s.updateGoalTitle);
-  const updateGoalTargetDate = useGoalsStore(s => s.updateGoalTargetDate);
-  const completeGoal = useGoalsStore(s => s.completeGoal);
-  const deleteGoal = useGoalsStore(s => s.deleteGoal);
 
   const goalRow = goalQuery.data ?? null;
   const linkedMarkRows = marksQuery.data ?? EMPTY_MARK_ROWS;
@@ -1043,10 +1072,16 @@ export default function GoalDetailScreen() {
 
   const handleSaveTitle = useCallback(async () => {
     if (titleDraft.trim().length >= 3) {
-      await updateGoalTitle(id!, titleDraft.trim());
+      try {
+        await renameGoal.mutateAsync({ goalId: id!, title: titleDraft.trim() });
+      } catch (error) {
+        // Stay in edit mode so the typed title is still there to retry.
+        showError(caughtErrorCopy(error));
+        return;
+      }
     }
     setEditingTitle(false);
-  }, [titleDraft, id, updateGoalTitle]);
+  }, [titleDraft, id, renameGoal, showError]);
 
   // QC4-L: candidates to link = every live mark not already linked to this goal.
   // M9 Phase 2: resolved THROUGH LINKS (all live marks minus this goal's linked
@@ -1135,7 +1170,7 @@ export default function GoalDetailScreen() {
         await logCheckin(markId, userId, 1);
       } catch (error: unknown) {
         // The raw error stayed in the data layer; this is the classified line.
-        showError(dataErrorCopy(asDataError(error)) ?? DATA_ERROR_COPY.unknown);
+        showError(caughtErrorCopy(error));
       }
     },
     [userId, logCheckin, showError],
@@ -1165,16 +1200,19 @@ export default function GoalDetailScreen() {
       const previousGoalId = markHolderGoalId.get(markId) ?? null;
       try {
         if (previousGoalId && previousGoalId !== id) {
-          await unlinkMarkFromGoal(previousGoalId, markId);
+          await unlinkMark.mutateAsync({ goalId: previousGoalId, markId });
         }
+        // The LINK is the write that matters and it goes LAST — if the legacy
+        // column write fails, the mark is not yet linked here and the move stays
+        // retryable, rather than leaving a link whose legacy column disagrees.
         await updateMark(markId, { goal_id: id! });
-        await linkMarkToGoal(id!, markId);
+        await linkMark.mutateAsync({ goalId: id!, markId, userId: userId ?? '' });
       } catch (error: unknown) {
         logger.error('Error linking mark to goal:', error);
-        showError('Could not link that mark. Try again.');
+        showError(caughtErrorCopy(error));
       }
     },
-    [markHolderGoalId, id, unlinkMarkFromGoal, updateMark, linkMarkToGoal, showError],
+    [markHolderGoalId, id, userId, unlinkMark, updateMark, linkMark, showError],
   );
 
   // The honest version. Unlinking leaves every logged event intact on the mark
@@ -1192,14 +1230,14 @@ export default function GoalDetailScreen() {
       });
       if (!ok) return;
       try {
-        await unlinkMarkFromGoal(id!, mark.id);
+        await unlinkMark.mutateAsync({ goalId: id!, markId: mark.id });
         await updateMark(mark.id, { goal_id: null });
       } catch (error: unknown) {
         logger.error('Error unlinking mark from goal:', error);
-        showError('Could not unlink that mark. Try again.');
+        showError(caughtErrorCopy(error));
       }
     },
-    [id, unlinkMarkFromGoal, updateMark, showError],
+    [id, unlinkMark, updateMark, showError],
   );
 
   // Progress reproduced from query data (replaces the retired goalsSlice.getGoalProgress
@@ -1242,7 +1280,7 @@ export default function GoalDetailScreen() {
   const handleComplete = () =>
     void confirmCompleteGoal(
       goal.title,
-      () => completeGoal(id!),
+      () => completeGoal({ id: id!, user_id: goal.user_id, created_at: goal.created_at }),
       () =>
         router.replace({ pathname: '/goal/complete', params: { goalTitle: goal.title, goalId: id! } } as any),
       showError,
@@ -1255,7 +1293,18 @@ export default function GoalDetailScreen() {
   };
 
   const handleSaveDate = async (date: Date) => {
-    await updateGoalTargetDate(id!, format(date, 'yyyy-MM-dd'));
+    try {
+      // `deadlineDate`, not `target_date`: the live `goals` table has
+      // `deadline_date` only. `target_date` was the store's alias, kept in sync by
+      // a shim that dies with the store.
+      await editGoal.mutateAsync({
+        goalId: id!,
+        changes: { deadlineDate: format(date, 'yyyy-MM-dd') },
+      });
+    } catch (error) {
+      showError(caughtErrorCopy(error));
+      return;
+    }
     setShowDatePicker(false);
   };
 
@@ -1327,7 +1376,7 @@ export default function GoalDetailScreen() {
           canComplete={canComplete}
           onOpenDatePicker={handleOpenDatePicker}
           onComplete={handleComplete}
-          onDelete={() => void confirmRemoveGoal(goal.title, () => deleteGoal(id!), () => router.back(), showError)}
+          onDelete={() => void confirmRemoveGoal(goal.title, () => archiveGoal.mutateAsync(id!), () => router.back(), showError)}
         />
       </ScrollView>
 
