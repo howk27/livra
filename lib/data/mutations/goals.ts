@@ -2,6 +2,12 @@
 //
 // M9 Phase 3 Task 3 — goal writes, and THE ARCHIVE RULE (T2).
 //
+// EXTENDED BY TASK 6 (2026-07-30) with `editGoal` and `completeGoal`, the last two
+// goal writes the store still owned. With these the mutation layer covers every
+// goal write there is — create, rename, edit, reorder, complete, archive, and
+// link/unlink over in `marks.ts` — which is what lets Step 1 delete the bridges
+// rather than merely thin them.
+//
 // ARCHIVE, NEVER DELETE (D-8/D-9). Nothing here issues a DELETE. Archiving stamps
 // `deleted_at` on the goal, on its links, and on any mark those links leave with
 // nowhere to belong. Every row is retained; there is no restore UI yet, by ruling.
@@ -177,6 +183,105 @@ export async function reorderGoals(orderedGoalIds: readonly string[]): Promise<v
   }
 }
 
+// ─── Edit (the rest of `updateGoal`) ────────────────────────────────────────
+//
+// `renameGoal` above owns the title because it is the one field with its own
+// affordance on two screens. This owns everything else the goal-detail editor can
+// change.
+//
+// FIELD BY FIELD, NEVER A BLANKET SPREAD — the same rule as `editMark`, for the
+// same reason: `{ ...changes }` sends `undefined` for every key the caller omitted,
+// and PostgREST writes those as NULL. On this table that silently clears a user's
+// deadline or description because they edited an unrelated field.
+//
+// `target_date` IS DELIBERATELY NOT HERE. It is not a column — the live `goals`
+// table has `deadline_date` only. The store carries both and keeps them in sync
+// (`goalsSlice.ts:186-188`), a compatibility shim for old callers that dies with
+// the store. Writing the real column once is the whole point of this layer.
+
+export interface EditGoalChanges {
+  description?: string | null;
+  /** The real column. `target_date` is the store's deprecated alias for it. */
+  deadlineDate?: string | null;
+  /** `jsonb` server-side, `string[]` in the app. */
+  milestonesFired?: readonly string[];
+  icon?: string | null;
+  color?: string | null;
+  tier?: string | null;
+  frequency?: string | null;
+  targetMarkCount?: number | null;
+}
+
+export async function editGoal(goalId: string, changes: EditGoalChanges): Promise<void> {
+  if (!UUID_RE.test(goalId)) throw invalid('goalId is not a uuid');
+
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if ('description' in changes) patch.description = changes.description ?? null;
+  if ('deadlineDate' in changes) patch.deadline_date = changes.deadlineDate ?? null;
+  if ('milestonesFired' in changes) patch.milestones_fired = [...(changes.milestonesFired ?? [])];
+  if ('icon' in changes) patch.icon = changes.icon ?? null;
+  if ('color' in changes) patch.color = changes.color ?? null;
+  if ('tier' in changes) patch.tier = changes.tier ?? null;
+  if ('frequency' in changes) patch.frequency = changes.frequency ?? null;
+  if ('targetMarkCount' in changes) patch.target_mark_count = changes.targetMarkCount ?? null;
+
+  // Only `updated_at` means the caller passed nothing. Sending that alone would
+  // bump the row's timestamp for no reason, which is a real cost once Phase 4
+  // resolves conflicts by recency.
+  if (Object.keys(patch).length === 1) return;
+
+  const { error } = await dataClient()
+    .from('goals')
+    .update(patch)
+    .eq('id', goalId)
+    .is('deleted_at', null);
+  if (error) throw toDataError(error);
+}
+
+// ─── Complete ───────────────────────────────────────────────────────────────
+
+/**
+ * Mark a goal finished.
+ *
+ * THIS WRITES THE ROW AND NOTHING ELSE — deliberately. The store's `completeGoal`
+ * also awards XP, fires analytics, clears the momentum snapshot and converts the
+ * goal's marks to maintenance. None of that belongs behind a data mutation: it is
+ * app orchestration, it is fire-and-forget, and burying it here would make a failed
+ * XP call look like a failed completion. This is the same split Task 2 made when it
+ * left badges to the caller.
+ *
+ * `banked_momentum_days` is an INPUT rather than something this reads, because the
+ * value lives in a Zustand store and `lib/data/` does not read Zustand.
+ *
+ * IDEMPOTENT VIA `.neq('status', 'completed')`: a second call matches no rows, so a
+ * Phase 4 replay cannot move `completed_at` forward. That guard is safe because a
+ * completed goal cannot un-complete in this product (`app/goal/history.tsx:22`), and
+ * it is `neq` rather than `eq('status','active')` so a QUEUED goal can still finish.
+ */
+export async function completeGoal(
+  goalId: string,
+  bankedMomentumDays: number,
+): Promise<void> {
+  if (!UUID_RE.test(goalId)) throw invalid('goalId is not a uuid');
+  if (!Number.isFinite(bankedMomentumDays) || bankedMomentumDays < 0) {
+    throw invalid('bankedMomentumDays is not a non-negative number');
+  }
+
+  const now = new Date().toISOString();
+  const { error } = await dataClient()
+    .from('goals')
+    .update({
+      status: 'completed',
+      completed_at: now,
+      banked_momentum_days: Math.floor(bankedMomentumDays),
+      updated_at: now,
+    })
+    .eq('id', goalId)
+    .neq('status', 'completed')
+    .is('deleted_at', null);
+  if (error) throw toDataError(error);
+}
+
 // ─── Archive (T2) ───────────────────────────────────────────────────────────
 
 export interface LiveLink {
@@ -322,6 +427,27 @@ export function useReorderGoalsMutation(userId: string) {
       if (context?.previous) client.setQueryData(queryKeys.goals(userId), context.previous);
     },
     onSettled: () => invalidateGoalScope(client, userId),
+  });
+}
+
+export function useEditGoalMutation(userId: string) {
+  const client = useQueryClient();
+  return useMutation<void, DataError, { goalId: string; changes: EditGoalChanges }>({
+    mutationFn: ({ goalId, changes }) => editGoal(goalId, changes),
+    onSuccess: () => invalidateGoalScope(client, userId),
+  });
+}
+
+/**
+ * Completion invalidates MARKS as well as goals, and that is not incidental: the
+ * caller converts the goal's marks to maintenance right after this resolves, so a
+ * goals-only refresh would leave the marks reads showing the pre-conversion shape.
+ */
+export function useCompleteGoalMutation(userId: string) {
+  const client = useQueryClient();
+  return useMutation<void, DataError, { goalId: string; bankedMomentumDays: number }>({
+    mutationFn: ({ goalId, bankedMomentumDays }) => completeGoal(goalId, bankedMomentumDays),
+    onSuccess: () => invalidateGoalScope(client, userId),
   });
 }
 

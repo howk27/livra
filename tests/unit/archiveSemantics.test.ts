@@ -17,6 +17,8 @@ import {
   createGoal,
   renameGoal,
   reorderGoals,
+  editGoal,
+  completeGoal,
   type LiveLink,
 } from '@/lib/data/mutations/goals';
 import { setSupabaseClientOverride } from '@/lib/supabase';
@@ -48,7 +50,7 @@ function makeClient(results: Result[]) {
         calls.push({ table, method, args });
         return builder;
       };
-    for (const method of ['select', 'insert', 'update', 'delete', 'upsert', 'eq', 'is', 'in', 'order']) {
+    for (const method of ['select', 'insert', 'update', 'delete', 'upsert', 'eq', 'neq', 'is', 'in', 'order']) {
       builder[method] = jest.fn(chain(method));
     }
     builder.single = jest.fn(() => Promise.resolve(result));
@@ -320,5 +322,131 @@ describe('reorderGoals', () => {
       kind: 'permission',
     });
     expect(calls.filter((c) => c.method === 'update')).toHaveLength(2);
+  });
+});
+
+// ─── editGoal — the rest of the store's `updateGoal` ────────────────────────
+//
+// THE BUG THIS IS WRITTEN AGAINST is the blanket spread. `update({ ...changes })`
+// sends `undefined` for every key the caller omitted, and PostgREST writes those as
+// NULL — so editing a description would silently clear a deadline the user set
+// weeks ago. `editMark` was built field-by-field for the same reason (Task 4).
+
+describe('editGoal', () => {
+  const GOAL = GOAL_A;
+
+  it('GUARD: an omitted field is NOT sent — it cannot be nulled by omission', async () => {
+    const { calls } = makeClient([{ data: null, error: null }]);
+    await editGoal(GOAL, { description: 'why this matters' });
+
+    const patch = calls.find((c) => c.method === 'update')?.args[0] as Record<string, unknown>;
+    expect(patch).toEqual({ description: 'why this matters', updated_at: expect.any(String) });
+    // The blanket-spread version would carry all eight keys, six of them undefined.
+    expect('deadline_date' in patch).toBe(false);
+    expect('milestones_fired' in patch).toBe(false);
+    expect('target_mark_count' in patch).toBe(false);
+  });
+
+  it('an EXPLICIT null is still written — clearing a deadline must work', async () => {
+    const { calls } = makeClient([{ data: null, error: null }]);
+    await editGoal(GOAL, { deadlineDate: null });
+
+    const patch = calls.find((c) => c.method === 'update')?.args[0] as Record<string, unknown>;
+    // The distinction the `in` check buys: absent means "leave alone", explicit
+    // null means "clear it". A truthiness check would collapse the two.
+    expect(patch.deadline_date).toBeNull();
+  });
+
+  it('GUARD: never writes target_date — it is not a column', async () => {
+    const { calls } = makeClient([{ data: null, error: null }]);
+    await editGoal(GOAL, { deadlineDate: '2026-12-31' });
+
+    const patch = calls.find((c) => c.method === 'update')?.args[0] as Record<string, unknown>;
+    expect(patch.deadline_date).toBe('2026-12-31');
+    // The store keeps a deprecated `target_date` alias in sync; the live table has
+    // no such column, so sending it would 400 the whole update.
+    expect('target_date' in patch).toBe(false);
+  });
+
+  it('sends nothing at all when there is nothing to change', async () => {
+    const { calls } = makeClient([{ data: null, error: null }]);
+    await editGoal(GOAL, {});
+    // An updated_at-only write would bump the row for no reason, which costs real
+    // correctness once Phase 4 resolves conflicts by recency.
+    expect(calls.filter((c) => c.method === 'update')).toHaveLength(0);
+  });
+
+  it('copies milestones rather than sending the caller its own array', async () => {
+    const { calls } = makeClient([{ data: null, error: null }]);
+    const fired = ['first-week', 'halfway'];
+    await editGoal(GOAL, { milestonesFired: fired });
+
+    const patch = calls.find((c) => c.method === 'update')?.args[0] as Record<string, unknown>;
+    expect(patch.milestones_fired).toEqual(fired);
+    expect(patch.milestones_fired).not.toBe(fired);
+  });
+
+  it('only touches live rows, and refuses a malformed id before any request', async () => {
+    const { calls } = makeClient([{ data: null, error: null }]);
+    await editGoal(GOAL, { icon: 'target' });
+    expect(calls.find((c) => c.method === 'is')?.args).toEqual(['deleted_at', null]);
+
+    const { from } = makeClient([]);
+    await expect(editGoal('nope', { icon: 'x' })).rejects.toMatchObject({ kind: 'unknown' });
+    expect(from).not.toHaveBeenCalled();
+  });
+});
+
+// ─── completeGoal ───────────────────────────────────────────────────────────
+
+describe('completeGoal', () => {
+  const GOAL = GOAL_A;
+
+  it('flips status and stamps completion in one write', async () => {
+    const { calls } = makeClient([{ data: null, error: null }]);
+    await completeGoal(GOAL, 12);
+
+    const patch = calls.find((c) => c.method === 'update')?.args[0] as Record<string, unknown>;
+    expect(patch).toMatchObject({ status: 'completed', banked_momentum_days: 12 });
+    expect(patch.completed_at).toBe(patch.updated_at);
+  });
+
+  it('GUARD: is idempotent — a replay cannot move completed_at forward', async () => {
+    const { calls } = makeClient([{ data: null, error: null }]);
+    await completeGoal(GOAL, 3);
+
+    // `.neq('status','completed')` is what makes the second call match zero rows.
+    // It is `neq` and not `eq('status','active')` so a QUEUED goal can still finish.
+    expect(calls.find((c) => c.method === 'neq')?.args).toEqual(['status', 'completed']);
+    expect(calls.find((c) => c.method === 'is')?.args).toEqual(['deleted_at', null]);
+  });
+
+  it('GUARD: writes ONLY the goal row — no XP, analytics or maintenance here', async () => {
+    const { calls } = makeClient([{ data: null, error: null }]);
+    await completeGoal(GOAL, 5);
+
+    // The store's completeGoal also awarded XP, fired analytics, cleared the
+    // momentum snapshot and converted marks to maintenance. That is orchestration
+    // and stays with the caller — a failed XP call must not read as a failed
+    // completion. Same split Task 2 made for badges.
+    expect(writeOrder(calls)).toEqual(['goals.update']);
+    expect(calls.every((c) => c.table === 'goals')).toBe(true);
+  });
+
+  it('floors the banked days and refuses a nonsensical count', async () => {
+    const { calls } = makeClient([{ data: null, error: null }]);
+    await completeGoal(GOAL, 7.8);
+    const patch = calls.find((c) => c.method === 'update')?.args[0] as Record<string, unknown>;
+    expect(patch.banked_momentum_days).toBe(7);
+
+    const { from } = makeClient([]);
+    await expect(completeGoal(GOAL, -1)).rejects.toMatchObject({ kind: 'unknown' });
+    await expect(completeGoal(GOAL, NaN)).rejects.toMatchObject({ kind: 'unknown' });
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it('classifies a refusal rather than leaking Postgres text', async () => {
+    makeClient([{ data: null, error: { code: '42501', message: 'permission denied for goals' } }]);
+    await expect(completeGoal(GOAL, 0)).rejects.toMatchObject({ kind: 'permission' });
   });
 });
