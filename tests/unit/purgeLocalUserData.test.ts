@@ -191,35 +191,17 @@ describe('purgeLocalUserData — the app is still usable afterwards', () => {
   });
 });
 
-describe('purgeLocalUserData — failure handling', () => {
-  it('reports a failed step instead of throwing', async () => {
-    const spy = jest
-      .spyOn(AsyncStorage, 'getAllKeys')
-      .mockRejectedValueOnce(new Error('storage unavailable'));
-
-    const result = await purgeLocalUserData();
-
-    expect(result.failures).toContain('storageKeys');
-    spy.mockRestore();
-  });
-
-  it('still clears SQLite when the key sweep fails', async () => {
-    const spy = jest
-      .spyOn(AsyncStorage, 'getAllKeys')
-      .mockRejectedValueOnce(new Error('storage unavailable'));
+describe('purge — the query cache (M9 Phase 5A Task 3 Step 2)', () => {
+  it('clears the in-memory query cache and sweeps its persisted key', async () => {
+    const { queryClient } = require('../../lib/data/queryClient');
+    queryClient.setQueryData(['livra', 'user-a', 'goals'], [{ id: 'g1' }]);
+    await AsyncStorage.setItem('livra-rq-cache', '{"clientState":{}}');
 
     await purgeLocalUserData();
 
-    expect(execCalls.filter((sql) => sql.includes('DELETE FROM')).length).toBeGreaterThan(0);
-    spy.mockRestore();
-  });
-});
-
-describe('sign-out wiring', () => {
-  it('signOut runs the purge', () => {
-    const src = fs.readFileSync(path.join(process.cwd(), 'hooks', 'useAuth.ts'), 'utf8');
-    const signOutBody = src.slice(src.indexOf('const signOut ='));
-    expect(signOutBody).toContain('purgeLocalUserData');
+    expect(queryClient.getQueryData(['livra', 'user-a', 'goals'])).toBeUndefined();
+    expect(await AsyncStorage.getItem('livra-rq-cache')).toBeNull();
+    queryClient.clear();
   });
 });
 
@@ -280,5 +262,56 @@ describe('storage-key drift guard', () => {
       (DEVICE_SCOPED_STORAGE_KEYS as readonly string[]).includes(key),
     );
     expect(overlap).toEqual([]);
+  });
+});
+
+describe('purgeLocalUserData — failure handling', () => {
+  it('reports a failed step instead of throwing', async () => {
+    const spy = jest
+      .spyOn(AsyncStorage, 'getAllKeys')
+      .mockRejectedValueOnce(new Error('storage unavailable'));
+
+    const result = await purgeLocalUserData();
+
+    expect(result.failures).toContain('storageKeys');
+    spy.mockRestore();
+  });
+
+  it('still clears SQLite when the key sweep fails', async () => {
+    const spy = jest
+      .spyOn(AsyncStorage, 'getAllKeys')
+      .mockRejectedValueOnce(new Error('storage unavailable'));
+
+    await purgeLocalUserData();
+
+    expect(execCalls.filter((sql) => sql.includes('DELETE FROM')).length).toBeGreaterThan(0);
+    spy.mockRestore();
+  });
+});
+
+describe('sign-out wiring', () => {
+  it('signOut runs the purge', () => {
+    const src = fs.readFileSync(path.join(process.cwd(), 'hooks', 'useAuth.ts'), 'utf8');
+    const signOutBody = src.slice(src.indexOf('const signOut ='));
+    expect(signOutBody).toContain('purgeLocalUserData');
+  });
+
+  // M9 Phase 5A Task 3 Step 3 (§7.4): before the sign-out confirm, the outbox
+  // is flushed best-effort, and anything still stranded is TOLD to the user —
+  // silent loss is what the old system did.
+  it('settings attempts an outbox flush and warns about stranded check-ins', () => {
+    const stripComments = (s: string) =>
+      s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    const src = stripComments(
+      fs.readFileSync(path.join(process.cwd(), 'app', '(tabs)', 'settings.tsx'), 'utf8'),
+    );
+    const body = src.slice(src.indexOf('const handleSignOut ='));
+    const flushAt = body.indexOf('flushOutbox(');
+    const confirmAt = body.indexOf('await confirm(');
+    expect(flushAt).toBeGreaterThan(-1);
+    expect(confirmAt).toBeGreaterThan(-1);
+    expect(flushAt).toBeLessThan(confirmAt);
+    expect(body).toContain('pendingOutboxEntries()');
+    expect(body).toContain('Sign out anyway');
   });
 });

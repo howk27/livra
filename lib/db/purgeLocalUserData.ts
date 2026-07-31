@@ -25,6 +25,7 @@ import { sqliteClearAllGoalsAndLinks } from './goalsSqlite';
 import { sqliteClearAllGoalNotes } from './goalNotesSqlite';
 import { clearPendingWidgetLogs } from '../widgets/widgetLogQueue';
 import { clearOutboxAll } from '../data/outbox';
+import { queryClient } from '../data/queryClient';
 import { syncWidgetData } from '../widgets/widgetSync';
 import { useMarksStore } from '../../state/countersSlice';
 import { useEventsStore } from '../../state/eventsSlice';
@@ -75,6 +76,10 @@ export const ACCOUNT_SCOPED_STORAGE_KEYS = [
   // the account that wrote them and must never flush under the next sign-in.
   // The in-memory queue is cleared by the clearOutboxAll() step below.
   'livra-outbox-v1',
+  // The persisted query cache (lib/data/queryClient.ts). Keys inside are
+  // user-namespaced, so this is privacy hygiene rather than a correctness fix —
+  // the previous account's rows must not sit on a shared device's disk.
+  'livra-rq-cache',
   // Sync state — a new account must not inherit another's watermark, its
   // blocked-goal ids, or its unsent retry queue.
   'last_synced_at',
@@ -105,9 +110,8 @@ export const ACCOUNT_SCOPED_STORAGE_KEYS = [
   'livra.onboardingDraft.v1',
   // Auth-owned, cleared on SIGNED_OUT anyway; listed so the guard test sees it.
   'session_expired',
-  // Who this device's data belongs to (lib/db/accountSwitchGuard.ts). Account-
-  // scoped on purpose: once the purge has run there is nothing left to
-  // attribute, and the sign-in guard treats "unknown" as record-don't-wipe.
+  // Legacy: the deleted account-switch guard's ownership record (M9 Phase 5A).
+  // The cutover wipe removes it; listed so a pre-cutover device still sheds it.
   'livra_last_signed_in_user_id_v1',
 ] as const;
 
@@ -289,6 +293,15 @@ export async function purgeLocalUserData(): Promise<PurgeLocalUserDataResult> {
   // but its in-memory queue would re-persist — and later FLUSH — the signed-out
   // account's rows. clearOutboxAll never throws.
   await clearOutboxAll();
+
+  // 4c. The in-memory query cache (M9 Phase 5A). Its persisted key is in the
+  // sweep above; without this the live cache re-persists it on the next write.
+  try {
+    queryClient.clear();
+  } catch (error) {
+    logger.warn('[Purge] query cache clear failed:', error);
+    failures.push('queryCache');
+  }
 
   // 5. The widget, which lives in the App Group and not in AsyncStorage — the
   // home screen keeps showing the signed-out account's goals and marks until

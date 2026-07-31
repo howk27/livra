@@ -16,9 +16,7 @@ import {
   LinkSimple,
   Star,
   Sun,
-  ArrowsClockwise,
   DownloadSimple,
-  Trash,
   Question,
   ChatText,
   Gauge,
@@ -47,6 +45,7 @@ import { isApplePrivateRelayEmail } from '../../lib/auth/accountCredentials';
 import { needsEmailVerification } from '../../lib/auth/emailVerification';
 import { queryClient } from '../../lib/data/queryClient';
 import { queryKeys } from '../../lib/data/queryKeys';
+import { flushOutbox, pendingOutboxEntries } from '../../lib/data/outbox';
 import { fetchMarksForUser } from '../../lib/data/marks';
 import { fetchUserCheckins } from '../../lib/data/checkins';
 import { totalsByMark } from '../../lib/data/derived';
@@ -275,10 +274,25 @@ export default function SettingsScreen() {
   // writes land on the server as they happen, so there is nothing to trigger.
 
   const handleSignOut = async () => {
+    // M9 Phase 5A (§7.4): sign-out wipes the device, and the outbox may hold
+    // check-ins written offline. Try to land them first; if any remain, the
+    // user decides with the loss in front of them — silent loss is what the
+    // old system did.
+    if (pendingOutboxEntries().length > 0) {
+      try {
+        await flushOutbox(queryClient);
+      } catch (error) {
+        logger.warn('[Settings] pre-sign-out outbox flush failed:', error);
+      }
+    }
+    const stranded = pendingOutboxEntries().length;
     const ok = await confirm({
       title: 'Sign out?',
-      message: 'Are you sure you want to sign out?',
-      confirmLabel: 'Sign Out',
+      message:
+        stranded > 0
+          ? `${stranded === 1 ? 'One check-in' : `${stranded} check-ins`} on this device ${stranded === 1 ? "hasn't" : "haven't"} reached the server yet. Signing out now deletes ${stranded === 1 ? 'it' : 'them'} — connect to the internet first to keep ${stranded === 1 ? 'it' : 'them'}.`
+          : 'Are you sure you want to sign out?',
+      confirmLabel: stranded > 0 ? 'Sign out anyway' : 'Sign Out',
       cancelLabel: 'Cancel',
       destructive: true,
     });
