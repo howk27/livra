@@ -8,7 +8,6 @@ import { capture } from '../lib/analytics/posthog';
 import { ANALYTICS_EVENTS } from '../lib/analytics/events';
 import { computeStreak, updateStreakInDB } from './useStreaks';
 import { useAuth } from './useAuth';
-import { useSync } from './useSync';
 import { useBadges } from './useBadges';
 import { useIapSubscriptions } from './useIapSubscriptions';
 import { logger } from '../lib/utils/logger';
@@ -50,7 +49,9 @@ export const useMarks = () => {
   const events = useEventsStore((state) => state.events);
   const getEventsByMark = useEventsStore((state) => state.getEventsByMark);
   const { user } = useAuth();
-  const { sync } = useSync();
+  // M9 Phase 5A: the sync engine is deleted. The retired paths below still name
+  // `sync`; a no-op keeps them inert until Task 6 deletes this whole file.
+  const sync = useCallback(async (_opts?: unknown) => undefined, []);
   const { isProUnlocked, proStatus } = useIapSubscriptions();
   const {
     recordDailyLogin,
@@ -344,16 +345,8 @@ export const useMarks = () => {
             last_activity_date: mark.last_activity_date,
           });
         } catch (revertErr) {
+          // M9 Phase 5A: total reconciliation deleted — totals derive from events.
           logger.error('[INCREMENT] Revert counter total failed:', revertErr);
-          const { reconcileMarkTotalWithPersistedEvents } = await import(
-            '../lib/db/markTotalReconciliation'
-          );
-          await reconcileMarkTotalWithPersistedEvents(userId, markId).catch((reconcileErr) => {
-            logger.error('[INCREMENT] reconcile after failed revert failed', {
-              markId,
-              message: reconcileErr instanceof Error ? reconcileErr.message : String(reconcileErr),
-            });
-          });
         }
         useMarksStore.setState((state) => {
           const ru = new Map(state.recentUpdates || new Map());
@@ -542,16 +535,8 @@ export const useMarks = () => {
             last_activity_date: mark.last_activity_date,
           });
         } catch (revertErr) {
+          // M9 Phase 5A: total reconciliation deleted — totals derive from events.
           logger.error('[DECREMENT] Revert counter total failed:', revertErr);
-          const { reconcileMarkTotalWithPersistedEvents } = await import(
-            '../lib/db/markTotalReconciliation'
-          );
-          await reconcileMarkTotalWithPersistedEvents(userId, markId).catch((reconcileErr) => {
-            logger.error('[DECREMENT] reconcile after failed revert failed', {
-              markId,
-              message: reconcileErr instanceof Error ? reconcileErr.message : String(reconcileErr),
-            });
-          });
         }
         useMarksStore.setState((state) => {
           const ru = new Map(state.recentUpdates || new Map());
@@ -603,13 +588,7 @@ export const useMarks = () => {
           last_activity_date: today,
         });
       } catch (error) {
-        const { reconcileMarkTotalWithPersistedEvents } = await import('../lib/db/markTotalReconciliation');
-        await reconcileMarkTotalWithPersistedEvents(userId, markId).catch((reconcileErr) => {
-          logger.error('[RESET_MARK] reconcile after persist error failed', {
-            markId,
-            message: reconcileErr instanceof Error ? reconcileErr.message : String(reconcileErr),
-          });
-        });
+        // M9 Phase 5A: total reconciliation deleted — totals derive from events.
         loadMarks(userId).catch((loadErr) => {
           logger.error('[RESET_MARK] loadMarks after persist error failed', {
             markId,

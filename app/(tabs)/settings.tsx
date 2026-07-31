@@ -40,28 +40,23 @@ import { fonts, spacing, radius, shadow, themedColors, fontSize } from '../../th
 import { useEffectiveTheme, useUIStore } from '../../state/uiSlice';
 
 import { useAuth } from '../../hooks/useAuth';
-import { useSync } from '../../hooks/useSync';
 import { useIapSubscriptions } from '../../hooks/useIapSubscriptions';
-import { useCounters } from '../../hooks/useCounters';
-import { useEventsStore } from '../../state/eventsSlice';
 import { useMarksStore } from '../../state/countersSlice';
-import { useGoalsStore } from '../../state/goalsSlice';
 import { getSupabaseClient } from '../../lib/supabase';
 import { isApplePrivateRelayEmail } from '../../lib/auth/accountCredentials';
 import { needsEmailVerification } from '../../lib/auth/emailVerification';
-import { clearSyncCursors } from '../../lib/sync/syncCursors';
-import { resetDatabaseState } from '../../lib/db';
-import { sqliteClearAllGoalsAndLinks } from '../../lib/db/goalsSqlite';
-import { sqliteClearAllGoalNotes } from '../../lib/db/goalNotesSqlite';
-import { sqliteClearAllMarkNotes } from '../../lib/db/markNotesSqlite';
+import { queryClient } from '../../lib/data/queryClient';
+import { queryKeys } from '../../lib/data/queryKeys';
+import { fetchMarksForUser } from '../../lib/data/marks';
+import { fetchUserCheckins } from '../../lib/data/checkins';
+import { totalsByMark } from '../../lib/data/derived';
+import { toMark, toMarkEvent } from '../../lib/data/adapters';
 import { generateAllCountersCSV } from '../../lib/csv';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { canExportData } from '../../lib/gating';
 import { logger } from '../../lib/utils/logger';
 import { useNotification } from '../../contexts/NotificationContext';
-import { useFocusEffect } from 'expo-router';
-import { readSyncDiagSnapshot, type SyncDiagSnapshotV1 } from '../../lib/sync/syncDiagSnapshot';
 import { getAvatarUrl, refreshAvatarUrl } from '../../lib/storage/avatarStorage';
 import { getPace, setPace, paceWeeklyTarget, PACE_LABELS, type PaceLevel } from '../../lib/paceSetting';
 import Constants from 'expo-constants';
@@ -159,17 +154,13 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
 
   const { user, signOut: authSignOut } = useAuth();
-  const { sync, syncState } = useSync();
   const { isProUnlocked } = useIapSubscriptions();
-  const { counters } = useCounters();
-  const { events } = useEventsStore();
   const { showSuccess, showError } = useNotification();
   const supabase = getSupabaseClient();
 
   const [profileImageUri, setProfileImageUri] = useState<string | null>(null);
   const [profileDisplayName, setProfileDisplayName] = useState<string | null>(null);
   const [emailVerifiedAt, setEmailVerifiedAt] = useState<string | null>(null);
-  const [persistedSyncDiag, setPersistedSyncDiag] = useState<SyncDiagSnapshotV1 | null>(null);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
   const [pace, setPaceState] = useState<PaceLevel>('steady');
@@ -206,24 +197,6 @@ export default function SettingsScreen() {
   // never drive a banner (verified live 2026-07-25).
   const needsVerification = needsEmailVerification(user, emailVerifiedAt);
   const onPrivateRelay = isApplePrivateRelayEmail(user?.email);
-
-  const refreshRotation = useRef(new Animated.Value(0)).current;
-  const lastSyncErrorRef = useRef<string | null>(null);
-
-  // --- Load persisted sync diag on focus ---
-  const refreshPersistedSyncDiag = useCallback(async () => {
-    setPersistedSyncDiag(await readSyncDiagSnapshot());
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      void refreshPersistedSyncDiag();
-    }, [refreshPersistedSyncDiag]),
-  );
-
-  useEffect(() => {
-    void refreshPersistedSyncDiag();
-  }, [syncState.lastSyncedAt, refreshPersistedSyncDiag]);
 
   // --- Load profile display name ---
   useEffect(() => {
@@ -276,14 +249,6 @@ export default function SettingsScreen() {
     return () => { cancelled = true; };
   }, [user?.id]);
 
-  // --- Sync error toast ---
-  useEffect(() => {
-    if (!syncState.error) { lastSyncErrorRef.current = null; return; }
-    if (lastSyncErrorRef.current === syncState.error) return;
-    lastSyncErrorRef.current = syncState.error;
-    showError(syncState.error);
-  }, [syncState.error, showError]);
-
   // --- Derived values ---
   const profileName = useMemo(() => {
     if (!user) return 'Guest user';
@@ -305,51 +270,9 @@ export default function SettingsScreen() {
     } catch { return null; }
   }, [user?.created_at]);
 
-  const syncStatusText = useMemo(() => {
-    if (syncState.isSyncing) return 'Syncing...';
-    const ts = persistedSyncDiag?.coreSyncedAtIso ?? syncState.lastSyncedAt;
-    if (ts) return `Synced ${new Date(ts).toLocaleTimeString()}`;
-    return 'Up to date';
-  }, [syncState.isSyncing, persistedSyncDiag, syncState.lastSyncedAt]);
-
-  const refreshIconRotation = refreshRotation.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
-
   // --- Handlers ---
-  const handleSync = async () => {
-    refreshRotation.setValue(0);
-    Animated.loop(
-      Animated.timing(refreshRotation, { toValue: 1, duration: 1000, useNativeDriver: true })
-    ).start();
-    try {
-      // bypassThrottle: an explicit tap is a REQUEST, not background I/O. The
-      // 2-minute throttle exists to stop automatic syncs from thrashing; when it
-      // caught a manual tap it resolved without syncing at all and this screen
-      // announced "Data synced successfully!" anyway — an instant green lie on
-      // any second tap inside two minutes.
-      const outcome = await sync({ bypassThrottle: true });
-
-      // ONLY a completed run is announced. The other outcomes resolve rather
-      // than throw, which is why this used to be an unconditional showSuccess:
-      //   failed   network/timeout, which executeSync deliberately swallows
-      //   partial  ran and advanced, but the free-tier cap refused rows
-      //   skipped  nothing ran
-      //
-      // They are NOT re-announced here on purpose. syncState.error carries the
-      // message in every one of those cases and the effect above already toasts
-      // it — saying it twice from one tap is the other half of the same bug.
-      if (outcome.status === 'synced') {
-        showSuccess('Data synced successfully!');
-      }
-    } catch (e: any) {
-      showError(e.message || 'Failed to sync data');
-    } finally {
-      refreshRotation.stopAnimation();
-      refreshRotation.setValue(0);
-    }
-  };
+  // M9 Phase 5A: the manual "Data & Sync" affordance died with the sync engine —
+  // writes land on the server as they happen, so there is nothing to trigger.
 
   const handleSignOut = async () => {
     const ok = await confirm({
@@ -361,7 +284,6 @@ export default function SettingsScreen() {
     });
     if (!ok) return;
     try {
-      await clearSyncCursors();
       await AsyncStorage.removeItem('pro_unlocked');
       router.push('/auth/signing-out');
     } catch (error) {
@@ -429,9 +351,25 @@ export default function SettingsScreen() {
       return;
     }
     try {
+      if (!user?.id) return;
+      // M9 Phase 5A: export reads the query layer (cache when fresh, fetch when
+      // not) — the stores it used to read are gone. Totals derive from events.
+      const [markRows, eventRows] = await Promise.all([
+        queryClient.ensureQueryData({
+          queryKey: queryKeys.marks(user.id),
+          queryFn: fetchMarksForUser,
+        }),
+        queryClient.ensureQueryData({
+          queryKey: queryKeys.userCheckins(user.id),
+          queryFn: fetchUserCheckins,
+        }),
+      ]);
+      const totals = totalsByMark(eventRows);
+      const counters = markRows.map((row) => toMark(row, totals));
+      const allEvents = eventRows.map(toMarkEvent);
       const eventsMap = new Map();
       counters.forEach((counter) => {
-        eventsMap.set(counter.id, events.filter((e) => e.mark_id === counter.id));
+        eventsMap.set(counter.id, allEvents.filter((e) => e.mark_id === counter.id));
       });
       const csv = generateAllCountersCSV(counters, eventsMap);
 
@@ -456,40 +394,10 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleResetAllData = async () => {
-    const ok = await confirm({
-      title: 'Reset all data?',
-      message: 'This permanently deletes all your marks, goals, and history on this device. Your account and sign-in stay intact. This cannot be undone.',
-      confirmLabel: 'Reset',
-      cancelLabel: 'Cancel',
-      destructive: true,
-    });
-    if (!ok) return;
-    try {
-      await resetDatabaseState();
-      // resetDatabaseState only empties the AsyncStorage-backed store (marks,
-      // events, streaks, badges, XP). Goals, their mark links and both note
-      // tables moved to real SQLite in M6-B, so without these they SURVIVED an
-      // action whose own copy promises "permanently deletes all your marks,
-      // goals, and history on this device". Deliberately NOT the full sign-out
-      // purge: this reset keeps the session, onboarding and entitlement.
-      await Promise.all([
-        sqliteClearAllGoalsAndLinks(),
-        sqliteClearAllGoalNotes(),
-        sqliteClearAllMarkNotes(),
-      ]);
-      // Reload the in-memory stores so the UI reflects the wipe.
-      await Promise.all([
-        useMarksStore.getState().loadMarks(user?.id),
-        user?.id ? useGoalsStore.getState().loadGoals(user.id) : Promise.resolve(),
-        useEventsStore.getState().loadEvents(undefined, user?.id),
-      ]);
-      showSuccess('All local data has been reset.');
-    } catch (e: any) {
-      logger.error('[Settings] Reset All Data failed:', e);
-      showError(e?.message || 'Failed to reset data.');
-    }
-  };
+  // M9 Phase 5A: "Reset All Data" is gone with the local database — the device
+  // holds only a query cache, so a "delete everything on this device" control
+  // no longer describes anything real. A server-side wipe would be a different,
+  // far more dangerous feature and is deliberately not built here.
 
   const scrollContentBottomPad = spacing.xxl + TAB_BAR_CONTENT_HEIGHT + insets.bottom + spacing.lg;
 
@@ -638,6 +546,7 @@ export default function SettingsScreen() {
           <SettingsRow
             icon={Gauge}
             label="Pace"
+            isLast
             hideChevron
             rightElement={
               <View style={[styles.themeToggle, { backgroundColor: c.surfaceAlt }]}>
@@ -664,18 +573,6 @@ export default function SettingsScreen() {
               </View>
             }
           />
-          <SettingsRow
-            icon={ArrowsClockwise}
-            label="Data & Sync"
-            isLast
-            onPress={handleSync}
-            hideChevron
-            rightElement={
-              <Animated.View style={{ transform: [{ rotate: syncState.isSyncing ? refreshIconRotation : '0deg' }] }}>
-                <Text style={[styles.inlineHint, { color: c.inkMuted }]}>{syncStatusText}</Text>
-              </Animated.View>
-            }
-          />
         </SettingsCard>
 
         {/* ── DATA ── */}
@@ -685,14 +582,7 @@ export default function SettingsScreen() {
             icon={DownloadSimple}
             label="Export Marks"
             onPress={handleExportMarks}
-          />
-          <SettingsRow
-            icon={Trash}
-            label="Reset All Data"
             isLast
-            labelColor={c.danger}
-            hideChevron
-            onPress={handleResetAllData}
           />
         </SettingsCard>
 

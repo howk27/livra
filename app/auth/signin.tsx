@@ -27,7 +27,6 @@ import type { SupabaseClient, AuthUser as User } from '@supabase/supabase-js';
 import { spacing, borderRadius, fontWeight, fonts, fontSize, themedColors } from '../../theme/tokens';
 import { useEffectiveTheme, useUIStore } from '../../state/uiSlice';
 import { getSupabaseClient } from '../../lib/supabase';
-import { useSync } from '../../hooks/useSync';
 import { useAuth } from '../../hooks/useAuth';
 import { useNotifications } from '../../hooks/useNotifications';
 import { logger } from '../../lib/utils/logger';
@@ -45,7 +44,6 @@ export default function SignInScreen() {
   const c = themedColors(theme);
   const router = useRouter();
   const { user, initialized } = useAuth();
-  const { sync } = useSync();
   const supabase = getSupabaseClient();
   const { requestPermissions, permissionGranted } = useNotifications();
 
@@ -291,7 +289,7 @@ export default function SignInScreen() {
           isNewAppleUser ? ANALYTICS_EVENTS.USER_SIGNED_UP : ANALYTICS_EVENTS.USER_SIGNED_IN,
           { method: 'apple' },
         );
-        try { await sync(); } catch { /* non-blocking */ }
+        // M9 Phase 5A: no post-sign-in sync — the query layer fetches on mount.
       }
     } catch (err: unknown) {
       const e = err as { code?: string; message?: string };

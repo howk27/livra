@@ -1,7 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { addDays, format, subDays } from 'date-fns';
-import { initDatabase, query } from '../db';
-import { env } from '../env';
 import { getAppDate } from '../appDate';
 import { WeeklyReview, WeeklyReviewDay, WeeklyReviewStreakHighlight } from '../../types/WeeklyReview';
 
@@ -28,9 +25,6 @@ type WeeklyHistoryEntry = {
   weekStart: string;
   totalActivity: number;
 };
-
-const HISTORY_KEY = 'livra_weekly_review_history';
-export const WEEKLY_REVIEW_SEED_USER_KEY = 'livra_weekly_review_seed_user_id';
 
 const toLocalDate = (date: Date): string => format(date, 'yyyy-MM-dd');
 export const normalizeLocalDateKey = (value: string): string => {
@@ -241,139 +235,3 @@ export const computeWeeklyReview = (params: {
   };
 };
 
-const loadHistory = async (): Promise<WeeklyHistoryEntry[]> => {
-  try {
-    const raw = await AsyncStorage.getItem(HISTORY_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(entry => entry?.weekStart && typeof entry.totalActivity === 'number');
-  } catch {
-    return [];
-  }
-};
-
-const persistHistory = async (history: WeeklyHistoryEntry[]): Promise<void> => {
-  try {
-    await AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(history));
-  } catch {
-    // Best effort
-  }
-};
-
-const upsertHistory = async (weekStart: string, totalActivity: number): Promise<WeeklyHistoryEntry[]> => {
-  const history = await loadHistory();
-  const filtered = history.filter(entry => entry.weekStart !== weekStart);
-  const updated = [...filtered, { weekStart, totalActivity }].sort((a, b) =>
-    a.weekStart.localeCompare(b.weekStart)
-  );
-  const trimmed = updated.slice(-12);
-  await persistHistory(trimmed);
-  return trimmed;
-};
-
-export const getWeeklyReview = async (
-  referenceDate: Date = getAppDate(),
-  userId?: string
-): Promise<WeeklyReview> => {
-  await initDatabase();
-  const { weekStart, weekEnd } = getWeekRange(referenceDate);
-  const seedUserId = await AsyncStorage.getItem(WEEKLY_REVIEW_SEED_USER_KEY);
-
-  const loadData = async (effectiveUserId?: string) => {
-    const eventParams: any[] = [weekStart, weekEnd];
-    const userFilter = effectiveUserId ? 'AND user_id = ?' : '';
-    if (effectiveUserId) eventParams.push(effectiveUserId);
-
-    const events = await query<ReviewEvent>(
-      `SELECT counter_id, event_type, amount, occurred_local_date
-       FROM lc_events
-       WHERE occurred_local_date >= ? AND occurred_local_date <= ?
-       AND event_type = 'increment'
-       ${userFilter}`,
-      eventParams
-    );
-
-    const counterParams: any[] = [];
-    const counterFilter = effectiveUserId ? 'AND user_id = ?' : '';
-    if (effectiveUserId) counterParams.push(effectiveUserId);
-
-    const counters = await query<ReviewCounter>(
-      `SELECT id, name, emoji
-       FROM lc_counters
-       WHERE deleted_at IS NULL
-       ${counterFilter}`,
-      counterParams
-    );
-
-    const streakParams: any[] = [];
-    const streakFilter = effectiveUserId ? 'AND user_id = ?' : '';
-    if (effectiveUserId) streakParams.push(effectiveUserId);
-
-    const streaks = await query<ReviewStreak>(
-      `SELECT counter_id, current_streak, last_increment_date
-       FROM lc_streaks
-       WHERE deleted_at IS NULL
-       ${streakFilter}`,
-      streakParams
-    );
-
-    return { events, counters, streaks };
-  };
-
-  const primaryUserId = userId || seedUserId || undefined;
-  let { events, counters, streaks } = await loadData(primaryUserId);
-
-  if (userId && seedUserId && env.isDev && events.length === 0) {
-    ({ events, counters, streaks } = await loadData(seedUserId));
-  }
-
-  const history = await loadHistory();
-  let review = computeWeeklyReview({
-    weekStart,
-    weekEnd,
-    events: events || [],
-    counters: counters || [],
-    streaks: streaks || [],
-    historyTotals: history,
-  });
-
-  if (env.isDev && review.totalActivity === 0) {
-    if (userId && seedUserId && seedUserId !== userId) {
-      ({ events, counters, streaks } = await loadData(seedUserId));
-      review = computeWeeklyReview({
-        weekStart,
-        weekEnd,
-        events: events || [],
-        counters: counters || [],
-        streaks: streaks || [],
-        historyTotals: history,
-      });
-    }
-
-    if (review.totalActivity === 0) {
-      const fallbackUsers = await query<{ user_id: string }>(
-        `SELECT DISTINCT user_id FROM lc_events
-         WHERE occurred_local_date >= ? AND occurred_local_date <= ?
-         AND event_type = 'increment'`,
-        [weekStart, weekEnd]
-      );
-      const fallbackUserId = fallbackUsers?.[0]?.user_id;
-      if (fallbackUserId) {
-        ({ events, counters, streaks } = await loadData(fallbackUserId));
-        review = computeWeeklyReview({
-          weekStart,
-          weekEnd,
-          events: events || [],
-          counters: counters || [],
-          streaks: streaks || [],
-          historyTotals: history,
-        });
-      }
-    }
-  }
-
-  await upsertHistory(weekStart, review.totalActivity);
-
-  return review;
-};

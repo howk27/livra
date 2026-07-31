@@ -250,12 +250,7 @@ export const useMarksStore = create<MarksState>((set, get) => ({
     } catch (error) {
       logger.error('Error persisting mark update to database:', error);
       const userId = mark.user_id;
-      if (userId && updates.total !== undefined) {
-        const { reconcileMarkTotalWithPersistedEvents } = await import('../lib/db/markTotalReconciliation');
-        reconcileMarkTotalWithPersistedEvents(userId, id).catch((reconcileErr) => {
-          logger.error('[MarksSlice] Total reconcile after failed update failed:', reconcileErr);
-        });
-      }
+      // M9 Phase 5A: total reconciliation deleted — totals derive from events.
       if (userId) {
         get().loadMarks(userId).catch((err) => {
           logger.error('Error reloading marks after failed update:', err);

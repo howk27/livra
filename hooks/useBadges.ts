@@ -1,13 +1,27 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MarkBadge, BadgeCode, MarkEvent } from '../types';
-import { query, execute } from '../lib/db';
-import { getMetaValue, setMetaValue } from '../lib/db/meta';
+import { dataClient } from '../lib/data/client';
+import { logger } from '../lib/utils/logger';
 import { formatDate, daysBetween } from '../lib/date';
 import { getAppDate, getAppDateTime } from '../lib/appDate';
-import { useEventsStore } from '../state/eventsSlice';
 import { useAppDateStore, selectAppDateKey } from '../state/appDateSlice';
 import { computeStreak } from './useStreaks';
+
+// M9 Phase 5A: badge records live in the server's `mark_badges` table — they
+// used to live in the deleted mock DB (`lc_badges`) and reach the server only
+// through the deleted sync engine. "Badges stay stored" (spec §4.2): earned is a
+// fact, never recomputed, so the rows persist; the evaluation below only ever
+// RAISES progress toward a definition and stamps `earned_at` once.
+//
+// Login history is device-behavioural data with no server home; it moved from
+// the mock DB's meta table to AsyncStorage under the same per-user keys. Both
+// key families are account-scoped in the sign-out purge.
+//
+// All persistence here is best-effort: no badge write may ever throw into a
+// check-in (callers already .catch, and offline evaluation self-heals — the next
+// evaluation recomputes progress from the full event history).
 
 type BadgeDefinition = {
   code: BadgeCode;
@@ -133,8 +147,7 @@ const computeWindowProgress = (
 const badgeToMap = (records: MarkBadge[]): BadgeMap => {
   const map: BadgeMap = new Map();
   records.forEach((record) => {
-    // Use mark_id if available, fallback to counter_id for database compatibility
-    const markId = record.mark_id || (record as any).counter_id || '';
+    const markId = record.mark_id;
     const perCounter = map.get(markId) ?? new Map<BadgeCode, MarkBadge>();
     perCounter.set(record.badge_code, record);
     map.set(markId, perCounter);
@@ -150,7 +163,6 @@ export const badgeTestUtils = {
 
 export const useBadges = (userId?: string) => {
   const appDateKey = useAppDateStore(selectAppDateKey);
-  const { getEventsByMark } = useEventsStore();
   const [badgesByCounter, setBadgesByCounter] = useState<BadgeMap>(new Map());
   const [loading, setLoading] = useState(false);
   const [lastLoginDate, setLastLoginDate] = useState<string | null>(null);
@@ -160,8 +172,8 @@ export const useBadges = (userId?: string) => {
 
   const loadLoginState = useCallback(
     async (uid: string) => {
-      const lastLogin = await getMetaValue(lastLoginKey(uid));
-      const historyRaw = await getMetaValue(loginHistoryKey(uid));
+      const lastLogin = await AsyncStorage.getItem(lastLoginKey(uid));
+      const historyRaw = await AsyncStorage.getItem(loginHistoryKey(uid));
       let history: string[] = [];
 
       if (historyRaw) {
@@ -192,10 +204,18 @@ export const useBadges = (userId?: string) => {
 
       setLoading(true);
       try {
-        const rows = await query<MarkBadge & { counter_id: string }>('SELECT * FROM lc_badges WHERE deleted_at IS NULL');
-        const filtered = rows.filter((row) => row.user_id === uid);
-        setBadgesByCounter(badgeToMap(filtered));
+        const { data, error } = await dataClient()
+          .from('mark_badges')
+          .select('*')
+          .eq('user_id', uid)
+          .is('deleted_at', null);
+        if (error) throw error;
+        setBadgesByCounter(badgeToMap((data ?? []) as unknown as MarkBadge[]));
         await loadLoginState(uid);
+      } catch (error) {
+        // Offline or transient — keep whatever state we had; badges have no
+        // surface that could show a gap, and the next load recovers.
+        logger.warn('[Badges] load failed:', error);
       } finally {
         setLoading(false);
       }
@@ -228,11 +248,10 @@ export const useBadges = (userId?: string) => {
       const lastProgressIso = lastProgressDate ? `${lastProgressDate}T00:00:00.000Z` : null;
 
       if (!existing) {
-        const record: MarkBadge & { counter_id: string } = {
+        const record: MarkBadge = {
           id: uuidv4(),
           user_id: uid,
           mark_id: markId,
-          counter_id: markId, // Database column is still counter_id for compatibility
           badge_code: definition.code,
           progress_value: progress,
           target_value: definition.targetValue,
@@ -243,24 +262,19 @@ export const useBadges = (userId?: string) => {
           updated_at: nowIso,
         };
 
-        await execute(
-          `INSERT INTO lc_badges (
-            id, user_id, counter_id, badge_code, progress_value, target_value,
-            earned_at, last_progressed_at, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            record.id,
-            record.user_id,
-            record.counter_id,
-            record.badge_code,
-            record.progress_value,
-            record.target_value,
-            record.earned_at,
-            record.last_progressed_at,
-            record.created_at,
-            record.updated_at,
-          ]
-        );
+        const { error } = await dataClient().from('mark_badges').insert({
+          id: record.id,
+          user_id: record.user_id,
+          mark_id: record.mark_id,
+          badge_code: record.badge_code,
+          progress_value: record.progress_value,
+          target_value: record.target_value,
+          earned_at: record.earned_at,
+          last_progressed_at: record.last_progressed_at,
+          created_at: record.created_at,
+          updated_at: record.updated_at,
+        });
+        if (error) throw error;
 
         return record;
       }
@@ -287,19 +301,17 @@ export const useBadges = (userId?: string) => {
           ? null
           : existing.earned_at;
 
-      await execute(
-        `UPDATE lc_badges SET 
-          progress_value = ?, target_value = ?, earned_at = ?, last_progressed_at = ?, updated_at = ?
-        WHERE id = ?`,
-        [
-          progress,
-          definition.targetValue,
-          earnedAt,
-          lastProgressIso,
-          nowIso,
-          existing.id,
-        ]
-      );
+      const { error } = await dataClient()
+        .from('mark_badges')
+        .update({
+          progress_value: progress,
+          target_value: definition.targetValue,
+          earned_at: earnedAt,
+          last_progressed_at: lastProgressIso,
+          updated_at: nowIso,
+        })
+        .eq('id', existing.id);
+      if (error) throw error;
 
       return {
         ...existing,
@@ -318,14 +330,13 @@ export const useBadges = (userId?: string) => {
       markId: string,
       uid: string,
       /**
-       * M9 Phase 3 Task 2 — the event list to score, when the caller already holds
-       * one. Check-ins now land in the React Query cache rather than `eventsSlice`,
-       * so `hooks/useCheckin.ts` passes what it read from there; omitting it keeps
-       * the old store-backed behaviour for every caller still on that path.
+       * The event list to score. Check-ins live in the React Query cache, so
+       * `hooks/useCheckin.ts` passes what it read from there; a caller with no
+       * events yet (a just-created mark) omits it and scores an empty history.
        */
-      sourceEvents?: readonly MarkEvent[]
+      sourceEvents: readonly MarkEvent[] = []
     ): Promise<BadgeProgress[]> => {
-      const events = (sourceEvents ?? getEventsByMark(markId)).filter(
+      const events = sourceEvents.filter(
         (event) =>
           event.mark_id === markId && event.event_type === 'increment' && !event.deleted_at
       );
@@ -391,7 +402,7 @@ export const useBadges = (userId?: string) => {
 
       return results;
     },
-    [badgesByCounter, getEventsByMark, loginHistorySet, updateBadgeRecord, appDateKey]
+    [badgesByCounter, loginHistorySet, updateBadgeRecord, appDateKey]
   );
 
   const recordDailyLogin = useCallback(
@@ -402,8 +413,8 @@ export const useBadges = (userId?: string) => {
         return diff <= 60;
       });
 
-      await setMetaValue(loginHistoryKey(uid), JSON.stringify(history));
-      await setMetaValue(lastLoginKey(uid), dateStr);
+      await AsyncStorage.setItem(loginHistoryKey(uid), JSON.stringify(history));
+      await AsyncStorage.setItem(lastLoginKey(uid), dateStr);
 
       setLastLoginDate(dateStr);
       setLoginHistory(history);
@@ -448,5 +459,3 @@ export const useBadges = (userId?: string) => {
     getBadgeProgress,
   };
 };
-
-

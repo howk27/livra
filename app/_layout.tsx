@@ -28,13 +28,10 @@ import { useUIStore } from '../state/uiSlice';
 import { useIdentityStore } from '../state/identitySlice';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { useAuth } from '../hooks/useAuth';
-import { useSync } from '../hooks/useSync';
 import { useDayRollover } from '../hooks/useDayRollover';
 import { themedColors } from '../theme/tokens';
 import { NotificationProvider } from '../contexts/NotificationContext';
 import { ConfirmHost, ActionSheetHost } from '../components/ui/overlays';
-import { cleanupDuplicateCounters } from '../lib/db/cleanup';
-import { parseError } from '../hooks/useSync';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { AuthPersistenceGate } from '../components/AuthPersistenceGate';
 import { logger } from '../lib/utils/logger';
@@ -172,7 +169,6 @@ export default function RootLayout() {
   const loadUIState = useUIStore((state) => state.loadUIState);
   const loadIdentityState = useIdentityStore((state) => state.loadIdentityState);
   const { user, initialized } = useAuth();
-  const { sync } = useSync();
   const router = useRouter();
   const pathname = usePathname();
   const params = useGlobalSearchParams();
@@ -515,83 +511,35 @@ export default function RootLayout() {
     return () => { cancelled = true; };
   }, [initialized, user?.id]);
 
-  // Auto-sync when user logs in
+  // Login-time store hydration. M9 Phase 5A deleted the sync engine this effect
+  // used to drive; what remains loads the Zustand stores that still back the
+  // milestone/momentum/widget-adjacent subsystems until Task 6 retires them.
   useEffect(() => {
-    // CRITICAL: Only sync if user is authenticated with a valid UUID
     if (initialized && user && user.id) {
-      // Validate that user.id is a valid UUID
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       if (!uuidRegex.test(user.id)) {
-        logger.log('[App] Skipping sync - user ID is not a valid UUID:', user.id);
+        logger.log('[App] Skipping store load - user ID is not a valid UUID:', user.id);
         return;
       }
-      
+
       // Small delay to ensure everything is initialized
       const timer = setTimeout(async () => {
         try {
-          // CRITICAL: Load marks from LOCAL DB FIRST before syncing
-          // This ensures we have the correct local values before Supabase sync might overwrite them
-          // The merge logic will preserve local values if they're higher
           const { useCountersStore } = await import('../state/countersSlice');
           const { useEventsStore } = await import('../state/eventsSlice');
-          
-          logger.log('[App] Loading marks from local DB before sync...');
           await useCountersStore.getState().loadMarks(user.id);
           useEventsStore.getState().loadEvents(undefined, user.id);
           await useGoalsStore.getState().loadGoals(user.id);
           checkAndFireMilestones().catch(() => {});
           await useXPStore.getState().loadXP(user.id);
-          logger.log('[App] Local marks loaded, now syncing...');
-          
-          // CRITICAL: Run cleanup before sync to remove any duplicates first
-          // This ensures duplicates are removed before syncing new data
-          const cleanupResult = await cleanupDuplicateCounters(user.id);
-          if (cleanupResult.duplicatesByID + cleanupResult.duplicatesByName > 0) {
-            logger.log(`[App] Cleaned up ${cleanupResult.duplicatesByID + cleanupResult.duplicatesByName} duplicate counter(s) on startup`);
-          }
-          
-          await sync();
-          
-          // Run cleanup again after sync to catch any duplicates introduced during sync
-          const postSyncCleanup = await cleanupDuplicateCounters(user.id);
-          if (postSyncCleanup.duplicatesByID + postSyncCleanup.duplicatesByName > 0) {
-            logger.log(`[App] Cleaned up ${postSyncCleanup.duplicatesByID + postSyncCleanup.duplicatesByName} duplicate counter(s) after sync`);
-          }
-          
-          // Reload counters and events after sync to show synced data
-          // CRITICAL: Only reload if sync actually completed successfully
-          // The loadMarks function will preserve optimistic updates via recentUpdates tracking
-          // Add a small delay to ensure any pending local writes complete first
-          await new Promise(resolve => setTimeout(resolve, 500)); // 500ms delay
-          logger.log('[App] Reloading marks after sync (merge will preserve local values)...');
-          await useCountersStore.getState().loadMarks(user.id);
-          useEventsStore.getState().loadEvents(undefined, user.id);
-          await useDailyTrackingStore.getState().loadDailyTracking();
-          await useGoalNotesStore.getState().loadGoalNotes();
-          await useFeaturesStore.getState().loadSkipFeatures();
-        } catch (error: any) {
-          // Parse error to extract clean message (handles HTML responses like Cloudflare errors)
-          const parsed = parseError(error);
-          
-          if (parsed.isNetworkError) {
-            // Log a clean warning for network errors
-            logger.warn('[App] Network/server error during auto-sync:', parsed.message);
-          } else {
-            // For other errors, log normally but truncate very long messages
-            const truncatedMessage = parsed.message.length > 200 
-              ? parsed.message.substring(0, 200) + '...'
-              : parsed.message;
-            logger.error('[App] Error auto-syncing after login:', truncatedMessage);
-          }
-          
-          // Don't show notification here as it might be too early in the app lifecycle
-          // Network errors are expected and will retry automatically on next sync
+        } catch (error) {
+          logger.error('[App] Error loading local stores after login:', error);
         }
       }, 1000);
 
       return () => clearTimeout(timer);
     }
-  }, [user, initialized, sync]);
+  }, [user, initialized]);
 
   return (
     <ErrorBoundary>

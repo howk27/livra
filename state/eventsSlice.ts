@@ -6,7 +6,6 @@ import { formatDate } from '../lib/date';
 import { getAppDateTime } from '../lib/appDate';
 import { subDays } from 'date-fns';
 import { logger } from '../lib/utils/logger';
-import { reconcileMarkTotalWithPersistedEvents } from '../lib/db/markTotalReconciliation';
 import { useMarksStore } from './countersSlice';
 
 // M9 Phase 3 Task 6 — THE CHECK-IN BRIDGE IS GONE, because the path that needed
@@ -170,15 +169,16 @@ export const useEventsStore = create<EventsState>((set, get) => ({
 
     if (row?.counter_id && row.user_id) {
       try {
-        await reconcileMarkTotalWithPersistedEvents(row.user_id, row.counter_id);
+        // M9 Phase 5A: total reconciliation deleted — `total` derives from the
+        // event log (lib/data/derived.ts); the stored column is unread.
         await useMarksStore.getState().loadMarks(row.user_id);
       } catch (reconcileErr) {
-        logger.error('[Events] Total reconcile after deleteEvent failed:', reconcileErr);
+        logger.error('[Events] Mark reload after deleteEvent failed:', reconcileErr);
       }
     }
   },
 
-  // Soft-deletes the last event row; lc_counters.total is realigned via reconcileMarkTotalWithPersistedEvents in deleteEvent.
+  // Soft-deletes the last event row.
   undoLastAction: async () => {
     const { lastActionId } = get();
     if (lastActionId) {

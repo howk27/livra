@@ -120,6 +120,10 @@ export const ACCOUNT_SCOPED_KEY_PREFIXES = [
   '@livra_reminder_time:',
   '@livra_pace_notif_state:',
   '@livra_sleep_notif_time:',
+  // Badge login history (hooks/useBadges.ts) — per-user keyed, moved from the
+  // mock DB's meta table to AsyncStorage in M9 Phase 5A.
+  'login_history:',
+  'last_login_date:',
 ] as const;
 
 /**

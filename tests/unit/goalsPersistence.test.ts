@@ -46,7 +46,6 @@ import {
   sqliteSoftDeleteGoalMarkLink,
   resetGoalsDbHandleForTests,
 } from '../../lib/db/goalsSqlite';
-import { mapGoalToSupabase, mapGoalMarkLinkToSupabase } from '../../lib/sync/mappers';
 import type { Goal, GoalMarkLink } from '../../types/goal';
 /* eslint-enable import/first */
 
@@ -151,61 +150,6 @@ describe('re-linking a tombstoned pair — upsert, never insert', () => {
     const updateClause = sql.slice(sql.indexOf('DO UPDATE'));
     expect(updateClause).not.toContain('id = excluded.id');
     expect(updateClause).not.toContain('created_at = excluded.created_at');
-  });
-});
-
-// ── Mapper guards (the RLS + schema contract) ────────────────────────────────
-
-describe('mappers — the 20260716 column contract', () => {
-  const goal: Goal = {
-    ...(legacyGoal as unknown as Goal),
-    target_date: '2026-12-01T00:00:00.000Z',
-    linked_mark_ids: [MARK_ID],
-    tier: 'building',
-    frequency: 'steady',
-  };
-
-  test('never sends target_date or linked_mark_ids — neither is a column', () => {
-    const row = mapGoalToSupabase(goal) as Record<string, unknown>;
-    expect(row).not.toHaveProperty('target_date');
-    expect(row).not.toHaveProperty('linked_mark_ids');
-  });
-
-  test('sends the sync columns this milestone added', () => {
-    const row = mapGoalToSupabase({ ...goal, deleted_at: NOW, banked_momentum_days: 12 });
-    expect(row).toMatchObject({
-      tier: 'building',
-      frequency: 'steady',
-      banked_momentum_days: 12,
-      deleted_at: NOW,
-    });
-  });
-
-  test('falls back to target_date for deadline_date so legacy goals keep their date', () => {
-    const row = mapGoalToSupabase({ ...goal, deadline_date: null });
-    expect(row.deadline_date).toBe('2026-12-01T00:00:00.000Z');
-  });
-
-  test('a link without user_id fails loudly — RLS would reject it silently', () => {
-    const link = {
-      id: 'l1',
-      goal_id: GOAL_ID,
-      mark_id: MARK_ID,
-      created_at: NOW,
-      updated_at: NOW,
-    } as unknown as GoalMarkLink;
-    expect(() => mapGoalMarkLinkToSupabase(link)).toThrow(/user_id is required/);
-  });
-
-  test('a link without updated_at fails loudly — it is the push cursor', () => {
-    const link = {
-      id: 'l1',
-      goal_id: GOAL_ID,
-      mark_id: MARK_ID,
-      user_id: USER,
-      created_at: NOW,
-    } as unknown as GoalMarkLink;
-    expect(() => mapGoalMarkLinkToSupabase(link)).toThrow(/updated_at is required/);
   });
 });
 

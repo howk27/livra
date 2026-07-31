@@ -1,11 +1,21 @@
 import { Platform } from 'react-native';
-import { getAppDate } from '../appDate';
-import { query } from '../db';
+import { getSupabaseClient } from '../supabase';
 import { checkProStatus } from '../iap/iap';
-import { getActiveGoals } from '../goalLogic';
-import { useGoalsStore } from '../../state/goalsSlice';
-import { useMarksStore } from '../../state/countersSlice';
+import {
+  getActiveGoals,
+  calculateGoalProgress,
+  calculateUnlockThreshold,
+  goalCommitmentTarget,
+} from '../goalLogic';
+import { queryClient } from '../data/queryClient';
+import { queryKeys } from '../data/queryKeys';
+import { fetchGoals } from '../data/goals';
+import { fetchMarksByGoal, fetchMarksForUser } from '../data/marks';
+import { fetchUserCheckins, mergePendingCheckins, todayLocalDate } from '../data/checkins';
+import { pendingOutboxEntries } from '../data/outbox';
+import { toGoal, toMarkEvent } from '../data/adapters';
 import { resolveMarkCategory, majorityCategory } from '../markCategoryResolve';
+import type { MarkRow, MarkEventRow } from '../data/types';
 import type { WidgetData, WidgetMarkData, WidgetGoalData } from './widgetTypes';
 import { APP_GROUP_ID, WIDGET_DATA_KEY } from './widgetTypes';
 import { categoryVisual } from './widgetIcons';
@@ -13,25 +23,55 @@ import { categoryVisual } from './widgetIcons';
 const MAX_GOALS = 4;
 const MAX_MARKS_PER_GOAL = 6;
 
+// M9 Phase 5A: the snapshot is built from the query layer — the same goals,
+// links and events the screens render — instead of the deleted mock DB and
+// Zustand stores. `ensureQueryData` serves the persisted cache when offline and
+// fetches when the cache is cold; queued offline check-ins are merged in via
+// the outbox (D-3: the widget must agree with the screens).
 export async function buildWidgetData(): Promise<WidgetData> {
-  const goalsState = useGoalsStore.getState();
-  const { marks } = useMarksStore.getState();
+  const { data } = await getSupabaseClient().auth.getSession();
+  const userId = data.session?.user?.id;
+  if (!userId) return { goals: [], lastUpdated: Date.now(), isPro: false };
+
   const { effectiveUnlocked: isPro } = await checkProStatus();
 
-  const appDate = getAppDate();
-  const today = `${appDate.getFullYear()}-${String(appDate.getMonth() + 1).padStart(2, '0')}-${String(appDate.getDate()).padStart(2, '0')}`;
-  const todayLogs = await query<{ mark_id: string; count: number }>(
-    `SELECT counter_id AS mark_id, COUNT(*) AS count
-     FROM lc_events
-     WHERE date(created_at) = ?
-     GROUP BY counter_id`,
-    [today],
-  );
-  const loggedTodayIds = new Set(todayLogs.map((r) => r.mark_id));
-  const activeMarks = marks.filter((m) => !m.deleted_at);
+  const [goalRows, marksByGoal, allMarks, serverEvents] = await Promise.all([
+    queryClient.ensureQueryData({ queryKey: queryKeys.goals(userId), queryFn: fetchGoals }),
+    queryClient.ensureQueryData({
+      queryKey: queryKeys.marksByGoal(userId),
+      queryFn: fetchMarksByGoal,
+    }),
+    // ALL live marks, linked or not — the goal-less fallback below must see the
+    // marks of a user who has no goals yet (parity with the old store read).
+    queryClient.ensureQueryData({
+      queryKey: queryKeys.marks(userId),
+      queryFn: fetchMarksForUser,
+    }),
+    queryClient.ensureQueryData({
+      queryKey: queryKeys.userCheckins(userId),
+      queryFn: fetchUserCheckins,
+    }),
+  ]);
 
-  const toWidgetMark = (mark: (typeof activeMarks)[number]): WidgetMarkData => {
-    const visual = categoryVisual(resolveMarkCategory({ name: mark.name, emoji: mark.emoji }));
+  const pending = pendingOutboxEntries()
+    .filter((e) => e.table === 'mark_events' && e.row.user_id === userId)
+    .map((e) => e.row as MarkEventRow);
+  const eventRows = mergePendingCheckins(serverEvents, pending) ?? [];
+  const events = eventRows.map(toMarkEvent);
+
+  const today = todayLocalDate();
+  const loggedTodayIds = new Set(
+    eventRows
+      .filter(
+        (e) => !e.deleted_at && e.event_type === 'increment' && e.occurred_local_date === today,
+      )
+      .map((e) => e.mark_id),
+  );
+
+  const toWidgetMark = (mark: MarkRow): WidgetMarkData => {
+    const visual = categoryVisual(
+      resolveMarkCategory({ name: mark.name, emoji: mark.emoji ?? undefined }),
+    );
     return {
       id: mark.id,
       name: mark.name,
@@ -41,39 +81,41 @@ export async function buildWidgetData(): Promise<WidgetData> {
     };
   };
 
-  // Filter to goals with marks FIRST (preserving sort order), then cap at MAX_GOALS.
-  // This ensures a goal with marks beyond the first 4 candidates isn't lost.
-  const activeGoalsWithMarks = getActiveGoals(goalsState.goals)
-    .map((goal) => ({
-      goal,
-      goalMarks: activeMarks.filter((m) => m.goal_id === goal.id),
-    }))
+  const goals = getActiveGoals(
+    goalRows.map((row) => toGoal(row, (marksByGoal[row.id] ?? []).map((m) => m.id))),
+  )
+    // Filter to goals with marks FIRST (preserving sort order), then cap at
+    // MAX_GOALS, so a goal with marks beyond the first 4 candidates isn't lost.
+    .map((goal) => ({ goal, goalMarks: marksByGoal[goal.id] ?? [] }))
     .filter(({ goalMarks }) => goalMarks.length > 0)
-    .slice(0, MAX_GOALS);
-
-  const goals: WidgetGoalData[] = activeGoalsWithMarks.map(({ goal, goalMarks }) => {
-    const limitedMarks = goalMarks.slice(0, MAX_MARKS_PER_GOAL);
-    const ring = goalsState.getGoalProgress(goal.id);
-    const goalVisual = categoryVisual(
-      majorityCategory(limitedMarks.map((m) => ({ name: m.name, emoji: m.emoji }))),
-    );
-    return {
-      id: goal.id,
-      title: goal.title,
-      icon: goalVisual.icon,
-      accent: goalVisual.accent,
-      progress: ring.progress,
-      threshold: Math.max(1, ring.threshold),
-      marks: limitedMarks.map(toWidgetMark),
-    };
-  });
+    .slice(0, MAX_GOALS)
+    .map(({ goal, goalMarks }): WidgetGoalData => {
+      const limitedMarks = goalMarks.slice(0, MAX_MARKS_PER_GOAL);
+      // Same arithmetic as the old goalsSlice.getGoalProgress selector.
+      const progress = calculateGoalProgress(goal, events, allMarks);
+      const threshold = goalCommitmentTarget(goal) ?? calculateUnlockThreshold(goal);
+      const goalVisual = categoryVisual(
+        majorityCategory(
+          limitedMarks.map((m) => ({ name: m.name, emoji: m.emoji ?? undefined })),
+        ),
+      );
+      return {
+        id: goal.id,
+        title: goal.title,
+        icon: goalVisual.icon,
+        accent: goalVisual.accent,
+        progress,
+        threshold: Math.max(1, threshold),
+        marks: limitedMarks.map(toWidgetMark),
+      };
+    });
 
   // Fallback: no active goal has marks → one "Today" pseudo-goal over all marks,
   // preserving the pre-rework goal-less behavior.
-  if (goals.length === 0 && activeMarks.length > 0) {
-    const fallbackMarks = activeMarks.slice(0, MAX_MARKS_PER_GOAL);
+  if (goals.length === 0 && allMarks.length > 0) {
+    const fallbackMarks = allMarks.slice(0, MAX_MARKS_PER_GOAL);
     const goalVisual = categoryVisual(
-      majorityCategory(fallbackMarks.map((m) => ({ name: m.name, emoji: m.emoji }))),
+      majorityCategory(fallbackMarks.map((m) => ({ name: m.name, emoji: m.emoji ?? undefined }))),
     );
     goals.push({
       id: 'today',

@@ -27,7 +27,6 @@ import { confirm, actionSheet } from '../../components/ui/overlays';
 
 import { useArchiveMarkMutation } from '@/lib/data/mutations/marks';
 import { useAuth } from '../../hooks/useAuth';
-import { useSync } from '../../hooks/useSync';
 import { useAppDateStore, selectAppDateKey } from '../../state/appDateSlice';
 import { useGoalsStore } from '../../state/goalsSlice';
 import { useMarksStore } from '../../state/countersSlice';
@@ -218,7 +217,6 @@ export default function FocusScreen() {
   // Reconcile logs tapped in the iOS 17+ interactive widget (AppIntent queue).
   useWidgetLogSync(logCheckin, user?.id);
   const { showError } = useNotification();
-  const { sync } = useSync();
   const appDateKey = useAppDateStore(selectAppDateKey);
   const todayStr = useMemo(() => formatDate(getAppDate()), [appDateKey]);
 

@@ -1,6 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
 import * as Notifications from 'expo-notifications';
-import { analyzeCountersForNotifications, NotificationAnalysis } from '../services/notificationService';
 import {
   getLivraRemindersEnabled,
   setLivraRemindersEnabled as persistLivraRemindersEnabledPref,
@@ -66,10 +65,6 @@ export const useNotifications = () => {
     return await Notifications.getAllScheduledNotificationsAsync();
   }, []);
 
-  const analyzeNotifications = useCallback(async (userId?: string): Promise<NotificationAnalysis> => {
-    return await analyzeCountersForNotifications(userId);
-  }, []);
-
   const setLivraRemindersEnabled = useCallback(
     async (userId: string | undefined, enabled: boolean) => {
       await persistLivraRemindersEnabledPref(enabled);
@@ -95,7 +90,6 @@ export const useNotifications = () => {
     requestPermissions,
     checkPermissions,
     getScheduledReminders,
-    analyzeNotifications,
     setLivraRemindersEnabled,
     refreshLivraRemindersPref,
   };
