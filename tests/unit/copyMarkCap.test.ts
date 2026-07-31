@@ -40,8 +40,10 @@ describe('free-tier mark limit copy', () => {
     expect(MARK_CEILING_MESSAGE).not.toMatch(/[—–]/);
   });
 
-  test('useCounters throws both messages from the constants, never inline', () => {
-    const src = read('hooks/useCounters.ts');
+  test('the create-mark gate throws both messages from the constants, never inline', () => {
+    // M9 Phase 5A Task 6: the gate moved from useCounters (deleted) to
+    // hooks/useCreateMark.ts — same error shapes, same constants.
+    const src = read('hooks/useCreateMark.ts');
     expect(src).toContain('FREE_COUNTER_LIMIT_REACHED: ${MARK_PER_GOAL_LIMIT_MESSAGE}');
     expect(src).toContain('FREE_COUNTER_LIMIT_REACHED: ${MARK_CEILING_MESSAGE}');
     expect(src).not.toContain('marks to this goal. Livra+ lets you add more.');

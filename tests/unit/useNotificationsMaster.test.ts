@@ -15,12 +15,8 @@ jest.mock('../../hooks/useAuth', () => ({
   useAuth: jest.fn().mockReturnValue({ user: { id: 'u1' } }),
 }));
 
-jest.mock('../../state/countersSlice', () => ({
-  useMarksStore: Object.assign(jest.fn().mockReturnValue([]), {
-    getState: jest.fn().mockReturnValue({ marks: [] }),
-  }),
-}));
-
+// M9 Phase 5A Task 6: the hook reads the query cache (empty here), so the
+// reconcile list is [] with no store mock at all.
 jest.mock('../../lib/utils/logger', () => ({
   logger: {
     warn: jest.fn(),

@@ -82,7 +82,6 @@ jest.mock('../../components/SharePreviewModal', () => {
 
 import { GoalCompletionOverlay } from '../../components/overlays/GoalCompletionOverlay';
 import { useGoalCompletionStore } from '../../state/goalCompletionStore';
-import { useGoalsStore } from '../../state/goalsSlice';
 import type { Goal } from '../../types/goal';
 
 const makeGoal = (o: Partial<Goal>): Goal => ({
@@ -92,10 +91,6 @@ const makeGoal = (o: Partial<Goal>): Goal => ({
 });
 
 describe('GoalCompletionOverlay banked momentum line', () => {
-  beforeEach(() => {
-    useGoalsStore.setState({ goals: [] } as any);
-  });
-
   it('shows the banked line when days > 0', () => {
     const goal = makeGoal({ banked_momentum_days: 9 });
     useGoalCompletionStore.setState({ completedGoal: goal, show: true } as any);

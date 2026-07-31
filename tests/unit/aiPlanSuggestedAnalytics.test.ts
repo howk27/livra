@@ -9,12 +9,11 @@
  *   4. AI_EXHAUSTED_COPY has all four fields the exhausted panel renders.
  */
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { ANALYTICS_EVENTS } from '../../lib/analytics/events';
 import { GENERATION_ERROR_COPY, AI_EXHAUSTED_COPY } from '../../lib/copy';
 import type { GenerationFailReason } from '../../lib/ai/goalGeneration';
-import { useGoalsStore } from '../../state/goalsSlice';
-import * as posthog from '../../lib/analytics/posthog';
 
 describe('ai_plan_suggested taxonomy', () => {
   test('AI_PLAN_SUGGESTED is registered as ai_plan_suggested', () => {
@@ -80,34 +79,26 @@ describe('AI_EXHAUSTED_COPY — inline panel fields', () => {
 });
 
 describe('goal_created — method property shape', () => {
-  const USER = 'u-method-shape';
-  let captureSpy: jest.SpyInstance;
+  // M9 Phase 5A Task 6: goal creation moved from the retired store to the
+  // three creation surfaces, and each carries its OWN capture — so the method
+  // property is now pinned where it is written, per surface.
+  const read = (rel: string) => readFileSync(join(__dirname, '../../', rel), 'utf8');
 
-  beforeEach(async () => {
-    await AsyncStorage.clear();
-    useGoalsStore.setState({ goals: [], isLoading: false, error: null });
-    captureSpy = jest.spyOn(posthog, 'capture').mockImplementation(() => {});
+  test('the manual surface captures method: "manual"', () => {
+    const src = read('app/goal/new.tsx');
+    const call = src.slice(src.indexOf('ANALYTICS_EVENTS.GOAL_CREATED'));
+    expect(call.slice(0, 300)).toContain("method: 'manual'");
   });
 
-  afterEach(() => {
-    captureSpy.mockRestore();
+  test('the AI package path captures method: "ai"', () => {
+    const src = read('lib/goals/createFromAIPackage.ts');
+    const call = src.slice(src.indexOf('ANALYTICS_EVENTS.GOAL_CREATED'));
+    expect(call.slice(0, 300)).toContain("method: 'ai'");
   });
 
-  test('defaults to method: "manual" when the caller omits it', async () => {
-    await useGoalsStore.getState().createGoal({ title: 'Manual goal', userId: USER, isPro: false });
-    expect(captureSpy).toHaveBeenCalledWith(
-      ANALYTICS_EVENTS.GOAL_CREATED,
-      expect.objectContaining({ method: 'manual' }),
-    );
-  });
-
-  test('passes through method: "ai" when the caller specifies it', async () => {
-    await useGoalsStore
-      .getState()
-      .createGoal({ title: 'AI goal', userId: USER, isPro: false, method: 'ai' });
-    expect(captureSpy).toHaveBeenCalledWith(
-      ANALYTICS_EVENTS.GOAL_CREATED,
-      expect.objectContaining({ method: 'ai' }),
-    );
+  test('onboarding branches the method on the path that built the goal', () => {
+    const src = read('app/onboarding.tsx');
+    const call = src.slice(src.indexOf('ANALYTICS_EVENTS.GOAL_CREATED'));
+    expect(call.slice(0, 300)).toContain("method: isAIPath ? 'ai' : 'manual'");
   });
 });

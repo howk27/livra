@@ -1,6 +1,6 @@
 // CRITICAL: Import react-native-get-random-values FIRST before any uuid imports
 import 'react-native-get-random-values';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useFonts } from 'expo-font';
 import {
   CormorantGaramond_400Regular_Italic,
@@ -23,7 +23,6 @@ import { StatusBar } from 'expo-status-bar';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as Linking from 'expo-linking';
-import { initDatabase, cleanupInvalidBadges } from '../lib/db';
 import { useUIStore } from '../state/uiSlice';
 import { useIdentityStore } from '../state/identitySlice';
 import { useEffectiveTheme } from '../state/uiSlice';
@@ -37,11 +36,19 @@ import { AuthPersistenceGate } from '../components/AuthPersistenceGate';
 import { logger } from '../lib/utils/logger';
 import { ExperimentsProvider } from '../providers/ExperimentsProvider';
 import { useFeaturesStore } from '../state/featuresSlice';
-import { useGoalsStore } from '../state/goalsSlice';
-import { useMarksStore } from '../state/countersSlice';
 import { syncWidgetData } from '../lib/widgets/widgetSync';
-import { useGoalNotesStore } from '../state/goalNotesSlice';
 import { useAppDateStore } from '../state/appDateSlice';
+// M9 Phase 5A Task 6: goals/marks reach this file through the query layer only.
+import { useGoals, fetchGoals } from '../lib/data/goals';
+import { useMarksForUser } from '../lib/data/marks';
+import { queryKeys } from '../lib/data/queryKeys';
+import { editGoal } from '../lib/data/mutations/goals';
+import { toGoal } from '../lib/data/adapters';
+import { expireDeadlinedGoals } from '../lib/goals/goalLifecycle';
+import {
+  evaluateGoalsMomentum,
+  readGoalDataSnapshot,
+} from '../lib/goals/momentumEvaluation';
 import {
   recordBehaviorNotificationTap,
   recordBehaviorAppForeground,
@@ -86,14 +93,23 @@ Notifications.setNotificationHandler({
 
 let milestonesChecking = false;
 
-async function checkAndFireMilestones(): Promise<void> {
-  if (milestonesChecking) return;
+// M9 Phase 5A Task 6: goals come from the query layer (fetched when the cache
+// is cold — the login-time call runs before any screen has mounted the query)
+// and the fired keys are stamped on the SERVER row via editGoal, which is what
+// `milestones_fired` always was: a goals column.
+async function checkAndFireMilestones(userId: string | undefined): Promise<void> {
+  if (!userId || milestonesChecking) return;
   milestonesChecking = true;
   try {
-    const { goals, markMilestonesFired } = useGoalsStore.getState();
+    const goals = await queryClient.ensureQueryData({
+      queryKey: queryKeys.goals(userId),
+      queryFn: fetchGoals,
+    });
     const today = getAppDate();
-    const activeGoals = goals.filter(g => g.status === 'active');
-    for (const goal of activeGoals) {
+    let anyFired = false;
+    for (const row of goals) {
+      if (row.status !== 'active') continue;
+      const goal = toGoal(row, []); // milestones read dates + fired keys, never links
       const due = getMilestonesToFire(goal, today);
       if (due.length === 0) continue;
       // Highest-priority (furthest-along) milestone only — avoids notification spam; all due keys are marked fired.
@@ -107,7 +123,13 @@ async function checkAndFireMilestones(): Promise<void> {
         },
         trigger: null,
       });
-      await markMilestonesFired(goal.id, due);
+      await editGoal(goal.id, {
+        milestonesFired: [...new Set([...(goal.milestones_fired ?? []), ...due])],
+      });
+      anyFired = true;
+    }
+    if (anyFired) {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.goals(userId) });
     }
   } finally {
     milestonesChecking = false;
@@ -173,20 +195,25 @@ export default function RootLayout() {
   const appStateRef = useRef(AppState.currentState);
   const previousPathnameRef = useRef<string | undefined>(undefined);
 
-  const markCount = useMarksStore((s) => s.marks.length);
-  const activeGoalTitle = useGoalsStore((s) => s.getActiveGoal()?.title);
+  // M9 Phase 5A Task 6: the widget's refresh triggers derive from the queries.
+  const marksQuery = useMarksForUser();
+  const goalsQuery = useGoals();
+  const markCount = marksQuery.data?.length ?? 0;
   // Founder 2026-07-23(b): the widget sat on a COMPLETED goal until the next
   // foreground. This effect's deps only saw the FIRST active goal's title, so
   // completing any other goal (status flip, no mark-count change) never
   // triggered a snapshot rebuild. Watch the whole active set — a joined id
-  // string, so Zustand's equality check stays a cheap string compare — and the
-  // completed goal drops out of the snapshot, advancing the widget queue.
-  const activeGoalIdsKey = useGoalsStore((s) =>
-    s.goals
+  // string, so the memo stays a cheap string compare — and the completed goal
+  // drops out of the snapshot, advancing the widget queue.
+  const { activeGoalTitle, activeGoalIdsKey } = useMemo(() => {
+    const active = (goalsQuery.data ?? [])
       .filter((g) => g.status === 'active')
-      .map((g) => g.id)
-      .join(','),
-  );
+      .sort((a, b) => a.sort_index - b.sort_index);
+    return {
+      activeGoalTitle: active[0]?.title,
+      activeGoalIdsKey: active.map((g) => g.id).join(','),
+    };
+  }, [goalsQuery.data]);
 
   // Notices that the day ended while the app was open. Everything day-shaped
   // used to advance only on a return from the background.
@@ -245,19 +272,23 @@ export default function RootLayout() {
       appStateRef.current = next;
       if (next === 'active' && wasBackground) {
         void recordBehaviorAppForeground();
-        checkAndFireMilestones().catch(() => {});
+        checkAndFireMilestones(user?.id).catch(() => {});
         void syncWidgetData();
-        useGoalsStore.getState().checkAllGoalExpiry();
         requestLivraLocalNotificationReschedule(user?.id);
-        void useGoalsStore
-          .getState()
-          .evaluateActiveGoalsMomentum()
-          .then(() =>
-            import('../services/momentumWarningNotifications').then(({ reconcileMomentumWarnings }) =>
-              reconcileMomentumWarnings(user?.id),
-            ),
-          )
-          .catch(() => {});
+        // M9 Phase 5A Task 6: expiry + momentum run against the query cache
+        // (lib/goals). Signed out there is no account data to evaluate.
+        if (user?.id) {
+          const userId = user.id;
+          void expireDeadlinedGoals(queryClient, userId).catch(() => {});
+          const snapshot = readGoalDataSnapshot(queryClient, userId);
+          void evaluateGoalsMomentum(snapshot.goals, snapshot.marksByGoal, snapshot.events)
+            .then(() =>
+              import('../services/momentumWarningNotifications').then(({ reconcileMomentumWarnings }) =>
+                reconcileMomentumWarnings(userId),
+              ),
+            )
+            .catch(() => {});
+        }
       }
     };
     const appSub = AppState.addEventListener('change', onAppState);
@@ -302,16 +333,11 @@ export default function RootLayout() {
       // below can read or recreate it. Static import — a runtime await import()
       // takes the catch branch under Jest and would look wired while never
       // running (this project shipped exactly that).
+      // (Task 6: initDatabase / goal-notes load / badge cleanup are gone WITH
+      // the local database they initialised.)
       await runCutoverOnce();
-      await initDatabase();
       await useAppDateStore.getState().hydrate();
-      await useGoalNotesStore.getState().loadGoalNotes();
       await useFeaturesStore.getState().loadSkipFeatures();
-      // Cleanup badges with invalid user_id (like "local-user")
-      const removedCount = await cleanupInvalidBadges();
-      if (removedCount > 0) {
-        logger.log(`[App] Cleaned up ${removedCount} badge(s) with invalid user_id on startup`);
-      }
     };
     init();
   }, []);
@@ -508,29 +534,24 @@ export default function RootLayout() {
     return () => { cancelled = true; };
   }, [initialized, user?.id]);
 
-  // Login-time store hydration. M9 Phase 5A deleted the sync engine this effect
-  // used to drive; what remains loads the Zustand stores that still back the
-  // milestone/momentum/widget-adjacent subsystems until Task 6 retires them.
+  // Login-time milestone check. M9 Phase 5A Task 6: the store hydration this
+  // effect used to run is gone with the stores — the queries load themselves.
+  // The milestone check keeps the small settle delay and fetches the goals it
+  // needs (ensureQueryData inside).
   useEffect(() => {
     if (initialized && user && user.id) {
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       if (!uuidRegex.test(user.id)) {
-        logger.log('[App] Skipping store load - user ID is not a valid UUID:', user.id);
+        logger.log('[App] Skipping milestone check - user ID is not a valid UUID:', user.id);
         return;
       }
 
+      const userId = user.id;
       // Small delay to ensure everything is initialized
-      const timer = setTimeout(async () => {
-        try {
-          const { useCountersStore } = await import('../state/countersSlice');
-          const { useEventsStore } = await import('../state/eventsSlice');
-          await useCountersStore.getState().loadMarks(user.id);
-          useEventsStore.getState().loadEvents(undefined, user.id);
-          await useGoalsStore.getState().loadGoals(user.id);
-          checkAndFireMilestones().catch(() => {});
-        } catch (error) {
-          logger.error('[App] Error loading local stores after login:', error);
-        }
+      const timer = setTimeout(() => {
+        checkAndFireMilestones(userId).catch((error) => {
+          logger.error('[App] Login-time milestone check failed:', error);
+        });
       }, 1000);
 
       return () => clearTimeout(timer);
@@ -568,21 +589,24 @@ function RootNavigator() {
   const theme = useEffectiveTheme();
   const goalCompletionShow = useGoalCompletionStore((s) => s.show);
 
-  // Detect newly completed goals and trigger overlay
-  const goals = useGoalsStore((s) => s.goals);
+  // Detect newly completed goals and trigger overlay. M9 Phase 5A Task 6: the
+  // transition is watched on the goals QUERY — the completing mutation
+  // invalidates it, the refetch flips the status, and the overlay fires.
+  const goalRows = useGoals().data;
   const showCompletion = useGoalCompletionStore((s) => s.showCompletion);
   const prevGoalStatusRef = React.useRef<Record<string, string>>({});
   useEffect(() => {
+    if (!goalRows) return;
     const prev = prevGoalStatusRef.current;
-    goals.forEach((g) => {
+    goalRows.forEach((g) => {
       if (g.status === 'completed' && prev[g.id] && prev[g.id] !== 'completed') {
-        showCompletion(g);
+        showCompletion(toGoal(g, []));
       }
     });
     const next: Record<string, string> = {};
-    goals.forEach((g) => { next[g.id] = g.status; });
+    goalRows.forEach((g) => { next[g.id] = g.status; });
     prevGoalStatusRef.current = next;
-  }, [goals, showCompletion]);
+  }, [goalRows, showCompletion]);
 
   return (
     <>

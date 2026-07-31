@@ -60,60 +60,7 @@ export const getStreakStatus = (
   return 'none';
 };
 
-/** Persist derived streak to DB — cache / sync projection only, not a second definition. */
-export const updateStreakInDB = async (
-  counterId: string,
-  userId: string,
-  streakData: StreakData
-): Promise<void> => {
-  const { execute, queryFirst } = await import('../lib/db');
-  
-  const { v4: uuidv4 } = await import('uuid');
-  
-  // Check if streak record exists
-  const existing = await queryFirst<CounterStreak>(
-    'SELECT * FROM lc_streaks WHERE counter_id = ? AND deleted_at IS NULL',
-    [counterId]
-  );
-
-  const now = new Date().toISOString();
-
-  if (existing) {
-    // Update existing
-    await execute(
-      `UPDATE lc_streaks SET 
-        current_streak = ?, 
-        longest_streak = ?, 
-        last_increment_date = ?,
-        updated_at = ?
-      WHERE id = ?`,
-      [
-        streakData.current,
-        Math.max(existing.longest_streak, streakData.longest),
-        streakData.lastDate || null,
-        now,
-        existing.id,
-      ]
-    );
-  } else {
-    // Create new
-    const id = uuidv4();
-    await execute(
-      `INSERT INTO lc_streaks (
-        id, user_id, counter_id, current_streak, longest_streak,
-        last_increment_date, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        id,
-        userId,
-        counterId,
-        streakData.current,
-        streakData.longest,
-        streakData.lastDate || null,
-        now,
-        now,
-      ]
-    );
-  }
-};
+// M9 Phase 5A Task 6: `updateStreakInDB` deleted with lib/db. It wrote the
+// lc_streaks cache nothing read (useCheckin documented the decision in Phase 3);
+// its last caller, useCounters.incrementMark, is gone.
 

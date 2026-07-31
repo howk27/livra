@@ -18,25 +18,22 @@
 // tests/unit/purgeLocalUserData.test.ts fails when a key literal in the repo
 // appears in neither, so a new key cannot silently join the leak.
 
+// M9 Phase 5A Task 6: this file moved OUT of lib/db (deleted with the local
+// database). The SQLite/mock-DB wipe steps went with it — the cutover wipe
+// removed those stores once, and no surviving code recreates them. What
+// remains is everything that still exists: AsyncStorage keys, the outbox, the
+// query cache, the kept slices, and the widget snapshot.
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { logger } from '../utils/logger';
-import { resetDatabaseState } from './index';
-import { sqliteClearAllGoalsAndLinks } from './goalsSqlite';
-import { sqliteClearAllGoalNotes } from './goalNotesSqlite';
-import { clearPendingWidgetLogs } from '../widgets/widgetLogQueue';
-import { clearOutboxAll } from '../data/outbox';
-import { queryClient } from '../data/queryClient';
-import { syncWidgetData } from '../widgets/widgetSync';
-import { useMarksStore } from '../../state/countersSlice';
-import { useEventsStore } from '../../state/eventsSlice';
-import { useGoalsStore } from '../../state/goalsSlice';
-import { useGoalNotesStore } from '../../state/goalNotesSlice';
-import { useCheckinsStore } from '../../state/checkinsSlice';
-import { useFeaturesStore } from '../../state/featuresSlice';
-import { useMomentumStore } from '../../state/momentumSlice';
-import { useIdentityStore } from '../../state/identitySlice';
-import { useVoiceStore } from '../../state/voiceSlice';
-import { useGoalCompletionStore } from '../../state/goalCompletionStore';
+import { logger } from './utils/logger';
+import { clearPendingWidgetLogs } from './widgets/widgetLogQueue';
+import { clearOutboxAll } from './data/outbox';
+import { queryClient } from './data/queryClient';
+import { syncWidgetData } from './widgets/widgetSync';
+import { useFeaturesStore } from '../state/featuresSlice';
+import { useMomentumStore } from '../state/momentumSlice';
+import { useIdentityStore } from '../state/identitySlice';
+import { useVoiceStore } from '../state/voiceSlice';
+import { useGoalCompletionStore } from '../state/goalCompletionStore';
 
 /**
  * Account-scoped keys — the previous user's data or their derived state.
@@ -215,14 +212,6 @@ function isAccountScoped(key: string): boolean {
 function resetInMemoryStores(): string[] {
   const failures: string[] = [];
   const steps: [string, () => void][] = [
-    ['marks', () =>
-      useMarksStore.setState({ marks: [], loading: false, error: null, recentUpdates: new Map() })],
-    ['events', () =>
-      useEventsStore.setState({ events: [], loading: false, error: null, lastActionId: null })],
-    ['goals', () => useGoalsStore.setState({ goals: [], isLoading: false, error: null })],
-    ['goalNotes', () =>
-      useGoalNotesStore.setState({ entries: [], loading: false, goalNotesCloudError: null })],
-    ['checkins', () => useCheckinsStore.setState({ checkins: [], loading: false, error: null })],
     ['skipTokens', () => useFeaturesStore.setState({ skipTokens: [], loading: false })],
     ['momentum', () =>
       useMomentumStore.setState({ snapshots: {}, longestRuns: {}, longestRunsHydrated: false })],
@@ -254,27 +243,8 @@ export async function purgeLocalUserData(): Promise<PurgeLocalUserDataResult> {
   const failures: string[] = [];
   let removedKeyCount = 0;
 
-  // 1. The AsyncStorage-backed mock DB: marks, events, streaks, badges, XP.
-  try {
-    await resetDatabaseState();
-  } catch (error) {
-    logger.error('[Purge] resetDatabaseState failed:', error);
-    failures.push('mockDb');
-  }
-
-  // 2. The three real SQLite databases.
-  const sqliteSteps: [string, () => Promise<void>][] = [
-    ['goalsSqlite', sqliteClearAllGoalsAndLinks],
-    ['goalNotesSqlite', sqliteClearAllGoalNotes],
-  ];
-  for (const [label, run] of sqliteSteps) {
-    try {
-      await run();
-    } catch (error) {
-      logger.error(`[Purge] ${label} clear failed:`, error);
-      failures.push(label);
-    }
-  }
+  // (Task 6: the mock-DB and SQLite wipe steps are gone with lib/db — the
+  // cutover wipe removed those stores once, and nothing recreates them.)
 
   // 3. Account-scoped AsyncStorage keys, including the per-goal/per-mark families.
   try {

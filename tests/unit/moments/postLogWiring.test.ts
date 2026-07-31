@@ -9,11 +9,12 @@ import { join } from 'path';
 const root = join(__dirname, '..', '..', '..');
 const read = (rel: string) => readFileSync(join(root, rel), 'utf8');
 
-describe('post-log voice wiring (hooks/useCounters.ts)', () => {
-  const src = read('hooks/useCounters.ts');
+describe('post-log voice wiring (hooks/useCheckin.ts)', () => {
+  // M9 Phase 5A Task 6: the increment path IS useCheckin (useCounters deleted).
+  const src = read('hooks/useCheckin.ts');
 
-  it('evaluates the voice engine after the event persists and before capture', () => {
-    const persistIdx = src.indexOf('await addEvent(');
+  it('evaluates the voice engine after the check-in persists and before capture', () => {
+    const persistIdx = src.indexOf('await logMutation.mutateAsync(');
     const voiceIdx = src.indexOf('maybeShowPostLogVoice(');
     const captureIdx = src.indexOf('capture(ANALYTICS_EVENTS.MARK_LOGGED');
     expect(persistIdx).toBeGreaterThan(-1);
@@ -27,11 +28,15 @@ describe('post-log voice wiring (hooks/useCounters.ts)', () => {
     expect(captureBlock).toContain('voice_line_shown: voiceLineShown');
   });
 
-  it('a failed increment never speaks: the voice call sits inside the persist try, before the catch', () => {
+  it('a failed check-in never speaks: the effects run after the awaited mutation', () => {
+    // The voice call lives inside runAfterInteractions, which is only reached
+    // once `await logMutation.mutateAsync(...)` has resolved — a rejected log
+    // throws to the caller before any effect is scheduled.
+    const persistIdx = src.indexOf('await logMutation.mutateAsync(');
+    const effectsIdx = src.indexOf('InteractionManager.runAfterInteractions(');
     const voiceIdx = src.indexOf('maybeShowPostLogVoice(');
-    const persistCatchIdx = src.indexOf('Persist failed — reverting counter row');
-    expect(persistCatchIdx).toBeGreaterThan(-1);
-    expect(voiceIdx).toBeLessThan(persistCatchIdx);
+    expect(effectsIdx).toBeGreaterThan(persistIdx);
+    expect(voiceIdx).toBeGreaterThan(effectsIdx);
   });
 });
 

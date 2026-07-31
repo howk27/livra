@@ -354,7 +354,7 @@ export const useAuth = () => {
     // sold phone. Runs only after the session is actually cleared (a failed
     // signOut throws above), and never throws itself.
     try {
-      const { purgeLocalUserData } = await import('../lib/db/purgeLocalUserData');
+      const { purgeLocalUserData } = await import('../lib/purgeLocalUserData');
       const { failures } = await purgeLocalUserData();
       if (failures.length > 0) {
         logger.error('[Auth] local data purge incomplete after signOut:', failures);

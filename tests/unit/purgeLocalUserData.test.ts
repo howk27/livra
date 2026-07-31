@@ -4,34 +4,19 @@
  * XP, momentum records, identity memory and widget snapshot all stayed on the
  * device for whoever signed in next (hooks/useAuth.ts, human queue 2026-07-22).
  *
- * Contract under test:
+ * M9 Phase 5A Task 6: the SQLite / mock-DB wipe steps are GONE with lib/db —
+ * the cutover wipe removed those stores once, and no surviving code recreates
+ * them. What remains under contract:
  *  1. Account-scoped keys go, device-scoped keys stay, per-goal/per-mark key
  *     FAMILIES go by prefix.
- *  2. The three real SQLite databases are emptied — a wipe, never a tombstone:
- *     these rows still belong to the signed-out account server-side.
- *  3. The stores that never re-hydrate from an empty file (identity milestones,
+ *  2. The stores that never re-hydrate from an empty file (identity milestones,
  *     momentum's longest runs) are reset in MEMORY, or the next account
  *     inherits them and momentum writes them straight back to disk.
- *  4. A failing step never throws — a user stranded in a signed-in session is
+ *  3. A failing step never throws — a user stranded in a signed-in session is
  *     worse than a partial wipe — and the failure is reported, not swallowed.
- *  5. DRIFT GUARD: every storage-key literal in the app is classified in one of
+ *  4. DRIFT GUARD: every storage-key literal in the app is classified in one of
  *     the registries. A new key cannot silently rejoin the leak.
  */
-
-const execCalls: string[] = [];
-
-jest.mock('expo-sqlite', () => {
-  const db = {
-    execAsync: jest.fn(async (sql: string) => {
-      execCalls.push(sql);
-    }),
-    runAsync: jest.fn(async () => ({ changes: 0 })),
-    getAllAsync: jest.fn(async () => []),
-    getFirstAsync: jest.fn(async () => null),
-    withTransactionAsync: jest.fn(async (cb: (d: unknown) => Promise<void>) => cb(db)),
-  };
-  return { openDatabaseAsync: jest.fn(async () => db) };
-});
 
 jest.mock('../../lib/widgets/widgetSync', () => ({
   syncWidgetData: jest.fn(async () => {}),
@@ -50,16 +35,12 @@ import {
   ACCOUNT_SCOPED_KEY_PREFIXES,
   DEVICE_SCOPED_STORAGE_KEYS,
   NON_ASYNC_STORAGE_LITERALS,
-} from '../../lib/db/purgeLocalUserData';
-import { initDatabase, getDatabase, query, execute } from '../../lib/db';
+} from '../../lib/purgeLocalUserData';
 import { useIdentityStore } from '../../state/identitySlice';
 import { useMomentumStore } from '../../state/momentumSlice';
-import { useMarksStore } from '../../state/countersSlice';
-import { useGoalsStore } from '../../state/goalsSlice';
 /* eslint-enable import/first */
 
 beforeEach(async () => {
-  execCalls.length = 0;
   await AsyncStorage.clear();
   jest.clearAllMocks();
 });
@@ -105,27 +86,6 @@ describe('purgeLocalUserData — AsyncStorage', () => {
   });
 });
 
-describe('purgeLocalUserData — SQLite', () => {
-  it('empties goals, links and goal notes', async () => {
-    await purgeLocalUserData();
-
-    const deletes = execCalls.filter((sql) => sql.includes('DELETE FROM')).join(' ');
-    expect(deletes).toContain('DELETE FROM goal_mark_links');
-    expect(deletes).toContain('DELETE FROM goals');
-    expect(deletes).toContain('DELETE FROM goal_notes');
-  });
-
-  it('wipes rather than tombstones — nothing here may travel to the server', async () => {
-    await purgeLocalUserData();
-
-    const wipes = execCalls.filter((sql) => sql.includes('DELETE FROM'));
-    expect(wipes.length).toBeGreaterThan(0);
-    for (const sql of wipes) {
-      expect(sql).not.toMatch(/deleted_at/);
-    }
-  });
-});
-
 describe('purgeLocalUserData — in-memory stores', () => {
   it('clears the stores that never re-hydrate from an empty file', async () => {
     useIdentityStore.setState({ fired: { 'mark-1': ['first-week'] }, loaded: true });
@@ -144,51 +104,6 @@ describe('purgeLocalUserData — in-memory stores', () => {
     expect(useMomentumStore.getState().longestRunsHydrated).toBe(false);
   });
 
-  it('clears the rendered data stores', async () => {
-    useMarksStore.setState({ marks: [{ id: 'm1', name: 'Run' } as never] });
-    useGoalsStore.setState({ goals: [{ id: 'g1', title: 'Marathon' } as never] });
-
-    await purgeLocalUserData();
-
-    expect(useMarksStore.getState().marks).toEqual([]);
-    expect(useGoalsStore.getState().goals).toEqual([]);
-  });
-});
-
-describe('purgeLocalUserData — the app is still usable afterwards', () => {
-  // QC-1058 R1. The purge nulled the mock DB handle and nothing rebuilt it:
-  // initDatabase() runs once, at boot, so the FIRST read after any account
-  // switch threw 'Database not initialized' and the app sat blank until it was
-  // force-quit. The wipe was never the bug — leaving no handle behind was.
-  it('leaves a live database handle, not a null one', async () => {
-    await initDatabase();
-
-    await purgeLocalUserData();
-
-    expect(() => getDatabase()).not.toThrow();
-  });
-
-  it('reads empty instead of throwing after the purge', async () => {
-    await initDatabase();
-    await execute(
-      'INSERT INTO lc_counters (id, user_id, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
-      ['m1', 'user-a', 'Water', '2026-07-26T00:00:00.000Z', '2026-07-26T00:00:00.000Z'],
-    );
-
-    await purgeLocalUserData();
-
-    // The next account's first read: empty, and it RESOLVES.
-    await expect(
-      query('SELECT * FROM lc_counters WHERE user_id = ? AND deleted_at IS NULL', ['user-b']),
-    ).resolves.toEqual([]);
-  });
-
-  it('reports mockDb rather than stranding the app when the reopen fails', async () => {
-    const result = await purgeLocalUserData();
-
-    // Baseline: the healthy path reports no database failure at all.
-    expect(result.failures).not.toContain('mockDb');
-  });
 });
 
 describe('purge — the query cache (M9 Phase 5A Task 3 Step 2)', () => {
@@ -207,9 +122,8 @@ describe('purge — the query cache (M9 Phase 5A Task 3 Step 2)', () => {
 
 describe('storage-key drift guard', () => {
   // Every persisted key is account-scoped (purged) or device-scoped (kept).
-  // lib/db/index.ts and lib/db/xpDb.ts are excluded: their keys are the mock
-  // DB's own STORAGE_KEYS, owned by resetDatabaseState — the purge's first step.
-  const EXCLUDED_FILES = [path.join('lib', 'db', 'index.ts'), path.join('lib', 'db', 'xpDb.ts')];
+  // (M9 Phase 5A Task 6: the lib/db exclusions are gone with lib/db itself.)
+  const EXCLUDED_FILES: string[] = [];
   const ROOTS = ['lib', 'state', 'hooks', 'services', 'components', 'app'];
   const PATTERNS = [
     /AsyncStorage\.(?:getItem|setItem|removeItem)\(\s*'([^']+)'/g,
@@ -277,14 +191,15 @@ describe('purgeLocalUserData — failure handling', () => {
     spy.mockRestore();
   });
 
-  it('still clears SQLite when the key sweep fails', async () => {
+  it('still resets the kept in-memory stores when the key sweep fails', async () => {
+    useIdentityStore.setState({ fired: { 'mark-1': ['first-week'] }, loaded: true });
     const spy = jest
       .spyOn(AsyncStorage, 'getAllKeys')
       .mockRejectedValueOnce(new Error('storage unavailable'));
 
     await purgeLocalUserData();
 
-    expect(execCalls.filter((sql) => sql.includes('DELETE FROM')).length).toBeGreaterThan(0);
+    expect(useIdentityStore.getState().fired).toEqual({});
     spy.mockRestore();
   });
 });
