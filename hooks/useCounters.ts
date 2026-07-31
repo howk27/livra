@@ -79,6 +79,14 @@ export const useMarks = () => {
     });
   }, [user?.id, lastLoginDate, recordDailyLogin, appDateKey]);
 
+  // ── RETIRED 2026-07-31, M9 Phase 3 Task 6 — NO SCREEN CALLS THIS ─────────────
+  //
+  // Mark creation runs through `hooks/useCreateMark.ts` → `lib/data/mutations/
+  // marks.ts` now (mark/new was the last caller). The duplicate check, Pro-status
+  // gate, free-tier walls and badge initialisation moved there; the free-tier
+  // pre-checks count the QUERY layer, not this store, because the store no longer
+  // sees a mutation-created mark until sync pulls it. Left on disk with the
+  // increment path below: Phase 5 deletes this whole file (standing invariant 5).
   const createMark = useCallback(
     async (data: {
       name: string;

@@ -98,13 +98,21 @@ describe('goal/new cap path (QC-FAIL-4 source guard)', () => {
     expect(src).toMatch(/<GoalLimitDialog/);
   });
 
-  it('sets the cap dialog visible on GoalLimitError instead of Alert.alert', () => {
-    // Isolate the GoalLimitError branch (up to its `else`) and assert it drives
-    // state, not a native prompt.
-    const start = src.indexOf('err instanceof GoalLimitError');
+  it('sets the cap dialog visible on the limit branch instead of Alert.alert', () => {
+    // M9 Phase 3 Task 6: the store's GoalLimitError became the classifier's
+    // `limit_reached` (the server wall) plus a canAddGoal pre-check (the UX
+    // wall). Isolate the limit branch (up to its `else`) and assert it still
+    // drives state, not a native prompt.
+    const start = src.indexOf("err.kind === 'limit_reached'");
+    expect(start).toBeGreaterThan(-1);
     const branch = src.slice(start, src.indexOf(' else {', start));
     expect(branch).toContain('setCapVisible(true)');
     expect(branch).not.toContain('Alert.alert');
+    // The pre-check side of the same wall: a capped free account meets the
+    // dialog BEFORE any write is attempted.
+    const preCheck = src.indexOf('canAddGoal(');
+    expect(preCheck).toBeGreaterThan(-1);
+    expect(src.slice(preCheck, preCheck + 200)).toContain('setCapVisible(true)');
   });
 });
 

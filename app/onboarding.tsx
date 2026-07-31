@@ -20,8 +20,11 @@ import { GoalPackageReview, GoalPackageReviewSelection } from '../components/ai/
 import { themedColors, fonts, spacing, radius, fontSize } from '../theme/tokens';
 import { useEffectiveTheme, useUIStore } from '../state/uiSlice';
 import { useOnboardingStore, CommitmentLevel } from '../state/onboardingSlice';
-import { useGoalsStore } from '../state/goalsSlice';
-import { useMarksStore } from '../state/countersSlice';
+import { useCreateGoalMutation } from '../lib/data/mutations/goals';
+import { useCreateMarkMutation } from '../lib/data/mutations/marks';
+import { queryClient } from '../lib/data/queryClient';
+import { fetchGoals } from '../lib/data/goals';
+import { queryKeys } from '../lib/data/queryKeys';
 import { useAuth } from '../hooks/useAuth';
 import { MARK_LIBRARY } from '../lib/suggestedCounters';
 import { applyOpacity } from '../src/components/icons/color';
@@ -106,9 +109,12 @@ export default function OnboardingScreen() {
 
   const store = useOnboardingStore();
   const completeOnboarding = useUIStore(s => s.completeOnboarding);
-  const createGoal = useGoalsStore(s => s.createGoal);
-  const linkMarkToGoal = useGoalsStore(s => s.linkMarkToGoal);
-  const addMark = useMarksStore(s => s.addMark);
+  // M9 Phase 3 Task 6: the first goal writes through the data layer, like every
+  // other creation surface. The store path wrote SQLite while Focus/Goals read
+  // Supabase, so the goal onboarding just made could not appear until sync
+  // pushed it — on the very first screen a new user lands on.
+  const createGoalMutation = useCreateGoalMutation();
+  const createMarkMutation = useCreateMarkMutation();
 
   const [step, setStep] = useState(0);
 
@@ -250,17 +256,43 @@ export default function OnboardingScreen() {
     }
 
     try {
-      // 2. Create the goal
+      // 2. Create the goal. A fresh account has no goals, but the sort index is
+      // still read rather than assumed — re-onboarding after a support reset is
+      // rare, not impossible. (The singleton client, not the hook: this runs
+      // outside render and the tests render this screen with no provider.)
       const descriptionDraft = reviewDescriptionRef.current.trim() || undefined;
-      const newGoal = await createGoal({
-        title: goalTitle.trim() || 'My first goal',
-        description: descriptionDraft,
+      const goalRows = await queryClient.ensureQueryData({
+        queryKey: queryKeys.goals(userId),
+        queryFn: fetchGoals,
+      });
+      const maxSortIndex = goalRows
+        .filter((g) => g.status === 'active')
+        .reduce((m, g) => Math.max(m, g.sort_index), -1);
+
+      const newGoal = await createGoalMutation.mutateAsync({
         userId,
-        isPro: false,
+        title: goalTitle.trim() || 'My first goal',
+        description: descriptionDraft ?? null,
+        // The store defaulted every onboarding goal to building/steady when no
+        // tier was passed; written explicitly now so the hero's unlock maths
+        // sees the same shape it always has.
+        tier: 'building',
+        frequency: 'steady',
+        sortIndex: maxSortIndex + 1,
+      });
+
+      // The store used to fire this inside createGoal; analytics is app
+      // orchestration, so it moved here with the same properties.
+      capture(ANALYTICS_EVENTS.GOAL_CREATED, {
+        goal_id: newGoal.id,
+        mark_count: 0,
+        tier: 'building',
+        frequency: 'steady',
         method: isAIPath ? 'ai' : 'manual',
       });
 
-      // 3. Create each selected mark
+      // 3. Create each selected mark — created AND linked in one call
+      // (goalId → a `goal_mark_links` row; `marks.goal_id` is never written).
       for (const markId of selectedMarkIds) {
         const sugg = MARK_LIBRARY.find((m) => m.id === markId);
         if (!sugg) continue;
@@ -277,30 +309,29 @@ export default function OnboardingScreen() {
           ? (marksForScreen.find((m) => m.mark.id === markId)?.mark.name ?? sugg.name)
           : sugg.name;
 
-        const newMark = await addMark({
+        await createMarkMutation.mutateAsync({
+          userId,
           name: markName,
           emoji: sugg.emoji,
           // QC4-M: same call the mark screen uses, so the first mark a user ever
           // makes is not a different color than the same mark made later.
           color: colorForSuggestedCounter(sugg),
           unit: sugg.unit,
-          user_id: userId,
-          goal_period: 'day',
-          schedule_type: 'daily',
-          // Binary by default (1 = one tap completes the day); quantitative
-          // marks like water start at their count-up target.
-          dailyTarget: defaultDailyTargetForMarkId(sugg.id),
-          total: 0,
-          enable_streak: false,
-          sort_index: 0,
-          goal_id: newGoal.id,
-          frequency_kind: sugg.frequencyKind,
-          frequency_min: sugg.frequency_min,
-          frequency_recommended: sugg.frequency_recommended,
-          frequency_max: sugg.frequency_max,
-          weekly_target: weeklyTarget,
+          enableStreak: false,
+          sortIndex: 0,
+          goalId: newGoal.id,
+          cadence: {
+            frequency_kind: sugg.frequencyKind,
+            frequency_min: sugg.frequency_min,
+            frequency_recommended: sugg.frequency_recommended,
+            frequency_max: sugg.frequency_max,
+            weekly_target: weeklyTarget,
+            // Binary by default (1 = one tap completes the day); quantitative
+            // marks like water start at their count-up target.
+            dailyTarget: defaultDailyTargetForMarkId(sugg.id),
+            maintenance_of: null,
+          },
         });
-        await linkMarkToGoal(newGoal.id, newMark.id);
       }
 
       // 4. AI path only: write the confirmed package to the cache on confirm+activate.

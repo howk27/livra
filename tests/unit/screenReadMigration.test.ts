@@ -19,7 +19,7 @@
 //     "focus.tsx reads `marks` from a retired store"
 //   · deleting one `// PHASE-2 BRIDGE` marker → the count assertion goes red.
 
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 
 const ROOT = join(__dirname, '..', '..');
@@ -50,9 +50,9 @@ const ALLOWED_STORE_MEMBERS = new Set([
   // writes — marks
   'updateMark',
   'convertMarksToMaintenance',
-  // writes — goals
-  'linkMarkToGoal',
-  'unlinkMarkFromGoal',
+  // writes — goals. `linkMarkToGoal`/`unlinkMarkFromGoal` were removed from this
+  // list with Task 6: linking runs through the mutations everywhere, so a screen
+  // reaching for the store version again should fail here.
   'updateGoalTitle',
   'updateGoalTargetDate',
   'completeGoal',
@@ -224,34 +224,24 @@ describe('M9 Phase 2 — migrated screens do not read the retired stores', () =>
 
 // ── Bridge inventory ─────────────────────────────────────────────────────────
 //
-// Phase 3 deletes every one of these. The count is PINNED so a bridge added
-// without updating this list fails here rather than being discovered missing in
-// Phase 3 — the failure message prints the full inventory.
+// Phase 3 Task 6 finished the deletion on 2026-07-31: the four creation surfaces
+// moved onto `lib/data/mutations/`, the last two markers left with them, and
+// `lib/data/bridge.ts` itself is GONE — asserted below, because the bridge
+// resurrecting quietly is exactly the regression this inventory exists to catch.
+// The count stays PINNED AT ZERO EVERYWHERE: any new `PHASE-2 BRIDGE` marker
+// means a write went back onto the store path this phase emptied.
 
 const BRIDGE_FILES = [
-  'lib/data/bridge.ts',
   'state/eventsSlice.ts',
   'state/goalNotesSlice.ts',
   'state/goalsSlice.ts',
 ];
 
-/**
- * file → number of `PHASE-2 BRIDGE` markers.
- *
- * M9 Phase 3 Task 6 took this from 18 to 2. It is a RATCHET: every number here
- * may fall and none may rise, because a new marker means a write went back onto
- * the store path this phase exists to empty.
- *
- * The two that remain are `goalsSlice.linkMarkToGoal` / `unlinkMarkFromGoal`,
- * which still serve four unmigrated creation surfaces (`app/goal/new.tsx`,
- * `app/mark/new.tsx`, `app/onboarding.tsx`, `lib/goals/createFromAIPackage.ts`).
- * They go to zero when those callers move — see `lib/data/bridge.ts`.
- */
+/** file → number of `PHASE-2 BRIDGE` markers. All zero, forever. */
 const EXPECTED_BRIDGE_MARKERS: Record<string, number> = {
-  'lib/data/bridge.ts': 0, // stripped to `bridgeInvalidate` alone
   'state/eventsSlice.ts': 0, // check-ins run through hooks/useCheckin.ts
   'state/goalNotesSlice.ts': 0, // both journal surfaces write through mutations
-  'state/goalsSlice.ts': 2, // link + unlink only; the other four are migrated
+  'state/goalsSlice.ts': 0, // creation surfaces write through the mutations too
 };
 
 function bridgeMarkerLines(relPath: string): number[] {
@@ -264,6 +254,13 @@ function bridgeMarkerLines(relPath: string): number[] {
 }
 
 describe('M9 Phase 2 — every bridge is findable and counted', () => {
+  test('lib/data/bridge.ts stays deleted', () => {
+    // The file was the write→read bridge's last remnant; Task 6 removed it once
+    // every creation surface wrote through the mutations. A new file at this
+    // path means the store write path is being revived — fail loudly.
+    expect(existsSync(join(ROOT, 'lib/data/bridge.ts'))).toBe(false);
+  });
+
   test('the inventory matches, and prints itself when it does not', () => {
     const actual: Record<string, number> = {};
     const inventory: string[] = [];

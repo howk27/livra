@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   View,
   Text,
@@ -30,10 +31,18 @@ import { PillButton } from '../../components/ui/PillButton';
 import { GoalLimitDialog } from '../../components/ui/GoalLimitDialog';
 import { CATEGORY_MAP } from '../../components/ui/MarkRow';
 import { useEffectiveTheme } from '../../state/uiSlice';
-import { useGoalsStore, GoalLimitError } from '../../state/goalsSlice';
 import { useMarksStore } from '../../state/countersSlice';
 import { useAuth } from '../../hooks/useAuth';
 import { useSettleEntrance } from '../../hooks/useSettleEntrance';
+import { useCreateGoalMutation } from '../../lib/data/mutations/goals';
+import { useCreateMarkMutation } from '../../lib/data/mutations/marks';
+import { fetchGoals } from '../../lib/data/goals';
+import { queryKeys } from '../../lib/data/queryKeys';
+import { isDataError } from '../../lib/data/errors';
+import { caughtErrorCopy } from '../../lib/copy';
+import { canAddGoal } from '../../lib/gating';
+import { capture } from '../../lib/analytics/posthog';
+import { ANALYTICS_EVENTS } from '../../lib/analytics/events';
 import { checkProStatus } from '../../lib/iap/iap';
 import { getMarksForGoal, frequencyWeeklyTarget } from '../../lib/goalMarkSuggestions';
 import { setPace, paceFromFrequency } from '../../lib/paceSetting';
@@ -205,8 +214,16 @@ export default function NewGoalScreen() {
   const params = useLocalSearchParams<{ title?: string }>();
   const { user } = useAuth();
   const { showError } = useNotification();
-  const createGoal = useGoalsStore(s => s.createGoal);
-  const addMark = useMarksStore(s => s.addMark);
+  // M9 Phase 3 Task 6: creation writes through the data layer. The store's
+  // createGoal/addMark wrote SQLite while the migrated Goals list reads Supabase,
+  // so a goal made here could not appear until sync pushed it — the gap this
+  // migration closes.
+  const queryClient = useQueryClient();
+  const createGoalMutation = useCreateGoalMutation();
+  const createMarkMutation = useCreateMarkMutation();
+  // STILL THE STORE, DELIBERATELY: CommitmentScreen's "already owned" strip takes
+  // the store's Mark shape. Reads are Phase 2's concern and this screen was not
+  // in its five; the read moves when the store retires (Phase 5).
   const marks = useMarksStore(s => s.marks);
 
   const [step, setStep] = useState<Step>('title');
@@ -273,65 +290,82 @@ export default function NewGoalScreen() {
     try {
       const proStatus = await checkProStatus();
 
-      // Create goal first to get its ID
-      const newGoal = await createGoal({
-        title: title.trim(),
-        description: description.trim() || undefined,
+      // The 2-goal cap is enforced by RLS server-side; this pre-check is UX
+      // (lib/data/mutations/goals.ts:80), so a free user meets Livra's own popup
+      // instead of a refused request. The same list answers where the new goal
+      // sorts. Cached when fresh, fetched when not.
+      const goalRows = await queryClient.ensureQueryData({
+        queryKey: queryKeys.goals(user.id),
+        queryFn: fetchGoals,
+      });
+      const nonCompleted = goalRows.filter(
+        g => g.status !== 'completed' && g.status !== 'expired',
+      );
+      if (!canAddGoal(proStatus.effectiveUnlocked, nonCompleted.length)) {
+        setCapVisible(true);
+        return;
+      }
+      const maxSortIndex = goalRows
+        .filter(g => g.status === 'active')
+        .reduce((m, g) => Math.max(m, g.sort_index), -1);
+
+      // Goal + links to already-owned marks in ONE call — the mutation writes
+      // the links itself, never `marks.goal_id`.
+      const newGoal = await createGoalMutation.mutateAsync({
         userId: user.id,
-        isPro: proStatus.effectiveUnlocked,
-        linked_mark_ids: [...selection.alreadyOwnedMarkIds],
-        target_mark_count: selection.commitmentTarget > 0 ? selection.commitmentTarget : null,
+        title: title.trim(),
+        description: description.trim() || null,
+        tier: selection.tier,
+        frequency: selection.frequency,
+        targetMarkCount: selection.commitmentTarget > 0 ? selection.commitmentTarget : null,
+        sortIndex: maxSortIndex + 1,
+        markIds: [...selection.alreadyOwnedMarkIds],
+      });
+
+      // The store used to fire this inside createGoal; the mutation layer owns
+      // rows, not analytics, so the event moved here with the same properties —
+      // mark_count is the links written AT create, as it always was.
+      capture(ANALYTICS_EVENTS.GOAL_CREATED, {
+        goal_id: newGoal.id,
+        mark_count: selection.alreadyOwnedMarkIds.length,
         tier: selection.tier,
         frequency: selection.frequency,
         method: 'manual',
       });
 
-      // Create new marks with goal_id set
-      const newMarkIds: string[] = [];
+      // Each new mark is created AND linked in one call (goalId → a link row).
       for (const id of selection.selectedNewMarkIds) {
         const sugg = suggestedMarks.find(s => s.id === id);
         if (!sugg) continue;
-        const newMark = await addMark({
+        await createMarkMutation.mutateAsync({
+          userId: user.id,
           name: sugg.name,
           emoji: sugg.emoji,
           // QC4-M: category-derived, never the library's authored `color` —
           // that field is unsanctioned and disagrees with what the row renders.
           color: colorForSuggestedCounter(sugg),
           unit: sugg.unit,
-          user_id: user.id,
-          goal_period: 'day',
-          schedule_type: 'daily',
-          // Binary by default (1 = one tap completes the day); quantitative
-          // marks like water start at their count-up target.
-          dailyTarget: defaultDailyTargetForMarkId(sugg.id),
-          total: 0,
-          enable_streak: false,
-          sort_index: 0,
-          goal_id: newGoal.id,
-          frequency_kind: sugg.frequencyKind,
-          // Cadence. Without these the store falls back to a flat 3/week
-          // (countersSlice: weekly_target ?? frequency_recommended ?? 3), so a
-          // mark the library calls daily — Water, Sleep — came out of THIS
-          // screen asking for 3 and read "done for the week" after three logs,
-          // while the same mark made in onboarding, the AI path or mark/new
-          // carried its real cadence. There is no commitment level on this
-          // screen, so recommended is the honest default, matching mark/new.
-          frequency_min: sugg.frequency_min,
-          frequency_recommended: sugg.frequency_recommended,
-          frequency_max: sugg.frequency_max,
-          // The intensity chosen right above on CommitmentScreen — not a flat
-          // "recommended" regardless of it. Founder device report 2026-07-26:
-          // "Grow my business" got the same cadence on every mark no matter
-          // what frequency was picked at creation.
-          weekly_target: frequencyWeeklyTarget(sugg, selection.frequency),
+          enableStreak: false,
+          sortIndex: 0,
+          goalId: newGoal.id,
+          // The full cadence set, required at the type level (the family this
+          // project has broken most often — 38a5b96, 186e8ec). There is no
+          // commitment level on this screen, so the library range plus the
+          // intensity chosen on CommitmentScreen is the honest cadence.
+          cadence: {
+            frequency_kind: sugg.frequencyKind,
+            frequency_min: sugg.frequency_min,
+            frequency_recommended: sugg.frequency_recommended,
+            frequency_max: sugg.frequency_max,
+            // Founder device report 2026-07-26: "Grow my business" got the same
+            // cadence on every mark no matter what frequency was picked.
+            weekly_target: frequencyWeeklyTarget(sugg, selection.frequency),
+            // Binary by default (1 = one tap completes the day); quantitative
+            // marks like water start at their count-up target.
+            dailyTarget: defaultDailyTargetForMarkId(sugg.id),
+            maintenance_of: null,
+          },
         });
-        newMarkIds.push(newMark.id);
-      }
-
-      // Link new marks to goal
-      if (newMarkIds.length > 0) {
-        const { useGoalsStore: gs } = await import('../../state/goalsSlice');
-        await Promise.all(newMarkIds.map(mId => gs.getState().linkMarkToGoal(newGoal.id, mId)));
       }
 
       // The chosen intensity becomes the app's ongoing Pace (Settings), so a
@@ -342,11 +376,12 @@ export default function NewGoalScreen() {
 
       router.back();
     } catch (err) {
-      if (err instanceof GoalLimitError) {
-        // Livra's own in-app popup (GoalLimitDialog), not the iOS-native prompt.
+      if (isDataError(err) && err.kind === 'limit_reached') {
+        // The server's wall, in Livra's own popup (GoalLimitDialog) — the same
+        // surface the pre-check uses, never the iOS-native prompt.
         setCapVisible(true);
       } else {
-        showError('Could not save goal. Please try again.');
+        showError(caughtErrorCopy(err));
       }
     } finally {
       setSaving(false);

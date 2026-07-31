@@ -24,13 +24,16 @@ import {
 } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useMotion } from '../../hooks/useMotion';
-import { useCounters } from '../../hooks/useCounters';
+import { useCreateMark } from '../../hooks/useCreateMark';
+import { useMarksForUser } from '../../lib/data/marks';
+import { isDataError } from '../../lib/data/errors';
+import { dataErrorCopy } from '../../lib/copy';
 import { SuggestedCounter, MARK_LIBRARY_BY_ID } from '../../lib/suggestedCounters';
 import { useAuth } from '../../hooks/useAuth';
 import { useGoalsStore } from '../../state/goalsSlice';
 import { getActiveGoals } from '../../lib/goalLogic';
 import { DuplicateCounterError, DuplicateMarkError } from '../../state/countersSlice';
-import type { GoalPeriod, ScheduleType, DayOfWeek } from '../../types';
+import type { ScheduleType, DayOfWeek } from '../../types';
 import { DuplicateCounterModal } from '../../components/DuplicateCounterModal';
 import { DailyTargetStepper } from '../../components/DailyTargetStepper';
 import { useNotification } from '../../contexts/NotificationContext';
@@ -45,7 +48,6 @@ import {
   DEFAULT_FREQUENCY_PRESET,
   FREQUENCY_PRESET_LABELS,
   weeklyTargetForPreset,
-  scheduleForPreset,
 } from '../../lib/markFrequencyPreset';
 import { getPace, paceWeeklyTarget } from '../../lib/paceSetting';
 import { ICON_TYPE_TO_EMOJI, MARK_ICON_OPTIONS, MARK_ICON_PRIMARY } from '../../lib/markIcons';
@@ -143,8 +145,16 @@ export default function NewCounterScreen() {
   const router = useRouter();
   const { goalId: goalIdParam } = useLocalSearchParams<{ goalId?: string }>();
   const insets = useSafeAreaInsets();
-  const { createCounter, counters } = useCounters();
   const { user } = useAuth();
+  // M9 Phase 3 Task 6: creation writes through the data layer. The hook carries
+  // the same gate the old useCounters path had (duplicates, Pro status, free-tier
+  // walls) and throws the same error shapes, so handleCreateMarkError below is
+  // unchanged in its branching.
+  const { createMark } = useCreateMark(user?.id ?? '');
+  // Query-layer marks, for the duplicate-modal lookup: the SQLite store no longer
+  // sees a mutation-created mark until sync pulls it, so it cannot answer "which
+  // existing mark has this name" for anything created since the last pull.
+  const marksQuery = useMarksForUser();
   const { showError, showSuccess } = useNotification();
   // QC4-L: WHICH goal a new mark joins is the user's call. This used to be
   // `goals.find(g => g.status === 'active')` — the FIRST active goal, with no
@@ -155,7 +165,6 @@ export default function NewCounterScreen() {
   const goals = useGoalsStore(s => s.goals);
   const goalsLoading = useGoalsStore(s => s.isLoading);
   const goalsError = useGoalsStore(s => s.error);
-  const linkMarkToGoal = useGoalsStore(s => s.linkMarkToGoal);
   // sort_index order — the chooser must list goals as the Goals screen does.
   const activeGoals = useMemo(() => getActiveGoals(goals), [goals]);
   // Smart default (ux-psychology): one active goal is not a decision — don't
@@ -171,8 +180,6 @@ export default function NewCounterScreen() {
   const [name, setName] = useState('');
   const [selectedIconType, setSelectedIconType] = useState<Exclude<MarkType, 'custom'>>(ICON_OPTIONS[0]);
   const unit: 'sessions' | 'days' | 'items' = 'sessions';
-  const [goalValue] = useState<number | null>(null);
-  const [goalPeriod] = useState<GoalPeriod>('day');
   const [scheduleType, setScheduleType] = useState<ScheduleType>('daily');
   const [scheduleDays, setScheduleDays] = useState<DayOfWeek[]>([]);
   const [frequencyPreset, setFrequencyPreset] = useState<FrequencyPreset>(DEFAULT_FREQUENCY_PRESET);
@@ -300,7 +307,7 @@ export default function NewCounterScreen() {
       const errorName = (error as any).markName || (error as any).counterName || 'Unknown';
       logger.warn(`[Counter] Duplicate counter detected: "${errorName}"`);
 
-      const existingCounter = counters.find(
+      const existingCounter = (marksQuery.data ?? []).find(
         (c) => c.name.toLowerCase() === errorName.toLowerCase() && !c.deleted_at,
       );
 
@@ -312,27 +319,31 @@ export default function NewCounterScreen() {
       showError('Unable to verify your subscription. Please check your connection and try again.');
     } else if (error instanceof Error && error.message.includes('FREE_COUNTER_LIMIT_REACHED')) {
       // Two different walls (this goal is full vs the account is full) throw two
-      // different messages from useCounters. Surface the one that actually fired
-      // instead of re-typing a single generic line here.
+      // different messages from the pre-check. Surface the one that actually
+      // fired instead of re-typing a single generic line here.
       logger.warn('[Counter] Free-tier mark limit reached');
       showError(error.message.replace('FREE_COUNTER_LIMIT_REACHED: ', ''));
       setTimeout(() => {
         router.replace('/paywall');
       }, 2000);
+    } else if (isDataError(error)) {
+      // A classified data-layer failure (the server refused, the network is down,
+      // …). The copy table is the only words allowed out of that layer.
+      logger.warn('[Counter] Mark create refused by the data layer', { kind: error.kind });
+      showError(dataErrorCopy(error) ?? 'Could not create the mark. Check your connection and try again.');
     } else {
+      // Never render error.message here: anything unclassified may carry raw
+      // Postgres text, which goes to the log only (Spec §6).
       logger.error('Error creating counter:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Could not create the mark. Check your connection and try again.';
-      showError(errorMessage);
+      showError('Could not create the mark. Check your connection and try again.');
     }
   };
 
-  // QC3 cleanup: the success epilogue shared by both create paths — link the
-  // new mark to its goal (fire-and-forget), toast, then pop back after the
-  // toast is visible. Callers pass their own success copy.
-  const finishMarkCreation = (savedMark: { id?: string } | null | undefined, successMessage: string) => {
-    if (linkTargetId && savedMark?.id) {
-      linkMarkToGoal(linkTargetId, savedMark.id).catch(() => {});
-    }
+  // QC3 cleanup: the success epilogue shared by both create paths — toast, then
+  // pop back after the toast is visible. The goal link is no longer made here:
+  // `createMark` writes it in the same call when a goalId is passed, so a mark
+  // can never arrive linkless because a fire-and-forget link was dropped.
+  const finishMarkCreation = (successMessage: string) => {
     showSuccess(successMessage);
     setTimeout(() => {
       router.back();
@@ -340,7 +351,7 @@ export default function NewCounterScreen() {
   };
 
   const handleConfirmSuggestedCounter = async () => {
-    if (!pendingSuggestedCounter) return;
+    if (!pendingSuggestedCounter || !user?.id) return;
     if (needsGoalChoice) {
       showError('Pick which goal this mark belongs to.');
       return;
@@ -364,23 +375,28 @@ export default function NewCounterScreen() {
           },
           pace,
         ) ?? pendingSuggestedCounter.frequency_recommended;
-      const savedMark = await createCounter({
+      await createMark({
         name: pendingSuggestedCounter.name,
         emoji: pendingSuggestedCounter.emoji,
         // QC4-M: the exact color the chip above previewed.
         color: colorForSuggestedCounter(pendingSuggestedCounter),
-        unit: 'sessions' as const,
-        enable_streak: false,
-        user_id: user?.id!,
-        dailyTarget,
-        frequency_kind: pendingSuggestedCounter.frequencyKind,
-        weekly_target: weeklyTarget,
-        // The per-goal free cap (5, lib/gating.ts) is enforced by createCounter
-        // off this goal_id — never reimplemented here.
-        ...(linkTargetId ? { goal_id: linkTargetId } : {}),
-      } as any);
+        unit: 'sessions',
+        enableStreak: false,
+        // The free-tier walls (per goal AND account-wide) are checked by the
+        // hook off this goalId — never reimplemented here.
+        goalId: linkTargetId ?? null,
+        cadence: {
+          frequency_kind: pendingSuggestedCounter.frequencyKind,
+          frequency_min: pendingSuggestedCounter.frequency_min,
+          frequency_recommended: pendingSuggestedCounter.frequency_recommended,
+          frequency_max: pendingSuggestedCounter.frequency_max,
+          weekly_target: weeklyTarget,
+          dailyTarget,
+          maintenance_of: null,
+        },
+      });
       setPendingSuggestedCounter(null);
-      finishMarkCreation(savedMark, 'Mark added');
+      finishMarkCreation('Mark added');
     } catch (error) {
       setLoading(false);
       handleCreateMarkError(error);
@@ -390,6 +406,7 @@ export default function NewCounterScreen() {
   };
 
   const handleSave = async () => {
+    if (!user?.id) return;
     if (!name.trim()) {
       showError('Give your mark a name first.');
       return;
@@ -403,31 +420,39 @@ export default function NewCounterScreen() {
       setLoading(true);
       const emoji = ICON_TYPE_TO_EMOJI[selectedIconType] || ICON_TYPE_TO_EMOJI.gym;
       // Cadence comes from the frequency preset (Every day / 3x a week / Custom days).
-      // Custom marks are always variable; weekly_target carries the cadence into the
-      // consistency engine, schedule_* is planning metadata only.
+      // Custom marks are always variable; weekly_target carries the cadence into
+      // the consistency engine. The 1/3/7 range mirrors what the store used to
+      // default for a custom mark, written explicitly so the Pace toggle can move
+      // the mark later — a null range is the exact 2026-07-26 pathology.
+      //
+      // schedule_type/schedule_days/goal_value are NOT carried: they are
+      // device-only columns that never existed server-side (lib/data/types.ts:31)
+      // and never survived a reinstall. WHICH days a custom-days pick meant is no
+      // longer stored at creation — only the count reaches weekly_target — and
+      // the days stay editable afterwards in mark/[id]/edit, which still owns the
+      // local metadata write.
       const cadenceDays = scheduleDaysForDisplay as DayOfWeek[];
       const weeklyTarget = weeklyTargetForPreset(frequencyPreset, 'variable', cadenceDays.length);
-      const schedule = scheduleForPreset(frequencyPreset, cadenceDays);
-      const savedMark = await createCounter({
+      await createMark({
         name: name.trim(),
         emoji,
         color,
         unit,
-        enable_streak: false,
-        user_id: user?.id!,
-        dailyTarget,
-        goal_value: goalValue,
-        goal_period: goalPeriod,
-        schedule_type: schedule.schedule_type,
-        schedule_days: schedule.schedule_days,
-        weekly_target: weeklyTarget,
-        frequency_kind: 'variable',
-        // The per-goal free cap (5, lib/gating.ts) is enforced by createCounter
-        // off this goal_id — never reimplemented here.
-        ...(linkTargetId ? { goal_id: linkTargetId } : {}),
-      } as any);
+        enableStreak: false,
+        // The free-tier walls are checked by the hook off this goalId.
+        goalId: linkTargetId ?? null,
+        cadence: {
+          frequency_kind: 'variable',
+          frequency_min: 1,
+          frequency_recommended: 3,
+          frequency_max: 7,
+          weekly_target: weeklyTarget,
+          dailyTarget,
+          maintenance_of: null,
+        },
+      });
 
-      finishMarkCreation(savedMark, 'Mark created');
+      finishMarkCreation('Mark created');
     } catch (error) {
       setLoading(false);
       handleCreateMarkError(error);

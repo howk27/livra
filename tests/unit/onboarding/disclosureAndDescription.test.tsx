@@ -126,22 +126,25 @@ jest.mock('../../../state/uiSlice', () => ({
   useUIStore: (fn: any) => fn({ completeOnboarding: jest.fn().mockResolvedValue(undefined) }),
 }));
 
+// M9 Phase 3 Task 6: onboarding persists through the data-layer mutations, so
+// the mocks sit on the mutation hooks (and the singleton query client the screen
+// uses for the sort-index read), not the Zustand stores.
 const mockCreateGoal = jest.fn().mockResolvedValue({ id: 'goal-1' });
-const mockLinkMarkToGoal = jest.fn().mockResolvedValue(undefined);
+const mockCreateMark = jest.fn().mockResolvedValue({ id: 'mark-1' });
 
-jest.mock('../../../state/goalsSlice', () => ({
-  useGoalsStore: (fn: any) =>
-    fn({
-      createGoal: mockCreateGoal,
-      linkMarkToGoal: mockLinkMarkToGoal,
-    }),
+jest.mock('../../../lib/data/mutations/goals', () => ({
+  useCreateGoalMutation: () => ({ mutateAsync: mockCreateGoal }),
 }));
 
-jest.mock('../../../state/countersSlice', () => ({
-  useMarksStore: (fn: any) =>
-    fn({
-      addMark: jest.fn().mockResolvedValue({ id: 'mark-1' }),
-    }),
+jest.mock('../../../lib/data/mutations/marks', () => ({
+  useCreateMarkMutation: () => ({ mutateAsync: mockCreateMark }),
+}));
+
+jest.mock('../../../lib/data/queryClient', () => ({
+  queryClient: {
+    ensureQueryData: jest.fn().mockResolvedValue([]),
+    invalidateQueries: jest.fn(),
+  },
 }));
 
 jest.mock('../../../lib/supabase', () => ({

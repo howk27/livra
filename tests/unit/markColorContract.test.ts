@@ -290,8 +290,12 @@ describe('mark/new lets the user choose the goal (QC4-L)', () => {
     expect(src).toMatch(/Pick which goal this mark belongs to\./);
   });
 
-  it('leaves the per-goal cap to lib/gating via createCounter', () => {
-    expect(src).toMatch(/\.\.\.\(linkTargetId \? \{ goal_id: linkTargetId \} : \{\}\)/);
+  it('leaves the free-tier walls to the useCreateMark gate via goalId', () => {
+    // M9 Phase 3 Task 6: creation runs through hooks/useCreateMark; the chosen
+    // goal travels as `goalId` and the walls live in the hook's gate
+    // (assertCanCreateMark), which counts live LINKS, not `marks.goal_id`.
+    // Both create paths on this screen pass it.
+    expect(code).toMatch(/goalId: linkTargetId \?\? null/);
     // The cap is never reimplemented on the screen.
     expect(src).not.toMatch(/FREE_MARKS_PER_GOAL/);
   });

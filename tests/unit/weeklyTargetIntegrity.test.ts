@@ -4,82 +4,115 @@ import { join } from 'path';
 /**
  * Every path that creates a mark must set its cadence explicitly.
  *
- * The store defaults a missing cadence to a flat 3/week
+ * HISTORY. The store defaulted a missing cadence to a flat 3/week
  * (`weekly_target ?? frequency_recommended ?? 3`, state/countersSlice.ts), and
- * that default is invisible: the mark is created, it works, and it simply asks
- * for the wrong number of days forever. `app/goal/new.tsx` omitted both fields,
- * so a mark the library calls daily (Water at 7, Sleep at 7) came out of the
- * goal screen at 3 and reported "done for the week" after three logs — while
- * the same mark created in onboarding, the AI package or mark/new carried its
- * real cadence. Nothing failed; the numbers just disagreed by origin.
+ * that default was invisible: `app/goal/new.tsx` omitted both fields, so a mark
+ * the library calls daily (Water at 7, Sleep at 7) came out of the goal screen
+ * at 3 and reported "done for the week" after three logs. This file used to pin
+ * `weekly_target` into every `addMark({`/`createCounter({` call as a
+ * source-string guard, because none of these screens render in unit tests.
  *
- * weekly_target feeds markWeeklyState, the Focus due logic, goalMomentum's
- * expectedInterval and the consistency maths, so a silent 3 is not cosmetic.
+ * M9 Phase 3 Task 6 (2026-07-31) moved every creation path onto
+ * `lib/data/mutations/marks.ts`, where the WHOLE cadence set is REQUIRED at the
+ * type level (`cadence: MarkCadence`, every field non-optional) — a caller that
+ * forgets one is a `tsc` error, which is strictly stronger than this scan ever
+ * was. What is left to guard here is the migration itself:
  *
- * This is a source-string guard because none of these screens render in unit
- * tests. It asserts the field is PASSED, not what it resolves to — the value
- * differs by path on purpose (onboarding has a commitment ladder, the AI path
- * carries the model's frequency, the other two use the library recommendation).
+ *   1. No creation surface may quietly return to the store path (`addMark(` /
+ *      `createCounter(`), because the store's silent-3 default still exists in
+ *      the retired code and would make the drift invisible again.
+ *   2. The type-level contract that replaced this file's old assertion must
+ *      itself stay REQUIRED — `cadence?:` would put the silent default one
+ *      refactor away.
+ *
+ * COMMENTS ARE STRIPPED before matching (this repo has shipped guards that
+ * measured prose); the retired implementations in state/countersSlice.ts and
+ * hooks/useCounters.ts are deliberately NOT scanned — they keep the old calls
+ * until Phase 5 deletes them whole.
  */
 
 const ROOT = join(__dirname, '../../');
 
-/** Every call site that creates a mark, and the call it makes. */
-const CREATION_PATHS: Array<[string, string]> = [
-  ['app/goal/new.tsx', 'addMark({'],
-  ['app/onboarding.tsx', 'addMark({'],
-  ['lib/goals/createFromAIPackage.ts', 'addMark({'],
-  ['app/mark/new.tsx', 'createCounter({'],
+/** Every surface that creates a mark, all through the mutation layer now. */
+const CREATION_SURFACES = [
+  'app/goal/new.tsx',
+  'app/onboarding.tsx',
+  'lib/goals/createFromAIPackage.ts',
+  'app/mark/new.tsx',
+  'hooks/useCreateMark.ts',
 ];
 
-/** The argument object of each call to `call` in `src`. */
-function callArgs(src: string, call: string): string[] {
-  const out: string[] = [];
-  let from = 0;
-  for (;;) {
-    const start = src.indexOf(call, from);
-    if (start === -1) break;
-    let depth = 0;
-    let i = start + call.length - 1;
-    for (; i < src.length; i++) {
-      if (src[i] === '{') depth++;
-      else if (src[i] === '}') {
-        depth--;
-        if (depth === 0) break;
+/** Same string-safe comment stripper the screen-migration guard uses. */
+function stripComments(src: string): string {
+  let out = '';
+  let i = 0;
+  let quote: string | null = null;
+  while (i < src.length) {
+    const ch = src[i];
+    const next = src[i + 1];
+    if (quote) {
+      if (ch === '\\') {
+        out += ch + (next ?? '');
+        i += 2;
+        continue;
       }
+      if (ch === quote) quote = null;
+      out += ch;
+      i += 1;
+      continue;
     }
-    out.push(src.slice(start, i + 1));
-    from = i + 1;
+    if (ch === '"' || ch === "'" || ch === '`') {
+      quote = ch;
+      out += ch;
+      i += 1;
+      continue;
+    }
+    if (ch === '/' && next === '/') {
+      while (i < src.length && src[i] !== '\n') i += 1;
+      continue;
+    }
+    if (ch === '/' && next === '*') {
+      i += 2;
+      while (i < src.length && !(src[i] === '*' && src[i + 1] === '/')) i += 1;
+      i += 2;
+      continue;
+    }
+    out += ch;
+    i += 1;
   }
   return out;
 }
 
-describe('weekly_target is set on every mark-creation path', () => {
-  it.each(CREATION_PATHS)('%s passes weekly_target on every %s', (rel, call) => {
-    const src = readFileSync(join(ROOT, rel), 'utf8');
-    const calls = callArgs(src, call);
-    expect(calls.length).toBeGreaterThan(0);
-    for (const args of calls) {
-      expect(args).toContain('weekly_target');
-    }
+describe('mark creation goes through the mutation layer, nowhere else', () => {
+  it.each(CREATION_SURFACES)('%s does not call the store creation path', (rel) => {
+    const src = stripComments(readFileSync(join(ROOT, rel), 'utf8'));
+    expect(src).not.toContain('addMark(');
+    expect(src).not.toContain('createCounter(');
   });
 
-  it('the store default that made the drift invisible is still there', () => {
-    // If this default is ever removed, the guard above stops being the only
-    // thing standing between a missing cadence and a silent 3.
-    const slice = readFileSync(join(ROOT, 'state/countersSlice.ts'), 'utf8');
-    expect(slice).toContain(
-      'markData.weekly_target ?? markData.frequency_recommended ?? 3',
+  it.each(CREATION_SURFACES.filter((f) => f !== 'hooks/useCreateMark.ts'))(
+    '%s passes a full cadence object to its create call',
+    (rel) => {
+      // The type system enforces the SHAPE; this pins that the surface builds a
+      // cadence at all rather than delegating to some future default.
+      const src = stripComments(readFileSync(join(ROOT, rel), 'utf8'));
+      expect(src).toContain('cadence: {');
+      expect(src).toContain('weekly_target');
+    },
+  );
+
+  it('the mutation keeps the whole cadence set REQUIRED at the type level', () => {
+    // `cadence: MarkCadence;` non-optional in CreateMarkInput is the guarantee
+    // that replaced the old per-call source scan. Making it optional would put
+    // the silent-3 era one refactor away. Scoped to CreateMarkInput because
+    // EditMarkChanges is partial BY DESIGN (an absent key must stay absent).
+    const src = stripComments(
+      readFileSync(join(ROOT, 'lib/data/mutations/marks.ts'), 'utf8'),
     );
-  });
-
-  it('goal/new.tsx forwards the library range, not just the target', () => {
-    // It was the one path passing neither, so it is the one worth pinning:
-    // frequency_recommended is also the store's second-choice fallback.
-    const src = readFileSync(join(ROOT, 'app/goal/new.tsx'), 'utf8');
-    const [args] = callArgs(src, 'addMark({');
-    for (const field of ['frequency_min', 'frequency_recommended', 'frequency_max']) {
-      expect(args).toContain(field);
-    }
+    const start = src.indexOf('interface CreateMarkInput');
+    expect(start).toBeGreaterThan(-1);
+    const block = src.slice(start, src.indexOf('}', start));
+    expect(block).toContain('cadence: MarkCadence;');
+    expect(block).not.toContain('cadence?:');
   });
 });

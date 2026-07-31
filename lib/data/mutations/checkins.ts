@@ -146,9 +146,9 @@ export async function softDeleteCheckin(
 // ─── Cache patching ─────────────────────────────────────────────────────────
 //
 // Three keys hold check-ins and all three must agree, or the same tap reads as
-// logged on one screen and not on another. `lib/data/bridge.ts` delegates to these
-// so there is ONE implementation while both write paths are alive; when Task 6
-// deletes the bridge, the primitives stay here where they belong.
+// logged on one screen and not on another. While both write paths were alive,
+// `lib/data/bridge.ts` delegated to these so there was ONE implementation; Task 6
+// deleted the bridge (2026-07-31) and the primitives stayed here where they belong.
 
 /** Prepend newest-first, replacing any entry with the same id. Idempotent by
  * construction: the eventual refetch carrying the real row cannot double it. */

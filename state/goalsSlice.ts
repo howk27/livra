@@ -14,7 +14,6 @@ import {
   getLinksForMark,
 } from '../lib/db/goalsDb';
 import { canAddGoal } from '../lib/gating';
-import { bridgeInvalidate } from '@/lib/data/bridge';
 import { capture } from '../lib/analytics/posthog';
 import { ANALYTICS_EVENTS } from '../lib/analytics/events';
 import { evaluateGoalMomentum } from '../lib/goalMomentumStore';
@@ -122,6 +121,12 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
     }
   },
 
+  // RETIRED 2026-07-31, M9 Phase 3 Task 6 — NO SCREEN CALLS THIS. Goal creation
+  // runs through `lib/data/mutations/goals.ts` from all three surfaces (goal/new,
+  // onboarding, the AI package); the cap pre-check, sort index and GOAL_CREATED
+  // analytics moved to the callers. Kept because Phase 5 deletes this store whole
+  // (standing invariant 5); the deprecated `addGoal` alias below still delegates
+  // here for store-level tests.
   createGoal: async ({ userId, isPro, tier, frequency, method, ...data }) => {
     const current = get().goals.filter(g => g.user_id === userId);
     const nonCompleted = current.filter(g => g.status !== 'completed' && g.status !== 'expired');
@@ -272,6 +277,17 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
     set(s => ({ goals: s.goals.map(g => map.get(g.id) ?? g) }));
   },
 
+  // ── RETIRED 2026-07-31, M9 Phase 3 Task 6 — NO SCREEN CALLS link/unlink ─────
+  //
+  // The four creation surfaces (goal/new, mark/new, onboarding, the AI package)
+  // now write links through `lib/data/mutations/marks.ts` — `createGoal` takes
+  // `markIds` and `createMark` takes `goalId`, so linking is part of the create
+  // call. The last remaining callers of these two are the dead increment path in
+  // `hooks/useCounters.ts` and store-level tests. Left on disk because Phase 5
+  // deletes this store whole, and nothing is removed until its replacement is
+  // proven (standing invariant 5). The `bridgeInvalidate` nudge they carried is
+  // gone with `lib/data/bridge.ts` itself — there is no screen left that writes
+  // here and reads there.
   linkMarkToGoal: async (goalId, markId) => {
     // The link's owner is the goal's owner — the same rule the RLS policy uses.
     // Without a known owner the row would be rejected server-side, so refuse here
@@ -286,10 +302,6 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
           : g
       ),
     }));
-    // PHASE-2 BRIDGE: delete in Phase 3
-    // The goal-detail marks list resolves THROUGH LINKS (useMarks), so a new link
-    // must refresh the marks reads for the mark to appear.
-    bridgeInvalidate('marks');
   },
 
   unlinkMarkFromGoal: async (goalId, markId) => {
@@ -301,8 +313,6 @@ export const useGoalsStore = create<GoalsState>((set, get) => ({
           : g
       ),
     }));
-    // PHASE-2 BRIDGE: delete in Phase 3
-    bridgeInvalidate('marks');
   },
 
   creditMarkToGoals: async (markId, sourceEvents) => {
