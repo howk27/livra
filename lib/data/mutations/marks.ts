@@ -190,6 +190,41 @@ export async function archiveMark(markId: string): Promise<void> {
   if (error) throw toDataError(error);
 }
 
+// ─── Maintenance conversion (M9 Phase 5A Task 6) ────────────────────────────
+
+/**
+ * When a goal ends (completed or expired), its habits carry on as maintenance
+ * marks: stamp `maintenance_of` on every mark still LINKED to the goal.
+ *
+ * The store version keyed on `marks.goal_id` and nulled it; that column is
+ * retired (and the store's copy was emptied by the cutover wipe, which made the
+ * old conversion a silent no-op). Links resolve the membership here, and they
+ * are deliberately left alive: they are the record of which marks served the
+ * goal, and every active-goal surface filters by goal STATUS, not by link
+ * existence. All habit fields (streaks, targets, reminders) are untouched.
+ */
+export async function convertGoalMarksToMaintenance(goalId: string): Promise<void> {
+  if (!UUID_RE.test(goalId)) throw invalid('goalId is not a uuid');
+
+  const client = dataClient();
+  const { data: links, error: linkError } = await client
+    .from('goal_mark_links')
+    .select('mark_id')
+    .eq('goal_id', goalId)
+    .is('deleted_at', null);
+  if (linkError) throw toDataError(linkError);
+
+  const markIds = (links ?? []).map((row) => (row as { mark_id: string }).mark_id);
+  if (markIds.length === 0) return;
+
+  const { error } = await client
+    .from('marks')
+    .update({ maintenance_of: goalId, updated_at: new Date().toISOString() })
+    .in('id', markIds)
+    .is('deleted_at', null);
+  if (error) throw toDataError(error);
+}
+
 // ─── Link / unlink (D-6) ────────────────────────────────────────────────────
 
 export interface LinkInput {

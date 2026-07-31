@@ -15,8 +15,10 @@
 // Writes go where they always did: the AsyncStorage momentum record (via
 // `evaluateGoalMomentum`) and the KEPT `momentumSlice` snapshots.
 
+import type { QueryClient } from '@tanstack/react-query';
 import { yyyyMmDd } from '../date';
 import { evaluateGoalMomentum } from '../goalMomentumStore';
+import { queryKeys } from '../data/queryKeys';
 import { useMomentumStore } from '../../state/momentumSlice';
 import { logger } from '../utils/logger';
 import type { MarkMomentumInput, MomentumSnapshot } from '../goalMomentum';
@@ -26,6 +28,62 @@ type ActivityEvent = Pick<
   MarkEventRow,
   'mark_id' | 'event_type' | 'occurred_local_date' | 'deleted_at'
 >;
+
+/** The cached reads every goal-lifecycle consumer needs, as one bundle. */
+export interface GoalDataSnapshot {
+  goals: GoalRow[];
+  /** Every user mark, linked or not (the `marks` query). */
+  marks: MarkRow[];
+  marksByGoal: Record<string, MarkRow[]>;
+  events: MarkEventRow[];
+}
+
+/**
+ * The query cache's current answer, read imperatively (the non-React
+ * equivalent of mounting the three hooks). Absent entries read as empty — the
+ * consumers (momentum, warnings, nudges, expiry) all degrade to "do nothing",
+ * which is correct before the first fetch lands.
+ */
+export function readGoalDataSnapshot(client: QueryClient, userId: string): GoalDataSnapshot {
+  return {
+    goals: client.getQueryData<GoalRow[]>(queryKeys.goals(userId)) ?? [],
+    marks: client.getQueryData<MarkRow[]>(queryKeys.marks(userId)) ?? [],
+    marksByGoal:
+      client.getQueryData<Record<string, MarkRow[]>>(queryKeys.marksByGoal(userId)) ?? {},
+    events: client.getQueryData<MarkEventRow[]>(queryKeys.userCheckins(userId)) ?? [],
+  };
+}
+
+/** Goals in the `PlanGoal` shape the notification planners take —
+ * `linked_mark_ids` projected from live links, exactly as the store did. */
+export function planGoalsFromSnapshot(
+  snapshot: GoalDataSnapshot,
+): { id: string; title: string; status: string; linked_mark_ids: string[] }[] {
+  return snapshot.goals.map((g) => ({
+    id: g.id,
+    title: g.title,
+    status: g.status,
+    linked_mark_ids: (snapshot.marksByGoal[g.id] ?? []).map((m) => m.id),
+  }));
+}
+
+/** Every mark in the snapshot, deduped, in the `PlanMark` shape — activity
+ * derived from events (the stored column froze at cutover). */
+export function planMarksFromSnapshot(
+  snapshot: GoalDataSnapshot,
+): { id: string; weekly_target?: number; last_activity_date: string | null; deleted_at: string | null }[] {
+  const lastActivity = lastActivityByMark(snapshot.events);
+  const byId = new Map<string, MarkRow>();
+  for (const list of Object.values(snapshot.marksByGoal)) {
+    for (const mark of list) if (!byId.has(mark.id)) byId.set(mark.id, mark);
+  }
+  return [...byId.values()].map((m) => ({
+    id: m.id,
+    weekly_target: m.weekly_target ?? undefined,
+    last_activity_date: lastActivity.get(m.id) ?? null,
+    deleted_at: m.deleted_at,
+  }));
+}
 
 /** Latest live increment's local date per mark — today included. */
 export function lastActivityByMark(

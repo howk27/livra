@@ -322,10 +322,14 @@ export const useMarks = () => {
         // persist — a failed increment never speaks. maybeShowPostLogVoice never
         // throws (voice is decoration); the voiceSlice action is injected so
         // lib/moments stays store-free (retry #2, no module cycle).
+        // M9 Phase 5A Task 6: the evaluator takes its data explicitly now. This
+        // path has NO callers (check-ins go through useCheckin) and dies with
+        // this file; the store arrays keep it compiling until then.
         const voiceLineShown = maybeShowPostLogVoice(
           markId,
           today,
           resolveFirstName(user?.user_metadata, user?.email),
+          { marks, events, goals: [] },
           useVoiceStore.getState().evaluatePostLog,
         );
         capture(ANALYTICS_EVENTS.MARK_LOGGED, {

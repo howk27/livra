@@ -9,23 +9,50 @@ jest.mock('../../lib/notifications/momentumWarningPlan', () => ({ hasMomentumWar
 
 import * as Notifications from 'expo-notifications';
 import { getLivraRemindersEnabled } from '../../lib/notifications/livraReminderPrefs';
-import { useGoalsStore } from '../../state/goalsSlice';
-import { useMarksStore } from '../../state/countersSlice';
+// M9 Phase 5A Task 6: the scheduler reads the query cache through the singleton
+// client — membership through links, activity derived from events.
+import { queryClient } from '../../lib/data/queryClient';
+import { queryKeys } from '../../lib/data/queryKeys';
 import { scheduleReengageNudge, REENGAGE_TITLE } from '../../lib/notifications/reengageNudge';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const eightDaysAgo = (() => { const d = new Date(); d.setDate(d.getDate() - 8); return d.toISOString().slice(0, 10); })();
+const USER = 'u1';
+const localDate = (daysBack: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() - daysBack);
+  return d.toISOString().slice(0, 10);
+};
+
+function seedCache(lastIncrementDaysBack: number) {
+  queryClient.setQueryData(queryKeys.goals(USER), [
+    { id: 'g1', user_id: USER, title: 'Goal', status: 'active' },
+  ]);
+  queryClient.setQueryData(queryKeys.marksByGoal(USER), {
+    g1: [{ id: 'm1', user_id: USER, name: 'Mark', deleted_at: null }],
+  });
+  queryClient.setQueryData(queryKeys.userCheckins(USER), [
+    {
+      id: 'e1',
+      user_id: USER,
+      mark_id: 'm1',
+      event_type: 'increment',
+      occurred_at: `${localDate(lastIncrementDaysBack)}T10:00:00Z`,
+      occurred_local_date: localDate(lastIncrementDaysBack),
+      deleted_at: null,
+    },
+  ]);
+}
 
 beforeEach(async () => {
   jest.clearAllMocks();
   await AsyncStorage.clear();
-  useGoalsStore.setState({ goals: [{ id: 'g1', status: 'active', linked_mark_ids: ['m1'] } as any] });
-  useMarksStore.setState({ marks: [{ id: 'm1', goal_id: 'g1', deleted_at: null, last_activity_date: eightDaysAgo } as any] });
+  queryClient.clear();
+  seedCache(8);
 });
 
 describe('scheduleReengageNudge', () => {
   it('schedules the nudge when idle >= 7 days', async () => {
-    await scheduleReengageNudge('u1');
+    await scheduleReengageNudge(USER);
     expect(Notifications.scheduleNotificationAsync).toHaveBeenCalledTimes(1);
     const arg = (Notifications.scheduleNotificationAsync as jest.Mock).mock.calls[0][0];
     expect(arg.content.title).toBe(REENGAGE_TITLE);
@@ -33,14 +60,14 @@ describe('scheduleReengageNudge', () => {
 
   it('schedules nothing when the master toggle is off', async () => {
     (getLivraRemindersEnabled as jest.Mock).mockResolvedValueOnce(false);
-    await scheduleReengageNudge('u1');
+    await scheduleReengageNudge(USER);
     expect(Notifications.scheduleNotificationAsync).not.toHaveBeenCalled();
     expect(Notifications.cancelScheduledNotificationAsync).toHaveBeenCalledWith('livra-bn-reengage');
   });
 
   it('schedules nothing when not idle long enough', async () => {
-    useMarksStore.setState({ marks: [{ id: 'm1', goal_id: 'g1', deleted_at: null, last_activity_date: new Date().toISOString().slice(0, 10) } as any] });
-    await scheduleReengageNudge('u1');
+    seedCache(0); // logged today
+    await scheduleReengageNudge(USER);
     expect(Notifications.scheduleNotificationAsync).not.toHaveBeenCalled();
   });
 });

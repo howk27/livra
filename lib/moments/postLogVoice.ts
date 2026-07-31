@@ -215,6 +215,15 @@ export function evaluatePostLogVoice(inputs: PostLogVoiceInputs): Moment | null 
   });
 }
 
+/** The account data the evaluator derives a line from. M9 Phase 5A Task 6:
+ * an explicit INPUT — the caller reads it from the query cache — because the
+ * stores the slice used to reach into are retired. */
+export interface PostLogVoiceData {
+  marks: Mark[];
+  events: MarkEvent[];
+  goals: MomentGoalInput[];
+}
+
 /**
  * The store-glue contract for the increment path: state/voiceSlice's
  * `evaluatePostLog` action satisfies it. Declared here so this module never
@@ -223,14 +232,15 @@ export function evaluatePostLogVoice(inputs: PostLogVoiceInputs): Moment | null 
 export type PostLogVoiceEvaluator = (
   markId: string,
   todayStr: string,
+  data: PostLogVoiceData,
   firstName?: string | null,
   rng?: () => number,
 ) => boolean;
 
 /**
  * The increment path's single voice call (PL-4 retry #1/#2): wraps error
- * handling around an INJECTED evaluator (hooks/useCounters passes voiceSlice's
- * action in at the call site) so incrementMark gains exactly one call and zero
+ * handling around an INJECTED evaluator (the check-in hook passes voiceSlice's
+ * action in at the call site) so the log path gains exactly one call and zero
  * branches, and this module stays store-free — no lib/moments ↔ state cycle.
  * Never throws — voice is decoration; a failure here must never block logging
  * or the mark_logged capture.
@@ -239,11 +249,12 @@ export function maybeShowPostLogVoice(
   markId: string,
   todayStr: string,
   firstName: string | null | undefined,
+  data: PostLogVoiceData,
   evaluate: PostLogVoiceEvaluator,
   rng?: () => number,
 ): boolean {
   try {
-    return evaluate(markId, todayStr, firstName, rng);
+    return evaluate(markId, todayStr, data, firstName, rng);
   } catch (error) {
     logger.error('[moments] Post-log voice evaluation failed:', error);
     return false;

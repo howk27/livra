@@ -20,9 +20,11 @@
 // Zustand, which is why the mutation takes the number as an input.
 
 import { useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useCompleteGoalMutation } from '../lib/data/mutations/goals';
+import { convertGoalMarksToMaintenance } from '../lib/data/mutations/marks';
+import { queryKeys } from '../lib/data/queryKeys';
 import { useMomentumStore } from '../state/momentumSlice';
-import { useMarksStore } from '../state/countersSlice';
 import { capture } from '../lib/analytics/posthog';
 import { ANALYTICS_EVENTS } from '../lib/analytics/events';
 import { logger } from '../lib/utils/logger';
@@ -34,6 +36,7 @@ export interface CompleteGoalTarget {
 }
 
 export function useCompleteGoal(userId: string) {
+  const client = useQueryClient();
   const mutation = useCompleteGoalMutation(userId);
 
   const completeGoal = useCallback(
@@ -54,18 +57,18 @@ export function useCompleteGoal(userId: string) {
 
       useMomentumStore.getState().clearSnapshot(goal.id);
 
-      // The goal is done, but its habits carry on as maintenance marks. Still a
-      // SQLite write (`countersSlice`), which is why the mutation invalidates the
-      // marks reads as well as the goals reads — a goals-only refresh would leave
-      // the marks showing their pre-conversion shape.
-      useMarksStore
-        .getState()
-        .convertMarksToMaintenance(goal.id)
+      // The goal is done, but its habits carry on as maintenance marks — a
+      // SERVER write now (M9 Phase 5A Task 6): `maintenance_of` is stamped on
+      // every mark still linked to the goal. Marks are re-invalidated AFTER the
+      // stamp lands: the completion mutation's own invalidation fires first and
+      // could refetch the pre-conversion rows.
+      convertGoalMarksToMaintenance(goal.id)
+        .then(() => client.invalidateQueries({ queryKey: queryKeys.marks(goal.user_id) }))
         .catch((error: unknown) =>
-          logger.error('[completeGoal] convertMarksToMaintenance failed', error),
+          logger.error('[completeGoal] convertGoalMarksToMaintenance failed', error),
         );
     },
-    [mutation],
+    [mutation, client],
   );
 
   return { completeGoal, isCompleting: mutation.isPending };

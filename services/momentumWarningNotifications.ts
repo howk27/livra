@@ -19,8 +19,14 @@ import {
 } from '../lib/notifications/livraScheduledOwnership';
 import { pickFireInWindow } from './behaviorNotifications';
 import { getLivraRemindersEnabled } from '../lib/notifications/livraReminderPrefs';
-import { useGoalsStore } from '../state/goalsSlice';
-import { useMarksStore } from '../state/countersSlice';
+// M9 Phase 5A Task 6: inputs come from the query cache (goals + links + derived
+// activity), read through the singleton client — the stores are retired.
+import { queryClient } from '../lib/data/queryClient';
+import {
+  readGoalDataSnapshot,
+  planGoalsFromSnapshot,
+  planMarksFromSnapshot,
+} from '../lib/goals/momentumEvaluation';
 
 const LAST_TEMPLATES_KEY = 'livra_mw_last_templates_v1';
 type LastTemplates = { first?: string; final?: string; combined?: string };
@@ -55,10 +61,12 @@ export async function reconcileMomentumWarnings(userId: string | undefined): Pro
   const now = getAppDate();
   const today = formatDate(now);
 
-  const goals = useGoalsStore.getState().goals;
-  const allMarks = useMarksStore.getState().marks;
-
-  const inputs = buildMomentumWarningInputs(goals as any, allMarks as any, today);
+  const snapshot = readGoalDataSnapshot(queryClient, userId);
+  const inputs = buildMomentumWarningInputs(
+    planGoalsFromSnapshot(snapshot),
+    planMarksFromSnapshot(snapshot),
+    today,
+  );
   const planned = planMomentumWarnings(inputs, today);
 
   // Always cancel the previous set first (recovery / replace / drop).

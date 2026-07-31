@@ -3,8 +3,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getLivraRemindersEnabled } from './livraReminderPrefs';
 import { hasMomentumWarningPlannedForToday } from './momentumWarningPlan';
 import { LIVRA_BEHAVIOR_ID_PREFIX } from './livraScheduledOwnership';
-import { useGoalsStore } from '../../state/goalsSlice';
-import { useMarksStore } from '../../state/countersSlice';
+// M9 Phase 5A Task 6: inputs come from the query cache — goals + links resolve
+// membership, and per-mark activity derives from events (the stored
+// last_activity_date column froze at the cutover).
+import { queryClient } from '../data/queryClient';
+import {
+  readGoalDataSnapshot,
+  planGoalsFromSnapshot,
+  planMarksFromSnapshot,
+  lastActivityByMark,
+} from '../goals/momentumEvaluation';
 import { getAppDate } from '../appDate';
 import { formatDate } from '../date';
 import { logger } from '../utils/logger';
@@ -68,20 +76,29 @@ export async function scheduleReengageNudge(userId: string | undefined): Promise
 
     const now = getAppDate();
     const today = formatDate(now);
-    const goals = useGoalsStore.getState().getActiveGoals();
-    const marks = useMarksStore.getState().marks;
+    const snapshot = readGoalDataSnapshot(queryClient, userId);
+    const planGoals = planGoalsFromSnapshot(snapshot);
+    const activeGoals = planGoals.filter((g) => g.status === 'active');
 
-    const activeGoalIds = new Set(goals.map((g) => g.id));
-    const activeMarkDates = marks
-      .filter((m) => !m.deleted_at && m.goal_id && activeGoalIds.has(m.goal_id))
-      .map((m) => m.last_activity_date);
+    // A mark is "on an active goal" when a live LINK puts it there; its last
+    // activity derives from the events (today included).
+    const lastActivity = lastActivityByMark(snapshot.events);
+    const activeMarkDates = activeGoals.flatMap((g) =>
+      (snapshot.marksByGoal[g.id] ?? [])
+        .filter((m) => !m.deleted_at)
+        .map((m) => lastActivity.get(m.id) ?? null),
+    );
 
     const daysIdle = daysIdleFromMarks(activeMarkDates, today);
-    const atRiskPlanned = hasMomentumWarningPlannedForToday(goals as any, marks as any, today);
+    const atRiskPlanned = hasMomentumWarningPlannedForToday(
+      planGoals,
+      planMarksFromSnapshot(snapshot),
+      today,
+    );
     const lastNudgeDate = await AsyncStorage.getItem(LAST_NUDGE_KEY);
 
     const plan = planReengageNudge({
-      activeGoalCount: goals.length,
+      activeGoalCount: activeGoals.length,
       daysIdle,
       lastNudgeDate,
       atRiskPlanned,

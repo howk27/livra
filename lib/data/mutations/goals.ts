@@ -282,6 +282,53 @@ export async function completeGoal(
   if (error) throw toDataError(error);
 }
 
+// ─── Expire (M9 Phase 5A Task 6) ────────────────────────────────────────────
+
+/**
+ * A passed deadline ends the goal. The store's `checkGoalCompletion` wrote this
+ * status flip into SQLite; this is the server row it always should have been.
+ *
+ * `.eq('status', 'active')` — narrower than completeGoal's `neq` on purpose:
+ * only an ACTIVE goal can expire (the store checked the same), so a replay, a
+ * completed goal, or a queued goal all match zero rows.
+ */
+export async function expireGoal(goalId: string): Promise<void> {
+  if (!UUID_RE.test(goalId)) throw invalid('goalId is not a uuid');
+
+  const now = new Date().toISOString();
+  const { error } = await dataClient()
+    .from('goals')
+    .update({ status: 'expired', updated_at: now })
+    .eq('id', goalId)
+    .eq('status', 'active')
+    .is('deleted_at', null);
+  if (error) throw toDataError(error);
+}
+
+/**
+ * The check-in credit: one bump of `current_mark_count` per mark per local day
+ * (the caller owns the dedupe — it needs the event list, which lives in the
+ * query cache, and lib/data does not read caches).
+ *
+ * READ-MODIFY-WRITE, same fidelity as the store version, which added 1 to its
+ * local copy: the caller passes the new count computed from the freshest row it
+ * holds. PostgREST cannot express `count = count + 1` without an RPC, and new
+ * RPCs are Phase 5B (blocked until the build is live). Single-user data; the
+ * races are the ones the store already had.
+ */
+export async function creditGoalMarkCount(goalId: string, newCount: number): Promise<void> {
+  if (!UUID_RE.test(goalId)) throw invalid('goalId is not a uuid');
+  if (!Number.isInteger(newCount) || newCount < 0) throw invalid('newCount is not a non-negative integer');
+
+  const { error } = await dataClient()
+    .from('goals')
+    .update({ current_mark_count: newCount, updated_at: new Date().toISOString() })
+    .eq('id', goalId)
+    .eq('status', 'active')
+    .is('deleted_at', null);
+  if (error) throw toDataError(error);
+}
+
 // ─── Archive (T2) ───────────────────────────────────────────────────────────
 
 export interface LiveLink {

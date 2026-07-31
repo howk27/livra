@@ -1,8 +1,16 @@
 import { useEffect } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { useAppDateStore } from '../state/appDateSlice';
-import { useGoalsStore } from '../state/goalsSlice';
+// M9 Phase 5A Task 6: expiry + momentum read the query cache through the
+// singleton client (the same instance the provider mounts).
+import { queryClient } from '../lib/data/queryClient';
+import { expireDeadlinedGoals } from '../lib/goals/goalLifecycle';
+import {
+  evaluateGoalsMomentum,
+  readGoalDataSnapshot,
+} from '../lib/goals/momentumEvaluation';
 import { syncWidgetData } from '../lib/widgets/widgetSync';
+import { useAuth } from './useAuth';
 import { logger } from '../lib/utils/logger';
 
 /**
@@ -31,6 +39,9 @@ export const DAY_ROLLOVER_TICK_MS = 60_000;
  * return, when timers have been suspended and the tick never fired.
  */
 export function useDayRollover(): void {
+  const { user } = useAuth();
+  const userId = user?.id;
+
   useEffect(() => {
     const onMaybeRollover = () => {
       if (!useAppDateStore.getState().refreshDayKey()) return;
@@ -38,16 +49,17 @@ export function useDayRollover(): void {
       logger.log('[DayRollover] local day changed — re-evaluating the day-shaped state');
       // The same day-sensitive work the foreground path runs. Without it the
       // screens would flip to the new day while goal expiry and momentum stayed
-      // on the old one.
-      try {
-        useGoalsStore.getState().checkAllGoalExpiry();
-      } catch (error) {
-        logger.error('[DayRollover] goal expiry check failed:', error);
+      // on the old one. Signed out there is no account data to re-evaluate —
+      // the widget sync alone still runs (it clears to the signed-out state).
+      if (userId) {
+        void expireDeadlinedGoals(queryClient, userId).catch((error) =>
+          logger.error('[DayRollover] goal expiry check failed:', error),
+        );
+        const snapshot = readGoalDataSnapshot(queryClient, userId);
+        void evaluateGoalsMomentum(snapshot.goals, snapshot.marksByGoal, snapshot.events).catch(
+          (error) => logger.error('[DayRollover] momentum re-evaluation failed:', error),
+        );
       }
-      void useGoalsStore
-        .getState()
-        .evaluateActiveGoalsMomentum()
-        .catch((error) => logger.error('[DayRollover] momentum re-evaluation failed:', error));
       // The widget shows today's ring and today's marks; it is as stale as the app was.
       void syncWidgetData().catch(() => {});
     };
@@ -61,5 +73,5 @@ export function useDayRollover(): void {
       clearInterval(interval);
       subscription.remove();
     };
-  }, []);
+  }, [userId]);
 }

@@ -5,11 +5,8 @@
 import { create } from 'zustand';
 import { currentWeekDates } from '../lib/features';
 import { milestoneForLog } from '../lib/identity';
-import { evaluatePostLogVoice } from '../lib/moments/postLogVoice';
+import { evaluatePostLogVoice, type PostLogVoiceData } from '../lib/moments/postLogVoice';
 import type { Moment, MomentType } from '../lib/moments/types';
-import { useMarksStore } from './countersSlice';
-import { useEventsStore } from './eventsSlice';
-import { useGoalsStore } from './goalsSlice';
 import { useIdentityStore } from './identitySlice';
 import { effectivePersonalBest, useMomentumStore } from './momentumSlice';
 
@@ -33,13 +30,17 @@ interface VoiceState {
   clearLine: () => void;
   speak: (moment: Moment) => void;
   /**
-   * Builds context from live stores and asks the engine for a post-log line.
+   * Asks the engine for a post-log line over caller-supplied account data
+   * (M9 Phase 5A Task 6: the caller reads the query cache — the data stores
+   * this slice used to reach into are retired; momentum + identity remain
+   * this side because they are kept slices).
    * Returns true when a line was shown — the analytics property's source of truth.
    * Call ONLY after a successful increment.
    */
   evaluatePostLog: (
     markId: string,
     todayStr: string,
+    data: PostLogVoiceData,
     firstName?: string | null,
     rng?: () => number,
   ) => boolean;
@@ -68,12 +69,10 @@ export const useVoiceStore = create<VoiceState>((set, get) => ({
       lastMomentIds: { ...s.lastMomentIds, [moment.type]: moment.id },
     })),
 
-  evaluatePostLog: (markId, todayStr, firstName, rng) => {
+  evaluatePostLog: (markId, todayStr, data, firstName, rng) => {
     if (get().surfaceCount <= 0) return false;
 
-    const marks = useMarksStore.getState().marks;
-    const events = useEventsStore.getState().events;
-    const goals = useGoalsStore.getState().goals;
+    const { marks, events, goals } = data;
     const { snapshots, longestRuns } = useMomentumStore.getState();
 
     // spec §2 (Task 4): the once-ever memory is an INPUT to the derivation, not

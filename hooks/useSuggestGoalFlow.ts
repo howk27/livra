@@ -18,7 +18,7 @@ import { checkProStatus } from '../lib/iap/iap';
 import { applyOpacity } from '../src/components/icons/color';
 import { GENERATION_ERROR_COPY } from '../lib/copy';
 import { createFromAIPackage } from '../lib/goals/createFromAIPackage';
-import { useMarksStore } from '../state/countersSlice';
+import { useMarksForUser } from '../lib/data/marks';
 import { countActiveMarks } from '../lib/gating';
 import {
   allowedPackageMarkCount,
@@ -64,7 +64,9 @@ export function useSuggestGoalFlow() {
   // default, since only a free account near the mark ceiling ever sees the note;
   // it flips true once checkProStatus resolves, hiding the note for Pro.
   const [isPro, setIsPro] = useState(false);
-  const marks = useMarksStore((s) => s.marks);
+  // M9 Phase 5A Task 6: the ceiling count reads the query layer (live rows
+  // already exclude tombstones; countActiveMarks re-filters harmlessly).
+  const marks = useMarksForUser().data ?? [];
 
   // How many marks THIS new goal can actually hold (per-goal cap AND the
   // account-wide ceiling, whichever binds). Drives the soft over-limit note.

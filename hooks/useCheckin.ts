@@ -32,6 +32,10 @@ import {
   useUndoCheckinMutation,
 } from '../lib/data/mutations/checkins';
 import { readCachedCheckins } from '../lib/data/checkins';
+import { creditMarkToGoals } from '../lib/goals/goalLifecycle';
+import { readGoalDataSnapshot } from '../lib/goals/momentumEvaluation';
+import { toGoal, toMark } from '../lib/data/adapters';
+import { totalsByMark } from '../lib/data/derived';
 import { useAuth } from './useAuth';
 import { useBadges } from './useBadges';
 import { capture } from '../lib/analytics/posthog';
@@ -112,12 +116,35 @@ export function useCheckin(): UseCheckinResult {
       InteractionManager.runAfterInteractions(() => {
         const events = readCachedCheckins(client, userId, markId).map(toMarkEvent);
 
+        // The account data the voice engine derives a line from, read from the
+        // query cache (M9 Phase 5A Task 6 — the slice no longer reaches into
+        // stores). `goal_id` on the adapted marks is the FIRST holder goal via
+        // live links: the moment selector keys goal-scoped lines off it, and
+        // one goal is what the retired column carried.
+        const snapshot = readGoalDataSnapshot(client, userId);
+        const totals = totalsByMark(snapshot.events);
+        const holderByMark = new Map<string, string>();
+        for (const [goalId, list] of Object.entries(snapshot.marksByGoal)) {
+          for (const m of list) if (!holderByMark.has(m.id)) holderByMark.set(m.id, goalId);
+        }
+        const voiceData = {
+          marks: snapshot.marks.map((row) => ({
+            ...toMark(row, totals),
+            goal_id: holderByMark.get(row.id) ?? null,
+          })),
+          events: snapshot.events.map(toMarkEvent),
+          goals: snapshot.goals.map((g) =>
+            toGoal(g, (snapshot.marksByGoal[g.id] ?? []).map((m) => m.id)),
+          ),
+        };
+
         let voiceLineShown = false;
         try {
           voiceLineShown = maybeShowPostLogVoice(
             markId,
             today,
             resolveFirstName(user?.user_metadata, user?.email),
+            voiceData,
             useVoiceStore.getState().evaluatePostLog,
           );
         } catch (error) {
@@ -136,21 +163,15 @@ export function useCheckin(): UseCheckinResult {
 
         // XP deleted in M9 Phase 5A (spec §4.4).
 
-        // Goal credit and momentum. STILL A SQLITE WRITE: `creditMarkToGoals`
-        // updates `current_mark_count` / `banked_momentum_days` in the local goals
-        // store, which the query layer does not read. The RING is unaffected —
-        // `calculateGoalProgress` counts events and links, so the optimistic patch
-        // already moved it. Migrating this write is Phase 3 Task 3 (goal mutations).
-        import('../state/goalsSlice')
-          .then(({ useGoalsStore }) =>
-            useGoalsStore
-              .getState()
-              .creditMarkToGoals(markId, events)
-              .then(() =>
-                import('../services/momentumWarningNotifications').then(
-                  ({ reconcileMomentumWarnings }) => reconcileMomentumWarnings(userId),
-                ),
-              ),
+        // Goal credit, momentum and the deadline check — the query-layer chain
+        // (M9 Phase 5A Task 6, lib/goals/goalLifecycle.ts). `current_mark_count`
+        // is now a SERVER write; the RING was never affected either way —
+        // `calculateGoalProgress` counts events and links.
+        creditMarkToGoals(client, userId, markId, events)
+          .then(() =>
+            import('../services/momentumWarningNotifications').then(
+              ({ reconcileMomentumWarnings }) => reconcileMomentumWarnings(userId),
+            ),
           )
           .catch((error: unknown) => {
             logger.error('[checkin] goal credit failed', error);

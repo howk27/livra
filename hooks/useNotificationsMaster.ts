@@ -2,7 +2,11 @@ import { useState, useEffect, useCallback } from 'react';
 import { getLivraRemindersEnabled } from '../lib/notifications/livraReminderPrefs';
 import { applyNotificationsMaster } from '../services/notificationsMaster';
 import { useAuth } from './useAuth';
-import { useMarksStore } from '../state/countersSlice';
+// M9 Phase 5A Task 6: the reconcile list reads the query cache — a MarkRow is
+// a ReconcileMark (id + name + deleted_at) structurally.
+import { queryClient } from '../lib/data/queryClient';
+import { queryKeys } from '../lib/data/queryKeys';
+import type { MarkRow } from '../lib/data/types';
 import type { ReconcileMark } from '../lib/notifications/markReminder';
 import { logger } from '../lib/utils/logger';
 
@@ -28,7 +32,9 @@ export function useNotificationsMaster() {
     async (v: boolean) => {
       const prior = enabled;
       setEnabledState(v); // optimistic
-      const marks = useMarksStore.getState().marks as unknown as ReconcileMark[];
+      const marks: ReconcileMark[] = user?.id
+        ? (queryClient.getQueryData<MarkRow[]>(queryKeys.marks(user.id)) ?? [])
+        : [];
       try {
         await applyNotificationsMaster(v, user?.id, marks);
       } catch (err) {
