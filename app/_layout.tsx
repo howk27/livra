@@ -53,6 +53,7 @@ import {
 import { requestLivraLocalNotificationReschedule } from '../services/livraLocalNotificationOwner';
 import { getSupabaseClient } from '../lib/supabase';
 import { initNetworkOnlineManager } from '../lib/data/connectivity';
+import { runCutoverOnce } from '../lib/data/cutover';
 import { startOutbox } from '../lib/data/outbox';
 import {
   queryClient,
@@ -303,6 +304,11 @@ export default function RootLayout() {
   useEffect(() => {
     // Initialize database first, then cleanup invalid badges
     const init = async () => {
+      // M9 Phase 5A: one-time wipe of old-architecture storage, before anything
+      // below can read or recreate it. Static import — a runtime await import()
+      // takes the catch branch under Jest and would look wired while never
+      // running (this project shipped exactly that).
+      await runCutoverOnce();
       await initDatabase();
       await useAppDateStore.getState().hydrate();
       await useDailyTrackingStore.getState().loadDailyTracking();

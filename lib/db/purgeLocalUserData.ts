@@ -135,6 +135,10 @@ export const DEVICE_SCOPED_STORAGE_KEYS = [
   'livra_share_card_style_v1', // share-card style preference
   'livra_feature_flags', // experiment assignment, device-level
   'biometric_lock_enabled', // device lock — dropping it would REMOVE protection
+  // M9 Phase 5A cutover flag (lib/data/cutover.ts): "this device has been cut
+  // over" is a fact about the device. Clearing it on sign-out would re-run the
+  // wipe on the next launch for no reason.
+  'livra_cutover_v1_done',
   '@livra_debug_app_date_override', // dev tool, gated to dev builds
   'iap_support_diagnostics_enabled', // support toggle, device-level
   // IAP replay protection. Deliberately KEPT: these are device-level guards

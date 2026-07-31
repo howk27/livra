@@ -24,7 +24,9 @@ export const queryClient = new QueryClient({
 // Bump this string on any cached-shape change so a persisted cache from an older
 // shape is discarded rather than rehydrated into new code. Phase 5's cutover
 // depends on being able to force exactly this.
-export const QUERY_CACHE_BUSTER = 'livra-data-v1';
+// v2: M9 Phase 5A cutover — nothing persisted before the cutover build may
+// rehydrate into the post-cutover code.
+export const QUERY_CACHE_BUSTER = 'livra-data-v2';
 export const QUERY_CACHE_MAX_AGE = 24 * 60 * 60 * 1000;
 
 // Persist the query cache to AsyncStorage so reads are available offline. The
