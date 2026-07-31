@@ -32,7 +32,6 @@ import { Skeleton } from '../../components/ui/Skeleton';
 import { GoalTitle } from '../../components/ui/GoalTitle';
 import { HistoryRow } from '../../components/goals/HistoryRow';
 import { useAuth } from '../../hooks/useAuth';
-import { useGoalsStore } from '../../state/goalsSlice';
 import { useReorderGoalsMutation } from '@/lib/data/mutations/goals';
 import { useGoals } from '@/lib/data/goals';
 import { useMarksByGoal } from '@/lib/data/marks';
@@ -578,12 +577,11 @@ export default function GoalsScreen() {
 
   const { user } = useAuth();
 
-  // M9 Phase 2 — reads come from the query layer; writes (fetchGoals refresh,
-  // reorderGoals) still flow through the store.
+  // M9 Phase 2 — reads come from the query layer. (Phase 5A Task 6: the store
+  // refresh is gone with the store; the query refetches below are the refresh.)
   const goalsQuery = useGoals();
   const marksByGoalQuery = useMarksByGoal();
   const checkinsQuery = useUserCheckins();
-  const fetchGoals = useGoalsStore((s) => s.fetchGoals);
 
   const goalRows = goalsQuery.data ?? EMPTY_GOAL_ROWS;
   const marksByGoalMap = marksByGoalQuery.data ?? EMPTY_MARKS_BY_GOAL;
@@ -642,7 +640,6 @@ export default function GoalsScreen() {
     setRefreshing(true);
     try {
       await Promise.all([
-        fetchGoals(user.id),
         refetchGoals(),
         refetchMarks(),
         refetchCheckins(),
@@ -650,7 +647,7 @@ export default function GoalsScreen() {
     } finally {
       setRefreshing(false);
     }
-  }, [user, fetchGoals, refetchGoals, refetchMarks, refetchCheckins]);
+  }, [user, refetchGoals, refetchMarks, refetchCheckins]);
 
   // Per-goal "this week" aggregate — same computation Focus uses per mark, summed
   // across each goal's linked marks. Marks are grouped THROUGH LINKS (useMarksByGoal),
@@ -754,9 +751,7 @@ export default function GoalsScreen() {
             {user?.id ? (
               <TouchableOpacity
                 onPress={() => {
-                  // Error is query-derived now: refetch the query (what clears it),
-                  // and keep the store fetch so the write model stays warm.
-                  void fetchGoals(user.id);
+                  // Error is query-derived: refetching the query is what clears it.
                   void refetchGoals();
                 }}
                 disabled={isLoading}

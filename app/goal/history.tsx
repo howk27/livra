@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+import { ActivityIndicator, View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { CaretLeft } from 'phosphor-react-native';
@@ -15,7 +15,9 @@ import {
   headerControlBoxLeading,
 } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
-import { useGoalsStore } from '../../state/goalsSlice';
+import { useGoals } from '@/lib/data/goals';
+import { asDataError } from '@/lib/data/errors';
+import { dataErrorCopy } from '../../lib/copy';
 import { formatDuration, formatTargetDelta } from '../../lib/goalHistory';
 import { getEmptyStateCopy } from '../../lib/moments/emptyState';
 
@@ -27,10 +29,15 @@ export default function GoalHistoryScreen() {
   const theme = useEffectiveTheme();
   const c = themedColors(theme);
   const router = useRouter();
-  const goals = useGoalsStore(s => s.goals);
+  // M9 Phase 5A Task 6: reads moved to the query layer (goalsSlice retired).
+  // Row fields cover everything this screen renders; `deadline_date` is the
+  // column behind the old store's mirrored `target_date`.
+  const goalsQuery = useGoals();
+  const goals = goalsQuery.data;
+  const readError = dataErrorCopy(asDataError(goalsQuery.error));
   const completed = useMemo(
     () =>
-      goals
+      (goals ?? [])
         .filter(g => g.status === 'completed')
         .sort((a, b) => (b.completed_at ?? '').localeCompare(a.completed_at ?? '')),
     [goals],
@@ -57,7 +64,15 @@ export default function GoalHistoryScreen() {
         <View style={styles.headerSpacer} />
       </View>
 
-      {count === 0 ? (
+      {goalsQuery.isLoading ? (
+        <View style={styles.emptyState}>
+          <ActivityIndicator color={c.inkMuted} />
+        </View>
+      ) : readError ? (
+        <View style={styles.emptyState}>
+          <Text style={[styles.emptyText, { color: c.inkMid }]}>{readError}</Text>
+        </View>
+      ) : count === 0 ? (
         <View style={styles.emptyState}>
           <Text style={[styles.emptyText, { color: c.inkMid }]}>
             {EMPTY_HISTORY_LINE}
@@ -85,9 +100,9 @@ export default function GoalHistoryScreen() {
                     {'  ·  Took ' + formatDuration(goal.created_at, goal.completed_at)}
                   </Text>
                 ) : null}
-                {goal.completed_at && goal.target_date ? (
+                {goal.completed_at && goal.deadline_date ? (
                   <Text style={[styles.metaText, { color: c.inkMuted }]}>
-                    {'  ·  ' + formatTargetDelta(goal.completed_at, goal.target_date)}
+                    {'  ·  ' + formatTargetDelta(goal.completed_at, goal.deadline_date)}
                   </Text>
                 ) : null}
               </View>

@@ -28,9 +28,8 @@ import { confirm, actionSheet } from '../../components/ui/overlays';
 import { useArchiveMarkMutation } from '@/lib/data/mutations/marks';
 import { useAuth } from '../../hooks/useAuth';
 import { useAppDateStore, selectAppDateKey } from '../../state/appDateSlice';
-import { useGoalsStore } from '../../state/goalsSlice';
-import { useMarksStore } from '../../state/countersSlice';
 import { effectivePersonalBest, useMomentumStore } from '../../state/momentumSlice';
+import { evaluateGoalsMomentum } from '../../lib/goals/momentumEvaluation';
 import { buildMomentContext } from '../../lib/moments/context';
 import {
   dayHashRng,
@@ -79,10 +78,12 @@ import {
 
 import type { Counter, Mark, MarkEvent, FrequencyKind } from '../../types';
 import type { Goal } from '../../types/goal';
-// M9 Phase 2 Task 4 — reads come from the query layer; writes stay in the stores.
+// M9 Phase 2 Task 4 — reads come from the query layer.
+import { useQueryClient } from '@tanstack/react-query';
 import { useMarksForUser, useMarksByGoal } from '@/lib/data/marks';
 import { useUserCheckins } from '@/lib/data/checkins';
 import { useGoals } from '@/lib/data/goals';
+import { queryKeys } from '@/lib/data/queryKeys';
 import { totalsByMark } from '@/lib/data/derived';
 import { asDataError } from '@/lib/data/errors';
 import { caughtErrorCopy, dataErrorCopy } from '@/lib/copy';
@@ -299,13 +300,25 @@ export default function FocusScreen() {
   // the count changes. Empty string when there are no active goals.
   const activeGoalIdsKey = useMemo(() => activeGoals.map((g) => g.id).join(','), [activeGoals]);
 
+  // M9 Phase 5A Task 6: momentum evaluation reads the query layer now
+  // (lib/goals/momentumEvaluation.ts) — the stores it derived from are retired.
+  // Cache reads are imperative (like the old `getState()`) so the trigger stays
+  // the active set + the day, not every checkins refetch.
+  const queryClient = useQueryClient();
   useEffect(() => {
-    if (!activeGoalIdsKey) return;
-    void useGoalsStore.getState().evaluateActiveGoalsMomentum();
-  }, [activeGoalIdsKey, todayStr]);
+    if (!activeGoalIdsKey || !user) return;
+    const userId = user.id;
+    void evaluateGoalsMomentum(
+      queryClient.getQueryData<GoalRow[]>(queryKeys.goals(userId)) ?? EMPTY_GOAL_ROWS,
+      queryClient.getQueryData<Record<string, MarkRowData[]>>(queryKeys.marksByGoal(userId)) ??
+        EMPTY_MARKS_BY_GOAL,
+      queryClient.getQueryData<MarkEventRow[]>(queryKeys.userCheckins(userId)) ??
+        EMPTY_CHECKIN_ROWS,
+    );
+  }, [queryClient, user, activeGoalIdsKey, todayStr]);
 
-  // Pull to refresh. Focus reads from three places, so a refresh has to touch
-  // all three or the card can redraw from half-stale state: marks, goals, then
+  // Pull to refresh. Focus reads from several queries, so a refresh has to touch
+  // all of them or the card can redraw from half-stale state: marks, goals, then
   // the momentum snapshots derived from both. Own flag, not `loading` — that
   // one drives the skeleton, which would blank a list the user is holding.
   const [refreshing, setRefreshing] = useState(false);
@@ -313,17 +326,18 @@ export default function FocusScreen() {
     if (!user) return;
     setRefreshing(true);
     try {
-      await Promise.all([
+      const [, checkinsResult, goalsResult, marksByGoalResult] = await Promise.all([
         // The query-backed reads the screen renders (T6 verify gesture).
         marksQuery.refetch(),
         checkinsQuery.refetch(),
         goalsQuery.refetch(),
         marksByGoalQuery.refetch(),
-        // Momentum snapshots still derive from the stores, so refresh them too.
-        useMarksStore.getState().loadMarks(user.id),
-        useGoalsStore.getState().fetchGoals(user.id),
       ]);
-      await useGoalsStore.getState().evaluateActiveGoalsMomentum();
+      await evaluateGoalsMomentum(
+        goalsResult.data ?? EMPTY_GOAL_ROWS,
+        marksByGoalResult.data ?? EMPTY_MARKS_BY_GOAL,
+        checkinsResult.data ?? EMPTY_CHECKIN_ROWS,
+      );
     } finally {
       setRefreshing(false);
     }

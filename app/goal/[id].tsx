@@ -46,7 +46,6 @@ import type { Goal } from '../../types/goal';
 import type { GoalRow, MarkRow, MarkEventRow } from '@/lib/data/types';
 import type { TierId, FrequencyId } from '../../lib/goalMarkSuggestions';
 import { useEffectiveTheme } from '../../state/uiSlice';
-import { useMarksStore } from '../../state/countersSlice';
 // M9 Phase 3: goal + note + link writes are mutations now; `goalsSlice` and
 // `goalNotesSlice` are gone from this screen, and with them the write→read bridge.
 import {
@@ -1023,16 +1022,6 @@ export default function GoalDetailScreen() {
   const unlinkMark = useUnlinkMarkMutation(userId ?? '');
   const { completeGoal } = useCompleteGoal(userId ?? '');
 
-  // STILL THE STORE, DELIBERATELY: `marks.goal_id` is the legacy association column
-  // this milestone retires, but SIX non-migrated subsystems still READ it —
-  // `lib/widgets/widgetSync.ts:49` (the iOS widget's per-goal grouping),
-  // `state/countersSlice.ts:273` (maintenance conversion), `lib/gating.ts:46`,
-  // `lib/features.ts:118`, `lib/moments/emptyState.ts:49`,
-  // `lib/notifications/reengageNudge.ts:76`. Dropping the write here would silently
-  // break all six. The LINK is the truth (the mutations never write `goal_id`);
-  // this is a dual-write to a dying column, and Phase 5 removes it with them.
-  const updateMark = useMarksStore(s => s.updateMark);
-
   const goalRow = goalQuery.data ?? null;
   const linkedMarkRows = marksQuery.data ?? EMPTY_MARK_ROWS;
   const allMarkRows = allMarksQuery.data ?? EMPTY_MARK_ROWS;
@@ -1205,24 +1194,21 @@ export default function GoalDetailScreen() {
       setShowLinkSheet(false);
       // Which goal currently holds this mark — resolved THROUGH LINKS (the live
       // goal_mark_links map), not the retired `mark.goal_id`. Same move semantics:
-      // a mark on another goal is unlinked there first. The `updateMark` below still
-      // writes the legacy goal_id column so non-migrated surfaces stay in step.
+      // a mark on another goal is unlinked there first. (M9 Phase 5A Task 6: the
+      // legacy `goal_id` dual-write is gone — the cutover wipe emptied the local
+      // store it wrote to, and the link IS the association.)
       const previousGoalId = markHolderGoalId.get(markId) ?? null;
       try {
         if (previousGoalId && previousGoalId !== id) {
           await unlinkMark.mutateAsync({ goalId: previousGoalId, markId });
         }
-        // The LINK is the write that matters and it goes LAST — if the legacy
-        // column write fails, the mark is not yet linked here and the move stays
-        // retryable, rather than leaving a link whose legacy column disagrees.
-        await updateMark(markId, { goal_id: id! });
         await linkMark.mutateAsync({ goalId: id!, markId, userId: userId ?? '' });
       } catch (error: unknown) {
         logger.error('Error linking mark to goal:', error);
         showError(caughtErrorCopy(error));
       }
     },
-    [markHolderGoalId, id, userId, unlinkMark, updateMark, linkMark, showError],
+    [markHolderGoalId, id, userId, unlinkMark, linkMark, showError],
   );
 
   // The honest version. Unlinking leaves every logged event intact on the mark
@@ -1241,13 +1227,12 @@ export default function GoalDetailScreen() {
       if (!ok) return;
       try {
         await unlinkMark.mutateAsync({ goalId: id!, markId: mark.id });
-        await updateMark(mark.id, { goal_id: null });
       } catch (error: unknown) {
         logger.error('Error unlinking mark from goal:', error);
         showError(caughtErrorCopy(error));
       }
     },
-    [id, unlinkMark, updateMark, showError],
+    [id, unlinkMark, showError],
   );
 
   // Progress reproduced from query data (replaces the retired goalsSlice.getGoalProgress

@@ -30,7 +30,8 @@ import { isDataError } from '../../lib/data/errors';
 import { dataErrorCopy } from '../../lib/copy';
 import { SuggestedCounter, MARK_LIBRARY_BY_ID } from '../../lib/suggestedCounters';
 import { useAuth } from '../../hooks/useAuth';
-import { useGoalsStore } from '../../state/goalsSlice';
+import { useGoals } from '@/lib/data/goals';
+import { toGoal } from '@/lib/data/adapters';
 import { getActiveGoals } from '../../lib/goalLogic';
 import { DuplicateCounterError, DuplicateMarkError } from '../../lib/errors';
 import type { ScheduleType, DayOfWeek } from '../../types';
@@ -159,12 +160,16 @@ export default function NewCounterScreen() {
   // QC4-L: WHICH goal a new mark joins is the user's call. This used to be
   // `goals.find(g => g.status === 'active')` — the FIRST active goal, with no
   // chooser — so a user with several goals watched their mark attach to an
-  // arbitrary one. It also read `useGoalsStore.getState()` inline during
-  // render, which is a snapshot outside the subscription: the title never
-  // updated when the goal did. Both go through selectors now.
-  const goals = useGoalsStore(s => s.goals);
-  const goalsLoading = useGoalsStore(s => s.isLoading);
-  const goalsError = useGoalsStore(s => s.error);
+  // arbitrary one. M9 Phase 5A Task 6: the store subscription became the goals
+  // query; rows adapt through the shared `toGoal` (this screen reads only
+  // title/status/sort_index, never `linked_mark_ids`).
+  const goalsQuery = useGoals();
+  const goals = useMemo(
+    () => (goalsQuery.data ?? []).map((row) => toGoal(row, [])),
+    [goalsQuery.data],
+  );
+  const goalsLoading = goalsQuery.isLoading;
+  const goalsError = goalsQuery.error;
   // sort_index order — the chooser must list goals as the Goals screen does.
   const activeGoals = useMemo(() => getActiveGoals(goals), [goals]);
   // Smart default (ux-psychology): one active goal is not a decision — don't

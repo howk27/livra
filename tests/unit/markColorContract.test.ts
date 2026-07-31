@@ -275,9 +275,13 @@ describe('mark/new lets the user choose the goal (QC4-L)', () => {
     expect(code).not.toMatch(/goals\.find\(g => g\.status === 'active'\)/);
   });
 
-  it('reads the store through selectors, never getState() during render', () => {
-    expect(code).not.toMatch(/useGoalsStore\.getState\(\)/);
-    expect(code).toMatch(/const goals = useGoalsStore\(s => s\.goals\)/);
+  it('reads goals from the query layer, never a store snapshot during render', () => {
+    // M9 Phase 5A Task 6: the store subscription became the goals query. The
+    // original QC4-L bug was an unsubscribed `getState()` snapshot during
+    // render; the query hook is a subscription by construction, so the guard is
+    // now that no store read comes back at all.
+    expect(code).not.toMatch(/useGoalsStore/);
+    expect(code).toMatch(/const goalsQuery = useGoals\(\)/);
   });
 
   it('offers a chooser only when there is a real choice to make', () => {
@@ -314,30 +318,17 @@ describe('goal detail can link and unlink marks (QC4-L)', () => {
     expect(src).toMatch(/const handleUnlink/);
   });
 
-  it('writes BOTH records a link is made of', () => {
-    // The link row drives progress, momentum and every migrated read; the legacy
-    // mark.goal_id still drives six unmigrated subsystems (the iOS widget's
-    // per-goal grouping, maintenance conversion, gating, features, empty-state
-    // copy, the re-engagement nudge). Writing one and not the other is the bug.
-    //
-    // M9 Phase 3: the link half moved to `lib/data/mutations/marks.ts` (a server
-    // write) while the legacy half stays on the store (a device write). The
-    // invariant is unchanged — it is which module owns each half that moved.
-    expect(src).toMatch(/await updateMark\(markId, \{ goal_id: id! \}\)/);
+  it('writes the LINK and only the link — the legacy goal_id dual-write is gone', () => {
+    // M9 Phase 5A Task 6: the six subsystems that read `mark.goal_id` are
+    // migrated or retired, the cutover wipe emptied the store the dual-write
+    // landed in, and the link row is the single record of the association.
+    // A resurrected `updateMark(..., { goal_id: ... })` would be a write to a
+    // column this milestone deleted from the app's vocabulary.
     expect(src).toMatch(/await linkMark\.mutateAsync\(\{ goalId: id!, markId, userId/);
     expect(src).toMatch(/await unlinkMark\.mutateAsync\(\{ goalId: id!, markId: mark\.id \}\)/);
-    expect(src).toMatch(/await updateMark\(mark\.id, \{ goal_id: null \}\)/);
-  });
-
-  it('makes the link the LAST write, so a failed legacy write stays retryable', () => {
-    // Ordering rule from the mutation layer: the row the user acts on goes last.
-    // If the legacy column write fails, the mark is not yet linked here and the
-    // move can simply be repeated — rather than leaving a live link whose legacy
-    // column disagrees with it.
-    const legacy = src.indexOf('await updateMark(markId, { goal_id: id! })');
-    const link = src.indexOf('await linkMark.mutateAsync({ goalId: id!, markId, userId');
-    expect(legacy).toBeGreaterThan(-1);
-    expect(link).toBeGreaterThan(legacy);
+    expect(src).not.toMatch(/goal_id: id!/);
+    expect(src).not.toMatch(/goal_id: null/);
+    expect(src).not.toMatch(/useMarksStore/);
   });
 
   it('uses the real gate rather than its own cap', () => {

@@ -12,8 +12,9 @@ import * as Haptics from 'expo-haptics';
 import * as Sharing from 'expo-sharing';
 import { themedColors, spacing, fontSize, fontWeight, borderRadius, fonts } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
-import { useGoalsStore } from '../../state/goalsSlice';
-import { getActiveGoals } from '../../lib/goalLogic';
+import { useGoals } from '@/lib/data/goals';
+import { toGoal } from '@/lib/data/adapters';
+import { getActiveGoals, getCompletedGoals } from '../../lib/goalLogic';
 import { resolveCompletionState } from '../../lib/completionState';
 import { getAppDate } from '../../lib/appDate';
 import { checkProStatus } from '../../lib/iap/iap';
@@ -52,18 +53,23 @@ export default function GoalCompleteScreen() {
     loadShareCardStyle();
   }, [loadShareCardStyle]);
 
-  // Derive days taken and targetDateLabel
-  const goals = useGoalsStore((s) => s.goals);
+  // M9 Phase 5A Task 6: reads moved to the query layer (goalsSlice retired).
+  // Rows adapt through the shared `toGoal` so the goalLogic helpers keep their
+  // store-era Goal shape; this screen never reads `linked_mark_ids`, so the
+  // empty list is honest. Arriving here the goals are already in cache — the
+  // completing screen just wrote and invalidated them.
+  const goalsQuery = useGoals();
+  const goals = useMemo(
+    () => (goalsQuery.data ?? []).map((row) => toGoal(row, [])),
+    [goalsQuery.data],
+  );
   const completedGoal = goalId ? goals.find((g) => g.id === goalId) : undefined;
 
   // sort_index order, so "up next" is the goal the user ranked highest.
-  const nextGoal = useGoalsStore((s) =>
-    getActiveGoals(s.goals).find((g) => g.id !== goalId) ?? null
-  );
+  const nextGoal = getActiveGoals(goals).find((g) => g.id !== goalId) ?? null;
 
   const closure = resolveCompletionState(goals);
-  const getCompletedGoals = useGoalsStore((s) => s.getCompletedGoals);
-  const completedGoals = useMemo(() => getCompletedGoals(), [getCompletedGoals, goals]);
+  const completedGoals = useMemo(() => getCompletedGoals(goals), [goals]);
   const completedCount = completedGoals.length;
   const marksLogged = useMemo(
     () => completedGoals.reduce((sum, g) => sum + (g.current_mark_count ?? 0), 0),
@@ -114,10 +120,10 @@ export default function GoalCompleteScreen() {
     nextOpacity.value = withDelay(d * 4, withTiming(1, { duration: d }));
   }, [logoOpacity, titleOpacity, copyOpacity, dividerOpacity, nextOpacity]);
 
+  const hasActiveGoal = getActiveGoals(goals).length > 0;
   const handleNext = useCallback(() => {
-    const hasActive = useGoalsStore.getState().getActiveGoals().length > 0;
-    router.replace(hasActive ? ('/(tabs)/focus' as any) : ('/(tabs)/goals' as any));
-  }, [router]);
+    router.replace(hasActiveGoal ? ('/(tabs)/focus' as any) : ('/(tabs)/goals' as any));
+  }, [router, hasActiveGoal]);
 
   const handleReflectSubmit = useCallback(() => {
     router.replace('/(tabs)/focus' as any);

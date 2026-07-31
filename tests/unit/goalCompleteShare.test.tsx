@@ -14,10 +14,9 @@ jest.mock('../../lib/sharing/generateShareCard', () => ({
   generateShareCard: jest.fn().mockResolvedValue('file:///tmp/card.jpg'),
 }));
 
-jest.mock('../../state/goalsSlice', () => ({
-  useGoalsStore: jest.fn((fn: any) =>
-    fn({ goals: [], getActiveGoal: () => null, getCompletedGoals: () => [] })
-  ),
+// M9 Phase 5A Task 6: the screen reads the goals QUERY, not the retired store.
+jest.mock('../../lib/data/goals', () => ({
+  useGoals: jest.fn(() => ({ data: [], isLoading: false, error: null })),
 }));
 
 jest.mock('expo-haptics', () => ({

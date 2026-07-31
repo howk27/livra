@@ -39,12 +39,16 @@ export type CommitmentSelection = {
   commitmentTarget: number;
 };
 
+/** What the owned-mark match actually reads — id and name. M9 Phase 5A Task 6:
+ * typed down from the store's full `Mark` so query-layer rows qualify directly. */
+export type OwnedMarkLite = Pick<Mark, 'id' | 'name'>;
+
 type Props = {
   goalTitle: string;
   /** The why, if entered on the previous step — rides on the live card. */
   goalWhy?: string;
   suggestedMarks: MarkDefinition[];
-  userMarks: Mark[];
+  userMarks: readonly OwnedMarkLite[];
   onConfirm: (selection: CommitmentSelection) => void;
   onBack: () => void;
   isOnboarding?: boolean;
@@ -52,10 +56,14 @@ type Props = {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function findOwnedMark(suggested: MarkDefinition, userMarks: Mark[]): Mark | undefined {
-  return userMarks.find(
-    m => m.name.toLowerCase() === suggested.name.toLowerCase() || (m as any).icon === suggested.id
-  );
+function findOwnedMark(
+  suggested: MarkDefinition,
+  userMarks: readonly OwnedMarkLite[],
+): OwnedMarkLite | undefined {
+  // Name is the same case-insensitive rule the duplicate gate uses. The old
+  // second clause — `(m as any).icon === suggested.id` — matched a SQLite-era
+  // field the server never had; query-layer marks cannot carry it.
+  return userMarks.find(m => m.name.toLowerCase() === suggested.name.toLowerCase());
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -89,7 +97,7 @@ export function CommitmentScreen({
     if (TIERS[tier].allowedFrequencies.includes(f)) setFrequency(f);
   };
 
-  const toggleMark = (id: string, owned: Mark | undefined) => {
+  const toggleMark = (id: string, owned: OwnedMarkLite | undefined) => {
     if (owned) {
       router.push(`/mark/${owned.id}` as any);
       return;

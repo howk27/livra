@@ -31,7 +31,7 @@ import { PillButton } from '../../components/ui/PillButton';
 import { GoalLimitDialog } from '../../components/ui/GoalLimitDialog';
 import { CATEGORY_MAP } from '../../components/ui/MarkRow';
 import { useEffectiveTheme } from '../../state/uiSlice';
-import { useMarksStore } from '../../state/countersSlice';
+import { useMarksForUser } from '../../lib/data/marks';
 import { useAuth } from '../../hooks/useAuth';
 import { useSettleEntrance } from '../../hooks/useSettleEntrance';
 import { useCreateGoalMutation } from '../../lib/data/mutations/goals';
@@ -221,10 +221,10 @@ export default function NewGoalScreen() {
   const queryClient = useQueryClient();
   const createGoalMutation = useCreateGoalMutation();
   const createMarkMutation = useCreateMarkMutation();
-  // STILL THE STORE, DELIBERATELY: CommitmentScreen's "already owned" strip takes
-  // the store's Mark shape. Reads are Phase 2's concern and this screen was not
-  // in its five; the read moves when the store retires (Phase 5).
-  const marks = useMarksStore(s => s.marks);
+  // M9 Phase 5A Task 6: the store retired; the "already owned" strip reads the
+  // query layer. CommitmentScreen only matches on id + name (OwnedMarkLite), so
+  // rows qualify directly.
+  const marks = useMarksForUser().data ?? [];
 
   const [step, setStep] = useState<Step>('title');
   const [title, setTitle] = useState(typeof params.title === 'string' ? params.title : '');
