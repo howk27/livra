@@ -23,7 +23,6 @@ import { logger } from '../utils/logger';
 import { resetDatabaseState } from './index';
 import { sqliteClearAllGoalsAndLinks } from './goalsSqlite';
 import { sqliteClearAllGoalNotes } from './goalNotesSqlite';
-import { sqliteClearAllMarkNotes } from './markNotesSqlite';
 import { clearPendingWidgetLogs } from '../widgets/widgetLogQueue';
 import { clearOutboxAll } from '../data/outbox';
 import { syncWidgetData } from '../widgets/widgetSync';
@@ -31,7 +30,6 @@ import { useMarksStore } from '../../state/countersSlice';
 import { useEventsStore } from '../../state/eventsSlice';
 import { useGoalsStore } from '../../state/goalsSlice';
 import { useGoalNotesStore } from '../../state/goalNotesSlice';
-import { useDailyTrackingStore } from '../../state/dailyTrackingSlice';
 import { useCheckinsStore } from '../../state/checkinsSlice';
 import { useFeaturesStore } from '../../state/featuresSlice';
 import { useMomentumStore } from '../../state/momentumSlice';
@@ -217,8 +215,6 @@ function resetInMemoryStores(): string[] {
     ['goals', () => useGoalsStore.setState({ goals: [], isLoading: false, error: null })],
     ['goalNotes', () =>
       useGoalNotesStore.setState({ entries: [], loading: false, goalNotesCloudError: null })],
-    ['markNotes', () =>
-      useDailyTrackingStore.setState({ dailyLogs: [], loading: false, notesCloudError: null })],
     ['checkins', () => useCheckinsStore.setState({ checkins: [], loading: false, error: null })],
     ['skipTokens', () => useFeaturesStore.setState({ skipTokens: [], loading: false })],
     ['momentum', () =>
@@ -263,7 +259,6 @@ export async function purgeLocalUserData(): Promise<PurgeLocalUserDataResult> {
   const sqliteSteps: [string, () => Promise<void>][] = [
     ['goalsSqlite', sqliteClearAllGoalsAndLinks],
     ['goalNotesSqlite', sqliteClearAllGoalNotes],
-    ['markNotesSqlite', sqliteClearAllMarkNotes],
   ];
   for (const [label, run] of sqliteSteps) {
     try {

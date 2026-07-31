@@ -101,20 +101,6 @@ export type ThemeMode = 'light' | 'dark' | 'system';
 
 export type AccentColor = 'blue' | 'purple' | 'green' | 'orange' | 'red' | 'pink';
 
-// Feature 4: Daily tracking log — one saved row per (user_id, mark_id, local calendar date)
-export type MarkNote = {
-  id: string;
-  mark_id: string;
-  user_id: string;
-  date: string;       // YYYY-MM-DD
-  text: string;
-  created_at: string;
-  updated_at: string;
-};
-
-/** Alias: persisted note attached to that day’s tracking record (same storage as MarkNote). */
-export type DailyTrackingLogEntry = MarkNote;
-
 // QC3-D: goal-level MULTI-ENTRY journal. Many timestamped entries per goal (and
 // per day); the entry's identity is a client-generated uuid (`id`), NOT a
 // natural (goal_id, date) key. `local_date` is the author's local day, used only

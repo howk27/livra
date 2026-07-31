@@ -106,14 +106,13 @@ describe('purgeLocalUserData — AsyncStorage', () => {
 });
 
 describe('purgeLocalUserData — SQLite', () => {
-  it('empties goals, links, goal notes and mark notes', async () => {
+  it('empties goals, links and goal notes', async () => {
     await purgeLocalUserData();
 
     const deletes = execCalls.filter((sql) => sql.includes('DELETE FROM')).join(' ');
     expect(deletes).toContain('DELETE FROM goal_mark_links');
     expect(deletes).toContain('DELETE FROM goals');
     expect(deletes).toContain('DELETE FROM goal_notes');
-    expect(deletes).toContain('DELETE FROM mark_notes');
   });
 
   it('wipes rather than tombstones — nothing here may travel to the server', async () => {

@@ -40,7 +40,6 @@ import { useFeaturesStore } from '../state/featuresSlice';
 import { useGoalsStore } from '../state/goalsSlice';
 import { useMarksStore } from '../state/countersSlice';
 import { syncWidgetData } from '../lib/widgets/widgetSync';
-import { useDailyTrackingStore } from '../state/dailyTrackingSlice';
 import { useGoalNotesStore } from '../state/goalNotesSlice';
 import { useAppDateStore } from '../state/appDateSlice';
 import {
@@ -306,7 +305,6 @@ export default function RootLayout() {
       await runCutoverOnce();
       await initDatabase();
       await useAppDateStore.getState().hydrate();
-      await useDailyTrackingStore.getState().loadDailyTracking();
       await useGoalNotesStore.getState().loadGoalNotes();
       await useFeaturesStore.getState().loadSkipFeatures();
       // Cleanup badges with invalid user_id (like "local-user")

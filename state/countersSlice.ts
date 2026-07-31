@@ -313,12 +313,6 @@ export const useMarksStore = create<MarksState>((set, get) => ({
     }));
 
     try {
-      const { useDailyTrackingStore } = await import('./dailyTrackingSlice');
-      await useDailyTrackingStore.getState().deleteDailyLogsForMark(id);
-    } catch (err) {
-      logger.error('[MarksSlice] Failed to clean up daily tracking for deleted mark:', err);
-    }
-    try {
       const { useFeaturesStore } = await import('./featuresSlice');
       await useFeaturesStore.getState().deleteSkipDataForMark(id);
     } catch (err) {

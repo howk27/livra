@@ -365,35 +365,6 @@ export type Database = {
           updated_at?: string;
         };
       };
-      mark_notes: {
-        Row: {
-          id: string;
-          mark_id: string;
-          user_id: string;
-          date: string;        // YYYY-MM-DD
-          text: string;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          mark_id: string;
-          user_id: string;
-          date: string;
-          text: string;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          id?: string;
-          mark_id?: string;
-          user_id?: string;
-          date?: string;
-          text?: string;
-          created_at?: string;
-          updated_at?: string;
-        };
-      };
     };
   };
 };
