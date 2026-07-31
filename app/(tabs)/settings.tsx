@@ -39,7 +39,9 @@ import { useEffectiveTheme, useUIStore } from '../../state/uiSlice';
 
 import { useAuth } from '../../hooks/useAuth';
 import { useIapSubscriptions } from '../../hooks/useIapSubscriptions';
-import { useMarksStore } from '../../state/countersSlice';
+import { editMark } from '../../lib/data/mutations/marks';
+import type { MarkRow } from '../../lib/data/types';
+import type { FrequencyKind } from '../../types';
 import { getSupabaseClient } from '../../lib/supabase';
 import { isApplePrivateRelayEmail } from '../../lib/auth/accountCredentials';
 import { needsEmailVerification } from '../../lib/auth/emailVerification';
@@ -170,18 +172,31 @@ export default function SettingsScreen() {
     return () => { active = false; };
   }, []);
 
+  // M9 Phase 5A Task 6: the recalculation reads and writes the QUERY layer —
+  // every mark's weekly_target is a server column, and `editMark` sends only
+  // the marks whose target actually moves. One invalidation at the end.
   const handlePaceChange = useCallback(async (next: PaceLevel) => {
     const prior = pace;
     setPaceState(next); // optimistic
     try {
       await setPace(next);
-      const marks = useMarksStore.getState().marks;
+      const marks = user?.id
+        ? (queryClient.getQueryData<MarkRow[]>(queryKeys.marks(user.id)) ?? [])
+        : [];
+      let changed = false;
       for (const mark of marks) {
         if (mark.deleted_at) continue;
-        const target = paceWeeklyTarget(mark, next);
+        const target = paceWeeklyTarget(
+          { ...mark, frequency_kind: mark.frequency_kind as FrequencyKind | null },
+          next,
+        );
         if (target != null && target !== mark.weekly_target) {
-          await useMarksStore.getState().updateMark(mark.id, { weekly_target: target });
+          await editMark(mark.id, { cadence: { weekly_target: target } });
+          changed = true;
         }
+      }
+      if (changed && user?.id) {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.marks(user.id) });
       }
       showSuccess('Pace updated across your marks.');
     } catch (e: any) {
@@ -189,7 +204,7 @@ export default function SettingsScreen() {
       setPaceState(prior);
       showError('Could not update your pace. Please try again.');
     }
-  }, [pace, showSuccess, showError]);
+  }, [pace, user, showSuccess, showError]);
 
   // The app's own proof, not auth.users.email_confirmed_at: this project
   // auto-confirms at signup, so that column is stamped for everyone and can

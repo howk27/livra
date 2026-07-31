@@ -4,10 +4,13 @@ import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { v4 as uuidv4 } from 'uuid';
 import type { SkipToken } from '../types';
-import { currentMonthISO, getEffectiveSkipTokens } from '../lib/features';
+import { currentMonthISO } from '../lib/features';
 import { logger } from '../lib/utils/logger';
 
 const TOKENS_KEY = '@livra_skip_tokens';
+/** Monthly streak-protection allowance per mark (was getEffectiveSkipTokens'
+ * default before the mark-row counters died with the local DB). */
+const SKIP_TOKENS_PER_MONTH = 2;
 
 interface FeaturesState {
   skipTokens: SkipToken[];
@@ -56,10 +59,15 @@ export const useFeaturesStore = create<FeaturesState>((set, get) => ({
     if (skipTokens.some((t) => t.mark_id === markId && t.protected_date === date)) {
       return { success: false, message: 'This date is already protected.' };
     }
-    const { useMarksStore } = await import('./countersSlice');
-    const mark = useMarksStore.getState().marks.find((m) => m.id === markId);
-    if (!mark) return { success: false, message: 'Mark not found.' };
-    const available = getEffectiveSkipTokens(mark);
+    // M9 Phase 5A Task 6: the monthly allowance derives from this slice's OWN
+    // token ledger. The old mark-row counters (skip_tokens_remaining/_month)
+    // lived only in the deleted local database; the ledger is already the
+    // record of every spend, so counting this month's entries needs no mark.
+    const month = currentMonthISO();
+    const usedThisMonth = skipTokens.filter(
+      (t) => t.mark_id === markId && t.created_at.slice(0, 7) === month,
+    ).length;
+    const available = SKIP_TOKENS_PER_MONTH - usedThisMonth;
     if (available <= 0) return { success: false, message: 'No skip tokens remaining this month.' };
     const token: SkipToken = {
       id: uuidv4(),
@@ -71,10 +79,6 @@ export const useFeaturesStore = create<FeaturesState>((set, get) => ({
     const updatedTokens = [token, ...skipTokens];
     set({ skipTokens: updatedTokens });
     await persist(TOKENS_KEY, updatedTokens);
-    await useMarksStore.getState().updateMark(markId, {
-      skip_tokens_remaining: available - 1,
-      skip_tokens_month: currentMonthISO(),
-    } as any);
     logger.log(`[FeaturesStore] Skip token used: ${markId} on ${date}. Remaining: ${available - 1}`);
     return { success: true, message: `Streak protected for ${date}. ${available - 1} token(s) left this month.` };
   },

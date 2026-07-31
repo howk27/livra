@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -50,8 +50,12 @@ import { PillButton } from '../../../components/ui/PillButton';
 import { SectionLabel } from '../../../components/ui/SectionLabel';
 import { confirm } from '../../../components/ui/overlays';
 import { useNotification } from '../../../contexts/NotificationContext';
-import { useCounters } from '../../../hooks/useCounters';
 import { useCheckin } from '../../../hooks/useCheckin';
+import {
+  getHealthKitBinding,
+  setHealthKitBinding,
+  type HealthKitBinding,
+} from '../../../lib/health/healthKitBinding';
 import { caughtErrorCopy } from '../../../lib/copy';
 import { useArchiveMarkMutation } from '@/lib/data/mutations/marks';
 import { LoadingScreen } from '../../../components/LoadingScreen';
@@ -211,15 +215,12 @@ function MarkDetailContent() {
   const params = useLocalSearchParams<{ id: string }>();
   const id = typeof params.id === 'string' ? params.id : params.id?.[0];
 
-  // M9 Phase 3 Task 2: check-in and undo are mutations. Mark delete and edit are
-  // still store writes until Task 4. `decrementCounter` and `resetCounter` were
-  // destructured here and never called — they went with the increment.
-  // M9 Phase 3: deleting a mark is `archiveMark` — a tombstone on the mark and its
-  // links, never a DELETE (D-8). `updateMark` STAYS on the store: its only callers
-  // here write `health_kit_type` / `health_kit_config`, which `lib/data/types.ts:32`
-  // records as columns that do NOT exist server-side. A device-only field has to
-  // keep its device-only write.
-  const { updateMark } = useCounters();
+  // M9 Phase 3 Task 2: check-in and undo are mutations. Deleting a mark is
+  // `archiveMark` — a tombstone on the mark and its links, never a DELETE (D-8).
+  // M9 Phase 5A Task 6: the health-kit binding — device-only by design, no
+  // server column — moved from the retired store's SQLite row to
+  // lib/health/healthKitBinding.ts (AsyncStorage), so this screen no longer
+  // touches useCounters at all.
   const archiveMark = useArchiveMarkMutation(user?.id ?? '');
   const { logCheckin, undoCheckin } = useCheckin();
   const { showError } = useNotification();
@@ -258,6 +259,18 @@ function MarkDetailContent() {
   const [healthStepGoal, setHealthStepGoal] = useState<string>('');
   const [healthPendingType, setHealthPendingType] = useState<HealthKitType | null>(null);
   const [healthConnecting, setHealthConnecting] = useState(false);
+  // The mark's device-local HealthKit binding (null = not connected).
+  const [healthBinding, setHealthBinding] = useState<HealthKitBinding | null>(null);
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    void getHealthKitBinding(id).then((b) => {
+      if (!cancelled) setHealthBinding(b);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
 
   // Banner for "all done today"
   const [showAllDoneBanner, setShowAllDoneBanner] = useState(false);
@@ -510,7 +523,8 @@ function MarkDetailContent() {
     try {
       await requestPermissions([type]);
       const config = type === 'steps' && stepGoal !== undefined ? { stepGoal } : null;
-      await updateMark(id, { health_kit_type: type, health_kit_config: config });
+      await setHealthKitBinding(id, { type, config });
+      setHealthBinding({ type, config });
       if (type === 'sleep') {
         let wakeTime = await getSleepNotifTime(id);
         if (!wakeTime) wakeTime = await suggestWakeTime();
@@ -538,7 +552,8 @@ function MarkDetailContent() {
       destructive: true,
     });
     if (!ok) return;
-    await updateMark(id, { health_kit_type: null, health_kit_config: null });
+    await setHealthKitBinding(id, null);
+    setHealthBinding(null);
     await cancelSleepNotification(id);
   };
 
@@ -717,7 +732,7 @@ function MarkDetailContent() {
               and its full journal screen. */}
 
           {/* Wake-up alarm (sleep mark) */}
-          {counter?.health_kit_type === 'sleep' && (
+          {healthBinding?.type === 'sleep' && (
             <View style={styles.settingCard}>
               <View style={styles.settingRow}>
                 <View style={{ flex: 1 }}>

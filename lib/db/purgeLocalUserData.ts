@@ -100,6 +100,9 @@ export const ACCOUNT_SCOPED_STORAGE_KEYS = [
   'profile_image_uri',
   'private_relay_notice_dismissed',
   'health_connected',
+  // Per-mark HealthKit bindings (lib/health/healthKitBinding.ts, M9 Phase 5A
+  // Task 6): they reference the signed-out account's mark ids.
+  'livra_health_kit_bindings_v1',
   // Onboarding: completion is device-wide, so whatever account finished it last
   // would otherwise make the NEXT account skip onboarding (uiSlice's
   // resetOnboardingState covers the same ground; kept here so a purge is

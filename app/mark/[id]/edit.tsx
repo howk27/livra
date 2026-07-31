@@ -1,5 +1,13 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  TextInput,
+  ActivityIndicator,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
@@ -13,10 +21,16 @@ import {
   headerControlBoxTrailing,
 } from '../../../theme/tokens';
 import { useEffectiveTheme } from '../../../state/uiSlice';
-import { useCounters } from '../../../hooks/useCounters';
-import { SchedulePicker } from '../../../components/SchedulePicker';
-import type { GoalPeriod, ScheduleType, DayOfWeek } from '../../../types';
-import { parseScheduleDays } from '../../../lib/features';
+// M9 Phase 5A Task 6: the mark is read from the query layer and edited through
+// the marks mutation — this screen no longer touches the retired store. The
+// schedule / goal_value section is GONE with it: those fields lived only in the
+// local database this milestone deletes (no server column, never carried by
+// mark/new since Phase 3), so a picker that "saved" them was writing to
+// nothing. Weekly cadence is the frequency/weekly_target family, edited via
+// the Pace setting and the frequency pickers.
+import { useMark } from '@/lib/data/marks';
+import { useEditMarkMutation } from '@/lib/data/mutations/marks';
+import { useAuth } from '../../../hooks/useAuth';
 import CounterIcon from '@/src/components/icons/CounterIcon';
 import { resolveCounterIconType } from '@/src/components/icons/IconResolver';
 import { applyOpacity } from '@/src/components/icons/color';
@@ -37,16 +51,21 @@ export default function EditCounterScreen() {
   const themeColors = themedColors(theme);
   const router = useRouter();
   const { showError } = useNotification();
+  const { user } = useAuth();
   const params = useLocalSearchParams<{ id: string }>();
   const id = typeof params.id === 'string' ? params.id : params.id?.[0];
 
-  const { counters, updateCounter } = useCounters();
-  const counter = id ? counters.find((c) => c.id === id) : null;
+  const markQuery = useMark(id ?? '');
+  const counter = markQuery.data ?? null;
+  const editMark = useEditMarkMutation(user?.id ?? '');
 
   // Get current icon type from counter or resolve from emoji/name
   const currentIconType = useMemo((): Exclude<MarkType, 'custom'> => {
     if (counter) {
-      const resolved = resolveCounterIconType({ name: counter.name, emoji: counter.emoji });
+      const resolved = resolveCounterIconType({
+        name: counter.name,
+        emoji: counter.emoji ?? undefined,
+      });
       return (resolved || 'gym') as Exclude<MarkType, 'custom'>; // Default to gym if can't resolve
     }
     return 'gym';
@@ -55,10 +74,15 @@ export default function EditCounterScreen() {
   const [name, setName] = useState(counter?.name || '');
   const [selectedIconType, setSelectedIconType] = useState<Exclude<MarkType, 'custom'>>(currentIconType);
 
-  // Sync icon type when counter changes
+  // Entering from mark detail the row is a cache hit, but on a cold open the
+  // query resolves a beat later — sync the form fields when it lands.
   useEffect(() => {
     if (counter) {
-      const resolved = resolveCounterIconType({ name: counter.name, emoji: counter.emoji });
+      setName((prev) => (prev === '' ? counter.name : prev));
+      const resolved = resolveCounterIconType({
+        name: counter.name,
+        emoji: counter.emoji ?? undefined,
+      });
       if (resolved && resolved !== 'custom') {
         setSelectedIconType(resolved as Exclude<MarkType, 'custom'>);
       }
@@ -75,16 +99,25 @@ export default function EditCounterScreen() {
   const [unit, setUnit] = useState<'sessions' | 'days' | 'items'>(
     (counter?.unit as 'sessions' | 'days' | 'items') || 'sessions'
   );
-  const [goalValue, setGoalValue] = useState<number | null>(counter?.goal_value ?? null);
-  const [goalPeriod, setGoalPeriod] = useState<GoalPeriod>((counter?.goal_period as GoalPeriod) ?? 'day');
-  const [scheduleType, setScheduleType] = useState<ScheduleType>((counter?.schedule_type as ScheduleType) ?? 'daily');
-  const [scheduleDays, setScheduleDays] = useState<DayOfWeek[]>(counter ? parseScheduleDays(counter) : []);
   const [dailyTarget, setDailyTarget] = useState(() => (counter ? resolveDailyTarget(counter) : 1));
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (counter) setDailyTarget(resolveDailyTarget(counter));
+    if (counter) {
+      setDailyTarget(resolveDailyTarget(counter));
+      setUnit((counter.unit as 'sessions' | 'days' | 'items') || 'sessions');
+    }
   }, [counter]);
+
+  if (markQuery.isLoading) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: themeColors.linen }]}>
+        <View style={styles.centered}>
+          <ActivityIndicator color={themeColors.inkMuted} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (!counter || !id) {
     return (
@@ -106,18 +139,16 @@ export default function EditCounterScreen() {
       setLoading(true);
       // Convert selected icon type to emoji for storage compatibility
       const emoji = ICON_TYPE_TO_EMOJI[selectedIconType] || ICON_TYPE_TO_EMOJI.gym;
-      await updateCounter(id, {
-        name: name.trim(),
-        emoji,
-        color,
-        unit,
-        enable_streak: counter?.enable_streak ?? false,
-        dailyTarget,
-        goal_value: goalValue,
-        goal_period: goalPeriod,
-        schedule_type: scheduleType,
-        schedule_days: scheduleType === 'custom' ? JSON.stringify(scheduleDays) : undefined,
-      } as any);
+      await editMark.mutateAsync({
+        markId: id,
+        changes: {
+          name: name.trim(),
+          emoji,
+          color,
+          unit,
+          cadence: { dailyTarget },
+        },
+      });
       router.back();
     } catch (error) {
       logger.error('Error updating counter:', error);
@@ -190,17 +221,6 @@ export default function EditCounterScreen() {
 
         <View style={styles.section}>
           <DailyTargetStepper value={dailyTarget} onChange={setDailyTarget} />
-        </View>
-
-        {/* Schedule */}
-        <View style={styles.section}>
-          <Text style={[styles.label, { color: themeColors.inkDark }]}>Schedule</Text>
-          <SchedulePicker
-            scheduleType={scheduleType}
-            scheduleDays={scheduleDays}
-            color={color}
-            onChange={(t, d) => { setScheduleType(t); setScheduleDays(d); }}
-          />
         </View>
       </ScrollView>
     </SafeAreaView>
