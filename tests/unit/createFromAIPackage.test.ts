@@ -16,7 +16,7 @@
  *   6. GOAL_CREATED fires once, method 'ai' (moved out of the store with the write).
  */
 
-import { GoalLimitError } from '../../state/goalsSlice';
+import { GoalLimitError } from '../../lib/errors';
 import { type AIGoalPackage } from '../../lib/ai/goalGeneration';
 
 const mockCreateGoal = jest.fn();

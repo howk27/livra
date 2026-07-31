@@ -32,7 +32,7 @@ import { SuggestedCounter, MARK_LIBRARY_BY_ID } from '../../lib/suggestedCounter
 import { useAuth } from '../../hooks/useAuth';
 import { useGoalsStore } from '../../state/goalsSlice';
 import { getActiveGoals } from '../../lib/goalLogic';
-import { DuplicateCounterError, DuplicateMarkError } from '../../state/countersSlice';
+import { DuplicateCounterError, DuplicateMarkError } from '../../lib/errors';
 import type { ScheduleType, DayOfWeek } from '../../types';
 import { DuplicateCounterModal } from '../../components/DuplicateCounterModal';
 import { DailyTargetStepper } from '../../components/DailyTargetStepper';

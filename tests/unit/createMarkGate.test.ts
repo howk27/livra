@@ -13,7 +13,7 @@
  */
 
 import { assertCanCreateMark, type CreateMarkGate } from '../../hooks/useCreateMark';
-import { DuplicateMarkError } from '../../state/countersSlice';
+import { DuplicateMarkError } from '../../lib/errors';
 import { MARK_PER_GOAL_LIMIT_MESSAGE, MARK_CEILING_MESSAGE } from '../../lib/copy';
 
 // The hook module pulls IAP + badges + react-query; the pure gate needs none of

@@ -21,7 +21,7 @@ import { fetchGoals } from '../data/goals';
 import { fetchMarksForUser } from '../data/marks';
 import { queryClient } from '../data/queryClient';
 import { queryKeys } from '../data/queryKeys';
-import { GoalLimitError } from '../../state/goalsSlice';
+import { GoalLimitError } from '../errors';
 import { getSupabaseClient } from '../supabase';
 import { MARK_LIBRARY } from '../suggestedCounters';
 import { colorForSuggestedCounter } from '../markCategory';

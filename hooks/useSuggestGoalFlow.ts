@@ -13,7 +13,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { themedColors } from '../theme/tokens';
 import { useAuth } from './useAuth';
-import { GoalLimitError } from '../state/goalsSlice';
+import { GoalLimitError } from '../lib/errors';
 import { checkProStatus } from '../lib/iap/iap';
 import { applyOpacity } from '../src/components/icons/color';
 import { GENERATION_ERROR_COPY } from '../lib/copy';

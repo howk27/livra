@@ -27,7 +27,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCreateMarkMutation, type MarkCadence } from '../lib/data/mutations/marks';
 import { fetchMarksForUser, fetchMarksByGoal } from '../lib/data/marks';
 import { queryKeys } from '../lib/data/queryKeys';
-import { DuplicateMarkError } from '../state/countersSlice';
+import { DuplicateMarkError } from '../lib/errors';
 import { useBadges } from './useBadges';
 import { useIapSubscriptions } from './useIapSubscriptions';
 import {

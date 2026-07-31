@@ -31,12 +31,10 @@ import {
   goalCommitmentTarget,
 } from '../lib/goalLogic';
 
-export class GoalLimitError extends Error {
-  constructor() {
-    super('Free keeps you to 2 goals at once. Finish one or upgrade to Livra+ for unlimited goals.');
-    this.name = 'GoalLimitError';
-  }
-}
+// M9 Phase 5A Task 6: GoalLimitError moved to lib/errors.ts (it outlives this
+// slice). Imported for the throw below, re-exported for old import paths.
+import { GoalLimitError } from '../lib/errors';
+export { GoalLimitError } from '../lib/errors';
 
 export interface GoalsState {
   goals: Goal[];

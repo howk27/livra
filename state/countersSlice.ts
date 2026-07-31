@@ -6,24 +6,10 @@ import { cleanupDuplicateCounters } from '../lib/db/cleanup';
 import { logger } from '../lib/utils/logger';
 import { normalizeDailyTargetInput, resolveDailyTarget } from '../lib/markDailyTarget';
 
-// Custom error class for duplicate marks
-export class DuplicateMarkError extends Error {
-  constructor(public markName: string) {
-    super(`A mark with the name "${markName}" already exists`);
-    this.name = 'DuplicateMarkError';
-  }
-}
-
-// Export as DuplicateCounterError for backwards compatibility
-// Use class extension to ensure instanceof works correctly
-export class DuplicateCounterError extends DuplicateMarkError {
-  constructor(public counterName: string) {
-    super(counterName);
-    this.name = 'DuplicateCounterError';
-    // Also set markName for compatibility
-    (this as any).markName = counterName;
-  }
-}
+// M9 Phase 5A Task 6: the error classes moved to lib/errors.ts (they outlive
+// this slice). Imported for the throws below, re-exported for old import paths.
+import { DuplicateMarkError } from '../lib/errors';
+export { DuplicateMarkError, DuplicateCounterError } from '../lib/errors';
 
 interface MarksState {
   marks: Mark[];
