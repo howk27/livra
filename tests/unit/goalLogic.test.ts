@@ -6,6 +6,7 @@ import {
   calculateUnlockThreshold,
   goalCommitmentTarget,
   goalWeekFraming,
+  isDeadlineExpired,
 } from '../../lib/goalLogic';
 import type { Goal } from '../../types/goal';
 import type { MarkEvent } from '../../types';
@@ -27,6 +28,42 @@ test('getActiveGoals returns all active sorted by sort_index', () => {
 test('getActiveGoal returns the first active by sort_index', () => {
   const goals = [g({ id: 'b', sort_index: 1 }), g({ id: 'a', sort_index: 0 })];
   expect(getActiveGoal(goals)?.id).toBe('a');
+});
+
+// ── isDeadlineExpired: boundary tests restored from the deleted goalStore.test.ts;
+// the function now gates the server-writing expiry pass in lib/goals/goalLifecycle.ts ──
+
+describe('isDeadlineExpired', () => {
+  const past = new Date(Date.now() - 86_400_000).toISOString();
+  const future = new Date(Date.now() + 86_400_000).toISOString();
+
+  test('false when no deadline', () => {
+    expect(isDeadlineExpired(g({}))).toBe(false);
+  });
+
+  test('false when deadline is in the future', () => {
+    expect(isDeadlineExpired(g({ deadline_date: future }))).toBe(false);
+  });
+
+  test('true when deadline has passed and status is active', () => {
+    expect(isDeadlineExpired(g({ deadline_date: past }))).toBe(true);
+  });
+
+  test('false when deadline has passed but status is completed', () => {
+    expect(isDeadlineExpired(g({ deadline_date: past, status: 'completed' }))).toBe(false);
+  });
+
+  test('false when deadline has passed but status is paused', () => {
+    expect(isDeadlineExpired(g({ deadline_date: past, status: 'paused' }))).toBe(false);
+  });
+
+  test('falls back to target_date when deadline_date absent', () => {
+    expect(isDeadlineExpired(g({ target_date: past }))).toBe(true);
+  });
+
+  test('deadline_date wins over target_date when both present', () => {
+    expect(isDeadlineExpired(g({ deadline_date: future, target_date: past }))).toBe(false);
+  });
 });
 
 // ── calculateGoalProgress: check-in DAYS, not taps ───────────────────────────
