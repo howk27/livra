@@ -5,11 +5,13 @@
 // We read the EVENTS, never `marks.total`: the stored total becomes derived in
 // Phase 4, and reading it here would bake in the very drift this milestone removes.
 
+import { useMemo, useSyncExternalStore } from 'react';
 import { useQuery, type QueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { dataClient, MARK_EVENT_COLUMNS, selectList } from '@/lib/data/client';
 import { queryKeys } from '@/lib/data/queryKeys';
 import { toDataError } from '@/lib/data/errors';
+import { subscribeOutbox, pendingOutboxEntries } from '@/lib/data/outbox';
 import { formatDate } from '@/lib/date';
 import { getAppDate } from '@/lib/appDate';
 import type { MarkEventRow } from '@/lib/data/types';
@@ -85,36 +87,105 @@ export function readCachedCheckins(
   return (all ?? []).filter((e) => e.mark_id === markId);
 }
 
+// ─── The outbox read merge (M9 Phase 4 Task 4) ──────────────────────────────
+//
+// Any check-in read MERGES what the server returned with the entries still
+// queued in the outbox, AT READ TIME. This is what makes D-3 true in practice
+// rather than only in the celebration animation: the optimistic cache patch is
+// transient (a refetch or an app restart discards it), while the outbox is
+// durable — so the queued check-in stays on every screen until the flush lands
+// it, and the app never contradicts itself while offline.
+//
+// The merge is a READ concern, never a cache write (R4): writing pending rows
+// into the query cache would make the cache authoritative, and the cache may be
+// discarded at any time. The pending rows live in the hook's return value only.
+
+/** The signed-in user's queued check-in rows, reactive to outbox changes. */
+function usePendingCheckinRows(userId: string): readonly MarkEventRow[] {
+  const entries = useSyncExternalStore(subscribeOutbox, pendingOutboxEntries, pendingOutboxEntries);
+  return useMemo(
+    () =>
+      entries
+        .filter((e) => e.table === 'mark_events' && e.row.user_id === userId)
+        .map((e) => e.row as MarkEventRow),
+    [entries, userId],
+  );
+}
+
+/**
+ * PURE. Pending rows overlaid on the server list, deduped by id (a row that has
+ * flushed AND been refetched appears once), newest-first by `occurred_at` —
+ * exactly the order the fetchers return, so a reader cannot tell a merged list
+ * from a fetched one. That indistinguishability is spec guard 3, pinned in
+ * offlineReadMerge.test.ts.
+ *
+ * With nothing pending this returns the server value UNTOUCHED (same reference,
+ * including `undefined` while loading) so online behaviour is byte-identical.
+ */
+export function mergePendingCheckins(
+  server: MarkEventRow[] | undefined,
+  pending: readonly MarkEventRow[],
+): MarkEventRow[] | undefined {
+  if (pending.length === 0) return server;
+  const pendingIds = new Set(pending.map((r) => r.id));
+  const merged = [...pending, ...(server ?? []).filter((r) => !pendingIds.has(r.id))];
+  merged.sort((a, b) => (a.occurred_at < b.occurred_at ? 1 : a.occurred_at > b.occurred_at ? -1 : 0));
+  return merged;
+}
+
 export function useUserCheckins() {
   const { user } = useAuth();
   const userId = user?.id ?? '';
-  return useQuery({
+  const pending = usePendingCheckinRows(userId);
+  const query = useQuery({
     queryKey: queryKeys.userCheckins(userId),
     queryFn: fetchUserCheckins,
     enabled: userId !== '',
     staleTime: CHECKINS_STALE_TIME,
   });
+  const data = useMemo(() => mergePendingCheckins(query.data, pending), [query.data, pending]);
+  return { ...query, data };
 }
 
 export function useCheckins(markId: string) {
   const { user } = useAuth();
   const userId = user?.id ?? '';
-  return useQuery({
+  const pending = usePendingCheckinRows(userId);
+  const query = useQuery({
     queryKey: queryKeys.checkins(userId, markId),
     queryFn: () => fetchCheckins(markId),
     enabled: userId !== '' && markId !== '',
     staleTime: CHECKINS_STALE_TIME,
   });
+  const data = useMemo(
+    () =>
+      mergePendingCheckins(
+        query.data,
+        pending.filter((r) => r.mark_id === markId),
+      ),
+    [query.data, pending, markId],
+  );
+  return { ...query, data };
 }
 
 export function useTodayCheckins() {
   const { user } = useAuth();
   const userId = user?.id ?? '';
   const localDate = todayLocalDate();
-  return useQuery({
+  const pending = usePendingCheckinRows(userId);
+  const query = useQuery({
     queryKey: queryKeys.todayCheckins(userId, localDate),
     queryFn: () => fetchTodayCheckins(localDate),
     enabled: userId !== '',
     staleTime: CHECKINS_STALE_TIME,
   });
+  const data = useMemo(
+    () =>
+      mergePendingCheckins(
+        query.data,
+        pending.filter((r) => r.occurred_local_date === localDate),
+      ),
+    [query.data, pending, localDate],
+  );
+  return { ...query, data };
 }

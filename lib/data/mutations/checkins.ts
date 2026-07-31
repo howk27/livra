@@ -22,8 +22,9 @@
 // issues a DELETE.
 
 import 'react-native-get-random-values'; // must precede any uuid use (see app/_layout.tsx)
-import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient, onlineManager, type QueryClient } from '@tanstack/react-query';
 import { v4 as uuidv4 } from 'uuid';
+import { enqueueOutboxEntry, removePendingOutboxEntry, flushOutbox } from '@/lib/data/outbox';
 import { dataClient, MARK_EVENT_COLUMNS, selectList } from '@/lib/data/client';
 import { queryKeys } from '@/lib/data/queryKeys';
 import { toDataError, type DataError } from '@/lib/data/errors';
@@ -209,7 +210,21 @@ export function removeCheckinFromCaches(
  */
 export function logCheckinMutationOptions(client: QueryClient) {
   return {
-    mutationFn: insertCheckin,
+    // OFFLINE ENQUEUES (M9 Phase 4). The row is complete before the request
+    // exists, so queuing it IS logging it: the mutation resolves, the optimistic
+    // patch stands, the celebration chain runs — a queued check-in is
+    // indistinguishable from an online one (D-3). A "pending" affordance here
+    // would be a defect. `networkMode: 'always'` below is what lets this
+    // mutationFn run while offline at all — React Query's default would pause it
+    // before the enqueue branch could execute.
+    mutationFn: async (row: MarkEventRow): Promise<MarkEventRow> => {
+      if (!onlineManager.isOnline()) {
+        await enqueueOutboxEntry({ table: 'mark_events', row });
+        return row;
+      }
+      return insertCheckin(row);
+    },
+    networkMode: 'always' as const,
     onMutate: (row: MarkEventRow) => {
       applyCheckinToCaches(client, row);
     },
@@ -224,6 +239,9 @@ export function logCheckinMutationOptions(client: QueryClient) {
     onSuccess: (serverRow: MarkEventRow) => {
       // Same id, so this REPLACES the optimistic entry rather than adding one.
       applyCheckinToCaches(client, serverRow);
+      // "After any successful write" is a drain trigger (plan Task 3 Step 1):
+      // a write that just succeeded is proof the server is reachable.
+      void flushOutbox(client);
     },
   };
 }
@@ -244,7 +262,15 @@ export interface UndoCheckinInput {
 
 export function undoCheckinMutationOptions(client: QueryClient) {
   return {
-    mutationFn: ({ eventId }: UndoCheckinInput) => softDeleteCheckin(eventId),
+    // A row still in the outbox never reached the server: removing the entry IS
+    // the undo, no network needed — which is what keeps D-3 true for the
+    // dominant undo (a just-logged check-in, possibly still offline). The write
+    // set stays append-only (R6): this is an unsend, not an offline edit.
+    mutationFn: async ({ eventId }: UndoCheckinInput): Promise<void> => {
+      if (await removePendingOutboxEntry(eventId)) return;
+      return softDeleteCheckin(eventId);
+    },
+    networkMode: 'always' as const,
     onMutate: (input: UndoCheckinInput) => {
       removeCheckinFromCaches(client, input);
     },

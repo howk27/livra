@@ -146,6 +146,25 @@ export function pendingOutboxEntries(): readonly OutboxEntry[] {
 }
 
 /**
+ * The queued goal notes for one goal, PURE over a snapshot. Lives here rather
+ * than in `lib/data/notes.ts` deliberately: selecting by `goal_id` is outbox
+ * bookkeeping, and the T6 guard rightly bans `.goal_id` access inside the entity
+ * read modules, where the same spelling would mean the retiring marks column.
+ */
+export function pendingGoalNoteRowsIn(
+  snapshot: readonly OutboxEntry[],
+  userId: string,
+  goalId: string,
+): GoalNoteRow[] {
+  const rows: GoalNoteRow[] = [];
+  for (const e of snapshot) {
+    if (e.table !== 'goal_notes') continue;
+    if (e.row.user_id === userId && e.row.goal_id === goalId) rows.push(e.row);
+  }
+  return rows;
+}
+
+/**
  * Append one entry. APPEND ONLY — nothing in this module ever mutates an entry
  * in place. Durability comes first: the entry is persisted before this resolves,
  * so an app kill immediately after an offline tap still holds the check-in.

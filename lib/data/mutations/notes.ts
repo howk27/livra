@@ -20,8 +20,9 @@
 // morning, and the guard below exists to make that unshippable.
 
 import 'react-native-get-random-values'; // must precede any uuid use
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient, onlineManager } from '@tanstack/react-query';
 import { v4 as uuidv4 } from 'uuid';
+import { enqueueOutboxEntry, removePendingOutboxEntry, flushOutbox } from '@/lib/data/outbox';
 import { dataClient, GOAL_NOTE_COLUMNS, selectList } from '@/lib/data/client';
 import { queryKeys } from '@/lib/data/queryKeys';
 import { toDataError, type DataError } from '@/lib/data/errors';
@@ -48,11 +49,11 @@ export interface AppendGoalNoteInput {
 }
 
 /**
- * Append one journal entry. Always an INSERT — never an upsert, never keyed on
- * the day. The id is client-generated for the same reason check-ins are: it makes
- * a Phase 4 double-flush structurally impossible.
+ * Validation at the boundary, PURE — the id and timestamps are fixed before any
+ * request exists, so the offline enqueue and the online insert carry the same
+ * row and a Phase 4 double-flush is structurally impossible.
  */
-export async function appendGoalNote(input: AppendGoalNoteInput): Promise<GoalNoteRow> {
+export function buildGoalNoteRow(input: AppendGoalNoteInput): GoalNoteRow {
   const text = input.text.trim();
   if (!UUID_RE.test(input.goalId)) throw invalid('goalId is not a uuid');
   if (!UUID_RE.test(input.userId)) throw invalid('userId is not a uuid');
@@ -61,21 +62,35 @@ export async function appendGoalNote(input: AppendGoalNoteInput): Promise<GoalNo
   if (text.length > MAX_NOTE_LENGTH) throw invalid('text is too long');
 
   const now = new Date().toISOString();
+  return {
+    id: uuidv4(),
+    goal_id: input.goalId,
+    user_id: input.userId,
+    local_date: input.localDate,
+    text,
+    created_at: now,
+    updated_at: now,
+    deleted_at: null,
+  };
+}
+
+/** The single INSERT of an already-built row — the same shape the outbox flushes. */
+export async function insertGoalNoteRow(row: GoalNoteRow): Promise<GoalNoteRow> {
   const { data, error } = await dataClient()
     .from('goal_notes')
-    .insert({
-      id: uuidv4(),
-      goal_id: input.goalId,
-      user_id: input.userId,
-      local_date: input.localDate,
-      text,
-      created_at: now,
-      updated_at: now,
-    })
+    .insert(row)
     .select(selectList(GOAL_NOTE_COLUMNS))
     .single();
   if (error) throw toDataError(error);
-  return (data ?? null) as unknown as GoalNoteRow;
+  return (data ?? row) as unknown as GoalNoteRow;
+}
+
+/**
+ * Append one journal entry. Always an INSERT — never an upsert, never keyed on
+ * the day (see the header).
+ */
+export async function appendGoalNote(input: AppendGoalNoteInput): Promise<GoalNoteRow> {
+  return insertGoalNoteRow(buildGoalNoteRow(input));
 }
 
 /**
@@ -134,11 +149,26 @@ export async function softDeleteGoalNote(noteId: string): Promise<void> {
 export function useAppendGoalNoteMutation() {
   const client = useQueryClient();
   return useMutation<GoalNoteRow, DataError, AppendGoalNoteInput>({
-    mutationFn: appendGoalNote,
+    // OFFLINE ENQUEUES (M9 Phase 4): a goal note is an append — the one shape
+    // the outbox holds. The built row resolves as the result, and the read
+    // merge in lib/data/notes.ts keeps it on screen until the flush lands it.
+    // `networkMode: 'always'` lets this run while offline at all.
+    mutationFn: async (input: AppendGoalNoteInput): Promise<GoalNoteRow> => {
+      const row = buildGoalNoteRow(input);
+      if (!onlineManager.isOnline()) {
+        await enqueueOutboxEntry({ table: 'goal_notes', row });
+        return row;
+      }
+      return insertGoalNoteRow(row);
+    },
+    networkMode: 'always',
     onSuccess: (_row, input) => {
       void client.invalidateQueries({
         queryKey: queryKeys.goalNotes(input.userId, input.goalId),
       });
+      // A write that just succeeded is proof the server is reachable (no-op
+      // offline — the enqueue path lands here too).
+      void flushOutbox(client);
     },
   });
 }
@@ -163,7 +193,13 @@ export function useEditGoalNoteMutation(userId: string) {
 export function useDeleteGoalNoteMutation(userId: string) {
   const client = useQueryClient();
   return useMutation<void, DataError, { noteId: string; goalId: string }, { previous?: GoalNoteRow[] }>({
-    mutationFn: ({ noteId }) => softDeleteGoalNote(noteId),
+    // A note still in the outbox never reached the server: removing the entry
+    // IS the delete (an unsend, not an offline edit — R6 holds).
+    mutationFn: async ({ noteId }) => {
+      if (await removePendingOutboxEntry(noteId)) return;
+      return softDeleteGoalNote(noteId);
+    },
+    networkMode: 'always',
     onMutate: async ({ noteId, goalId }) => {
       const key = queryKeys.goalNotes(userId, goalId);
       // Cancel in-flight reads first, or a refetch that started before this
