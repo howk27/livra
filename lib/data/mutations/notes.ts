@@ -98,17 +98,38 @@ export async function editGoalNote(noteId: string, rawText: string): Promise<voi
   if (error) throw toDataError(error);
 }
 
-// 🔴 DELETE IS DELIBERATELY ABSENT, and it is a decision owed rather than an
-// omission. This phase's standing constraint is "archive, never hard-delete — no
-// mutation issues a DELETE" (D-8), but `goal_notes` HAS NO `deleted_at` COLUMN
-// (verified live 2026-07-30: id, goal_id, user_id, local_date, text, created_at,
-// updated_at). So honouring the constraint for notes needs one of:
-//   (a) ADD COLUMN deleted_at — additive, build-60 safe, could ship in Phase 5; or
-//   (b) an explicit exception: journal entries are hard-deleted because a user
-//       who deletes a private diary entry means it.
-// The journal screen offers deletion today (`app/goal/journal/[id].tsx`), so this
-// must be settled before Task 6 can finish wiring that screen. Writing a DELETE
-// into a phase that forbids them is not a call to make quietly.
+// ─── Delete — SETTLED 2026-07-30, and it is an ARCHIVE ──────────────────────────
+//
+// This was an open decision through Task 5: D-8 forbids hard deletes, but
+// `goal_notes` had no `deleted_at` column, so a tombstone was not expressible and
+// the journal screen could not be wired. The founder chose to ADD THE COLUMN
+// (migration `20260730_goal_notes_deleted_at.sql`, applied live and verified by
+// reading `information_schema` back) rather than carve journal entries out of D-8.
+//
+// The consequence is the point: the mutation layer has ONE delete shape. Every
+// module here tombstones and nothing anywhere issues a `.delete()`, so "did this
+// entity hard-delete?" stops being a per-table question a reader has to look up.
+
+/**
+ * Archive one journal entry, addressed BY ITS OWN ID — the same addressing rule as
+ * `editGoalNote`, and for the same reason: a note is one row among many that may
+ * share a (goal, day), so anything coarser deletes entries the user did not touch.
+ *
+ * `.is('deleted_at', null)` makes this IDEMPOTENT: archiving twice is a no-op
+ * rather than a second write that moves the tombstone's timestamp forward. That
+ * matters for the Phase 4 outbox, which may replay an entry it is unsure landed.
+ */
+export async function softDeleteGoalNote(noteId: string): Promise<void> {
+  if (!UUID_RE.test(noteId)) throw invalid('noteId is not a uuid');
+
+  const now = new Date().toISOString();
+  const { error } = await dataClient()
+    .from('goal_notes')
+    .update({ deleted_at: now, updated_at: now })
+    .eq('id', noteId)
+    .is('deleted_at', null);
+  if (error) throw toDataError(error);
+}
 
 export function useAppendGoalNoteMutation() {
   const client = useQueryClient();
@@ -127,6 +148,38 @@ export function useEditGoalNoteMutation(userId: string) {
   return useMutation<void, DataError, { noteId: string; goalId: string; text: string }>({
     mutationFn: ({ noteId, text }) => editGoalNote(noteId, text),
     onSuccess: (_v, { goalId }) => {
+      void client.invalidateQueries({ queryKey: queryKeys.goalNotes(userId, goalId) });
+    },
+  });
+}
+
+/**
+ * Deleting a journal entry is the one note write with an OPTIMISTIC step. Append
+ * and edit can wait for the server — the user is looking at text they just typed,
+ * and a beat of latency reads as saving. A delete that leaves the entry on screen
+ * reads as a failed tap and invites a second one, which is why this removes the row
+ * from the cache immediately and puts it back if the server refuses.
+ */
+export function useDeleteGoalNoteMutation(userId: string) {
+  const client = useQueryClient();
+  return useMutation<void, DataError, { noteId: string; goalId: string }, { previous?: GoalNoteRow[] }>({
+    mutationFn: ({ noteId }) => softDeleteGoalNote(noteId),
+    onMutate: async ({ noteId, goalId }) => {
+      const key = queryKeys.goalNotes(userId, goalId);
+      // Cancel in-flight reads first, or a refetch that started before this
+      // delete can land after it and resurrect the entry.
+      await client.cancelQueries({ queryKey: key });
+      const previous = client.getQueryData<GoalNoteRow[]>(key);
+      client.setQueryData<GoalNoteRow[]>(key, (old) =>
+        old === undefined ? old : old.filter((n) => n.id !== noteId),
+      );
+      return { previous };
+    },
+    onError: (_err, { goalId }, context) => {
+      if (context?.previous === undefined) return;
+      client.setQueryData<GoalNoteRow[]>(queryKeys.goalNotes(userId, goalId), context.previous);
+    },
+    onSettled: (_v, _e, { goalId }) => {
       void client.invalidateQueries({ queryKey: queryKeys.goalNotes(userId, goalId) });
     },
   });

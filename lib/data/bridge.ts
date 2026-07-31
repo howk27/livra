@@ -105,9 +105,17 @@ export function bridgeCheckinRemoved(params: {
 // without the entry the user just typed; offline it would never appear at all.
 // So goal notes get the same Option-A treatment, for the same measured reason.
 //
-// `GoalNoteRow` and the domain `GoalNote` are field-for-field identical (all seven
-// columns, none nullable), so there is no adapter here — the assignment below is the
-// compile-time proof, and it breaks if either shape drifts.
+// `GoalNoteRow` and the domain `GoalNote` WERE field-for-field identical (seven
+// columns, none nullable), so there was no adapter here — the assignment below was
+// the compile-time proof that they had not drifted.
+//
+// THEY DRIFTED, AND IT CAUGHT IT: `goal_notes.deleted_at` was added 2026-07-30 so
+// the journal's delete could archive instead of hard-delete, and this line went red
+// with TS2741 on the next `tsc`. That is the guard doing its job, not a nuisance.
+// The store-side `GoalNote` is deliberately NOT extended to match — the store is
+// what Task 6 retires, and teaching a dying model about tombstones is work that
+// gets deleted with it. A note being mirrored into cache is by construction live,
+// so `deleted_at` is null here and nowhere else.
 
 /** Newest-first, matching `fetchGoalNotes`' `created_at desc, id desc`. */
 function byNoteNewest(a: GoalNoteRow, b: GoalNoteRow): number {
@@ -126,7 +134,7 @@ function upsertNote(
 // PHASE-2 BRIDGE: delete in Phase 3
 /** Mirror a written or edited journal entry into its goal's note cache. */
 export function bridgeGoalNoteUpserted(note: GoalNote): void {
-  const row: GoalNoteRow = note;
+  const row: GoalNoteRow = { ...note, deleted_at: null };
   queryClient.setQueryData<GoalNoteRow[]>(
     queryKeys.goalNotes(note.user_id, note.goal_id),
     (old) => upsertNote(old, row),

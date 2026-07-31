@@ -9,6 +9,14 @@
 // a silent runtime 400 like the `dailyTarget` pull and the six dropped cadence
 // columns cost this project twice.
 //
+// REGENERATED 2026-07-30 for `goal_notes.deleted_at` (M9 Phase 3, migration
+// 20260730_goal_notes_deleted_at.sql). The generator was run in full and its output
+// DIFFED against this file by comparing every table's column set to
+// information_schema — all 23 tables matched live except that one added column, so
+// the three lines below are the generator's own output, not a hand guess. That diff
+// is worth re-running rather than trusting a paste: it is the check that would have
+// caught the `dailyTarget` drift years earlier than the API log did.
+//
 // App-facing row types are DERIVED from that block (never re-typed by hand) below
 // the generated section.
 //
@@ -351,6 +359,7 @@ export type Database = {
       goal_notes: {
         Row: {
           created_at: string
+          deleted_at: string | null
           goal_id: string
           id: string
           local_date: string
@@ -360,6 +369,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          deleted_at?: string | null
           goal_id: string
           id?: string
           local_date: string
@@ -369,6 +379,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          deleted_at?: string | null
           goal_id?: string
           id?: string
           local_date?: string

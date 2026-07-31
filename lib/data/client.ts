@@ -108,6 +108,10 @@ export const GOAL_NOTE_COLUMNS = [
   'text',
   'created_at',
   'updated_at',
+  // Added 2026-07-30 (migration 20260730_goal_notes_deleted_at.sql). Until then
+  // this was the ONE entity here with no tombstone column, which is why the
+  // journal's delete could not honour D-8 and blocked Task 6.
+  'deleted_at',
 ] as const satisfies readonly (keyof GoalNoteRow)[];
 
 // Only the columns the link resolution needs; `goal_mark_links` is a join table,

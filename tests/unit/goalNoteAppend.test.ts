@@ -10,7 +10,9 @@
 // non-unique indexes), which is why the queue holds ONE entry class and handles no
 // conflicts at all.
 
-import { appendGoalNote, editGoalNote } from '@/lib/data/mutations/notes';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import { appendGoalNote, editGoalNote, softDeleteGoalNote } from '@/lib/data/mutations/notes';
 import { setSupabaseClientOverride } from '@/lib/supabase';
 
 jest.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: null }) }));
@@ -135,8 +137,96 @@ describe('editGoalNote', () => {
   });
 });
 
-// NOTE: deletion is deliberately absent from this module — `goal_notes` has no
-// `deleted_at` column, so honouring D-8 needs either that column or an explicit
-// exception. The decision is recorded in the module header and in decisions.md;
-// it is not pinned by a test, because a test asserting "we have not built this
-// yet" would fail for the right reason the day the decision lands.
+describe('softDeleteGoalNote', () => {
+  it('GUARD: archives — it issues an UPDATE and never a DELETE', async () => {
+    const { calls } = makeClient([{ data: null, error: null }]);
+    await softDeleteGoalNote(NOTE);
+
+    // This is D-8 in one assertion. Before 2026-07-30 `goal_notes` had no
+    // `deleted_at` column, so the only way to wire the journal's delete button was
+    // a real DELETE — which is exactly what this forbids.
+    expect(calls.some((c) => c.method === 'delete')).toBe(false);
+    const update = calls.find((c) => c.method === 'update');
+    expect(update?.args[0]).toMatchObject({ deleted_at: expect.any(String) });
+  });
+
+  it('stamps deleted_at and updated_at to the same instant', async () => {
+    const { calls } = makeClient([{ data: null, error: null }]);
+    await softDeleteGoalNote(NOTE);
+    const patch = calls.find((c) => c.method === 'update')?.args[0] as {
+      deleted_at: string;
+      updated_at: string;
+    };
+    expect(patch.deleted_at).toBe(patch.updated_at);
+  });
+
+  it('addresses ONE entry by its own id, like the edit path', async () => {
+    const { calls } = makeClient([{ data: null, error: null }]);
+    await softDeleteGoalNote(NOTE);
+
+    const eqs = calls.filter((c) => c.method === 'eq');
+    expect(eqs).toHaveLength(1);
+    expect(eqs[0].args).toEqual(['id', NOTE]);
+    // Anything coarser — (goal, day) especially — would archive entries the user
+    // never touched, since many notes can share a goal and a day.
+    expect(eqs.some((c) => c.args[0] === 'local_date')).toBe(false);
+  });
+
+  it('GUARD: is idempotent — a second archive cannot move the tombstone', async () => {
+    const { calls } = makeClient([{ data: null, error: null }]);
+    await softDeleteGoalNote(NOTE);
+
+    // `.is('deleted_at', null)` is what makes the UPDATE match zero rows the second
+    // time. Without it a Phase-4 replay would rewrite deleted_at to a later instant.
+    const guard = calls.find((c) => c.method === 'is');
+    expect(guard?.args).toEqual(['deleted_at', null]);
+  });
+
+  it('refuses a malformed id before any request', async () => {
+    const { from } = makeClient([]);
+    await expect(softDeleteGoalNote('not-a-uuid')).rejects.toMatchObject({ kind: 'unknown' });
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it('classifies a refusal rather than leaking Postgres text', async () => {
+    makeClient([{ data: null, error: { code: '42501', message: 'permission denied for goal_notes' } }]);
+    await expect(softDeleteGoalNote(NOTE)).rejects.toMatchObject({ kind: 'permission' });
+  });
+});
+
+// ── D-8 across the whole mutation layer ──────────────────────────────────────
+//
+// The per-function guard above proves THIS module archives. This one proves the
+// rule holds everywhere, so "does this entity hard-delete?" stops being a
+// per-table question. It is a source scan rather than a behavioural test because
+// the thing being asserted is an ABSENCE across four files — the only honest way
+// to catch a `.delete()` added to a module nobody thought to write a test for.
+
+describe('D-8 — no mutation module issues a hard delete', () => {
+  const MUTATION_MODULES = [
+    'lib/data/mutations/checkins.ts',
+    'lib/data/mutations/goals.ts',
+    'lib/data/mutations/marks.ts',
+    'lib/data/mutations/notes.ts',
+  ];
+
+  it.each(MUTATION_MODULES)('%s never calls .delete()', (relPath) => {
+    const source = readFileSync(join(process.cwd(), relPath), 'utf8');
+    // Strip comments first: this file's own prose says the word ".delete()" more
+    // than once, and a scan that counts prose measures nothing. (This repo has
+    // shipped that exact mistake twice — 2026-07-25 and 2026-07-26.)
+    const code = source
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .split('\n')
+      .filter((line) => !line.trim().startsWith('//'))
+      .join('\n');
+    expect(code).not.toMatch(/\.delete\s*\(/);
+  });
+
+  it('the scan is non-vacuous — it finds an injected .delete()', () => {
+    const injected = `
+      const x = client.from('goal_notes').delete().eq('id', noteId);
+    `;
+    expect(injected).toMatch(/\.delete\s*\(/);
+  });
+});

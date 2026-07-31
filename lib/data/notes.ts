@@ -22,6 +22,11 @@ export async function fetchGoalNotes(goalId: string): Promise<GoalNoteRow[]> {
     .from('goal_notes')
     .select(selectList(GOAL_NOTE_COLUMNS))
     .eq('goal_id', goalId)
+    // Tombstones are excluded here, exactly as in goals/marks/checkins. This
+    // filter and the `deleted_at` column arrived together (2026-07-30); before
+    // that, `goal_notes` had no tombstone to hide. A deleted entry that still
+    // renders is the one failure mode the new column introduces.
+    .is('deleted_at', null)
     .order('created_at', { ascending: false })
     // Tiebreak by id so the order is TOTAL. The store this replaces sorted
     // `created_at desc, id desc` client-side; without the second key two entries
