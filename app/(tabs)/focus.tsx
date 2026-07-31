@@ -25,7 +25,7 @@ import { SpeedDialFAB } from '../../components/ui/SpeedDialFAB';
 import { VoiceLine } from '../../components/ui/VoiceLine';
 import { confirm, actionSheet } from '../../components/ui/overlays';
 
-import { useCounters } from '../../hooks/useCounters';
+import { useArchiveMarkMutation } from '@/lib/data/mutations/marks';
 import { useAuth } from '../../hooks/useAuth';
 import { useSync } from '../../hooks/useSync';
 import { useAppDateStore, selectAppDateKey } from '../../state/appDateSlice';
@@ -85,7 +85,7 @@ import { useMarksForUser, useMarksByGoal } from '@/lib/data/marks';
 import { useUserCheckins } from '@/lib/data/checkins';
 import { useGoals } from '@/lib/data/goals';
 import { asDataError } from '@/lib/data/errors';
-import { dataErrorCopy, DATA_ERROR_COPY } from '@/lib/copy';
+import { caughtErrorCopy, dataErrorCopy } from '@/lib/copy';
 import { useCheckin } from '../../hooks/useCheckin';
 // `MarkRow` here is the components/ui/MarkRow VALUE import; the data-layer row
 // type is aliased to avoid the name collision.
@@ -97,7 +97,8 @@ import type { TierId, FrequencyId } from '../../lib/goalMarkSuggestions';
 // focusQueue selectors, and the JSX render identically. Adapters mirror goal
 // detail / mark detail (Tasks 2–3) verbatim — kept local, deleted with the seam
 // in Phase 3. Marks resolve to goals THROUGH goal_mark_links (useMarksByGoal),
-// never mark.goal_id.
+// never mark.goal_id. Writes are mutations as of Phase 3; the adapters
+// themselves die with the seam in Phase 5.
 const EMPTY_MARK_ROWS: MarkRowData[] = [];
 const EMPTY_CHECKIN_ROWS: MarkEventRow[] = [];
 const EMPTY_GOAL_ROWS: GoalRow[] = [];
@@ -179,9 +180,12 @@ export default function FocusScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ logMarkId?: string }>();
   const { user } = useAuth();
-  // Reads come from the query layer (Phase 2). The CHECK-IN write is a mutation
-  // (Phase 3 Task 2); mark deletion is still a store write until Task 4.
-  const { deleteCounter } = useCounters();
+  // Reads come from the query layer (Phase 2); both writes this screen owns are
+  // mutations now (Phase 3) — the check-in via `useCheckin`, the removal below.
+  // Removing a mark is `archiveMark` — a tombstone on the mark and its
+  // links, never a DELETE (D-8). This was `useCounters().deleteCounter`, the last
+  // thing this screen wanted from that hook, so the hook is gone from it entirely.
+  const archiveMark = useArchiveMarkMutation(user?.id ?? '');
   const { logCheckin } = useCheckin();
 
   const marksQuery = useMarksForUser();
@@ -575,7 +579,7 @@ export default function FocusScreen() {
         await logCheckin(markId, user.id, 1);
       } catch (error: unknown) {
         // The raw error stayed in the data layer; this is the classified line.
-        showError(dataErrorCopy(asDataError(error)) ?? DATA_ERROR_COPY.unknown);
+        showError(caughtErrorCopy(error));
       }
     },
     [user?.id, logCheckin, showError],
@@ -614,8 +618,11 @@ export default function FocusScreen() {
       cancelLabel: 'Keep it',
       destructive: true,
     });
-    if (ok) deleteCounter(markId).catch(() => {});
-  }, [deleteCounter]);
+    // The removal is a server write now, so a failure has to be said out loud —
+    // the silent `.catch(() => {})` this replaces would have left the mark on
+    // screen with no explanation.
+    if (ok) archiveMark.mutateAsync(markId).catch((error: unknown) => showError(caughtErrorCopy(error)));
+  }, [archiveMark, showError]);
 
   const handleMarkLongPress = useCallback(async (markId: string, markName: string) => {
     const choice = await actionSheet({
@@ -643,8 +650,8 @@ export default function FocusScreen() {
       confirmLabel: 'Retire',
       cancelLabel: 'Keep going',
     });
-    if (ok) deleteCounter(markId).catch(() => {});
-  }, [deleteCounter]);
+    if (ok) archiveMark.mutateAsync(markId).catch((error: unknown) => showError(caughtErrorCopy(error)));
+  }, [archiveMark, showError]);
 
   // ── Mark row renderer (shared) ────────────────────────────────────────────
 

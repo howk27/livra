@@ -311,12 +311,29 @@ describe('goal detail can link and unlink marks (QC4-L)', () => {
   });
 
   it('writes BOTH records a link is made of', () => {
-    // mark.goal_id drives this screen's list + the free cap; linked_mark_ids
-    // drives progress and momentum. Writing one and not the other is the bug.
+    // The link row drives progress, momentum and every migrated read; the legacy
+    // mark.goal_id still drives six unmigrated subsystems (the iOS widget's
+    // per-goal grouping, maintenance conversion, gating, features, empty-state
+    // copy, the re-engagement nudge). Writing one and not the other is the bug.
+    //
+    // M9 Phase 3: the link half moved to `lib/data/mutations/marks.ts` (a server
+    // write) while the legacy half stays on the store (a device write). The
+    // invariant is unchanged — it is which module owns each half that moved.
     expect(src).toMatch(/await updateMark\(markId, \{ goal_id: id! \}\)/);
-    expect(src).toMatch(/await linkMarkToGoal\(id!, markId\)/);
-    expect(src).toMatch(/await unlinkMarkFromGoal\(id!, mark\.id\)/);
+    expect(src).toMatch(/await linkMark\.mutateAsync\(\{ goalId: id!, markId, userId/);
+    expect(src).toMatch(/await unlinkMark\.mutateAsync\(\{ goalId: id!, markId: mark\.id \}\)/);
     expect(src).toMatch(/await updateMark\(mark\.id, \{ goal_id: null \}\)/);
+  });
+
+  it('makes the link the LAST write, so a failed legacy write stays retryable', () => {
+    // Ordering rule from the mutation layer: the row the user acts on goes last.
+    // If the legacy column write fails, the mark is not yet linked here and the
+    // move can simply be repeated — rather than leaving a live link whose legacy
+    // column disagrees with it.
+    const legacy = src.indexOf('await updateMark(markId, { goal_id: id! })');
+    const link = src.indexOf('await linkMark.mutateAsync({ goalId: id!, markId, userId');
+    expect(legacy).toBeGreaterThan(-1);
+    expect(link).toBeGreaterThan(legacy);
   });
 
   it('uses the real gate rather than its own cap', () => {

@@ -52,8 +52,8 @@ import { confirm } from '../../../components/ui/overlays';
 import { useNotification } from '../../../contexts/NotificationContext';
 import { useCounters } from '../../../hooks/useCounters';
 import { useCheckin } from '../../../hooks/useCheckin';
-import { dataErrorCopy, DATA_ERROR_COPY } from '../../../lib/copy';
-import { asDataError } from '../../../lib/data/errors';
+import { caughtErrorCopy } from '../../../lib/copy';
+import { useArchiveMarkMutation } from '@/lib/data/mutations/marks';
 import { LoadingScreen } from '../../../components/LoadingScreen';
 import { useAuth } from '../../../hooks/useAuth';
 import { logger } from '../../../lib/utils/logger';
@@ -120,7 +120,8 @@ export default function MarkDetailScreen() {
 // Query rows (MarkRow/MarkEventRow/GoalRow) are adapted to the old domain models
 // so every derivation and the JSX below render identically. Adapters mirror
 // app/goal/[id].tsx (Task 2) verbatim — kept local, not shared, on purpose;
-// Phase 3 deletes both copies with the seam. Writes still flow through the stores.
+// Phase 3 deletes both copies with the seam. Writes are mutations as of Phase 3,
+// except the two device-only health_kit_* fields, which have no server column.
 // Goals resolve THROUGH LINKS (useMarksByGoal), never `mark.goal_id`.
 
 /** Stable empty references so an unresolved query keeps memo identity. */
@@ -210,7 +211,13 @@ function MarkDetailContent() {
   // M9 Phase 3 Task 2: check-in and undo are mutations. Mark delete and edit are
   // still store writes until Task 4. `decrementCounter` and `resetCounter` were
   // destructured here and never called — they went with the increment.
-  const { deleteCounter, updateMark } = useCounters();
+  // M9 Phase 3: deleting a mark is `archiveMark` — a tombstone on the mark and its
+  // links, never a DELETE (D-8). `updateMark` STAYS on the store: its only callers
+  // here write `health_kit_type` / `health_kit_config`, which `lib/data/types.ts:32`
+  // records as columns that do NOT exist server-side. A device-only field has to
+  // keep its device-only write.
+  const { updateMark } = useCounters();
+  const archiveMark = useArchiveMarkMutation(user?.id ?? '');
   const { logCheckin, undoCheckin } = useCheckin();
   const { showError } = useNotification();
 
@@ -391,7 +398,7 @@ function MarkDetailContent() {
 
     logCheckin(id, user.id, 1).catch((error) => {
       // The raw error stayed in the data layer; this is the classified line.
-      showError(dataErrorCopy(asDataError(error)) ?? DATA_ERROR_COPY.unknown);
+      showError(caughtErrorCopy(error));
     });
 
     // Check if all marks done after this log (check after short delay for state to update)
@@ -432,7 +439,7 @@ function MarkDetailContent() {
 
     undoCheckin(lastRow)
       .catch((error) => {
-        showError(dataErrorCopy(asDataError(error)) ?? DATA_ERROR_COPY.unknown);
+        showError(caughtErrorCopy(error));
       })
       .finally(() => {
         undoInFlight.current = false;
@@ -458,11 +465,11 @@ function MarkDetailContent() {
     });
     if (!sure) return;
     try {
-      await deleteCounter(id);
+      await archiveMark.mutateAsync(id);
       router.replace('/(tabs)/focus' as any);
     } catch (error) {
       logger.error('delete mark failed:', error);
-      showError('Could not delete this mark.');
+      showError(caughtErrorCopy(error));
     }
   };
 

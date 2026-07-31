@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback } from 'react';
+import React, { useMemo, useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -33,10 +33,11 @@ import { GoalTitle } from '../../components/ui/GoalTitle';
 import { HistoryRow } from '../../components/goals/HistoryRow';
 import { useAuth } from '../../hooks/useAuth';
 import { useGoalsStore } from '../../state/goalsSlice';
+import { useReorderGoalsMutation } from '@/lib/data/mutations/goals';
 import { useGoals } from '@/lib/data/goals';
 import { useMarksByGoal } from '@/lib/data/marks';
 import { asDataError } from '@/lib/data/errors';
-import { dataErrorCopy } from '@/lib/copy';
+import { caughtErrorCopy, dataErrorCopy } from '@/lib/copy';
 import { useUserCheckins } from '@/lib/data/checkins';
 import { currentWeekDates, computeCompletionsThisWeek } from '../../lib/features';
 import {
@@ -66,8 +67,8 @@ const EMPTY_MARKS: Mark[] = [];
 // pure progress/weekly helpers are typed against the old domain models in `types/`.
 // The strangler seam is bridged HERE: query rows (GoalRow/MarkRow/MarkEventRow) are
 // mapped to the old `Goal`/`Mark`/`MarkEvent` shapes the unchanged children require,
-// so rendering stays byte-for-byte identical. Writes still flow through the stores;
-// Phase 3 deletes these adapters with the seam.
+// so rendering stays byte-for-byte identical. Writes are mutations as of Phase 3;
+// these adapters die with the seam in Phase 5.
 
 /** Stable empty references so an unresolved query keeps memo identity. */
 const EMPTY_GOAL_ROWS: GoalRow[] = [];
@@ -502,10 +503,17 @@ interface DraggableGoalListProps {
   marksByGoal: Map<string, Mark[]>;
   progressByGoal: Map<string, GoalProgress>;
   onPressGoal: (goalId: string) => void;
+  /** A failed reorder rolls the order back on its own; this is how the user is
+   *  told why the rows moved. */
+  onWriteError: (copy: string) => void;
 }
 
-function DraggableGoalList({ goals, weeklyByGoal, marksByGoal, progressByGoal, onPressGoal }: DraggableGoalListProps) {
-  const reorderGoals = useGoalsStore((s) => s.reorderGoals);
+function DraggableGoalList({ goals, weeklyByGoal, marksByGoal, progressByGoal, onPressGoal, onWriteError }: DraggableGoalListProps) {
+  // M9 Phase 3: reorder is a mutation. It patches the cached order in `onMutate`
+  // and rolls back on error, which is what keeps a dragged row from visibly
+  // snapping back while a round trip settles.
+  const { user } = useAuth();
+  const reorderGoals = useReorderGoalsMutation(user?.id ?? '');
 
   const slotHeight = useSharedValue(0);
   const activeId = useSharedValue<string | null>(null);
@@ -530,8 +538,10 @@ function DraggableGoalList({ goals, weeklyByGoal, marksByGoal, progressByGoal, o
     const ordered = [...goals].sort(
       (a, b) => (positions.value[a.id] ?? 0) - (positions.value[b.id] ?? 0),
     );
-    void reorderGoals(ordered.map((g) => g.id));
-  }, [goals, positions, reorderGoals]);
+    reorderGoals
+      .mutateAsync(ordered.map((g) => g.id))
+      .catch((error: unknown) => onWriteError(caughtErrorCopy(error)));
+  }, [goals, positions, reorderGoals, onWriteError]);
 
   return (
     <View style={styles.listWrapper}>
@@ -609,7 +619,11 @@ export default function GoalsScreen() {
   // one source for every data failure in the app, instead of a per-screen string
   // that says "try again" whether the cause was offline, expired or refused.
   const isLoading = goalsQuery.isLoading;
-  const error = dataErrorCopy(asDataError(goalsQuery.error));
+  // M9 Phase 3: the banner carries write failures as well as read failures. A
+  // write error wins — it is the thing the user just caused, and it clears on the
+  // next successful one.
+  const [writeError, setWriteError] = useState<string | null>(null);
+  const error = writeError ?? dataErrorCopy(asDataError(goalsQuery.error));
 
   // Pull to refresh. Held on its own flag rather than `isLoading`: the loading flag
   // drives the skeleton, and showing both at once would replace the list the user
@@ -790,6 +804,7 @@ export default function GoalsScreen() {
               marksByGoal={marksByGoal}
               progressByGoal={progressByGoal}
               onPressGoal={handleOpenGoal}
+              onWriteError={setWriteError}
             />
           </>
         )}
