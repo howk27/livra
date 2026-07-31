@@ -44,6 +44,11 @@ export function JournalComposer({
     try {
       await onAdd(trimmed);
       setDraft('');
+    } catch {
+      // M9 Phase 3: the draft SURVIVES a failed save. Writes reach the server
+      // directly now, so `onAdd` can genuinely reject — and clearing the box on a
+      // rejection would delete what the user just wrote. The parent owns the error
+      // copy; swallowing here only stops the rejection escaping an onPress.
     } finally {
       setSaving(false);
     }

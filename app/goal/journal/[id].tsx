@@ -26,12 +26,16 @@ import {
 } from '../../../theme/tokens';
 import type { GoalNote } from '../../../types';
 import { useEffectiveTheme } from '../../../state/uiSlice';
-import { useGoalNotesStore } from '../../../state/goalNotesSlice';
-// M9 Phase 2: journal READS come from lib/data/ (React Query); WRITES still go
-// through goalNotesSlice, bridged into the cache by bridgeGoalNoteUpserted /
-// bridgeGoalNoteRemoved (see lib/data/bridge.ts).
+// M9 Phase 3: reads AND writes are both lib/data/ now. `goalNotesSlice` is gone
+// from this screen entirely, and with it the write→read bridge — an entry reaches
+// the server directly and the mutation refreshes its own query.
 import { useGoal } from '@/lib/data/goals';
 import { useGoalNotes } from '@/lib/data/notes';
+import {
+  useAppendGoalNoteMutation,
+  useDeleteGoalNoteMutation,
+  useEditGoalNoteMutation,
+} from '@/lib/data/mutations/notes';
 import { asDataError } from '@/lib/data/errors';
 import { dataErrorCopy } from '@/lib/copy';
 import { useAuth } from '../../../hooks/useAuth';
@@ -98,6 +102,9 @@ function JournalEntryRow({
     try {
       await onEdit(entry.id, trimmed);
       setEditing(false);
+    } catch {
+      // M9 Phase 3: stay in edit mode on a rejected save, so the revised text is
+      // still there to retry. The parent renders the error copy.
     } finally {
       setSaving(false);
     }
@@ -157,7 +164,11 @@ export default function GoalJournalScreen() {
   const c = themedColors(theme);
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const noteUserId = user?.id ?? 'local';
+  // M9 Phase 3: '' rather than the old 'local' sentinel. Every note write is a
+  // server write now and the mutations reject a non-uuid before sending, so a
+  // signed-out screen must not attempt one — the reads are gated the same way
+  // (`useGoalNotes` runs only when userId !== '').
+  const noteUserId = user?.id ?? '';
 
   // Reads: lib/data/ query layer (M9 Phase 2). `useGoalNotes` returns this goal's
   // entries already scoped and ordered `created_at desc, id desc` — the same total
@@ -168,12 +179,15 @@ export default function GoalJournalScreen() {
   const loading = notesQuery.isLoading;
   const readError = dataErrorCopy(asDataError(notesQuery.error));
 
-  // Writes still go through the store; its cloud-backup hint stays with them.
-  const cloudError = useGoalNotesStore((s) => s.goalNotesCloudError);
-  const clearCloudError = useGoalNotesStore((s) => s.clearGoalNotesCloudError);
-  const addGoalNote = useGoalNotesStore((s) => s.addGoalNote);
-  const editGoalNote = useGoalNotesStore((s) => s.editGoalNote);
-  const deleteGoalNote = useGoalNotesStore((s) => s.deleteGoalNote);
+  // Writes (M9 Phase 3). The store's `goalNotesCloudError` is gone with it: that
+  // hint meant "saved here, the backup failed", which was true when SQLite was
+  // authoritative. It no longer is — a rejected write means the entry was NOT
+  // saved, and the copy has to say so. Hence one `writeError`, in this surface's
+  // own vocabulary, cleared on the next successful write.
+  const appendNote = useAppendGoalNoteMutation();
+  const editNote = useEditGoalNoteMutation(noteUserId);
+  const deleteNote = useDeleteGoalNoteMutation(noteUserId);
+  const [writeError, setWriteError] = useState<string | null>(null);
 
   // Grouped by local_date, preserving the newest-first order they arrive in.
   const dayGroups = useMemo(() => {
@@ -192,35 +206,61 @@ export default function GoalJournalScreen() {
 
   const handleAdd = useCallback(
     async (text: string) => {
-      if (!id) return;
+      if (!id || noteUserId === '') return;
       if (Platform.OS !== 'web') {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       }
       const localDate = formatDate(getAppDate());
-      await addGoalNote(id, noteUserId, localDate, text);
+      try {
+        await appendNote.mutateAsync({ goalId: id, userId: noteUserId, localDate, text });
+        setWriteError(null);
+      } catch (error) {
+        setWriteError(dataErrorCopy(asDataError(error)));
+        // RETHROWN on purpose: `JournalComposer` clears its draft only when this
+        // resolves, so swallowing here would wipe the entry the save just lost.
+        throw error;
+      }
     },
-    [id, noteUserId, addGoalNote],
+    [id, noteUserId, appendNote],
   );
 
   const handleEdit = useCallback(
     async (noteId: string, text: string) => {
-      await editGoalNote(noteId, noteUserId, text);
+      if (!id) return;
+      try {
+        await editNote.mutateAsync({ noteId, goalId: id, text });
+        setWriteError(null);
+      } catch (error) {
+        setWriteError(dataErrorCopy(asDataError(error)));
+        throw error;
+      }
     },
-    [noteUserId, editGoalNote],
+    [id, editNote],
   );
 
   const handleDelete = useCallback(
     async (noteId: string) => {
+      if (!id) return;
       const ok = await confirm({
+        // Copy follows the write: entries ARCHIVE now (D-8, `deleted_at` added
+        // 2026-07-30). "Permanently removed" would be a promise the mutation
+        // deliberately does not keep.
         title: 'Delete entry?',
-        message: 'This journal entry will be permanently removed.',
+        message: 'This journal entry will be removed from your journal.',
         confirmLabel: 'Delete',
         cancelLabel: 'Keep it',
         destructive: true,
       });
-      if (ok) void deleteGoalNote(noteId);
+      if (!ok) return;
+      try {
+        await deleteNote.mutateAsync({ noteId, goalId: id });
+        setWriteError(null);
+      } catch (error) {
+        // The optimistic removal has already rolled back by here.
+        setWriteError(dataErrorCopy(asDataError(error)));
+      }
     },
-    [deleteGoalNote],
+    [id, deleteNote],
   );
 
   // First-load gate (M9 Phase 2): the goal comes from the query layer now, so hold
@@ -275,10 +315,10 @@ export default function GoalJournalScreen() {
 
           <JournalComposer c={c} onAdd={handleAdd} showCharCount inputMinHeight={84} maxLen={ENTRY_MAX_LEN} />
 
-          {cloudError ? (
+          {writeError ? (
             <View style={[styles.cloudRow, { borderColor: c.borderLight }]}>
-              <Text style={[styles.cloudHint, { color: c.inkMid }]}>{cloudError}</Text>
-              <TouchableOpacity onPress={() => clearCloudError()} style={styles.cloudDismissBtn} activeOpacity={0.7}>
+              <Text style={[styles.cloudHint, { color: c.inkMid }]}>{writeError}</Text>
+              <TouchableOpacity onPress={() => setWriteError(null)} style={styles.cloudDismissBtn} activeOpacity={0.7}>
                 <Text style={[styles.cloudDismiss, { color: c.accent }]}>Dismiss</Text>
               </TouchableOpacity>
             </View>
