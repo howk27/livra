@@ -253,6 +253,10 @@ function MarkDetailContent() {
 
   const [historyExpanded, setHistoryExpanded] = useState(false);
   const undoInFlight = useRef(false);
+  // M9 P6 T1: armed by handleDeleteMark so the not-found guard below never
+  // paints over the user's own delete (the archive mutation drops the row from
+  // the cache before dismissTo lands).
+  const deletingRef = useRef(false);
   const appDateKey = useAppDateStore(selectAppDateKey);
 
   const [healthModalVisible, setHealthModalVisible] = useState(false);
@@ -389,6 +393,11 @@ function MarkDetailContent() {
   if (loading) return <LoadingScreen />;
 
   if (!counter || !id) {
+    // A delete this screen initiated: the row is gone from the cache by design
+    // and dismissTo is about to unmount us — hold the frame instead of painting
+    // "Mark not found". The guard itself stays: a genuinely missing mark
+    // (bad deep link, another device's delete) must still land here.
+    if (deletingRef.current) return <LoadingScreen />;
     return (
       <SafeAreaView style={[styles.safeArea, { backgroundColor: c.linen }]}>
         <View style={styles.centered}>
@@ -490,9 +499,14 @@ function MarkDetailContent() {
     });
     if (!sure) return;
     try {
+      deletingRef.current = true;
       await archiveMark.mutateAsync(id);
-      router.replace('/(tabs)/focus' as any);
+      // This route is presentation:'modal' — router.replace navigates UNDER it
+      // and leaves the modal up; dismissTo (POP_TO) actually dismisses, and
+      // still lands on Focus when the modal was deep-linked with no history.
+      router.dismissTo('/(tabs)/focus' as any);
     } catch (error) {
+      deletingRef.current = false;
       logger.error('delete mark failed:', error);
       showError(caughtErrorCopy(error));
     }

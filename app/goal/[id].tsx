@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import type { ComponentType } from 'react';
 import {
   View,
@@ -1018,6 +1018,10 @@ export default function GoalDetailScreen() {
   const renameGoal = useRenameGoalMutation(userId ?? '');
   const editGoal = useEditGoalMutation(userId ?? '');
   const archiveGoal = useArchiveGoalMutation(userId ?? '');
+  // M9 P6 T1: armed before the archive mutation so the not-found guard never
+  // flashes "Goal not found" in the window between the cache dropping the row
+  // and router.back() dismissing this modal.
+  const deletingRef = useRef(false);
   const linkMark = useLinkMarkMutation(userId ?? '');
   const unlinkMark = useUnlinkMarkMutation(userId ?? '');
   const { completeGoal } = useCompleteGoal(userId ?? '');
@@ -1256,6 +1260,16 @@ export default function GoalDetailScreen() {
   }
 
   if (!goal) {
+    // A delete this screen initiated — the cache dropped the row by design and
+    // router.back() is about to dismiss us; hold the frame instead of flashing
+    // the guard. A genuinely missing goal must still land below.
+    if (deletingRef.current) {
+      return (
+        <SafeAreaView style={{ flex: 1, backgroundColor: c.linen, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator color={c.inkMuted} />
+        </SafeAreaView>
+      );
+    }
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: c.linen, alignItems: 'center', justifyContent: 'center' }}>
         <Text style={{ fontFamily: fonts.sans, color: c.inkMuted }}>Goal not found.</Text>
@@ -1371,7 +1385,20 @@ export default function GoalDetailScreen() {
           canComplete={canComplete}
           onOpenDatePicker={handleOpenDatePicker}
           onComplete={handleComplete}
-          onDelete={() => void confirmRemoveGoal(goal.title, () => archiveGoal.mutateAsync(id!), () => router.back(), showError)}
+          onDelete={() =>
+            void confirmRemoveGoal(
+              goal.title,
+              () => {
+                deletingRef.current = true;
+                return archiveGoal.mutateAsync(id!);
+              },
+              () => router.back(),
+              (message) => {
+                deletingRef.current = false;
+                showError(message);
+              },
+            )
+          }
         />
       </ScrollView>
 
