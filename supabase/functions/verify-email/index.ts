@@ -44,17 +44,20 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { evaluateLinkSession, decodeJwtPayload } from './linkSessionGate.ts';
 
-const CORS_HEADERS: Record<string, string> = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
+// Narrowed from '*' (Phase 7 security pass): the website landing page made
+// this function a real browser caller, so the wildcard stopped being inert.
+// The native app's supabase-js invoke sends no Origin header and CORS never
+// gates it either way.
+const ALLOWED_ORIGINS = new Set(['https://www.livralife.com', 'https://livralife.com']);
 
-function json(status: number, body: unknown): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
-  });
+function corsHeaders(origin: string | null): Record<string, string> {
+  return {
+    'Access-Control-Allow-Origin':
+      origin && ALLOWED_ORIGINS.has(origin) ? origin : 'https://www.livralife.com',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    Vary: 'Origin',
+  };
 }
 
 /** GoTrue's rejections, mapped to the three outcomes the app can act on. */
@@ -66,8 +69,15 @@ function classifyOtpError(message: string): 'invalid_code' | 'expired_code' | 'v
 }
 
 Deno.serve(async (req: Request) => {
+  const cors = corsHeaders(req.headers.get('Origin'));
+  const json = (status: number, body: unknown): Response =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { ...cors, 'Content-Type': 'application/json' },
+    });
+
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: CORS_HEADERS });
+    return new Response('ok', { headers: cors });
   }
   if (req.method !== 'POST') {
     return json(405, { ok: false, error: 'method_not_allowed' });
