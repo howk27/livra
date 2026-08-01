@@ -85,17 +85,40 @@ function notify(): void {
   for (const cb of subscribers) cb();
 }
 
+const isNonEmptyString = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
+
 /** Structural check for rehydrated JSON — corrupt or foreign shapes are dropped
- * (and logged) rather than crashing every flush from now on. */
+ * (and logged) rather than crashing every flush from now on.
+ *
+ * FULL per-table shape, not just `table` + `row.id`: a corrupt row that kept its
+ * id would rehydrate, fail its INSERT as `server` (23502 not-null violation),
+ * be KEPT by OUTBOX_KEEP_ON_FAILURE, and retry at the backoff cadence forever.
+ * The fields checked are exactly the NOT NULL columns of each table's Insert. */
 function isOutboxEntry(value: unknown): value is OutboxEntry {
   if (typeof value !== 'object' || value === null) return false;
   const e = value as { table?: unknown; row?: unknown };
-  if (e.table !== 'mark_events' && e.table !== 'goal_notes') return false;
-  return (
-    typeof e.row === 'object' &&
-    e.row !== null &&
-    typeof (e.row as { id?: unknown }).id === 'string'
-  );
+  if (typeof e.row !== 'object' || e.row === null) return false;
+  const row = e.row as Record<string, unknown>;
+  if (e.table === 'mark_events') {
+    return (
+      isNonEmptyString(row.id) &&
+      isNonEmptyString(row.user_id) &&
+      isNonEmptyString(row.mark_id) &&
+      isNonEmptyString(row.event_type) &&
+      isNonEmptyString(row.occurred_at) &&
+      isNonEmptyString(row.occurred_local_date)
+    );
+  }
+  if (e.table === 'goal_notes') {
+    return (
+      isNonEmptyString(row.id) &&
+      isNonEmptyString(row.user_id) &&
+      isNonEmptyString(row.goal_id) &&
+      isNonEmptyString(row.local_date) &&
+      typeof row.text === 'string'
+    );
+  }
+  return false;
 }
 
 async function ensureLoaded(): Promise<void> {

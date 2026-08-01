@@ -158,6 +158,30 @@ describe('the queue', () => {
   });
 });
 
+describe('corrupt persisted rows are dropped on load, not retried forever', () => {
+  // The Phase 4 security Medium: a right-table right-id entry whose row lost
+  // its required fields would rehydrate, fail its INSERT as `server` (23502),
+  // be KEPT by OUTBOX_KEEP_ON_FAILURE, and retry at the backoff cadence
+  // forever. The shape check must validate the FULL per-table row.
+  it('drops entries whose rows are missing required columns; valid ones still flush', async () => {
+    const corruptCheckin = { table: 'mark_events', row: { id: ID_B } };
+    const corruptNote = { table: 'goal_notes', row: { id: ID_C, user_id: USER } };
+    await AsyncStorage.setItem(
+      OUTBOX_STORAGE_KEY,
+      JSON.stringify([checkinEntry(ID_A), corruptCheckin, corruptNote]),
+    );
+    __resetOutboxForTests();
+    const writes = install(() => ok);
+    await flushOutbox(client);
+    // Only the intact entry reached the server; the corrupt two are gone from
+    // memory AND storage rather than queued behind a permanent 23502.
+    expect(writes.map((w) => (w.row as { id: string }).id)).toEqual([ID_A]);
+    expect(pendingOutboxEntries()).toHaveLength(0);
+    const stored = JSON.parse((await AsyncStorage.getItem(OUTBOX_STORAGE_KEY)) ?? '[]');
+    expect(stored).toHaveLength(0);
+  });
+});
+
 describe('spec guard 1 — flushing twice does not double-count', () => {
   it('a flushed entry leaves the queue, so a second flush sends nothing', async () => {
     const writes = install(() => ok);
