@@ -25,11 +25,17 @@ let pending: boolean | null = null;
 
 export async function markRecoveryPending(): Promise<void> {
   pending = true;
-  try {
-    await AsyncStorage.setItem(RECOVERY_PENDING_STORAGE_KEY, '1');
-  } catch (error) {
-    // The in-memory mirror still leashes this launch; only a relaunch escapes.
-    logger.error('[recoveryPending] persist failed:', error);
+  // One retry (T4 security Medium): a single silently-failed write plus a kill
+  // before clear() opens the leash on relaunch, because the read deliberately
+  // fails open. Two failures in a row we accept and log — the in-memory mirror
+  // still leashes THIS launch either way.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      await AsyncStorage.setItem(RECOVERY_PENDING_STORAGE_KEY, '1');
+      return;
+    } catch (error) {
+      if (attempt === 1) logger.error('[recoveryPending] persist failed twice:', error);
+    }
   }
 }
 

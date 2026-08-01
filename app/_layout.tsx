@@ -57,7 +57,7 @@ import { requestLivraLocalNotificationReschedule } from '../services/livraLocalN
 import { getSupabaseClient } from '../lib/supabase';
 import { initNetworkOnlineManager } from '../lib/data/connectivity';
 import { runCutoverOnce } from '../lib/data/cutover';
-import { markRecoveryPending } from '../lib/auth/recoveryPending';
+import { markRecoveryPending, isRecoveryPending } from '../lib/auth/recoveryPending';
 import { startOutbox } from '../lib/data/outbox';
 import {
   queryClient,
@@ -380,6 +380,16 @@ export default function RootLayout() {
         // Widget deep links — handle before the password-reset guard
         const isWidgetHome = incomingUrl === 'livra://home' || incomingUrl.startsWith('livra://home?');
         const isWidgetLogMark = incomingUrl.startsWith('livra://log-mark');
+
+        // T4 security re-check (Critical): these branches route to the tabs and
+        // fire on EVERY url event, so without this gate a recovery-session
+        // holder could escape the set-password screen by opening livra://home —
+        // the exact bypass the leash exists to close. While a reset is
+        // pending, every deep link lands back on the set-password screen.
+        if ((isWidgetHome || isWidgetLogMark) && (await isRecoveryPending())) {
+          router.replace('/auth/reset-password-complete');
+          return;
+        }
 
         if (isWidgetHome) {
           router.replace('/(tabs)/focus' as any);

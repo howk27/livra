@@ -76,6 +76,39 @@ describe('the three enforcement points stay wired', () => {
     expect(index).toMatch(/if \(recoveryPending\)[\s\S]{0,120}reset-password-complete/);
   });
 
+  it('a widget deep link cannot reach the tabs while recovery is pending (the bypass)', () => {
+    // T4 security Critical: isWidgetHome/isWidgetLogMark route to the tabs on
+    // EVERY url event, before the reset gate — ungated, livra://home walked a
+    // recovery session straight past the leash. The gate must sit between the
+    // widget-branch declarations and the first tab replace.
+    const layout = strip('app/_layout.tsx');
+    expect(layout).toMatch(
+      /const isWidgetLogMark[\s\S]{0,600}isRecoveryPending\(\)[\s\S]{0,200}reset-password-complete[\s\S]{0,800}if \(isWidgetHome\)/,
+    );
+  });
+
+  it('a persist failure is retried before the leash trusts memory alone', async () => {
+    // Manual swap, NEVER spyOn/mockRestore on the shared AsyncStorage mock —
+    // restore strips its implementation for every later test (decisions.md
+    // 2026-07-31 d, learned the hard way).
+    const original = AsyncStorage.setItem;
+    let calls = 0;
+    AsyncStorage.setItem = ((key: string, value: string) => {
+      calls += 1;
+      if (calls === 1) return Promise.reject(new Error('disk full'));
+      return original(key, value);
+    }) as typeof AsyncStorage.setItem;
+    try {
+      await markRecoveryPending();
+    } finally {
+      AsyncStorage.setItem = original;
+    }
+    expect(calls).toBe(2);
+    // The retry landed: a relaunch-shaped read still finds the flag.
+    __resetRecoveryPendingForTests();
+    expect(await isRecoveryPending()).toBe(true);
+  });
+
   it('reset-password-complete clears the leash only on the update success path', () => {
     const screen = strip('app/auth/reset-password-complete.tsx');
     expect(screen).toMatch(
