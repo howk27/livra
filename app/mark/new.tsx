@@ -326,6 +326,11 @@ export default function NewCounterScreen() {
       // Two different walls (this goal is full vs the account is full) throw two
       // different messages from the pre-check. Surface the one that actually
       // fired instead of re-typing a single generic line here.
+      //
+      // SAFE, and checked again in QC-1061: the sentinel is thrown ONLY by
+      // hooks/useCreateMark.ts, carrying MARK_PER_GOAL_LIMIT_MESSAGE or
+      // MARK_CEILING_MESSAGE from lib/copy.ts. No server message can reach here,
+      // so this echoes curated copy, never Postgres text.
       logger.warn('[Counter] Free-tier mark limit reached');
       showError(error.message.replace('FREE_COUNTER_LIMIT_REACHED: ', ''));
       setTimeout(() => {

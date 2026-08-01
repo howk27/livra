@@ -24,6 +24,7 @@ import { uploadAvatar, getAvatarUrl } from '../../lib/storage/avatarStorage';
 import { resolveInitialDisplayName } from '../../lib/profile/displayName';
 import { saveDisplayName } from '../../lib/profile/saveDisplayName';
 import { logger } from '../../lib/utils/logger';
+import { caughtErrorCopy } from '../../lib/copy';
 import { useNotification } from '../../contexts/NotificationContext';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import {
@@ -207,7 +208,8 @@ export default function ProfileScreen() {
         await uploadAvatar(user.id, uri);
       } catch (e) {
         setAvatarUri(prev);
-        showError(e instanceof Error ? e.message : 'Could not upload avatar.');
+        // Never echo a raw message: storage errors carry bucket and policy names.
+        showError(caughtErrorCopy(e));
       }
     }
     // showError is a stable context callback and is deliberately left out:

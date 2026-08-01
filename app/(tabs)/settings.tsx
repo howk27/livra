@@ -55,6 +55,7 @@ import { toMark, toMarkEvent } from '../../lib/data/adapters';
 import { generateAllCountersCSV } from '../../lib/csv';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
+import { caughtErrorCopy } from '../../lib/copy';
 import { canExportData } from '../../lib/gating';
 import { logger } from '../../lib/utils/logger';
 import { useNotification } from '../../contexts/NotificationContext';
@@ -420,7 +421,8 @@ export default function SettingsScreen() {
         UTI: 'public.comma-separated-values-text',
       });
     } catch (e: any) {
-      showError(e.message || 'Failed to export marks.');
+      // Never echo a raw message: an export failure can carry Postgres text.
+      showError(caughtErrorCopy(e));
     }
   };
 
