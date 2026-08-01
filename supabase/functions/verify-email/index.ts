@@ -13,27 +13,36 @@
 //   writing email_verified_at at all, and this function, holding service_role,
 //   is the only writer. It stamps only after GoTrue accepts the code.
 //
-// What it does:
-//   - Authenticates the caller via the JWT in the Authorization header.
-//   - Verifies the emailed code against GoTrue (type 'email'), using the caller's
-//     OWN address read from their auth record — never an address from the body,
-//     so a caller cannot verify their way onto someone else's mail.
-//   - Confirms the verified identity is the caller, then stamps
-//     profiles.email_verified_at with the service-role client.
+// TWO PATHS since M9 Phase 7 (founder ruling D1, 2026-07-27 — link replaces
+// the typed code; the {{ .Token }} template gate is RETIRED BY REDESIGN, the
+// default {{ .ConfirmationURL }} is exactly right):
 //
-// The verification round trip issues a session server-side as a side effect of
-// verifyOtp. It is discarded here and never returned: the caller is already
-// signed in, and handing back a second session would swap their live one for no
-// reason (and re-run the app's onAuthStateChange path mid-screen).
+//   CODE path (body { token }) — build-60 clients. Authenticates the caller
+//   via the JWT in the Authorization header, verifies the emailed code against
+//   GoTrue (type 'email') using the caller's OWN address read from their auth
+//   record — never an address from the body — confirms the verified identity
+//   IS the caller, then stamps. The session verifyOtp mints is discarded.
+//
+//   LINK path (body { mode: 'link' }) — the website landing page at
+//   livralife.com/verify-email. Tapping the emailed link has GoTrue's
+//   /auth/v1/verify CONSUME the token and mint a session; possession of that
+//   session is the proof of inbox. The page calls this function with it, and
+//   the gate (linkSessionGate.ts) requires the validated JWT's `amr` to show a
+//   RECENT `otp` acceptance — an everyday password/Apple session is refused,
+//   which is what keeps the stamp non-self-asserted on this path. The minted
+//   session is used for this one call and never returned to any app client.
+//
+// Either way: the guard trigger blocks the two PostgREST roles from writing
+// email_verified_at at all; this function, holding service_role, is the only
+// writer, and it stamps only after GoTrue accepted something.
 //
 // Deploy:  supabase functions deploy verify-email
 // Secrets: SUPABASE_URL, SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY are
 //          injected automatically.
-// GATE:    the Magic Link email template must contain {{ .Token }} — without it
-//          Supabase mails a link and the user has no code to type.
-// STATUS:  NOT YET DEPLOYED.
+// STATUS:  v1 (code path only) ACTIVE since 2026-07-25; v2 adds the link path.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { evaluateLinkSession, decodeJwtPayload } from './linkSessionGate.ts';
 
 const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -77,13 +86,15 @@ Deno.serve(async (req: Request) => {
   }
 
   let token = '';
+  let mode = '';
   try {
     const body = await req.json();
     token = String(body?.token ?? '').trim();
+    mode = String(body?.mode ?? '').trim();
   } catch {
     return json(400, { ok: false, error: 'bad_request' });
   }
-  if (!token) return json(400, { ok: false, error: 'missing_token' });
+  if (mode !== 'link' && !token) return json(400, { ok: false, error: 'missing_token' });
 
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -95,6 +106,33 @@ Deno.serve(async (req: Request) => {
   const caller = userData?.user;
   if (userErr || !caller) return json(401, { ok: false, error: 'unauthenticated' });
   if (!caller.email) return json(400, { ok: false, error: 'no_email_on_account' });
+
+  const stamp = async (): Promise<Response> => {
+    const verifiedAt = new Date().toISOString();
+    const { error: stampErr } = await admin
+      .from('profiles')
+      .update({ email_verified_at: verifiedAt })
+      .eq('id', caller.id);
+    if (stampErr) {
+      console.error('[verify-email] stamp failed:', stampErr.message);
+      return json(500, { ok: false, error: 'stamp_failed' });
+    }
+    return json(200, { ok: true, email_verified_at: verifiedAt });
+  };
+
+  if (mode === 'link') {
+    // The JWT itself is the proof: GoTrue minted it by consuming the emailed
+    // link. getUser above validated it; the gate now reads HOW it was earned.
+    const payload = decodeJwtPayload(jwt);
+    const verdict = payload
+      ? evaluateLinkSession(payload, Math.floor(Date.now() / 1000))
+      : ({ ok: false, reason: 'no_amr' } as const);
+    if (!verdict.ok) {
+      console.warn('[verify-email] link session refused:', verdict.reason);
+      return json(403, { ok: false, error: 'not_a_link_session' });
+    }
+    return await stamp();
+  }
 
   // Anon client: verifyOtp is a public auth operation, and using the service
   // role for it would skip the very check being performed.
@@ -121,16 +159,5 @@ Deno.serve(async (req: Request) => {
     return json(403, { ok: false, error: 'identity_mismatch' });
   }
 
-  const verifiedAt = new Date().toISOString();
-  const { error: stampErr } = await admin
-    .from('profiles')
-    .update({ email_verified_at: verifiedAt })
-    .eq('id', caller.id);
-
-  if (stampErr) {
-    console.error('[verify-email] stamp failed:', stampErr.message);
-    return json(500, { ok: false, error: 'stamp_failed' });
-  }
-
-  return json(200, { ok: true, email_verified_at: verifiedAt });
+  return await stamp();
 });
