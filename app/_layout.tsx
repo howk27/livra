@@ -195,35 +195,9 @@ export default function RootLayout() {
   const appStateRef = useRef(AppState.currentState);
   const previousPathnameRef = useRef<string | undefined>(undefined);
 
-  // M9 Phase 5A Task 6: the widget's refresh triggers derive from the queries.
-  const marksQuery = useMarksForUser();
-  const goalsQuery = useGoals();
-  const markCount = marksQuery.data?.length ?? 0;
-  // Founder 2026-07-23(b): the widget sat on a COMPLETED goal until the next
-  // foreground. This effect's deps only saw the FIRST active goal's title, so
-  // completing any other goal (status flip, no mark-count change) never
-  // triggered a snapshot rebuild. Watch the whole active set — a joined id
-  // string, so the memo stays a cheap string compare — and the completed goal
-  // drops out of the snapshot, advancing the widget queue.
-  const { activeGoalTitle, activeGoalIdsKey } = useMemo(() => {
-    const active = (goalsQuery.data ?? [])
-      .filter((g) => g.status === 'active')
-      .sort((a, b) => a.sort_index - b.sort_index);
-    return {
-      activeGoalTitle: active[0]?.title,
-      activeGoalIdsKey: active.map((g) => g.id).join(','),
-    };
-  }, [goalsQuery.data]);
-
   // Notices that the day ended while the app was open. Everything day-shaped
   // used to advance only on a return from the background.
   useDayRollover();
-
-  useEffect(() => {
-    if (initialized) {
-      void syncWidgetData();
-    }
-  }, [initialized, markCount, activeGoalTitle, activeGoalIdsKey]);
 
   useEffect(() => {
     if (!initialized) return;
@@ -573,6 +547,7 @@ export default function RootLayout() {
             <NotificationProvider>
               <View style={{ flex: 1 }}>
                 <RootNavigator />
+                <WidgetQuerySync />
                 <AuthPersistenceGate />
                 <ConfirmHost />
                 <ActionSheetHost />
@@ -583,6 +558,41 @@ export default function RootLayout() {
       </GestureHandlerRootView>
     </ErrorBoundary>
   );
+}
+
+// M9 Phase 5A Task 6 follow-up: `useMarksForUser`/`useGoals` are React Query
+// HOOKS, so they must render INSIDE PersistQueryClientProvider. RootLayout's
+// own body sits ABOVE the provider it mounts — calling them there crashed
+// EVERY boot with "No QueryClient set" (caught in the web viewer; jest never
+// renders RootLayout, so the suite stayed green).
+function WidgetQuerySync() {
+  const { initialized } = useAuth();
+  const marksQuery = useMarksForUser();
+  const goalsQuery = useGoals();
+  const markCount = marksQuery.data?.length ?? 0;
+  // Founder 2026-07-23(b): the widget sat on a COMPLETED goal until the next
+  // foreground. This effect's deps only saw the FIRST active goal's title, so
+  // completing any other goal (status flip, no mark-count change) never
+  // triggered a snapshot rebuild. Watch the whole active set — a joined id
+  // string, so the memo stays a cheap string compare — and the completed goal
+  // drops out of the snapshot, advancing the widget queue.
+  const { activeGoalTitle, activeGoalIdsKey } = useMemo(() => {
+    const active = (goalsQuery.data ?? [])
+      .filter((g) => g.status === 'active')
+      .sort((a, b) => a.sort_index - b.sort_index);
+    return {
+      activeGoalTitle: active[0]?.title,
+      activeGoalIdsKey: active.map((g) => g.id).join(','),
+    };
+  }, [goalsQuery.data]);
+
+  useEffect(() => {
+    if (initialized) {
+      void syncWidgetData();
+    }
+  }, [initialized, markCount, activeGoalTitle, activeGoalIdsKey]);
+
+  return null;
 }
 
 function RootNavigator() {
