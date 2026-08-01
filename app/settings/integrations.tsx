@@ -5,7 +5,7 @@ import { LivraHeader } from '../../components/ui/LivraHeader';
 import { SectionLabel } from '../../components/ui/SectionLabel';
 import { fonts, spacing, radius, shadow, themedColors, fontSize } from '../../theme/tokens';
 import { useEffectiveTheme, useUIStore } from '../../state/uiSlice';
-import { requestPermissions } from '../../lib/health/healthPermissions';
+import { requestPermissions, isHealthUnavailable } from '../../lib/health/healthPermissions';
 import type { HealthKitType } from '../../lib/health/healthTypes';
 import { useNotification } from '../../contexts/NotificationContext';
 import { logger } from '../../lib/utils/logger';
@@ -60,7 +60,18 @@ export default function IntegrationsScreen() {
       // so the next device report arrives with evidence attached.
       const reason = e instanceof Error ? e.message : String(e);
       logger.error('[Health] connect failed:', reason);
-      showError('Apple Health could not be reached. Try Settings → Privacy → Health.');
+      // QC-1061 item 6: the old single sentence sent the user to
+      // "Settings → Privacy → Health", a path that has not existed since iOS 16
+      // renamed it Privacy & Security — and it said the same thing whether the
+      // build lacked HealthKit entirely or the user simply declined. A missing
+      // module is not something tapping in Settings can answer, so it no longer
+      // asks anyone to go looking. The remaining case points at the Health app,
+      // where per-app read access actually lives.
+      showError(
+        isHealthUnavailable(e)
+          ? 'Apple Health isn’t available on this device.'
+          : 'Livra couldn’t reach Apple Health. Give it access in the Health app under Sharing → Apps.',
+      );
     } finally {
       setConnecting(false);
     }

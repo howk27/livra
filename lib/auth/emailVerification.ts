@@ -40,6 +40,33 @@ export function needsEmailVerification(
   return !isEmailProven({ email: user.email, emailVerifiedAt });
 }
 
+/**
+ * The stamp as a SCREEN knows it: `undefined` until the profile row has been
+ * read, then a timestamp or `null`.
+ */
+export type VerificationStamp = string | null | undefined;
+
+/**
+ * Should the verify banner render right now?
+ *
+ * UNKNOWN IS NOT UNVERIFIED (QC-1061). Both screens hold the stamp in state and
+ * fetch the profile in an effect, so the first render always has no stamp yet.
+ * `needsEmailVerification` reads that absence as "unproven" — correct for its own
+ * question, wrong for a banner — so the banner painted on mount and vanished when
+ * the row arrived, flashing on every navigation to a verified account's Settings.
+ *
+ * Anything the user can be nagged by has to wait for the answer, so this returns
+ * false while the stamp is unknown. A verified account therefore never sees the
+ * banner at all, and an unverified one sees it a beat later than before.
+ */
+export function shouldAskToVerify(
+  user: CredentialUser | null | undefined,
+  emailVerifiedAt: VerificationStamp,
+): boolean {
+  if (emailVerifiedAt === undefined) return false;
+  return needsEmailVerification(user, emailVerifiedAt);
+}
+
 /** GoTrue's own rejections when ASKING for a link (signInWithOtp). */
 export function mapSendCodeError(message?: string | null): string {
   const m = (message ?? '').toLowerCase();

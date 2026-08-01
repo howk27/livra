@@ -10,6 +10,7 @@ import {
   isEmailProven,
   mapSendCodeError,
   needsEmailVerification,
+  shouldAskToVerify,
 } from '../../lib/auth/emailVerification';
 import type { CredentialUser } from '../../lib/auth/accountCredentials';
 
@@ -52,6 +53,31 @@ describe('needsEmailVerification', () => {
   it('does not ask when signed out, or when the account has no address', () => {
     expect(needsEmailVerification(null, null)).toBe(false);
     expect(needsEmailVerification(user({ email: null }), null)).toBe(false);
+  });
+});
+
+describe('shouldAskToVerify — the banner rule (QC-1061: it flashed on navigation)', () => {
+  it('stays silent while the stamp is UNKNOWN', () => {
+    // The whole bug in one assertion. Both screens mount with no stamp and fetch
+    // the profile in an effect, so `undefined` is the state of every first render.
+    // `needsEmailVerification` answers true there — right for its own question,
+    // wrong for a banner — which painted it for a frame on every navigation.
+    expect(shouldAskToVerify(user(), undefined)).toBe(false);
+    expect(needsEmailVerification(user(), undefined)).toBe(true); // the trap, pinned
+  });
+
+  it('asks once the row is read and the stamp is genuinely absent', () => {
+    expect(shouldAskToVerify(user(), null)).toBe(true);
+  });
+
+  it('never asks a verified or relay account', () => {
+    expect(shouldAskToVerify(user(), '2026-07-25T10:00:00Z')).toBe(false);
+    expect(shouldAskToVerify(user({ email: 'x@privaterelay.appleid.com' }), null)).toBe(false);
+  });
+
+  it('never asks when signed out', () => {
+    expect(shouldAskToVerify(null, null)).toBe(false);
+    expect(shouldAskToVerify(null, undefined)).toBe(false);
   });
 });
 

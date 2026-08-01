@@ -44,7 +44,7 @@ import type { MarkRow } from '../../lib/data/types';
 import type { FrequencyKind } from '../../types';
 import { getSupabaseClient } from '../../lib/supabase';
 import { isApplePrivateRelayEmail } from '../../lib/auth/accountCredentials';
-import { needsEmailVerification } from '../../lib/auth/emailVerification';
+import { shouldAskToVerify, type VerificationStamp } from '../../lib/auth/emailVerification';
 import { queryClient } from '../../lib/data/queryClient';
 import { queryKeys } from '../../lib/data/queryKeys';
 import { flushOutbox, pendingOutboxEntries } from '../../lib/data/outbox';
@@ -161,7 +161,8 @@ export default function SettingsScreen() {
 
   const [profileImageUri, setProfileImageUri] = useState<string | null>(null);
   const [profileDisplayName, setProfileDisplayName] = useState<string | null>(null);
-  const [emailVerifiedAt, setEmailVerifiedAt] = useState<string | null>(null);
+  // `undefined` until the profile row is read — see shouldAskToVerify (QC-1061).
+  const [emailVerifiedAt, setEmailVerifiedAt] = useState<VerificationStamp>(undefined);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [deleteDialogVisible, setDeleteDialogVisible] = useState(false);
   const [pace, setPaceState] = useState<PaceLevel>('steady');
@@ -209,7 +210,7 @@ export default function SettingsScreen() {
   // The app's own proof, not auth.users.email_confirmed_at: this project
   // auto-confirms at signup, so that column is stamped for everyone and can
   // never drive a banner (verified live 2026-07-25).
-  const needsVerification = needsEmailVerification(user, emailVerifiedAt);
+  const needsVerification = shouldAskToVerify(user, emailVerifiedAt);
   const onPrivateRelay = isApplePrivateRelayEmail(user?.email);
 
   // --- Load profile display name ---

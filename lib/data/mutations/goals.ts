@@ -47,11 +47,23 @@ function invalid(reason: string): DataError {
   return { kind: 'unknown', message: 'The change could not be built from that input.' };
 }
 
-/** Both goal keys plus every mark view: archiving moves marks too. */
-function invalidateGoalScope(client: QueryClient, userId: string): void {
+/**
+ * Both goal keys plus every mark view: archiving moves marks too.
+ *
+ * CHECK-INS BELONG HERE (QC-1061 item 4). Deleting a goal soft-deletes the marks
+ * it leaves without a parent, and every check-in figure on screen — weekly
+ * progress, the day's count, the streak — is derived from `mark_events` scoped by
+ * the surviving marks. Refreshing goals and marks while leaving the check-in
+ * queries cached meant the numbers kept counting a mark the user had just
+ * deleted, until some unrelated refetch happened to correct them. Exported for
+ * the key-set test: the failure was an omission from this list, so the list is
+ * the thing worth pinning.
+ */
+export function invalidateGoalScope(client: QueryClient, userId: string): void {
   void client.invalidateQueries({ queryKey: queryKeys.goals(userId) });
   void client.invalidateQueries({ queryKey: queryKeys.marks(userId) });
   void client.invalidateQueries({ queryKey: queryKeys.marksByGoal(userId) });
+  void client.invalidateQueries({ queryKey: queryKeys.checkinsRoot(userId) });
 }
 
 // ─── Create ─────────────────────────────────────────────────────────────────

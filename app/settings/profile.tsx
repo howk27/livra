@@ -31,7 +31,8 @@ import {
   RESEND_COOLDOWN_SECONDS,
   describeLinkSent,
   describeResend,
-  needsEmailVerification,
+  shouldAskToVerify,
+  type VerificationStamp,
   resendSecondsLeft,
 } from '../../lib/auth/emailVerification';
 import {
@@ -98,7 +99,8 @@ export default function ProfileScreen() {
   // link-sent state appears only once a link is actually on its way (M9 P7:
   // verification completes on the website the link opens — the app just sends
   // and re-reads the stamp).
-  const [emailVerifiedAt, setEmailVerifiedAt] = useState<string | null>(null);
+  // `undefined` until the profile row is read — see shouldAskToVerify (QC-1061).
+  const [emailVerifiedAt, setEmailVerifiedAt] = useState<VerificationStamp>(undefined);
   const [verifyStage, setVerifyStage] = useState<'idle' | 'sending' | 'link' | 'checking'>('idle');
   const [codeSentAt, setCodeSentAt] = useState<number | null>(null);
   const [resendLeft, setResendLeft] = useState(0);
@@ -705,7 +707,7 @@ export default function ProfileScreen() {
                 so the address is proven here, afterwards. Nothing appears once
                 it is proven, and Apple relay addresses never see this at all —
                 the reward for verifying is that the app stops mentioning it. */}
-            {needsEmailVerification(user, emailVerifiedAt) && !emailEditing ? (
+            {shouldAskToVerify(user, emailVerifiedAt) && !emailEditing ? (
               <>
                 {verifyStage === 'link' || verifyStage === 'checking' ? (
                   <>
