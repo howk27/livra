@@ -14,7 +14,11 @@ jest.mock('@react-native-async-storage/async-storage', () =>
 import { useFeaturesStore } from '../../state/featuresSlice';
 import type { SkipToken } from '../../types';
 
-const thisMonth = new Date().toISOString().slice(0, 7);
+// LOCAL month, matching currentMonthISO — toISOString() is UTC and disagrees
+// with it for the hours around a month boundary (how the mixed-clock bug in
+// useSkipToken was caught in the first place).
+const now = new Date();
+const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
 const token = (markId: string, dayIso: string, createdAt: string): SkipToken =>
   ({

@@ -5,6 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { v4 as uuidv4 } from 'uuid';
 import type { SkipToken } from '../types';
 import { currentMonthISO } from '../lib/features';
+import { formatDate } from '../lib/date';
 import { logger } from '../lib/utils/logger';
 
 const TOKENS_KEY = '@livra_skip_tokens';
@@ -64,8 +65,14 @@ export const useFeaturesStore = create<FeaturesState>((set, get) => ({
     // lived only in the deleted local database; the ledger is already the
     // record of every spend, so counting this month's entries needs no mark.
     const month = currentMonthISO();
+    // Same clock on both sides: currentMonthISO is the LOCAL month (formatDate
+    // → date-fns local fields) while created_at is a UTC instant. Slicing the
+    // raw ISO put every spend near a month boundary in the wrong month — for
+    // the hours where local and UTC disagree, fresh spends stopped counting
+    // and the 2-per-month cap granted unlimited tokens (caught by the suite
+    // running inside that exact window on 2026-07-31 EDT).
     const usedThisMonth = skipTokens.filter(
-      (t) => t.mark_id === markId && t.created_at.slice(0, 7) === month,
+      (t) => t.mark_id === markId && formatDate(t.created_at).slice(0, 7) === month,
     ).length;
     const available = SKIP_TOKENS_PER_MONTH - usedThisMonth;
     if (available <= 0) return { success: false, message: 'No skip tokens remaining this month.' };
