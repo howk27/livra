@@ -8,6 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -194,7 +195,13 @@ export default function ResetPasswordCompleteScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
       >
-        <View style={styles.content}>
+        {/* T5: the column SCROLLS under the keyboard instead of compressing —
+            a fixed flex:1 column squashed on small devices ("cramped"). */}
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           <Animated.View entering={FadeIn.duration(400)} style={styles.header}>
             <TouchableOpacity
               onPress={() => router.replace('/auth/signin')}
@@ -315,7 +322,7 @@ export default function ResetPasswordCompleteScreen() {
               </TouchableOpacity>
             </Animated.View>
           )}
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -329,11 +336,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    flex: 1,
+    flexGrow: 1,
     paddingHorizontal: spacing.lg,
     // QC4-K: converge the back control's distance below the safe-area inset onto
     // the shared headerControl.topGap (was spacing.xl, 32).
     paddingTop: headerControl.topGap,
+    paddingBottom: spacing.xl,
   },
   header: {
     marginBottom: spacing.xl,
@@ -359,7 +367,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   form: {
-    flex: 1,
+    flexGrow: 1,
   },
   block: {
     gap: spacing.lg,
