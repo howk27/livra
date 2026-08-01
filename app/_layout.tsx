@@ -57,6 +57,7 @@ import { requestLivraLocalNotificationReschedule } from '../services/livraLocalN
 import { getSupabaseClient } from '../lib/supabase';
 import { initNetworkOnlineManager } from '../lib/data/connectivity';
 import { runCutoverOnce } from '../lib/data/cutover';
+import { markRecoveryPending } from '../lib/auth/recoveryPending';
 import { startOutbox } from '../lib/data/outbox';
 import {
   queryClient,
@@ -363,16 +364,18 @@ export default function RootLayout() {
           return;
         }
 
+        // T4 trace (founder device, 2026-07-31): the reset email's link is
+        // GoTrue /auth/v1/verify?token=…&type=recovery&redirect_to=
+        // livra://auth/reset-password — the app receives the CUSTOM SCHEME
+        // with the implicit-flow fragment (#access_token=…&refresh_token=…&
+        // type=recovery). Linking.parse puts 'auth' in hostname for a scheme
+        // URL, so the parsed.path checks alone never matched; the includes()
+        // covers scheme AND https shapes, which also retires the old
+        // isUniversalLink branch (redundant subset, never the live path).
         const isResetPassword =
           parsed.path === 'auth/reset-password' ||
           parsed.path === '/auth/reset-password' ||
-          incomingUrl.includes('/auth/reset-password') ||
           incomingUrl.includes('auth/reset-password');
-
-        const isUniversalLink =
-          (incomingUrl.startsWith('https://livralife.com/auth/reset-password') ||
-            incomingUrl.startsWith('https://www.livralife.com/auth/reset-password')) &&
-          incomingUrl.includes('livralife.com/auth/reset-password');
 
         // Widget deep links — handle before the password-reset guard
         const isWidgetHome = incomingUrl === 'livra://home' || incomingUrl.startsWith('livra://home?');
@@ -399,7 +402,7 @@ export default function RootLayout() {
           return;
         }
 
-        if (!isResetPassword && !isUniversalLink) {
+        if (!isResetPassword) {
           return;
         }
 
@@ -425,7 +428,7 @@ export default function RootLayout() {
           hasAccessToken: Boolean(accessToken),
           hasRefreshToken: Boolean(refreshToken),
           type,
-          urlFormat: isUniversalLink ? 'universal' : 'deep',
+          urlFormat: incomingUrl.startsWith('https') ? 'universal' : 'deep',
         });
 
         if (type === 'recovery' && accessToken && refreshToken && isLikelyAccessToken(accessToken)) {
@@ -439,6 +442,11 @@ export default function RootLayout() {
             router.replace('/auth/reset-password');
             return;
           }
+          // T4: a recovery session is a FULL session — leash it to the
+          // set-password screen (app/index.tsx enforces on every launch)
+          // until updateUser({ password }) succeeds. Armed only AFTER
+          // setSession, so a failed install never strands the flag.
+          await markRecoveryPending();
           router.replace('/auth/reset-password-complete');
           return;
         }

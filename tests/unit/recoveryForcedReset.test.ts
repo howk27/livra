@@ -1,0 +1,86 @@
+/**
+ * M9 Phase 6 T4 — a reset session cannot reach the tabs without setting a
+ * password.
+ *
+ * The traced defect: the reset link's recovery session was a FULL session,
+ * and app/index.tsx routed it into the tabs on relaunch — anyone holding the
+ * emailed link owned the account without ever proving a password. The leash:
+ * armed in _layout after setSession, enforced in index.tsx before any tab
+ * redirect, cleared only after updateUser({ password }) succeeds.
+ *
+ * Part behavior (the module), part comment-stripped wiring scan (the three
+ * enforcement points cannot silently unwire). Confirmed red pre-fix.
+ */
+
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import {
+  RECOVERY_PENDING_STORAGE_KEY,
+  markRecoveryPending,
+  clearRecoveryPending,
+  isRecoveryPending,
+  __resetRecoveryPendingForTests,
+} from '../../lib/auth/recoveryPending';
+import { ACCOUNT_SCOPED_STORAGE_KEYS } from '../../lib/purgeLocalUserData';
+
+const strip = (rel: string) =>
+  readFileSync(join(__dirname, '../../', rel), 'utf8')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
+
+beforeEach(async () => {
+  __resetRecoveryPendingForTests();
+  await AsyncStorage.clear();
+});
+
+describe('the leash itself', () => {
+  it('arms, persists, and survives an in-memory reset (relaunch shape)', async () => {
+    await markRecoveryPending();
+    __resetRecoveryPendingForTests();
+    expect(await isRecoveryPending()).toBe(true);
+  });
+
+  it('clears fully — memory and disk', async () => {
+    await markRecoveryPending();
+    await clearRecoveryPending();
+    __resetRecoveryPendingForTests();
+    expect(await isRecoveryPending()).toBe(false);
+    expect(await AsyncStorage.getItem(RECOVERY_PENDING_STORAGE_KEY)).toBeNull();
+  });
+
+  it('is not pending on a fresh device', async () => {
+    expect(await isRecoveryPending()).toBe(false);
+  });
+
+  it('dies with the session: the key is purge-registered', () => {
+    expect(ACCOUNT_SCOPED_STORAGE_KEYS).toContain(RECOVERY_PENDING_STORAGE_KEY);
+  });
+});
+
+describe('the three enforcement points stay wired', () => {
+  it('_layout arms the leash on the recovery setSession success path', () => {
+    const layout = strip('app/_layout.tsx');
+    expect(layout).toMatch(
+      /await markRecoveryPending\(\);?[\s\S]{0,200}router\.replace\(\s*'\/auth\/reset-password-complete'/,
+    );
+  });
+
+  it('index.tsx consults the leash BEFORE any tab redirect, and unknown blocks', () => {
+    const index = strip('app/index.tsx');
+    const gate = index.indexOf('recoveryPending');
+    const tabs = index.indexOf('/(tabs)/focus');
+    expect(gate).toBeGreaterThan(-1);
+    expect(tabs).toBeGreaterThan(gate);
+    expect(index).toMatch(/recoveryPending === null[\s\S]{0,120}LoadingScreen/);
+    expect(index).toMatch(/if \(recoveryPending\)[\s\S]{0,120}reset-password-complete/);
+  });
+
+  it('reset-password-complete clears the leash only on the update success path', () => {
+    const screen = strip('app/auth/reset-password-complete.tsx');
+    expect(screen).toMatch(
+      /if \(updateError\)[\s\S]{0,700}clearRecoveryPending\(\)[\s\S]{0,300}router\.replace\(\s*'\/auth\/signin'/,
+    );
+    expect((screen.match(/clearRecoveryPending\(\)/g) ?? []).length).toBe(1);
+  });
+});

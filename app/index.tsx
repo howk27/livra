@@ -7,6 +7,7 @@ import {
   ONBOARDING_COMPLETED_LEGACY_KEY,
 } from '../state/uiSlice';
 import { useAuth } from '../hooks/useAuth';
+import { isRecoveryPending } from '../lib/auth/recoveryPending';
 import { logger } from '../lib/utils/logger';
 import { LoadingScreen } from '../components/LoadingScreen';
 
@@ -21,6 +22,19 @@ export default function Index() {
   const isOnboarded = useUIStore((state) => state.isOnboarded);
   const uiStateLoaded = useUIStore((state) => state.uiStateLoaded);
   const [timeoutReached, setTimeoutReached] = useState(false);
+  // null = not read yet; the recovery gate below refuses to route past it
+  // while unknown, so a relaunch mid-reset cannot slip into the tabs.
+  const [recoveryPending, setRecoveryPending] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    isRecoveryPending().then((value) => {
+      if (!cancelled) setRecoveryPending(value);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,6 +96,17 @@ export default function Index() {
 
   if (!isAuthenticated) {
     return <Redirect href="/auth/signin" />;
+  }
+
+  // T4: a session installed by a password-reset link may not reach the app
+  // until a new password is set — anyone holding the emailed link IS this
+  // session. The leash is armed in _layout's deep-link handler and cleared
+  // only by a successful updateUser({ password }).
+  if (recoveryPending === null) {
+    return <LoadingScreen />;
+  }
+  if (recoveryPending) {
+    return <Redirect href="/auth/reset-password-complete" />;
   }
 
   if (!isOnboarded) {

@@ -52,6 +52,8 @@ export const ACCOUNT_SCOPED_STORAGE_KEYS = [
   '@livra_consistency_history',
   '@livra_longest_runs_v1',
   '@livra_skip_tokens',
+  // T4: the recovery-session leash dies with the session it leashes.
+  'livra-recovery-pending-v1',
   'identity_milestones_v1',
   'livra_momentum_banner_dismissed_v1',
   'livra.pace.v1',

@@ -24,6 +24,7 @@ import {
 } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { getSupabaseClient } from '../../lib/supabase';
+import { clearRecoveryPending } from '../../lib/auth/recoveryPending';
 import { logger } from '../../lib/utils/logger';
 import { useNotification } from '../../contexts/NotificationContext';
 import { confirm } from '../../components/ui/overlays';
@@ -161,6 +162,9 @@ export default function ResetPasswordCompleteScreen() {
         throw updateError;
       }
 
+      // T4: the password is proven — take the leash off BEFORE navigating, or
+      // app/index.tsx bounces the user straight back to this screen.
+      await clearRecoveryPending();
       showSuccess('Password updated. You can now sign in with your new password.');
       router.replace('/auth/signin');
     } catch (err: unknown) {
