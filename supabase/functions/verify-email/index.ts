@@ -39,7 +39,11 @@
 // Deploy:  supabase functions deploy verify-email
 // Secrets: SUPABASE_URL, SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY are
 //          injected automatically.
-// STATUS:  v1 (code path only) ACTIVE since 2026-07-25; v2 adds the link path.
+// STATUS:  DEPLOYED — v2 (link path) went live 2026-07-31 ahead of the website
+//          page, which is SAFE: the link path has no caller until the founder
+//          both merges the /verify-email page and keeps the default Magic Link
+//          template; build-60 clients ride the unchanged code path meanwhile.
+//          v3 narrows CORS. Verify any deploy with `supabase functions list`.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { evaluateLinkSession, decodeJwtPayload } from './linkSessionGate.ts';
