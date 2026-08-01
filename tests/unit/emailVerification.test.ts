@@ -1,17 +1,15 @@
 // Soft email verification (founder call 2026-07-25): let people in, prove the
 // address afterwards. These are the decisions the screens delegate.
+// M9 P7 (D1): the typed code is GONE — its helpers and their tests died with
+// it; the link-sent copy claims are ported below.
 import {
   RESEND_COOLDOWN_SECONDS,
-  VERIFICATION_CODE_LENGTH,
-  describeCodeSent,
+  describeLinkSent,
   describeResend,
   resendSecondsLeft,
   isEmailProven,
   mapSendCodeError,
-  mapVerifyEmailError,
   needsEmailVerification,
-  normalizeVerificationCode,
-  validateVerificationCode,
 } from '../../lib/auth/emailVerification';
 import type { CredentialUser } from '../../lib/auth/accountCredentials';
 
@@ -57,63 +55,30 @@ describe('needsEmailVerification', () => {
   });
 });
 
-describe('the code itself', () => {
-  it('keeps digits only, from however the code was pasted', () => {
-    expect(normalizeVerificationCode(' 12 34-56 ')).toBe('123456');
-  });
-
-  it('never grows past the code length', () => {
-    expect(normalizeVerificationCode('1234567890')).toHaveLength(VERIFICATION_CODE_LENGTH);
-  });
-
-  it('asks for the code before anything is typed', () => {
-    expect(validateVerificationCode('')).toBe('Enter the code from your email.');
-  });
-
-  it('names the length while the code is short', () => {
-    expect(validateVerificationCode('123')).toContain(String(VERIFICATION_CODE_LENGTH));
-  });
-
-  it('passes a full code, spaced or not', () => {
-    expect(validateVerificationCode('123456')).toBeNull();
-    expect(validateVerificationCode('12 34 56')).toBeNull();
-  });
-});
-
 describe('failure copy', () => {
-  it('distinguishes a wrong code from an expired one', () => {
-    expect(mapVerifyEmailError('invalid_code')).not.toBe(mapVerifyEmailError('expired_code'));
-    expect(mapVerifyEmailError('expired_code')).toContain('expired');
-  });
-
-  it('says the code worked when only the save failed', () => {
-    expect(mapVerifyEmailError('stamp_failed')).toContain('right');
-  });
-
-  it('reads an unknown server code as transient rather than leaking it', () => {
-    const copy = mapVerifyEmailError('some_new_thing');
-    expect(copy).toBe(mapVerifyEmailError('verify_failed'));
-    expect(copy).not.toContain('some_new_thing');
-  });
-
-  it('recognises the rate limit when asking for a code', () => {
+  it('recognises the rate limit when asking for a link', () => {
     expect(mapSendCodeError('For security purposes, you can only request this after 51 seconds'))
       .toContain('Wait a minute');
+  });
+
+  it('never leaks the raw server message', () => {
+    const copy = mapSendCodeError('pg_boss saturated: worker 7 dead');
+    expect(copy).not.toContain('pg_boss');
   });
 });
 
 describe('confirmation copy', () => {
-  it('names the address the code went to', () => {
-    expect(describeCodeSent('dei@example.com')).toContain('dei@example.com');
+  it('names the address the link went to', () => {
+    expect(describeLinkSent('dei@example.com')).toContain('dei@example.com');
   });
 
   it('still says something useful with no address to name', () => {
-    expect(describeCodeSent(null)).toContain('Code sent');
+    expect(describeLinkSent(null)).toContain('verification link');
   });
 
   it('uses the middle dot separator, never a dash', () => {
-    expect(describeCodeSent('dei@example.com')).toContain('·');
-    expect(describeCodeSent('dei@example.com')).not.toMatch(/[—–]|\s-\s/);
+    expect(describeLinkSent('dei@example.com')).toContain('·');
+    expect(describeLinkSent('dei@example.com')).not.toMatch(/[—–]|\s-\s/);
   });
 });
 

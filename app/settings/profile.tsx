@@ -27,19 +27,16 @@ import { logger } from '../../lib/utils/logger';
 import { useNotification } from '../../contexts/NotificationContext';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import {
+  LINK_NOT_VERIFIED_YET_COPY,
   RESEND_COOLDOWN_SECONDS,
-  describeCodeSent,
+  describeLinkSent,
   describeResend,
   needsEmailVerification,
   resendSecondsLeft,
-  validateVerificationCode,
-  normalizeVerificationCode,
-  VERIFICATION_CODE_LENGTH,
 } from '../../lib/auth/emailVerification';
 import {
   fetchEmailVerifiedAt,
-  sendVerificationCode,
-  submitVerificationCode,
+  sendVerificationLink,
 } from '../../lib/auth/emailVerificationService';
 import {
   describeEmailChangeOutcome,
@@ -97,13 +94,14 @@ export default function ProfileScreen() {
   const [emailPassword, setEmailPassword] = useState('');
 
   // Soft email verification (founder 2026-07-25): the door is never blocked, so
-  // proving the address happens here, afterwards. 'idle' shows the ask; the code
-  // field appears only once a code is actually on its way.
+  // proving the address happens here, afterwards. 'idle' shows the ask; the
+  // link-sent state appears only once a link is actually on its way (M9 P7:
+  // verification completes on the website the link opens — the app just sends
+  // and re-reads the stamp).
   const [emailVerifiedAt, setEmailVerifiedAt] = useState<string | null>(null);
-  const [verifyStage, setVerifyStage] = useState<'idle' | 'sending' | 'code' | 'verifying'>('idle');
+  const [verifyStage, setVerifyStage] = useState<'idle' | 'sending' | 'link' | 'checking'>('idle');
   const [codeSentAt, setCodeSentAt] = useState<number | null>(null);
   const [resendLeft, setResendLeft] = useState(0);
-  const [verifyCode, setVerifyCode] = useState('');
   const [verifyError, setVerifyError] = useState<string | null>(null);
 
   const [currentPassword, setCurrentPassword] = useState('');
@@ -253,14 +251,16 @@ export default function ProfileScreen() {
   };
 
   // ── Soft email verification ──────────────────────────────────────────────
-  // Asking for the code is a plain GoTrue call (it rate-limits); declaring
-  // success is not ours to do. The verify-email edge function checks the code
-  // and stamps profiles.email_verified_at, which the client cannot write.
-  const handleSendVerificationCode = useCallback(async () => {
-    if (!userEmail || verifyStage === 'sending' || verifyStage === 'verifying') return;
+  // Asking for the link is a plain GoTrue call (it rate-limits); declaring
+  // success is not ours to do. The website page the link opens hands the
+  // link-minted session to the verify-email edge function, which stamps
+  // profiles.email_verified_at — a column the client cannot write. Here the
+  // app only sends, waits, and re-reads.
+  const handleSendVerificationLink = useCallback(async () => {
+    if (!userEmail || verifyStage === 'sending' || verifyStage === 'checking') return;
     setVerifyError(null);
     setVerifyStage('sending');
-    const result = await sendVerificationCode(supabase, userEmail);
+    const result = await sendVerificationLink(supabase, userEmail);
     if (!result.ok) {
       setVerifyError(result.message);
       setVerifyStage('idle');
@@ -271,7 +271,7 @@ export default function ProfileScreen() {
     // the full cooldown is exactly what it is worth at this instant anyway.
     setCodeSentAt(Date.now());
     setResendLeft(RESEND_COOLDOWN_SECONDS);
-    setVerifyStage('code');
+    setVerifyStage('link');
   }, [userEmail, verifyStage, supabase]);
 
   // Resend cooldown. GoTrue rate-limits the endpoint either way; this exists so
@@ -285,34 +285,24 @@ export default function ProfileScreen() {
     return () => clearInterval(id);
   }, [codeSentAt]);
 
-  const handleSubmitVerificationCode = useCallback(async () => {
-    if (verifyStage === 'verifying') return;
-    const problem = validateVerificationCode(verifyCode);
-    if (problem) {
-      setVerifyError(problem);
-      return;
-    }
+  // "I opened the link" — re-read the stamp the website flow wrote. Only the
+  // row can say yes; the app never declares success on its own.
+  const handleCheckVerified = useCallback(async () => {
+    if (verifyStage === 'checking' || !user?.id) return;
     setVerifyError(null);
-    setVerifyStage('verifying');
-    const result = await submitVerificationCode(supabase, verifyCode);
-    if (!result.ok) {
-      setVerifyError(result.message);
-      setVerifyStage('code');
+    setVerifyStage('checking');
+    const stamped = await fetchEmailVerifiedAt(supabase, user.id);
+    if (stamped) {
+      setEmailVerifiedAt(stamped);
+      setVerifyStage('idle');
+      showSuccess('Your email is verified.');
       return;
     }
-    // Trust the server's own timestamp, then confirm from the row: the banner on
-    // Settings reads the same column on its next visit.
-    setEmailVerifiedAt(result.verifiedAt);
-    setVerifyCode('');
-    setVerifyStage('idle');
-    showSuccess('Your email is verified.');
-    if (user?.id) {
-      const stamped = await fetchEmailVerifiedAt(supabase, user.id);
-      if (stamped) setEmailVerifiedAt(stamped);
-    }
+    setVerifyError(LINK_NOT_VERIFIED_YET_COPY);
+    setVerifyStage('link');
     // showSuccess is a stable context callback, deliberately omitted: listing it
     // makes the React compiler drop this memo (same note as pickImage).
-  }, [verifyCode, verifyStage, supabase, user?.id]);
+  }, [verifyStage, supabase, user?.id]);
 
   const handleEmailChange = useCallback(async () => {
     if (savingEmail) return;
@@ -410,7 +400,6 @@ export default function ProfileScreen() {
       if (outcome.status === 'applied') {
         setEmailVerifiedAt(null);
         setVerifyStage('idle');
-        setVerifyCode('');
         setVerifyError(null);
       }
       // Submit succeeded — collapse back to the calm on-file view. The outcome
@@ -718,48 +707,28 @@ export default function ProfileScreen() {
                 the reward for verifying is that the app stops mentioning it. */}
             {needsEmailVerification(user, emailVerifiedAt) && !emailEditing ? (
               <>
-                {verifyStage === 'code' || verifyStage === 'verifying' ? (
+                {verifyStage === 'link' || verifyStage === 'checking' ? (
                   <>
-                    <Text style={styles.note}>{describeCodeSent(userEmail)}</Text>
-                    <TextInput
-                      style={[styles.input, styles.stackedInput]}
-                      value={verifyCode}
-                      onChangeText={(t) => {
-                        setVerifyCode(normalizeVerificationCode(t));
-                        setVerifyError(null);
-                      }}
-                      placeholder={`${VERIFICATION_CODE_LENGTH}-digit code`}
-                      placeholderTextColor={c.inkMuted}
-                      keyboardType="number-pad"
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      textContentType="oneTimeCode"
-                      autoComplete="one-time-code"
-                      maxLength={VERIFICATION_CODE_LENGTH}
-                      editable={verifyStage !== 'verifying'}
-                      autoFocus
-                      returnKeyType="done"
-                      onSubmitEditing={() => { void handleSubmitVerificationCode(); }}
-                    />
+                    <Text style={styles.note}>{describeLinkSent(userEmail)}</Text>
                     {verifyError ? <Text style={styles.errorText}>{verifyError}</Text> : null}
                     <View style={styles.actionRow}>
                       <PillButton
                         variant="ghost"
-                        label={verifyStage === 'verifying' ? 'Checking…' : 'Verify email'}
-                        onPress={() => { void handleSubmitVerificationCode(); }}
-                        disabled={verifyStage === 'verifying' || !verifyCode.trim()}
+                        label={verifyStage === 'checking' ? 'Checking…' : 'I opened the link'}
+                        onPress={() => { void handleCheckVerified(); }}
+                        disabled={verifyStage === 'checking'}
                         style={styles.actionFlex}
                       />
                       <TouchableOpacity
-                        onPress={() => { void handleSendVerificationCode(); }}
+                        onPress={() => { void handleSendVerificationLink(); }}
                         style={styles.resendBtn}
-                        disabled={verifyStage === 'verifying' || resendLeft > 0}
+                        disabled={verifyStage === 'checking' || resendLeft > 0}
                         accessibilityRole="button"
                         accessibilityState={{ disabled: resendLeft > 0 }}
                         accessibilityLabel={
                           resendLeft > 0
-                            ? `Send a new code, available in ${resendLeft} seconds`
-                            : 'Send a new code'
+                            ? `Send a new link, available in ${resendLeft} seconds`
+                            : 'Send a new link'
                         }
                       >
                         <Text style={[styles.cancelText, resendLeft > 0 && styles.resendWaiting]}>
@@ -777,8 +746,8 @@ export default function ProfileScreen() {
                     <View style={styles.actionRow}>
                       <PillButton
                         variant="ghost"
-                        label={verifyStage === 'sending' ? 'Sending…' : 'Send me a code'}
-                        onPress={() => { void handleSendVerificationCode(); }}
+                        label={verifyStage === 'sending' ? 'Sending…' : 'Send me a link'}
+                        onPress={() => { void handleSendVerificationLink(); }}
                         disabled={verifyStage === 'sending' || !userEmail}
                         style={styles.actionFlex}
                       />

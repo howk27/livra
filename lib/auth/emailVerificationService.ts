@@ -1,14 +1,20 @@
-// The two round trips soft email verification needs, in one place so the
+// What soft email verification needs from Supabase, in one place so the
 // settings banner and Edit Profile cannot drift apart. Decisions and copy live
 // in ./emailVerification (pure); this file only talks to Supabase.
 //
-// Asking for the code is a plain client call (GoTrue rate-limits it). Declaring
-// success is NOT: the profiles guard trigger blocks the client from writing
-// email_verified_at, and the verify-email edge function is the only writer, so
-// the stamp always follows a code GoTrue actually accepted.
+// M9 P7 (D1): the app SENDS the link and READS the signal — it never declares
+// success. Verification completes on the website the link opens
+// (livralife.com/verify-email calls the verify-email edge function with the
+// session GoTrue mints by consuming the link). The profiles guard trigger
+// blocks the client from writing email_verified_at either way.
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '../utils/logger';
-import { mapSendCodeError, mapVerifyEmailError, normalizeVerificationCode } from './emailVerification';
+import { mapSendCodeError } from './emailVerification';
+
+/** Where the emailed {{ .ConfirmationURL }} lands after GoTrue consumes the
+ * token. Must be registered in Supabase → Auth → URL Configuration →
+ * Redirect URLs, or GoTrue silently falls back to the Site URL. */
+export const VERIFY_EMAIL_LANDING_URL = 'https://www.livralife.com/verify-email';
 
 export type VerificationResult =
   | { ok: true; verifiedAt: string | null }
@@ -38,18 +44,21 @@ export async function fetchEmailVerifiedAt(
 }
 
 /**
- * Mails a six-digit code to the account's own address. `shouldCreateUser: false`
- * matters: this is a proof-of-inbox for someone already signed in, and must
- * never quietly mint an account for a typo'd address.
+ * Mails a verification link to the account's own address.
+ * `shouldCreateUser: false` matters: this is a proof-of-inbox for someone
+ * already signed in, and must never quietly mint an account for a typo'd
+ * address. `emailRedirectTo` is what turns the default Magic Link template's
+ * {{ .ConfirmationURL }} into a landing on our website — the {{ .Token }}
+ * template gate is retired by this redesign.
  */
-export async function sendVerificationCode(
+export async function sendVerificationLink(
   supabase: SupabaseClient,
   email: string,
 ): Promise<VerificationResult> {
   try {
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { shouldCreateUser: false },
+      options: { shouldCreateUser: false, emailRedirectTo: VERIFY_EMAIL_LANDING_URL },
     });
     if (error) return { ok: false, message: mapSendCodeError(error.message) };
     return { ok: true, verifiedAt: null };
@@ -59,37 +68,6 @@ export async function sendVerificationCode(
   }
 }
 
-/**
- * Hands the code to the edge function, which verifies it and stamps the column.
- * The address is never sent: the function reads it off the caller's own auth
- * record, so a code cannot be redeemed against somebody else's address.
- */
-export async function submitVerificationCode(
-  supabase: SupabaseClient,
-  rawCode: string,
-): Promise<VerificationResult> {
-  const token = normalizeVerificationCode(rawCode);
-  try {
-    const { data, error } = await supabase.functions.invoke('verify-email', {
-      method: 'POST',
-      body: { token },
-    });
-    const payload = data as { ok?: boolean; error?: string; email_verified_at?: string } | null;
-
-    if (payload?.ok === true) {
-      return { ok: true, verifiedAt: payload.email_verified_at ?? new Date().toISOString() };
-    }
-    // supabase-js leaves `data` null on a non-2xx (the FunctionsHttpError trap
-    // that made every IAP rejection read transient, lib/iap/validationOutcome.ts),
-    // so an error with no payload is classified from the transport, not assumed.
-    if (payload?.error) return { ok: false, message: mapVerifyEmailError(payload.error) };
-    if (error) {
-      logger.warn('[emailVerification] verify rejected:', error.message);
-      return { ok: false, message: mapVerifyEmailError('verify_failed') };
-    }
-    return { ok: false, message: mapVerifyEmailError('verify_failed') };
-  } catch (err) {
-    logger.error('[emailVerification] verify threw:', err);
-    return { ok: false, message: mapVerifyEmailError('network') };
-  }
-}
+// submitVerificationCode is GONE (M9 P7): the app no longer redeems anything.
+// The edge function keeps its code path alive for build-60 clients, whose own
+// bundled copy of the old service still calls it.

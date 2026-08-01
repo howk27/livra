@@ -9,9 +9,6 @@
 // guard trigger pins it for the two PostgREST roles).
 import { isApplePrivateRelayEmail, type CredentialUser } from './accountCredentials';
 
-/** GoTrue's email OTP is six digits. */
-export const VERIFICATION_CODE_LENGTH = 6;
-
 export type VerificationSubject = {
   email?: string | null;
   /** profiles.email_verified_at, ISO string or null. */
@@ -43,73 +40,29 @@ export function needsEmailVerification(
   return !isEmailProven({ email: user.email, emailVerifiedAt });
 }
 
-/** Digits only: people paste codes with spaces, and mail clients add them. */
-export function normalizeVerificationCode(raw: string): string {
-  return raw.replace(/\D/g, '').slice(0, VERIFICATION_CODE_LENGTH);
-}
-
-/** Null when the code is worth sending; otherwise the sentence to show. */
-export function validateVerificationCode(raw: string): string | null {
-  const code = normalizeVerificationCode(raw);
-  if (code.length === 0) return 'Enter the code from your email.';
-  if (code.length < VERIFICATION_CODE_LENGTH) {
-    return `The code is ${VERIFICATION_CODE_LENGTH} digits.`;
-  }
-  return null;
-}
-
-/** The error codes verify-email returns, plus the transport failures around it. */
-export type VerifyEmailFailure =
-  | 'invalid_code'
-  | 'expired_code'
-  | 'verify_failed'
-  | 'identity_mismatch'
-  | 'no_email_on_account'
-  | 'missing_token'
-  | 'bad_request'
-  | 'unauthenticated'
-  | 'server_misconfigured'
-  | 'stamp_failed'
-  | 'network';
-
-const FAILURE_COPY: Record<VerifyEmailFailure, string> = {
-  invalid_code: 'That code did not match. Check the email and try again.',
-  expired_code: 'That code has expired. Send a new one.',
-  verify_failed: 'We could not check that code. Try again in a moment.',
-  identity_mismatch: 'That code belongs to a different account.',
-  no_email_on_account: 'This account has no email address to verify.',
-  missing_token: 'Enter the code from your email.',
-  bad_request: 'We could not check that code. Try again in a moment.',
-  unauthenticated: 'Sign in again, then verify your email.',
-  server_misconfigured: 'Verification is unavailable right now. Try again later.',
-  stamp_failed: 'Your code was right, but saving it failed. Try again.',
-  network: 'No connection. Try again once you are back online.',
-};
-
-/** Never leaks a raw server string to the user; unknown codes read as transient. */
-export function mapVerifyEmailError(code?: string | null): string {
-  if (code && code in FAILURE_COPY) return FAILURE_COPY[code as VerifyEmailFailure];
-  return FAILURE_COPY.verify_failed;
-}
-
-/** GoTrue's own rejections when ASKING for a code (signInWithOtp). */
+/** GoTrue's own rejections when ASKING for a link (signInWithOtp). */
 export function mapSendCodeError(message?: string | null): string {
   const m = (message ?? '').toLowerCase();
   if (m.includes('rate') || m.includes('too many') || m.includes('security purposes')) {
-    return 'Too many requests. Wait a minute, then ask for a new code.';
+    return 'Too many requests. Wait a minute, then ask for a new link.';
   }
   if (m.includes('network') || m.includes('fetch')) {
     return 'No connection. Try again once you are back online.';
   }
-  return 'We could not send the code. Try again in a moment.';
+  return 'We could not send the link. Try again in a moment.';
 }
 
-/** What the screen says once a code is on its way. */
-export function describeCodeSent(email?: string | null): string {
+/** What the screen says once a link is on its way (M9 P7, D1: the typed code
+ * is gone — verification completes on the website the link opens). */
+export function describeLinkSent(email?: string | null): string {
   return email
-    ? `Code sent to ${email} · it expires in about an hour.`
-    : 'Code sent · it expires in about an hour.';
+    ? `We emailed a verification link to ${email} · open it, then come back here.`
+    : 'We emailed you a verification link · open it, then come back here.';
 }
+
+/** What the screen says when a status check finds the stamp not there yet. */
+export const LINK_NOT_VERIFIED_YET_COPY =
+  'Not verified yet. Open the link in your email first — it can take a minute to arrive.';
 
 /**
  * How long "Send again" stays quiet after a code goes out.
