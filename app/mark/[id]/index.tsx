@@ -255,8 +255,9 @@ function MarkDetailContent() {
   const undoInFlight = useRef(false);
   // M9 P6 T1: armed by handleDeleteMark so the not-found guard below never
   // paints over the user's own delete (the archive mutation drops the row from
-  // the cache before dismissTo lands).
-  const deletingRef = useRef(false);
+  // the cache before dismissTo lands). State, not a ref — the guard reads it
+  // during render, where a ref read violates the rules of React.
+  const [isDeleting, setIsDeleting] = useState(false);
   const appDateKey = useAppDateStore(selectAppDateKey);
 
   const [healthModalVisible, setHealthModalVisible] = useState(false);
@@ -397,7 +398,7 @@ function MarkDetailContent() {
     // and dismissTo is about to unmount us — hold the frame instead of painting
     // "Mark not found". The guard itself stays: a genuinely missing mark
     // (bad deep link, another device's delete) must still land here.
-    if (deletingRef.current) return <LoadingScreen />;
+    if (isDeleting) return <LoadingScreen />;
     return (
       <SafeAreaView style={[styles.safeArea, { backgroundColor: c.linen }]}>
         <View style={styles.centered}>
@@ -499,14 +500,14 @@ function MarkDetailContent() {
     });
     if (!sure) return;
     try {
-      deletingRef.current = true;
+      setIsDeleting(true);
       await archiveMark.mutateAsync(id);
       // This route is presentation:'modal' — router.replace navigates UNDER it
       // and leaves the modal up; dismissTo (POP_TO) actually dismisses, and
       // still lands on Focus when the modal was deep-linked with no history.
       router.dismissTo('/(tabs)/focus' as any);
     } catch (error) {
-      deletingRef.current = false;
+      setIsDeleting(false);
       logger.error('delete mark failed:', error);
       showError(caughtErrorCopy(error));
     }
@@ -744,6 +745,36 @@ function MarkDetailContent() {
           {/* Per-mark notes moved to the goal-level journal (QC3-D). The daily
               note UI was removed here; reflection now lives on the goal detail
               and its full journal screen. */}
+
+          {/* Apple Health — the per-mark automation binding. iOS only: the
+              permission bridge is react-native-health. Connect is Pro-gated
+              inside handleConnectHealth (paywall push). */}
+          {Platform.OS === 'ios' && (
+            <View style={styles.settingCard}>
+              <View style={styles.settingRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.settingLabel}>Apple Health</Text>
+                  <Text style={styles.settingMeta}>
+                    {healthBinding
+                      ? `Logging from ${healthBinding.type.charAt(0).toUpperCase() + healthBinding.type.slice(1)}`
+                      : 'Log this mark automatically.'}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.settingActionBox}
+                  onPress={() => void (healthBinding ? handleDisconnectHealth() : handleConnectHealth())}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    healthBinding ? 'Disconnect Apple Health' : 'Connect Apple Health'
+                  }
+                >
+                  <Text style={styles.settingAction}>
+                    {healthBinding ? 'Disconnect' : 'Connect'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
 
           {/* Wake-up alarm (sleep mark) */}
           {healthBinding?.type === 'sleep' && (
@@ -1069,6 +1100,14 @@ function createStyles(c: ReturnType<typeof themedColors>) {
   settingLabel: { fontSize: fontSize.md, fontFamily: fonts.sansMedium, color: c.inkDark },
   settingMeta: { fontSize: fontSize.sm, fontFamily: fonts.sans, color: c.inkMuted, marginTop: 2 },
   settingAction: { fontSize: fontSize[13], fontFamily: fonts.sansMedium, color: c.accent },
+  // A real ≥44pt touch box — a bare text touchable is the 20-24pt trap the
+  // 2026-07-25 sweep cleared; hitSlop clips at the parent and is banned.
+  settingActionBox: {
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'flex-end',
+    paddingLeft: spacing.sm,
+  },
 
   // Modal
   modalOverlay: {

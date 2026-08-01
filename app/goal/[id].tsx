@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import type { ComponentType } from 'react';
 import {
   View,
@@ -1020,8 +1020,9 @@ export default function GoalDetailScreen() {
   const archiveGoal = useArchiveGoalMutation(userId ?? '');
   // M9 P6 T1: armed before the archive mutation so the not-found guard never
   // flashes "Goal not found" in the window between the cache dropping the row
-  // and router.back() dismissing this modal.
-  const deletingRef = useRef(false);
+  // and router.back() dismissing this modal. State, not a ref — the guard
+  // reads it during render, where a ref read violates the rules of React.
+  const [isDeleting, setIsDeleting] = useState(false);
   const linkMark = useLinkMarkMutation(userId ?? '');
   const unlinkMark = useUnlinkMarkMutation(userId ?? '');
   const { completeGoal } = useCompleteGoal(userId ?? '');
@@ -1263,7 +1264,7 @@ export default function GoalDetailScreen() {
     // A delete this screen initiated — the cache dropped the row by design and
     // router.back() is about to dismiss us; hold the frame instead of flashing
     // the guard. A genuinely missing goal must still land below.
-    if (deletingRef.current) {
+    if (isDeleting) {
       return (
         <SafeAreaView style={{ flex: 1, backgroundColor: c.linen, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator color={c.inkMuted} />
@@ -1389,12 +1390,12 @@ export default function GoalDetailScreen() {
             void confirmRemoveGoal(
               goal.title,
               () => {
-                deletingRef.current = true;
+                setIsDeleting(true);
                 return archiveGoal.mutateAsync(id!);
               },
               () => router.back(),
               (message) => {
-                deletingRef.current = false;
+                setIsDeleting(false);
                 showError(message);
               },
             )
