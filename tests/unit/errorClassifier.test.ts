@@ -70,6 +70,30 @@ describe('classification — every shape measured on this project', () => {
       Object.assign(new TypeError('Network request failed'), {}),
       'network',
     ],
+    // THE SHAPE THAT ACTUALLY REACHES THIS PATH. Every write goes through
+    // `const { error } = await client.from(...).insert(...)`, and supabase-js
+    // DESTRUCTURES a failed fetch into a PostgrestError-shaped PLAIN OBJECT with an
+    // empty `code` — it never rethrows the TypeError. The case above passes an
+    // instance the write path can never produce, so it proved nothing about offline
+    // behaviour. Misclassified as `unknown` this is dropped from the outbox
+    // (OUTBOX_KEEP_ON_FAILURE.unknown === false) and the check-in is gone forever.
+    [
+      'an offline write, in the shape supabase-js DESTRUCTURES it, is `network`',
+      pgError({ message: 'TypeError: Network request failed' }),
+      'network',
+    ],
+    [
+      'the web/Expo spelling of the same failure is `network`',
+      pgError({ message: 'TypeError: Failed to fetch' }),
+      'network',
+    ],
+    // The guard on the fix: a code means PostgREST ANSWERED, so it is not a
+    // transport failure however the message reads.
+    [
+      'a coded error whose message mentions fetch is still classified by its code',
+      pgError({ code: 'PGRST205', message: 'could not fetch relation' }),
+      'server',
+    ],
     ['an unrecognised value is `unknown`, never a guess', { weird: true }, 'unknown'],
   ];
 

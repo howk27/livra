@@ -58,9 +58,15 @@ function install(respond: (write: RecordedWrite) => QueryResult) {
 const ok: QueryResult = { data: null, error: null };
 const refusedRls: QueryResult = { data: null, error: { code: '42501', message: 'permission denied' } };
 const alreadyThere: QueryResult = { data: null, error: { code: '23505', message: 'duplicate key' } };
+// THE SHAPE SUPABASE-JS ACTUALLY PUTS IN `error`. It catches the fetch TypeError
+// and hands back a PostgrestError-shaped plain object with an empty `code` — it
+// never rethrows the instance. This fixture used to be `new TypeError(...)`, which
+// no `.insert()` can produce, so the "keeps a transiently-failed entry" test below
+// passed while production DROPPED every offline check-in (classified `unknown`).
+// Every other fixture here is already a plain object; this one was the outlier.
 const networkDown: QueryResult = {
   data: null,
-  error: new TypeError('Network request failed'),
+  error: { code: '', message: 'TypeError: Network request failed', details: '', hint: '' },
 };
 const sessionGone: QueryResult = { data: null, error: { code: 'PGRST301', message: 'JWT expired' } };
 

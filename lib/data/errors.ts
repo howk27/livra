@@ -137,13 +137,32 @@ function errorDetail(raw: unknown): string {
   return parts.join(' ');
 }
 
+/**
+ * A transport failure — the request never reached PostgREST.
+ *
+ * TWO SHAPES, and the second is the one that matters. `supabase-js` never rethrows
+ * the fetch `TypeError`: every call here is `const { error } = await client.from(…)`,
+ * and a failed fetch is DESTRUCTURED into a PostgrestError-shaped PLAIN OBJECT
+ * (`{ message: 'TypeError: Network request failed', details, hint, code: '' }`).
+ * An `instanceof TypeError` gate therefore never fired on the write path, so every
+ * offline write classified `unknown` — and `unknown` is dropped from the outbox
+ * (`OUTBOX_KEEP_ON_FAILURE`), which deleted queued check-ins instead of retrying
+ * them. The test that "covered" this constructed a real TypeError, an input this
+ * path cannot produce.
+ *
+ * The code check is the guard on the widened branch: a code means PostgREST
+ * ANSWERED, so it is a server outcome however the message reads.
+ */
 function isNetworkFailure(raw: unknown): boolean {
   const name = errorName(raw);
   if (name === 'AuthRetryableFetchError' || name === 'FunctionsFetchError') return true;
   const msg = errorMessage(raw).toLowerCase();
+  if (raw instanceof TypeError) return msg.includes('fetch') || msg.includes('network');
+  if (errorCode(raw)) return false;
   return (
-    raw instanceof TypeError &&
-    (msg.includes('network request failed') || msg.includes('failed to fetch') || msg.includes('fetch'))
+    msg.includes('network request failed') ||
+    msg.includes('failed to fetch') ||
+    msg.includes('network error')
   );
 }
 
