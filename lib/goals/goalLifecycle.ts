@@ -71,9 +71,13 @@ function invalidateGoalReads(client: QueryClient, userId: string): void {
 /**
  * Expire every active goal whose deadline has passed (or only those in
  * `onlyGoalIds` when given — the per-credit check the store ran). Per goal:
- * server status flip → momentum snapshot cleared → marks converted to
- * maintenance. Failures are per-goal and logged, never thrown: expiry runs on
- * ticks and foregrounds, where a throw has no user to land on.
+ * marks converted to maintenance → server status flip → momentum snapshot
+ * cleared. Conversion runs FIRST because it is idempotent and the flip is the
+ * commit point: whichever half fails, the goal is still 'active' and the next
+ * tick re-runs both. (The store did it flip-first, which made a failed
+ * conversion permanent — the goal left the active scan forever.) Failures are
+ * per-goal and logged, never thrown: expiry runs on ticks and foregrounds,
+ * where a throw has no user to land on.
  *
  * Returns the ids that were expired, so callers can invalidate once.
  */
@@ -93,9 +97,9 @@ export async function expireDeadlinedGoals(
     // fallback the row does not carry — deadline_date IS the column).
     if (!isDeadlineExpired({ ...goal, target_date: goal.deadline_date } as never)) continue;
     try {
+      await convertGoalMarksToMaintenance(goal.id);
       await expireGoal(goal.id);
       useMomentumStore.getState().clearSnapshot(goal.id);
-      await convertGoalMarksToMaintenance(goal.id);
       expired.push(goal.id);
     } catch (error) {
       logger.error(`[goalLifecycle] expiry failed for goal ${goal.id}:`, error);

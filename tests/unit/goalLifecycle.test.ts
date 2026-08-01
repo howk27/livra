@@ -197,6 +197,27 @@ describe('expireDeadlinedGoals', () => {
     expect(expireGoal).toHaveBeenCalledTimes(1);
   });
 
+  it('converts marks BEFORE the status flip, so a conversion failure stays retryable', async () => {
+    // The Task 7 review finding: with expire-first, a failed maintenance
+    // conversion is NEVER retried — the next tick skips the goal because its
+    // status is no longer 'active'. Convert-first keeps the goal active on
+    // either failure, and the conversion is idempotent, so the next tick
+    // re-runs both halves.
+    jest.mocked(convertGoalMarksToMaintenance).mockRejectedValueOnce(new Error('injected'));
+    const client = seededClient([goalRow('deadlined', { deadline_date: '2020-01-01' })], {}, []);
+    const expired = await expireDeadlinedGoals(client, USER);
+    expect(expired).toEqual([]);
+    expect(expireGoal).not.toHaveBeenCalled();
+  });
+
+  it('runs conversion before the flip in the success path too', async () => {
+    const client = seededClient([goalRow('deadlined', { deadline_date: '2020-01-01' })], {}, []);
+    await expireDeadlinedGoals(client, USER);
+    const convertOrder = jest.mocked(convertGoalMarksToMaintenance).mock.invocationCallOrder[0];
+    const expireOrder = jest.mocked(expireGoal).mock.invocationCallOrder[0];
+    expect(convertOrder).toBeLessThan(expireOrder);
+  });
+
   it('one goal’s failed expiry does not block the next', async () => {
     jest.mocked(expireGoal).mockRejectedValueOnce(new Error('injected'));
     const client = seededClient(
