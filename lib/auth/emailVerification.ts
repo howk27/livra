@@ -62,7 +62,7 @@ export function describeLinkSent(email?: string | null): string {
 
 /** What the screen says when a status check finds the stamp not there yet. */
 export const LINK_NOT_VERIFIED_YET_COPY =
-  'Not verified yet. Open the link in your email first — it can take a minute to arrive.';
+  'Not verified yet. Open the link in your email first. It can take a minute to arrive.';
 
 /**
  * How long "Send again" stays quiet after a code goes out.
