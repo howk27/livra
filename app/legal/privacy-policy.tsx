@@ -37,7 +37,7 @@ export default function PrivacyPolicyScreen() {
           showsVerticalScrollIndicator={false}
         >
           <AppText variant="caption" style={[styles.lastUpdated, { color: c.inkMuted }]}>
-            Last updated: January 11, 2025
+            Last updated: August 2, 2026
           </AppText>
 
           <AppText variant="body" style={[styles.paragraph, { color: c.inkDark }]}>
@@ -110,6 +110,29 @@ export default function PrivacyPolicyScreen() {
           <AppText variant="body" style={[styles.paragraph, { color: c.inkDark }]}>
             We do not access your password.
           </AppText>
+
+          {/* HealthKit 5.1.3 drift fix: the binary declares the HealthKit
+              entitlement, so the policy must describe the data — claims below
+              mirror NSHealthShareUsageDescription and are pinned by
+              tests/unit/copyHealthPrivacy.test.ts. */}
+          <AppText variant="body" style={[styles.subsectionTitle, { color: c.inkDark }]}>
+            1.4. Apple Health Data (Optional)
+          </AppText>
+          <AppText variant="body" style={[styles.paragraph, { color: c.inkDark }]}>
+            If you choose to connect Apple Health, Livra reads your workout, sleep, and activity data
+            to power your weekly reflection.
+          </AppText>
+          <View style={styles.bulletList}>
+            <AppText variant="body" style={[styles.bulletItem, { color: c.inkDark }]}>
+              • Health data is read on your device and is never stored on our servers
+            </AppText>
+            <AppText variant="body" style={[styles.bulletItem, { color: c.inkDark }]}>
+              • We never sell health data or use it for advertising or marketing
+            </AppText>
+            <AppText variant="body" style={[styles.bulletItem, { color: c.inkDark }]}>
+              • You can revoke access anytime in the iOS Health app under Sharing
+            </AppText>
+          </View>
 
           {/* Section 2 */}
           <AppText variant="subtitle" style={[styles.sectionTitle, { color: c.inkDark }]}>
