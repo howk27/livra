@@ -1469,6 +1469,15 @@ function PaywallScreenContent() {
           </View>
         </View>
 
+        {/* Auto-renewal disclosure — required at the point of purchase (App Store
+            Review 3.1.2). The plan cards above carry the title, length and price;
+            this is the renewal term, which they do not state. */}
+        <Text style={[styles.renewalNote, { color: c.inkMuted }]}>
+          Your subscription renews automatically unless you cancel at least 24 hours
+          before the current period ends. You can cancel anytime in your App Store
+          settings.
+        </Text>
+
         <View style={styles.legalLinks}>
           <TouchableOpacity onPress={() => router.push('/legal/privacy-policy')} style={styles.legalLink}>
             <Text style={[styles.legalLinkText, { color: c.inkMid }]}>Privacy Policy</Text>
@@ -1926,6 +1935,13 @@ const styles = StyleSheet.create({
   faqAnswer: {
     fontSize: fontSize.sm,
     lineHeight: 20,
+  },
+  renewalNote: {
+    fontSize: fontSize.xs,
+    lineHeight: fontSize.xs * 1.5,
+    textAlign: 'center',
+    marginTop: spacing.xl,
+    paddingHorizontal: spacing.lg,
   },
   legalLinks: {
     flexDirection: 'row',
