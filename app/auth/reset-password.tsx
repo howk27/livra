@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import Animated, { FadeIn, SlideInDown } from 'react-native-reanimated';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import {
   themedColors,
   spacing,
@@ -107,10 +107,13 @@ export default function ResetPasswordScreen() {
             </Text>
           </Animated.View>
 
-          {/* Form */}
+          {/* Form. QC-1061 item 4: was SlideInDown — a full-height travel on
+              mount, on the screen a user reaches while already frustrated. Fade
+              only, inside the skill's 200–350ms band, and opacity-only means it
+              needs no reduced-motion branch. */}
           <Animated.View
             style={styles.form}
-            entering={SlideInDown.duration(400).delay(100)}
+            entering={FadeIn.duration(250).delay(80)}
           >
             {/* Email Input */}
             <View style={styles.inputContainer}>

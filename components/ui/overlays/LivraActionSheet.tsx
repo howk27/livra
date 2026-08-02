@@ -32,7 +32,7 @@ interface LivraActionSheetProps {
  * as the rest of the app.
  *
  * Motion: scrim fades and the sheet rises from the bottom edge (useMotion →
- * instant under Reduce Motion).
+ * springs.calm, instant under Reduce Motion).
  *
  * Presentation goes through OverlayPortal, NOT a bare <Modal> — see that file.
  * Only focus.tsx (a tab) calls actionSheet() today, so this host never hit the
@@ -59,7 +59,7 @@ export function LivraActionSheet({
 
   useEffect(() => {
     if (visible) {
-      progress.value = spring(1, 'settle');
+      progress.value = spring(1, 'calm');
     } else {
       progress.value = timing(0, 0);
     }

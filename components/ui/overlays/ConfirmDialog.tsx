@@ -31,7 +31,7 @@ interface ConfirmDialogProps {
  * heading via sansBold, one primary CTA + a quiet dismiss) so every confirmation
  * in the app reads as Livra, not as a generic iOS system alert.
  *
- * Motion: overlay fades and the card settles up on present (useMotion → springs
+ * Motion: overlay fades and the card settles up on present (useMotion → springs.calm,
  * collapse to instant under Reduce Motion, so the decision still lands).
  *
  * Presentation goes through OverlayPortal, NOT a bare <Modal> — read that file
@@ -57,7 +57,7 @@ export function ConfirmDialog({
 
   useEffect(() => {
     if (visible) {
-      progress.value = spring(1, 'settle');
+      progress.value = spring(1, 'calm');
     } else {
       progress.value = timing(0, 0);
     }

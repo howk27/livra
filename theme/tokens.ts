@@ -346,4 +346,14 @@ export const springs = {
   playful:  { damping: 12, stiffness: 280 },
   settle:   { damping: 20, stiffness: 200 },
   entrance: { damping: 14, stiffness: 90 },
+  // QC-1061 item 4 ("we need to reduce the bouncing on these elements ... they
+  // need to be more calm"). The three presets above are all UNDERDAMPED, so
+  // they overshoot and settle back by design — right for a check-in, wrong for
+  // a destructive confirm, where the card popping past its resting size reads
+  // as jitter at the exact moment the user wants steadiness.
+  //
+  // Damping ratio ζ = damping / (2·√stiffness) at reanimated's default mass 1.
+  // settle is ζ ≈ 0.71 (visible overshoot); calm is ζ ≈ 1.01 — critically
+  // damped, so it arrives and stops, without being slower.
+  calm:     { damping: 30, stiffness: 220 },
 } as const;

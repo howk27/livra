@@ -14,13 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import Animated, {
-  FadeIn,
-  FadeOut,
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-} from 'react-native-reanimated';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import type { SupabaseClient, AuthUser as User } from '@supabase/supabase-js';
@@ -61,15 +55,10 @@ export default function SignInScreen() {
   const [isAppleAvailable, setIsAppleAvailable] = useState(false);
   const [isAppleLoading, setIsAppleLoading] = useState(false);
 
-  const slideOffset = useSharedValue(0);
   const emailInputRef = useRef<TextInput>(null);
   const passwordInputRef = useRef<TextInput>(null);
   const fullNameInputRef = useRef<TextInput>(null);
   const confirmPasswordInputRef = useRef<TextInput>(null);
-
-  useEffect(() => {
-    slideOffset.value = withSpring(mode === 'signup' ? 1 : 0, { damping: 15 });
-  }, [mode]);
 
   useEffect(() => {
     if (initialized && user) {
@@ -100,11 +89,13 @@ export default function SignInScreen() {
     checkApple();
   }, []);
 
-  const animatedContainerStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: slideOffset.value * -20 },
-    ],
-  }));
+  // QC-1061 item 4 — the sign-in ↔ sign-up toggle used to shove the whole form
+  // 20px up on a loose spring (damping 15, default stiffness), which overshoots
+  // and settles visibly. It fought the FadeIn already running on the fields that
+  // appear and disappear, so the toggle read as a wobble rather than a change of
+  // mode. The fade alone carries it. Removing the shared value also removes a
+  // raw withSpring that never consulted hooks/useMotion, so nothing here needs a
+  // reduced-motion branch any more — opacity-only is the degraded state.
 
   const dismissKeyboard = () => {
     Keyboard.dismiss();
@@ -354,7 +345,7 @@ export default function SignInScreen() {
               </Animated.View>
 
               {/* Form */}
-              <Animated.View style={[styles.form, animatedContainerStyle]}>
+              <Animated.View style={styles.form}>
 
                 {/* Full name (signup only) */}
                 {mode === 'signup' && (

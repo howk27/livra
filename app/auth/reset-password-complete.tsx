@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import Animated, { FadeIn, SlideInDown } from 'react-native-reanimated';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import {
   themedColors,
   spacing,
@@ -248,7 +248,7 @@ export default function ResetPasswordCompleteScreen() {
               </Text>
             </View>
           ) : recoveryGate === 'invalid' ? (
-            <Animated.View entering={SlideInDown.duration(400)} style={styles.block}>
+            <Animated.View entering={FadeIn.duration(250)} style={styles.block}>
               {error ? (
                 <Text style={[styles.errorText, { color: c.danger }]}>{error}</Text>
               ) : null}
@@ -263,7 +263,8 @@ export default function ResetPasswordCompleteScreen() {
               </TouchableOpacity>
             </Animated.View>
           ) : (
-            <Animated.View style={styles.form} entering={SlideInDown.duration(400).delay(100)}>
+            // QC-1061 item 4: was SlideInDown.duration(400) — see reset-password.tsx.
+            <Animated.View style={styles.form} entering={FadeIn.duration(250).delay(80)}>
               <View style={styles.inputContainer}>
                 <Text style={[styles.label, { color: c.inkMuted }]}>New password</Text>
                 <TextInput
