@@ -38,6 +38,11 @@ import {
 } from '../../lib/purgeLocalUserData';
 import { useIdentityStore } from '../../state/identitySlice';
 import { useMomentumStore } from '../../state/momentumSlice';
+import {
+  markRecoveryPending,
+  isRecoveryPending,
+  __resetRecoveryPendingForTests,
+} from '../../lib/auth/recoveryPending';
 /* eslint-enable import/first */
 
 beforeEach(async () => {
@@ -176,6 +181,24 @@ describe('storage-key drift guard', () => {
       (DEVICE_SCOPED_STORAGE_KEYS as readonly string[]).includes(key),
     );
     expect(overlap).toEqual([]);
+  });
+});
+
+describe('purge — the recovery leash mirror (QC-1061 item 2)', () => {
+  it('takes the in-memory mirror with the key, so the next sign-in is not bounced', async () => {
+    __resetRecoveryPendingForTests();
+    await markRecoveryPending();
+    expect(await isRecoveryPending()).toBe(true);
+
+    await purgeLocalUserData();
+
+    // NO __resetRecoveryPendingForTests() here, deliberately: this is the SAME
+    // app launch as the sign-out. The key sweep empties the disk, but
+    // isRecoveryPending() short-circuits on the module-level mirror and never
+    // reads it — so a stale `true` survives the purge and app/index.tsx sends
+    // the NEXT account straight back to set-a-password, with no reset session
+    // behind it and no way to clear the leash.
+    expect(await isRecoveryPending()).toBe(false);
   });
 });
 

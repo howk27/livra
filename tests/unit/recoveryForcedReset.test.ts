@@ -56,6 +56,35 @@ describe('the leash itself', () => {
   it('dies with the session: the key is purge-registered', () => {
     expect(ACCOUNT_SCOPED_STORAGE_KEYS).toContain(RECOVERY_PENDING_STORAGE_KEY);
   });
+
+  // QC-1061 item 2. The screen always had three exits; none of them moved the
+  // STATE behind the screen. A recovery link mints a full session, so backing
+  // out left the user authenticated with the leash still armed — every route
+  // through `/` bounced them back, which is the "can't back out or cancel
+  // anything" report. Abandoning the reset has to end the session, because the
+  // leash's whole invariant is that it dies with the session it leashes.
+  it('every abandon exit signs out; only the post-update path goes straight to sign-in', () => {
+    const src = strip('app/auth/reset-password-complete.tsx');
+
+    const straightToSignIn = src.match(/router\.replace\('\/auth\/signin'\)/g) ?? [];
+    expect(straightToSignIn).toHaveLength(1);
+    // ...and that one is the success path, after the leash is off.
+    expect(src).toMatch(
+      /clearRecoveryPending\(\)[\s\S]{0,400}?router\.replace\('\/auth\/signin'\)/,
+    );
+
+    // All three back-outs — the back arrow, the invalid-link exit and the
+    // form's cancel — go through ONE shared handler, so count the call sites
+    // rather than the route literal (counting the literal would read 1 and
+    // pass for the wrong reason if two of the three were reverted).
+    const abandonCallSites = src.match(/onPress=\{abandonReset\}/g) ?? [];
+    expect(abandonCallSites).toHaveLength(3);
+
+    // ...and that handler is the one that ends the session.
+    expect(src).toMatch(
+      /const abandonReset = useCallback\(\(\) => \{\s*router\.replace\('\/auth\/signing-out'\)/,
+    );
+  });
 });
 
 describe('the three enforcement points stay wired', () => {

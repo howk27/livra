@@ -63,6 +63,23 @@ export async function isRecoveryPending(): Promise<boolean> {
   return pending;
 }
 
+/**
+ * Forget the mirror WITHOUT asserting a value — the next read goes to disk.
+ *
+ * For the purge (QC-1061 item 2). The storage key is purge-registered, but the
+ * mirror short-circuits `isRecoveryPending`, so within one app launch a
+ * sign-out left a stale `true` behind and app/index.tsx bounced the NEXT
+ * account to set-a-password with no reset session behind it — the leash
+ * outliving the session it exists to leash.
+ *
+ * Deliberately `null`, not `false`: if the key sweep failed, disk still says
+ * armed and the next read re-arms. That errs toward keeping the leash on,
+ * which is the safe direction for a security gate.
+ */
+export function forgetRecoveryPendingMirror(): void {
+  pending = null;
+}
+
 /** Test seam: forget the in-memory mirror. */
 export function __resetRecoveryPendingForTests(): void {
   pending = null;

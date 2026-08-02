@@ -34,6 +34,7 @@ import { useMomentumStore } from '../state/momentumSlice';
 import { useIdentityStore } from '../state/identitySlice';
 import { useVoiceStore } from '../state/voiceSlice';
 import { useGoalCompletionStore } from '../state/goalCompletionStore';
+import { forgetRecoveryPendingMirror } from './auth/recoveryPending';
 
 /**
  * Account-scoped keys — the previous user's data or their derived state.
@@ -221,6 +222,10 @@ function resetInMemoryStores(): string[] {
     ['voice', () => useVoiceStore.setState({ line: null, lastMomentIds: {} })],
     ['goalCompletion', () =>
       useGoalCompletionStore.setState({ completedGoal: null, show: false })],
+    // Not a store, same failure mode: the leash's module-level mirror
+    // short-circuits its own disk read, so the key sweep above is invisible to
+    // it until the next launch (QC-1061 item 2).
+    ['recoveryLeash', () => forgetRecoveryPendingMirror()],
   ];
 
   for (const [label, run] of steps) {

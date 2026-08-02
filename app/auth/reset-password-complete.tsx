@@ -193,6 +193,27 @@ export default function ResetPasswordCompleteScreen() {
 
   const goRequestNew = () => router.replace('/auth/reset-password');
 
+  /**
+   * Leaving without setting a password (QC-1061 item 2).
+   *
+   * This screen always had three exits, and all three only NAVIGATED — the
+   * recovery link mints a full session, so the user landed on the sign-in
+   * screen still authenticated with the leash still armed, and the next route
+   * through `/` sent them straight back here. That is the "can't back out or
+   * cancel anything" report; the buttons worked, the state behind them did not.
+   *
+   * So abandoning the reset ends the session. That is the leash's own
+   * invariant — it dies with the session it leashes — and it is the only
+   * ordering that is safe in both directions: clearing the leash while the
+   * recovery session lives would re-open T4 (a link-holder walks into the
+   * tabs), and ending the session while the leash lives would trap the next
+   * sign-in. `/auth/signing-out` does both, with retry copy if the network is
+   * down, and routes here to sign-in once the session is actually gone.
+   */
+  const abandonReset = useCallback(() => {
+    router.replace('/auth/signing-out');
+  }, [router]);
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: c.linen }]}>
       <KeyboardAvoidingView
@@ -208,8 +229,10 @@ export default function ResetPasswordCompleteScreen() {
         >
           <Animated.View entering={FadeIn.duration(400)} style={styles.header}>
             <TouchableOpacity
-              onPress={() => router.replace('/auth/signin')}
+              onPress={abandonReset}
               style={styles.backButton}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel password reset and sign out"
             >
               <Text style={[styles.backButtonText, { color: c.inkMuted }]}>←</Text>
             </TouchableOpacity>
@@ -235,7 +258,7 @@ export default function ResetPasswordCompleteScreen() {
               >
                 <Text style={styles.submitButtonText}>Request a new reset email</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => router.replace('/auth/signin')} style={styles.linkBtn}>
+              <TouchableOpacity onPress={abandonReset} style={styles.linkBtn}>
                 <Text style={[styles.linkText, { color: c.accent }]}>Back to sign in</Text>
               </TouchableOpacity>
             </Animated.View>
@@ -316,12 +339,15 @@ export default function ResetPasswordCompleteScreen() {
               </TouchableOpacity>
 
               <TouchableOpacity
-                onPress={() => router.replace('/auth/signin')}
+                onPress={abandonReset}
                 disabled={loading}
                 style={styles.backToSignInButton}
               >
+                {/* Says what it does: the reset link is spent either way, so a
+                    user who leaves needs to know they are leaving, not that
+                    they are stepping back one screen. */}
                 <Text style={[styles.backToSignInText, { color: c.accent }]}>
-                  ← Back to sign in
+                  Cancel and sign out
                 </Text>
               </TouchableOpacity>
             </Animated.View>
