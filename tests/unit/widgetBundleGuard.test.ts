@@ -94,11 +94,12 @@ describe('LivraWidget iOS 17 container-background migration', () => {
     'utf8',
   );
 
-  it('declares the forest fill via containerBackground(for: .widget)', () => {
-    // The helper does the iOS 17+ container background; both views call it with
-    // the forest fill.
+  it('declares the surface via containerBackground(for: .widget)', () => {
+    // The helper does the iOS 17+ container background. Since the light-theme
+    // fix it is applied ONCE, at the entry view, with an explicitly resolved
+    // ground — see the "explicit scheme" guard below for why.
     expect(views).toContain('containerBackground(color, for: .widget)');
-    expect(views).toContain('widgetContainerBackground(WidgetPalette.bg)');
+    expect(views).toContain('widgetContainerBackground(WidgetPalette.bg(for: scheme))');
   });
 
   it('opts out of the system content margins', () => {
@@ -156,7 +157,32 @@ describe('LivraWidget is theme-aware (light + dark surfaces)', () => {
   });
 
   it('centers the done row on Small, where the ring above it is centered', () => {
-    expect(views).toContain('AllDoneOrEmpty(data: data, alignment: .center)');
+    expect(views).toContain('AllDoneOrEmpty(data: data, alignment: .center, compact: true)');
+  });
+
+  // THE BUILD-62 LIGHT-THEME BUG, PINNED SO IT CANNOT COME BACK.
+  //
+  // 057a18a made the widget follow the app's theme by overriding the
+  // `.colorScheme` environment. That reaches every colour drawn INSIDE the
+  // SwiftUI hierarchy — but `containerBackground(_:for:)` hands its colour to
+  // WidgetKit, which paints the container outside it, so a dynamic UIColor
+  // there resolved against the DEVICE appearance. Result on device: a
+  // light-themed app on a dark phone rendered near-black ink on the near-black
+  // dark ground. The ground must be resolved from an explicit scheme.
+  it('resolves the container ground from an explicit scheme, not a dynamic colour', () => {
+    expect(views).toMatch(/static func bg\(for scheme: ColorScheme\) -> Color/);
+    // A `static let bg` is the regression: that form can only be a dynamic
+    // colour, which is exactly what the container background cannot resolve.
+    expect(views).not.toMatch(/static let bg\s*=/);
+    expect(views).toMatch(/entry\.data\.colorSchemeOverride\s*\?\?\s*systemScheme/);
+  });
+
+  it('applies the container background once, at the entry view', () => {
+    // Both family views used to carry their own copy. Two call sites means two
+    // chances to reintroduce an unresolved ground.
+    // Leading dot = a call site; the bare name is the helper's own declaration.
+    const calls = views.match(/\.widgetContainerBackground\(/g) ?? [];
+    expect(calls).toHaveLength(1);
   });
 
   it('resolves surface + ink per color scheme via a dynamic UIColor', () => {
@@ -173,10 +199,12 @@ describe('LivraWidget is theme-aware (light + dark surfaces)', () => {
   // #1C3830 legitimately remains the LIGHT accent on the line below. So this
   // reads the `bg` declaration specifically.
   it('does not paint the light-theme forest as the dark surface', () => {
-    const bgLine = views.split('\n').find((l) => /static let bg\s*=/.test(l));
-    expect(bgLine).toBeDefined();
-    expect(bgLine).toContain('dark: "#15211D"');
-    expect(bgLine).not.toContain('#1C3830');
+    const from = views.indexOf('static func bg(for scheme');
+    expect(from).toBeGreaterThan(-1);
+    const body = views.slice(from, views.indexOf('}', from) + 1);
+    expect(body).toContain('#15211D');
+    expect(body).toContain('#F0EDE8');
+    expect(body).not.toContain('#1C3830');
   });
 
   it('keeps the sanctioned amber→ember ring in both themes', () => {
@@ -192,5 +220,55 @@ describe('LivraWidget is theme-aware (light + dark surfaces)', () => {
   it('still renders the current mark via the queue, not a fixed index', () => {
     expect(views).toMatch(/currentMark/);
     expect(views).toMatch(/currentGoal/);
+  });
+});
+
+/**
+ * Guard: the medium widget uses the frame it is given.
+ *
+ * Founder device report 2026-08-02: "too close, too much space unused" (active
+ * state) and "completed state feels empty" (done state). Measured from the
+ * screenshots, the content column filled ~77pt of a ~126pt content box — the
+ * medium family rendered at roughly half scale, with the done state holding two
+ * elements in it.
+ */
+describe('LivraWidget medium layout fills its frame', () => {
+  const views = readFileSync(
+    join(__dirname, '../../targets/LivraWidget/LivraWidget.swift'),
+    'utf8',
+  )
+    .replace(/\r\n/g, '\n')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .map((line) => line.replace(/(^|[^:])\/\/.*$/, '$1'))
+    .join('\n');
+
+  it('sizes the medium ring from measured height, not a constant', () => {
+    // The regression is a hardcoded diameter back in MediumWidgetView.
+    expect(views).toContain('GeometryReader');
+    expect(views).toMatch(/min\(geo\.size\.height,\s*Self\.ringCap\)/);
+    expect(views).toMatch(/GoalRingView\(goal: goal, diameter: diameter/);
+  });
+
+  it('gives the done state the same pill as the mark tile, so nothing re-arranges', () => {
+    // Both must render a full-width rounded pill on an accent wash. If the done
+    // state drops back to a bare row, the column jumps on the day's last tap.
+    const pills = views.match(/RoundedRectangle\(cornerRadius: 12, style: \.continuous\)/g) ?? [];
+    expect(pills.length).toBeGreaterThanOrEqual(2);
+    expect(views).not.toMatch(/Spacer\(minLength: 0\)\s*\n\s*AllDoneOrEmpty/);
+  });
+
+  it('captions the done state with the day count', () => {
+    expect(views).toContain('struct DayCountText');
+    expect(views).toMatch(/DayCountText\(goal: goal\)/);
+    // Gated on marks existing — an account with none must not read "0 / 7".
+    expect(views).toMatch(/!data\.marks\.isEmpty,\s*let goal = data\.currentGoal/);
+  });
+
+  it('reads the unit off the snapshot instead of hardcoding "check-in days"', () => {
+    // goals.tsx:262 only says "check-in days" when a commitment backs the
+    // threshold; hardcoding it here would state a commitment that may not exist.
+    expect(views).toContain('goal.progressUnit');
+    expect(views).not.toContain('check-in days');
   });
 });

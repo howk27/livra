@@ -13,6 +13,12 @@ export interface WidgetGoalData {
   accent: string;    // majority-category accent hex
   progress: number;  // DAYS toward the goal's unlock threshold
   threshold: number; // total days the goal requires (>= 1)
+  // Whether `threshold` is a real commitment (goalCommitmentTarget) or the
+  // derived unlock floor. It exists ONLY so the widget can pick the same words
+  // the app does: goals.tsx:262 says "check-in days" for a commitment and
+  // "check-ins" without one, and the widget collapses both into `threshold`.
+  // Swift decodes it as optional, so an older snapshot still on disk renders.
+  hasCommitment: boolean;
   marks: WidgetMarkData[];
 }
 

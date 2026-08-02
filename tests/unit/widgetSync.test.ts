@@ -173,6 +173,24 @@ describe('buildWidgetData v2 (query-layer)', () => {
     expect(g2.marks.map((m) => m.id)).toEqual(['m3']);
   });
 
+  it('flags whether the threshold is a commitment or the unlock floor', async () => {
+    // The widget captions its done state "N / M check-in days" only for a real
+    // commitment (goals.tsx:262); without this flag it cannot tell the two
+    // thresholds apart, since both arrive as the same number. Both canonical
+    // goals carry target_mark_count, so the false case needs a goal without one.
+    const uncommitted = goalRow({ id: 'goal-3', title: 'Just tracking', sort_index: 2 });
+    seed({
+      goals: [goalA, uncommitted],
+      byGoal: { 'goal-1': [m1, m2], 'goal-3': [m3] },
+    });
+    const data = await buildWidgetData();
+    const byId = Object.fromEntries(data.goals.map((g) => [g.id, g]));
+    expect(byId['goal-1'].hasCommitment).toBe(true);
+    expect(byId['goal-3'].hasCommitment).toBe(false);
+    // And the threshold still lands — the flag describes it, never gates it.
+    expect(byId['goal-3'].threshold).toBeGreaterThanOrEqual(1);
+  });
+
   it('flags today-completed marks per goal', async () => {
     seed();
     const data = await buildWidgetData();

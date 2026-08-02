@@ -23,7 +23,24 @@ enum WidgetPalette {
     // uses), so the widget now sits on it and the handoff app -> widget is one
     // surface. Every ink pairing gained contrast: ink 10.85 -> 14.19, muted
     // 6.81 -> 8.91, accent 5.61 -> 7.35, ring 6.53 -> 8.54.
-    static let bg = dynamic(light: "#F0EDE8", dark: "#15211D")
+    // THE GROUND IS RESOLVED EXPLICITLY, NOT DYNAMICALLY — this is a fix, not a
+    // style choice. Build 62 shipped the light theme broken: on a light-themed
+    // app over a dark phone the ink flipped to light-theme (near-black) while
+    // the card stayed dark, i.e. black text on a near-black ground (founder
+    // device screenshot, 2026-08-02).
+    //
+    // Root cause: `containerBackground(_:for: .widget)` hands its colour to
+    // WidgetKit, which paints the container OUTSIDE our SwiftUI hierarchy. The
+    // `.colorScheme` environment override that 057a18a applies to the body
+    // therefore never reaches it, and a dynamic UIColor there resolves against
+    // the DEVICE appearance instead. Every colour below is drawn INSIDE the
+    // hierarchy and does follow the override — the device screenshot proves it,
+    // since the text flipped and only the ground did not — so those stay
+    // dynamic. The ground is resolved once, at the entry view, and handed to the
+    // system as a plain colour it cannot re-resolve.
+    static func bg(for scheme: ColorScheme) -> Color {
+        Color(hex: scheme == .dark ? "#15211D" : "#F0EDE8")
+    }
     static let ink = dynamic(light: "#1A1A18", dark: "#F0EDE8")
     // Dark muted stays colorsDark.inkInverseMuted rather than moving to
     // colorsDark.inkMuted ("#8A938E"): it was picked when this surface was a
@@ -173,21 +190,24 @@ struct LogMarkLabel: View {
             Image(mark.icon.isEmpty ? "livra_circle" : mark.icon)
                 .resizable()
                 .scaledToFit()
-                .frame(width: compact ? 15 : 17, height: compact ? 15 : 17)
-                .frame(width: compact ? 24 : 28, height: compact ? 24 : 28)
+                .frame(width: compact ? 15 : 18, height: compact ? 15 : 18)
+                .frame(width: compact ? 24 : 30, height: compact ? 24 : 30)
                 .background(accent.opacity(0.14))
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             Text(mark.name)
-                .font(.system(size: compact ? 12 : 14, weight: .semibold))
+                .font(.system(size: compact ? 12 : 15, weight: .semibold))
                 .foregroundColor(WidgetPalette.ink)
                 .lineLimit(1)
                 .truncationMode(.tail)
             Spacer(minLength: 4)
             Image(systemName: "plus.circle.fill")
-                .font(.system(size: compact ? 17 : 21))
+                .font(.system(size: compact ? 17 : 23))
                 .foregroundColor(accent)
         }
-        .padding(.vertical, 8)
+        // Medium's pill is 10/30/10 = 50pt tall and AllDoneOrEmpty's matches it
+        // exactly, so logging the last mark of the day changes the pill's
+        // CONTENTS and nothing else moves.
+        .padding(.vertical, compact ? 8 : 10)
         .padding(.horizontal, compact ? 8 : 12)
         .frame(maxWidth: .infinity)
         .background(accent.opacity(0.10))
@@ -201,7 +221,7 @@ struct QueueStatusText: View {
     let data: WidgetData
     var body: some View {
         Text(statusText)
-            .font(.system(size: 11, weight: .medium))
+            .font(.system(size: 12, weight: .medium))
             .foregroundColor(WidgetPalette.inkMuted)
             .lineLimit(1)
     }
@@ -213,15 +233,32 @@ struct QueueStatusText: View {
     }
 }
 
+// MARK: - Day count (mirrors the goal card's progress label)
+
+struct DayCountText: View {
+    let goal: WidgetGoalData
+
+    var body: some View {
+        // Wording split matches goals.tsx:262 exactly — a commitment earns
+        // "check-in days", anything else is plain "check-ins".
+        Text("\(goal.progress) / \(goal.threshold) \(goal.progressUnit)")
+            .font(.system(size: 12, weight: .medium))
+            .foregroundColor(WidgetPalette.inkMuted)
+            .lineLimit(1)
+    }
+}
+
 // MARK: - All-done / empty state (outlined done cue — never a filled dot)
 
 struct AllDoneOrEmpty: View {
     let data: WidgetData
     /// Small stacks its content under a CENTERED ring, so a hard .leading here
     /// left the done row hanging off-axis once the last mark was logged — the
-    /// "it re-arranges and doesn't look aligned" report of 2026-08-02. Medium
-    /// lays out inside a leading VStack beside the ring and stays .leading.
+    /// "it re-arranges and doesn't look aligned" report of 2026-08-02. Now only
+    /// the empty-state TEXT uses it: the done state is a full-width pill, which
+    /// has no alignment to get wrong.
     var alignment: Alignment = .leading
+    var compact: Bool = false
 
     private var textAlignment: TextAlignment {
         alignment == .center ? .center : .leading
@@ -236,22 +273,35 @@ struct AllDoneOrEmpty: View {
                 .multilineTextAlignment(textAlignment)
                 .frame(maxWidth: .infinity, alignment: alignment)
         } else {
+            // The done state wears the SAME pill as LogMarkLabel — same tile
+            // column, padding, corner radius and full width. Before this, the
+            // last tap of the day swapped a 48pt pill for a bare 18pt row and
+            // the whole column jumped ("completed state feels empty",
+            // 2026-08-02). Now only the contents change: the mark tile becomes
+            // the done cue and the plus button goes away, because there is
+            // nothing left to tap.
             HStack(spacing: 8) {
                 // Outlined (not filled) done cue — design-decisions 2026-07-12.
                 ZStack {
                     Circle()
                         .stroke(WidgetPalette.accent, lineWidth: 1.5)
-                        .frame(width: 18, height: 18)
+                        .frame(width: compact ? 18 : 22, height: compact ? 18 : 22)
                     Image(systemName: "checkmark")
-                        .font(.system(size: 9, weight: .bold))
+                        .font(.system(size: compact ? 9 : 11, weight: .bold))
                         .foregroundColor(WidgetPalette.accent)
                 }
+                .frame(width: compact ? 24 : 30, height: compact ? 24 : 30)
                 Text("All done today")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: compact ? 12 : 15, weight: .semibold))
                     .foregroundColor(WidgetPalette.ink)
                     .lineLimit(1)
+                Spacer(minLength: 4)
             }
-            .frame(maxWidth: .infinity, alignment: alignment)
+            .padding(.vertical, compact ? 8 : 10)
+            .padding(.horizontal, compact ? 8 : 12)
+            .frame(maxWidth: .infinity)
+            .background(WidgetPalette.accent.opacity(0.10))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
     }
 }
@@ -269,13 +319,11 @@ struct SmallWidgetView: View {
             if let mark = data.currentMark {
                 LogMarkButton(mark: mark, compact: true)
             } else {
-                AllDoneOrEmpty(data: data, alignment: .center)
+                AllDoneOrEmpty(data: data, alignment: .center, compact: true)
             }
         }
         .padding(12)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .widgetContainerBackground(WidgetPalette.bg)
-        .widgetURL(URL(string: "livra://home"))
     }
 }
 
@@ -284,36 +332,57 @@ struct SmallWidgetView: View {
 struct MediumWidgetView: View {
     let data: WidgetData
 
+    /// Ceiling on the ring, so it stops growing before it crowds the title
+    /// column on the widest devices. The ring is otherwise sized from the
+    /// MEASURED content height rather than a constant: at a fixed 76pt it filled
+    /// barely half a ~126pt content box and the widget read as rendered at half
+    /// scale ("too close, too much space unused", 2026-08-02). Deriving it means
+    /// the fit holds across device widths instead of being tuned to one.
+    private static let ringCap: CGFloat = 104
+
     var body: some View {
-        HStack(spacing: 16) {
-            if let goal = data.currentGoal {
-                GoalRingView(goal: goal, diameter: 76, lineWidth: 7)
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                // Serif goal title — echoes the signature Cormorant voice via the
-                // system serif (New York); no font bundling into the appex in v1.
-                Text(data.currentGoal?.title ?? "No active goal")
-                    .font(.system(size: 15, weight: .semibold, design: .serif))
-                    .foregroundColor(WidgetPalette.ink)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-
-                if let mark = data.currentMark {
-                    LogMarkButton(mark: mark, compact: false)
-                    QueueStatusText(data: data)
-                } else {
-                    Spacer(minLength: 0)
-                    AllDoneOrEmpty(data: data)
-                    Spacer(minLength: 0)
+        GeometryReader { geo in
+            let diameter = min(geo.size.height, Self.ringCap)
+            HStack(spacing: 14) {
+                if let goal = data.currentGoal {
+                    GoalRingView(goal: goal, diameter: diameter, lineWidth: max(7, diameter * 0.085))
                 }
+
+                // Both branches below are title → pill → caption. That is the
+                // point: the done state is not a different layout, so logging
+                // the last mark of the day cannot re-arrange the card.
+                VStack(alignment: .leading, spacing: 6) {
+                    // Serif goal title — echoes the signature Cormorant voice via the
+                    // system serif (New York); no font bundling into the appex in v1.
+                    Text(data.currentGoal?.title ?? "No active goal")
+                        .font(.system(size: 15, weight: .semibold, design: .serif))
+                        .foregroundColor(WidgetPalette.ink)
+                        // Two lines, because the wider ring narrows this column
+                        // and a long goal title ("Get my stress under control")
+                        // would otherwise truncate. Wrapping spends the height
+                        // the widget was wasting anyway.
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+
+                    if let mark = data.currentMark {
+                        LogMarkButton(mark: mark, compact: false)
+                        QueueStatusText(data: data)
+                    } else {
+                        AllDoneOrEmpty(data: data)
+                        // The day count only earns its place once the day is
+                        // DONE — it is what the founder asked the empty half of
+                        // the done state to say. Gated on marks existing so the
+                        // "add a mark" empty state isn't captioned "0 / 7".
+                        if !data.marks.isEmpty, let goal = data.currentGoal {
+                            DayCountText(goal: goal)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .padding(16)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .widgetContainerBackground(WidgetPalette.bg)
-        .widgetURL(URL(string: "livra://home"))
     }
 }
 
@@ -337,10 +406,25 @@ extension View {
 
 struct LivraWidgetEntryView: View {
     @Environment(\.widgetFamily) var widgetFamily
+    /// The DEVICE appearance — the fallback when the snapshot carries no theme
+    /// (older snapshot still on disk), and the only appearance WidgetKit itself
+    /// knows about.
+    @Environment(\.colorScheme) private var systemScheme
     let entry: LivraWidgetEntry
 
+    /// The one place the widget's appearance is decided. The ground is resolved
+    /// from it HERE, above the container background, because that background is
+    /// painted by WidgetKit outside the hierarchy and a dynamic colour there
+    /// resolves against the device instead of the app (see WidgetPalette.bg).
+    private var scheme: ColorScheme {
+        entry.data.colorSchemeOverride ?? systemScheme
+    }
+
     var body: some View {
-        content.widgetColorScheme(entry.data.colorSchemeOverride)
+        content
+            .widgetColorScheme(entry.data.colorSchemeOverride)
+            .widgetContainerBackground(WidgetPalette.bg(for: scheme))
+            .widgetURL(URL(string: "livra://home"))
     }
 
     @ViewBuilder

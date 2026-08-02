@@ -41,6 +41,26 @@ describe('the theme survives the widget-tap re-encode', () => {
     expect(model).toMatch(/default: return nil/);
   });
 
+  // Same trap as `theme`, one field over: the tap rebuild reconstructs every
+  // WidgetGoalData, so an omitted `hasCommitment` would downgrade the day
+  // count's wording from "check-in days" to "check-ins" the first time a mark
+  // was logged from the widget — and only then, which is why no other test
+  // would ever see it.
+  it('constructs the updated goal with hasCommitment carried from the current one', () => {
+    const ctor = model.slice(model.indexOf('return WidgetGoalData('));
+    expect(ctor).toContain('hasCommitment: goal.hasCommitment');
+  });
+
+  it('decodes hasCommitment as optional, so an older snapshot still renders', () => {
+    // Non-optional would fail the whole goals array into the legacy adapter.
+    expect(model).toMatch(/let hasCommitment: Bool\?/);
+  });
+
+  it('claims "check-in days" only when a commitment backs the threshold', () => {
+    // Mirrors goals.tsx:262. Absent must fall to the cautious "check-ins".
+    expect(model).toContain('hasCommitment == true ? "check-in days" : "check-ins"');
+  });
+
   it('strips comments, so prose cannot satisfy the guards above', () => {
     expect(rawModel).toContain('MUST be carried through');
     expect(model).not.toContain('MUST be carried through');

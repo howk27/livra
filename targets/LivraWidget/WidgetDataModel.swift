@@ -20,7 +20,42 @@ struct WidgetGoalData: Codable, Identifiable {
     let accent: String
     let progress: Int
     let threshold: Int
+    /// Whether `threshold` is a real commitment or the derived unlock floor.
+    /// OPTIONAL for the same reason `theme` is: a snapshot written by an older
+    /// app build has no such key and stays on disk until the app next
+    /// foregrounds. A synthesized Codable decodes an Optional with
+    /// decodeIfPresent, so a missing key yields nil rather than failing the
+    /// whole goals array into the legacy adapter.
+    let hasCommitment: Bool?
     let marks: [WidgetMarkData]
+
+    init(
+        id: String,
+        title: String?,
+        icon: String,
+        accent: String,
+        progress: Int,
+        threshold: Int,
+        hasCommitment: Bool? = nil,
+        marks: [WidgetMarkData]
+    ) {
+        self.id = id
+        self.title = title
+        self.icon = icon
+        self.accent = accent
+        self.progress = progress
+        self.threshold = threshold
+        self.hasCommitment = hasCommitment
+        self.marks = marks
+    }
+
+    /// The unit the day count is counted in — the same split the app makes at
+    /// goals.tsx:262. Absent (older snapshot) reads as the cautious "check-ins",
+    /// which is true of every goal; "check-in days" is the claim that needs the
+    /// commitment behind it.
+    var progressUnit: String {
+        hasCommitment == true ? "check-in days" : "check-ins"
+    }
 
     var progressFraction: Double {
         guard threshold > 0 else { return 0 }
@@ -189,9 +224,15 @@ enum WidgetLogQueue {
                 return WidgetMarkData(id: mark.id, name: mark.name, icon: mark.icon, accent: mark.accent, completed: true)
             }
             // NOTE: progress is intentionally left unchanged — days-based ring.
+            // `hasCommitment` MUST be carried through for the same reason
+            // `theme` is below: this rebuild runs on every widget tap, and
+            // dropping it would silently downgrade the day count's wording from
+            // "check-in days" to "check-ins" the first time a mark was logged
+            // from the widget.
             return WidgetGoalData(
                 id: goal.id, title: goal.title, icon: goal.icon, accent: goal.accent,
-                progress: goal.progress, threshold: goal.threshold, marks: updatedMarks
+                progress: goal.progress, threshold: goal.threshold,
+                hasCommitment: goal.hasCommitment, marks: updatedMarks
             )
         }
 

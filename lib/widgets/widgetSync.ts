@@ -112,7 +112,11 @@ export async function buildWidgetData(): Promise<WidgetData> {
       const limitedMarks = goalMarks.slice(0, MAX_MARKS_PER_GOAL);
       // Same arithmetic as the old goalsSlice.getGoalProgress selector.
       const progress = calculateGoalProgress(goal, events, allMarks);
-      const threshold = goalCommitmentTarget(goal) ?? calculateUnlockThreshold(goal);
+      // Same pair the Goals screen derives (goals.tsx:177 + :481) — the
+      // commitment when there is one, the unlock floor otherwise — so the
+      // widget's day count reads identically to the goal card's.
+      const commitment = goalCommitmentTarget(goal);
+      const threshold = commitment ?? calculateUnlockThreshold(goal);
       const goalVisual = categoryVisual(
         majorityCategory(
           limitedMarks.map((m) => ({ name: m.name, emoji: m.emoji ?? undefined })),
@@ -125,6 +129,7 @@ export async function buildWidgetData(): Promise<WidgetData> {
         accent: goalVisual.accent,
         progress,
         threshold: Math.max(1, threshold),
+        hasCommitment: commitment !== null,
         marks: limitedMarks.map(toWidgetMark),
       };
     });
@@ -143,6 +148,8 @@ export async function buildWidgetData(): Promise<WidgetData> {
       accent: goalVisual.accent,
       progress: 0,
       threshold: 7,
+      // A pseudo-goal has no commitment to speak of.
+      hasCommitment: false,
       marks: fallbackMarks.map(toWidgetMark),
     });
   }
