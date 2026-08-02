@@ -167,11 +167,26 @@ export default function RootLayout() {
     DMSans_700Bold,
   });
 
+  // The display preference, read on its own — no auth gate, no network. It is
+  // NOT part of loadUIState's job below: that one waits for auth init and does a
+  // profile round-trip, and the launch screen cannot wait for either.
+  const loadThemeMode = useUIStore((state) => state.loadThemeMode);
+  const themeLoaded = useUIStore((state) => state.themeLoaded);
   useEffect(() => {
-    if (fontsLoaded) {
+    loadThemeMode();
+  }, [loadThemeMode]);
+
+  useEffect(() => {
+    // Hold the native splash until the THEME is known as well as the fonts.
+    // Hiding on fonts alone uncovered a LoadingScreen still holding the store's
+    // 'system' default, so the first screen of every cold start followed the
+    // phone instead of Settings (founder report 2026-08-02). `themeLoaded` is
+    // guaranteed to settle — loadThemeMode races a timeout — so this can never
+    // strand the app on its launch image.
+    if (fontsLoaded && themeLoaded) {
       SplashScreen.hideAsync().catch(() => {});
     }
-  }, [fontsLoaded]);
+  }, [fontsLoaded, themeLoaded]);
 
   // M9 Phase 1 — drive React Query's online state from real device connectivity.
   useEffect(() => initNetworkOnlineManager(), []);

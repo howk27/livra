@@ -36,6 +36,18 @@ interface UIState {
   /** True when user has completed onboarding (same as `hasCompletedOnboarding` in product copy). */
   isOnboarded: boolean;
   uiStateLoaded: boolean; // Track if UI state has been loaded from storage
+  /**
+   * True once `theme_mode` has been read from storage — separately from, and
+   * earlier than, `uiStateLoaded`.
+   *
+   * These are two different questions and conflating them is what made the
+   * launch screen ignore the theme setting: `loadUIState` is gated behind auth
+   * init and does a profile round-trip, while the display preference is a single
+   * device-local key that nothing should wait on. Until it had landed the store
+   * still held its `'system'` default, so `useEffectiveTheme` followed the PHONE
+   * and the first screen of every cold start could contradict Settings.
+   */
+  themeLoaded: boolean;
   /** Batch 2 (founder 2026-07-18): the Focus "Daily habits" section is OPEN by
    *  default and only hides when the user says so — remembered locally. */
   dailyHabitsOpen: boolean;
@@ -62,14 +74,28 @@ interface UIState {
     userId?: string,
     meta?: { commitment?: string; completedAt?: string }
   ) => Promise<boolean>;
+  /**
+   * Reads ONLY `theme_mode`, with no auth gate and no network. Boot holds the
+   * native splash on this, so it must always settle — see THEME_LOAD_TIMEOUT_MS.
+   */
+  loadThemeMode: () => Promise<void>;
   loadUIState: (userId?: string) => Promise<void>;
   /** Clears local onboarding completion so the next signed-in account (possibly a different one on this device) is re-evaluated from scratch. */
   resetOnboardingState: () => Promise<void>;
   getEffectiveTheme: () => 'light' | 'dark';
 }
 
+/**
+ * Ceiling on the boot-time `theme_mode` read. Boot holds the native splash until
+ * this resolves, so a storage layer that never settles must not be able to hang
+ * the app on its launch image — it falls back to `'system'`, which is exactly
+ * today's behaviour, rather than to a frozen splash.
+ */
+export const THEME_LOAD_TIMEOUT_MS = 2000;
+
 export const useUIStore = create<UIState>((set, get) => ({
   themeMode: 'system',
+  themeLoaded: false,
   accentColor: 'blue',
   sortBy: 'recent',
   searchQuery: '',
@@ -231,6 +257,29 @@ export const useUIStore = create<UIState>((set, get) => ({
     set({ isOnboarded: false, uiStateLoaded: false });
   },
 
+  loadThemeMode: async () => {
+    // Already resolved (loadUIState can win the race on a warm start) — never
+    // re-read, and never overwrite a value the user changed in the meantime.
+    if (get().themeLoaded) return;
+    try {
+      const stored = await Promise.race([
+        AsyncStorage.getItem('theme_mode'),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), THEME_LOAD_TIMEOUT_MS)),
+      ]);
+      if (get().themeLoaded) return;
+      if (stored === 'light' || stored === 'dark' || stored === 'system') {
+        set({ themeMode: stored, themeLoaded: true });
+        return;
+      }
+      // Unset or unrecognised — keep the 'system' default rather than trusting
+      // a value the ThemeMode union does not cover.
+      set({ themeLoaded: true });
+    } catch (error) {
+      logger.error('[UIState] theme_mode read failed, falling back to system', error);
+      set({ themeLoaded: true });
+    }
+  },
+
   loadUIState: async (userId?: string) => {
     const tokenAtStart = onboardingResetToken;
     const supabase = getSupabaseClient();
@@ -346,6 +395,9 @@ export const useUIStore = create<UIState>((set, get) => ({
 
     set({
       themeMode: (themeMode as ThemeMode) || 'system',
+      // The full hydrate answers the theme question too, so a warm start that
+      // reaches here first satisfies boot's gate without a second read.
+      themeLoaded: true,
       accentColor: (accentColor as AccentColor) || 'blue',
       isOnboarded,
       dailyHabitsOpen,
