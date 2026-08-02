@@ -1,4 +1,5 @@
-import { Platform } from 'react-native';
+import { Appearance, Platform } from 'react-native';
+import { useUIStore } from '../../state/uiSlice';
 import { getSupabaseClient } from '../supabase';
 import { checkProStatus } from '../iap/iap';
 import {
@@ -23,6 +24,24 @@ import { categoryVisual } from './widgetIcons';
 const MAX_GOALS = 4;
 const MAX_MARKS_PER_GOAL = 6;
 
+/**
+ * The app's effective theme, resolved OUTSIDE a component.
+ *
+ * `useEffectiveTheme` is a hook and the snapshot is built from background sync,
+ * so it cannot be used here; `useUIStore.getState().getEffectiveTheme()` is not
+ * an option either — it hardcodes 'light' for system mode (uiSlice.ts:358, a
+ * stub with zero callers). `Appearance.getColorScheme()` is the non-hook read of
+ * the same system value `useColorScheme` returns, so 'system' resolves the same
+ * way the app itself resolves it.
+ */
+export function currentAppTheme(): 'light' | 'dark' {
+  const mode = useUIStore.getState().themeMode;
+  if (mode === 'system') {
+    return Appearance.getColorScheme() === 'dark' ? 'dark' : 'light';
+  }
+  return mode;
+}
+
 // M9 Phase 5A: the snapshot is built from the query layer — the same goals,
 // links and events the screens render — instead of the deleted mock DB and
 // Zustand stores. `ensureQueryData` serves the persisted cache when offline and
@@ -31,7 +50,7 @@ const MAX_MARKS_PER_GOAL = 6;
 export async function buildWidgetData(): Promise<WidgetData> {
   const { data } = await getSupabaseClient().auth.getSession();
   const userId = data.session?.user?.id;
-  if (!userId) return { goals: [], lastUpdated: Date.now(), isPro: false };
+  if (!userId) return { goals: [], lastUpdated: Date.now(), isPro: false, theme: currentAppTheme() };
 
   const { effectiveUnlocked: isPro } = await checkProStatus();
 
@@ -128,7 +147,7 @@ export async function buildWidgetData(): Promise<WidgetData> {
     });
   }
 
-  return { goals, lastUpdated: Date.now(), isPro };
+  return { goals, lastUpdated: Date.now(), isPro, theme: currentAppTheme() };
 }
 
 export async function syncWidgetData(): Promise<void> {

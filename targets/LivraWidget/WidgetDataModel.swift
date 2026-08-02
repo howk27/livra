@@ -34,19 +34,38 @@ struct WidgetData: Codable {
     let goals: [WidgetGoalData]
     let lastUpdated: Double
     let isPro: Bool
+    /// The APP's effective theme ("light" / "dark"), written by widgetSync.ts.
+    /// OPTIONAL on purpose: a snapshot written by an older app build has no such
+    /// key, and that snapshot stays on disk until the app next foregrounds. nil
+    /// means "fall back to the system trait", i.e. exactly today's behaviour.
+    let theme: String?
 
-    enum CodingKeys: String, CodingKey { case goals, lastUpdated, isPro }
+    enum CodingKeys: String, CodingKey { case goals, lastUpdated, isPro, theme }
 
-    init(goals: [WidgetGoalData], lastUpdated: Double, isPro: Bool) {
+    init(goals: [WidgetGoalData], lastUpdated: Double, isPro: Bool, theme: String? = nil) {
         self.goals = goals
         self.lastUpdated = lastUpdated
         self.isPro = isPro
+        self.theme = theme
+    }
+
+    /// Explicit scheme to render in, or nil to follow the system appearance.
+    var colorSchemeOverride: ColorScheme? {
+        switch theme {
+        case "dark": return .dark
+        case "light": return .light
+        default: return nil
+        }
     }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         isPro = (try? c.decode(Bool.self, forKey: .isPro)) ?? false
         lastUpdated = (try? c.decode(Double.self, forKey: .lastUpdated)) ?? 0
+        // Swift 5 `try?` FLATTENS optionals (SE-0230) — this is already String?,
+        // so do NOT add a second unwrap. Same trap that broke the EAS build on
+        // the legacy marks adapter below.
+        theme = (try? c.decodeIfPresent(String.self, forKey: .theme)) ?? nil
         if let v2 = try? c.decode([WidgetGoalData].self, forKey: .goals) {
             goals = v2
         } else {
@@ -176,7 +195,16 @@ enum WidgetLogQueue {
             )
         }
 
-        let updated = WidgetData(goals: updatedGoals, lastUpdated: current.lastUpdated, isPro: current.isPro)
+        // `theme` MUST be carried through. This re-encode runs on every widget
+        // tap; dropping the field here would erase the app's theme from the
+        // snapshot and silently revert the widget to following the phone the
+        // first time the user logged a mark from it.
+        let updated = WidgetData(
+            goals: updatedGoals,
+            lastUpdated: current.lastUpdated,
+            isPro: current.isPro,
+            theme: current.theme
+        )
         if let data = try? JSONEncoder().encode(updated),
            let str = String(data: data, encoding: .utf8) {
             defaults.set(str, forKey: LIVRA_WIDGET_DATA_KEY)

@@ -604,11 +604,18 @@ function WidgetQuerySync() {
     };
   }, [goalsQuery.data]);
 
+  // The snapshot carries the APP's theme (founder ruling 2026-08-02: the widget
+  // follows the app's setting, not the phone's), so a theme change has to rewrite
+  // it — otherwise the widget keeps the old scheme until the next data change.
+  // Reading the EFFECTIVE theme also covers 'system' flipping under a user who
+  // never touched the toggle.
+  const widgetTheme = useEffectiveTheme();
+
   useEffect(() => {
     if (initialized) {
       void syncWidgetData();
     }
-  }, [initialized, markCount, activeGoalTitle, activeGoalIdsKey]);
+  }, [initialized, markCount, activeGoalTitle, activeGoalIdsKey, widgetTheme]);
 
   return null;
 }

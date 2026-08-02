@@ -1,10 +1,51 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-const model = readFileSync(
+const rawModel = readFileSync(
   join(__dirname, '../../targets/LivraWidget/WidgetDataModel.swift'),
   'utf8',
 );
+
+// Comments stripped before any assertion: this file's comments quote the very
+// symbols the guards look for (e.g. the note explaining why `theme` must be
+// carried through the tap re-encode names `theme:` itself). Scanning raw source
+// would let prose satisfy a structural guard — the dead-guard class recorded in
+// docs/PROJECT-CONTEXT.md, hit again on 2026-08-02.
+const model = rawModel
+  .replace(/\r\n/g, '\n')
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .split('\n')
+  .map((line) => line.replace(/(^|[^:])\/\/.*$/, '$1'))
+  .join('\n');
+
+describe('the theme survives the widget-tap re-encode', () => {
+  // WidgetLogQueue.optimisticallyComplete rebuilds WidgetData on every tap.
+  // Omitting `theme` there would erase the app's theme from the snapshot the
+  // first time a mark was logged from the widget, silently reverting it to
+  // following the phone. Structural, and invisible to every other test.
+  it('constructs the updated snapshot with theme carried from the current one', () => {
+    const ctor = model.slice(model.indexOf('let updated = WidgetData('));
+    expect(ctor).toContain('theme: current.theme');
+  });
+
+  it('decodes theme as optional, so an older snapshot still renders', () => {
+    expect(model).toMatch(/let theme: String\?/);
+    expect(model).toContain('decodeIfPresent(String.self, forKey: .theme)');
+    expect(model).toContain('case goals, lastUpdated, isPro, theme');
+  });
+
+  it('maps only the two known values, defaulting to the system trait', () => {
+    expect(model).toContain('var colorSchemeOverride: ColorScheme?');
+    expect(model).toMatch(/case "dark": return \.dark/);
+    expect(model).toMatch(/case "light": return \.light/);
+    expect(model).toMatch(/default: return nil/);
+  });
+
+  it('strips comments, so prose cannot satisfy the guards above', () => {
+    expect(rawModel).toContain('MUST be carried through');
+    expect(model).not.toContain('MUST be carried through');
+  });
+});
 
 describe('WidgetData v2 Swift model', () => {
   it('defines a WidgetGoalData struct with a marks array', () => {

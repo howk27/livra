@@ -125,12 +125,14 @@ struct GoalRingView: View {
                     style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
                 )
                 .rotationEffect(.degrees(-90))
-            // The app's own Phosphor duotone glyph (accent baked into the asset),
-            // statically centered — carries the goal's identity.
-            Image(goal.icon.isEmpty ? "livra_circle" : goal.icon)
-                .resizable()
-                .scaledToFit()
-                .frame(width: diameter * 0.5, height: diameter * 0.5)
+            // GOAL GLYPH REMOVED 2026-08-02 (founder: "the goal icon feels
+            // redundant"). The widget showed TWO icons at once — this one inside
+            // the ring and the mark's category tile in LogMarkLabel — and since
+            // the goal glyph is derived from the majority category of the goal's
+            // marks (widgetSync.ts majorityCategory), it was usually the SAME
+            // glyph as the mark tile right beside it. Two copies of one symbol
+            // read as two different things. The ring alone carries the goal; the
+            // tile carries the mark.
         }
         .frame(width: diameter, height: diameter)
     }
@@ -215,6 +217,15 @@ struct QueueStatusText: View {
 
 struct AllDoneOrEmpty: View {
     let data: WidgetData
+    /// Small stacks its content under a CENTERED ring, so a hard .leading here
+    /// left the done row hanging off-axis once the last mark was logged — the
+    /// "it re-arranges and doesn't look aligned" report of 2026-08-02. Medium
+    /// lays out inside a leading VStack beside the ring and stays .leading.
+    var alignment: Alignment = .leading
+
+    private var textAlignment: TextAlignment {
+        alignment == .center ? .center : .leading
+    }
 
     var body: some View {
         if data.marks.isEmpty {
@@ -222,7 +233,8 @@ struct AllDoneOrEmpty: View {
                 .font(.system(size: 12, weight: .medium))
                 .foregroundColor(WidgetPalette.inkMuted)
                 .lineLimit(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .multilineTextAlignment(textAlignment)
+                .frame(maxWidth: .infinity, alignment: alignment)
         } else {
             HStack(spacing: 8) {
                 // Outlined (not filled) done cue — design-decisions 2026-07-12.
@@ -239,7 +251,7 @@ struct AllDoneOrEmpty: View {
                     .foregroundColor(WidgetPalette.ink)
                     .lineLimit(1)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: alignment)
         }
     }
 }
@@ -257,7 +269,7 @@ struct SmallWidgetView: View {
             if let mark = data.currentMark {
                 LogMarkButton(mark: mark, compact: true)
             } else {
-                AllDoneOrEmpty(data: data)
+                AllDoneOrEmpty(data: data, alignment: .center)
             }
         }
         .padding(12)
@@ -307,11 +319,32 @@ struct MediumWidgetView: View {
 
 // MARK: - Entry View
 
+// Applies the app's theme, when the snapshot carries one, by overriding the
+// colorScheme environment for the whole widget body. WidgetPalette's dynamic
+// UIColors resolve against that environment, so every surface, ink and ring
+// colour follows in one place — no palette threading, and nil (an older
+// snapshot) simply leaves the system trait in charge.
+extension View {
+    @ViewBuilder
+    func widgetColorScheme(_ scheme: ColorScheme?) -> some View {
+        if let scheme = scheme {
+            environment(\.colorScheme, scheme)
+        } else {
+            self
+        }
+    }
+}
+
 struct LivraWidgetEntryView: View {
     @Environment(\.widgetFamily) var widgetFamily
     let entry: LivraWidgetEntry
 
     var body: some View {
+        content.widgetColorScheme(entry.data.colorSchemeOverride)
+    }
+
+    @ViewBuilder
+    private var content: some View {
         switch widgetFamily {
         case .systemSmall:
             SmallWidgetView(data: entry.data)

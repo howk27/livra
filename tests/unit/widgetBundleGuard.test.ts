@@ -139,6 +139,26 @@ describe('LivraWidget is theme-aware (light + dark surfaces)', () => {
     expect(views.length).toBeLessThan(rawViews.length);
   });
 
+  // Founder ruling 2026-08-02: the widget follows the APP's theme. Swift only
+  // compiles at EAS, so these are source scans — but over STRIPPED source, so
+  // the explanatory comments cannot satisfy them.
+  it('overrides the colorScheme environment from the snapshot theme', () => {
+    expect(views).toContain('func widgetColorScheme');
+    expect(views).toMatch(/environment\(\\?\.colorScheme,\s*scheme\)/);
+    expect(views).toContain('entry.data.colorSchemeOverride');
+  });
+
+  it('drops the redundant goal glyph from the ring', () => {
+    // The ring must no longer render the goal's own icon; the mark tile in
+    // LogMarkLabel is the only glyph left. `goal.icon` reaching an Image() is
+    // the regression.
+    expect(views).not.toMatch(/Image\(goal\.icon/);
+  });
+
+  it('centers the done row on Small, where the ring above it is centered', () => {
+    expect(views).toContain('AllDoneOrEmpty(data: data, alignment: .center)');
+  });
+
   it('resolves surface + ink per color scheme via a dynamic UIColor', () => {
     expect(views).toMatch(/UIColor\s*\{/); // trait-based dynamic color
     expect(views).toContain('#F0EDE8'); // light surface
