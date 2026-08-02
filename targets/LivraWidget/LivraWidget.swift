@@ -12,8 +12,25 @@ import UIKit
 
 enum WidgetPalette {
     // Dynamic surface/ink resolve per light/dark; category accents stay constant.
-    static let bg = dynamic(light: "#F0EDE8", dark: "#1C3830")
+    //
+    // DARK SURFACE, corrected 2026-08-02 (founder device report: "widgets have the
+    // wrong tone, they stay green"). This was "#1C3830", which is
+    // colorsLight.FOREST — the LIGHT theme's brand green, the colour of a card or
+    // a button, never a page background. The widget was painting a light-theme
+    // brand colour as its dark-mode ground, so in dark mode it read as a green
+    // tile next to an app whose background is near-black. The app's dark page
+    // background is colorsDark.linen "#15211D" (the same ground the dark splash
+    // uses), so the widget now sits on it and the handoff app -> widget is one
+    // surface. Every ink pairing gained contrast: ink 10.85 -> 14.19, muted
+    // 6.81 -> 8.91, accent 5.61 -> 7.35, ring 6.53 -> 8.54.
+    static let bg = dynamic(light: "#F0EDE8", dark: "#15211D")
     static let ink = dynamic(light: "#1A1A18", dark: "#F0EDE8")
+    // Dark muted stays colorsDark.inkInverseMuted rather than moving to
+    // colorsDark.inkMuted ("#8A938E"): it was picked when this surface was a
+    // forest card, and on the corrected ground it still reads at 8.91:1 and keeps
+    // the mint tint the accent already carries. Changing it is a visual call the
+    // founder can only make on a device, so it is deliberately NOT bundled into a
+    // tone fix.
     static let inkMuted = dynamic(light: "#4A4A45", dark: "#A8C4BC")
     static let accent = dynamic(light: "#1C3830", dark: "#8DB5A8")
     static let ringTrack = dynamic(

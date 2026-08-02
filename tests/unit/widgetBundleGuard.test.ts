@@ -115,16 +115,48 @@ describe('LivraWidget iOS 17 container-background migration', () => {
 });
 
 describe('LivraWidget is theme-aware (light + dark surfaces)', () => {
-  const views = readFileSync(
+  const rawViews = readFileSync(
     join(__dirname, '../../targets/LivraWidget/LivraWidget.swift'),
     'utf8',
   );
 
+  // Swift comments stripped before any colour assertion. The palette is heavily
+  // commented and those comments QUOTE the hexes they explain, so a plain
+  // `toContain` scan is satisfied by prose — proven live on 2026-08-02, when
+  // reverting the dark surface failed only the line-based guard below while this
+  // block stayed green off a comment. That is the exact class of dead guard
+  // docs/PROJECT-CONTEXT.md warns about; do not scan raw source for a hex here.
+  const views = rawViews
+    .replace(/\r\n/g, '\n')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .map((line) => line.replace(/(^|[^:])\/\/.*$/, '$1'))
+    .join('\n');
+
+  it('strips comments before scanning, so prose cannot satisfy a colour assertion', () => {
+    expect(rawViews).toMatch(/colorsLight\.forest/i); // prose naming the old value
+    expect(views).not.toMatch(/colorsLight\.forest/i);
+    expect(views.length).toBeLessThan(rawViews.length);
+  });
+
   it('resolves surface + ink per color scheme via a dynamic UIColor', () => {
     expect(views).toMatch(/UIColor\s*\{/); // trait-based dynamic color
     expect(views).toContain('#F0EDE8'); // light surface
-    expect(views).toContain('#1C3830'); // dark surface
+    expect(views).toContain('#15211D'); // dark surface = colorsDark.linen
     expect(views).toContain('#1A1A18'); // light ink
+  });
+
+  // THIS GUARD PREVIOUSLY ENCODED THE BUG: it asserted the dark surface was
+  // "#1C3830", which is colorsLight.forest — a light-theme card/button colour
+  // used as a dark page background. The founder saw it as "the widget stays
+  // green". Asserting the string alone cannot catch the regression, because
+  // #1C3830 legitimately remains the LIGHT accent on the line below. So this
+  // reads the `bg` declaration specifically.
+  it('does not paint the light-theme forest as the dark surface', () => {
+    const bgLine = views.split('\n').find((l) => /static let bg\s*=/.test(l));
+    expect(bgLine).toBeDefined();
+    expect(bgLine).toContain('dark: "#15211D"');
+    expect(bgLine).not.toContain('#1C3830');
   });
 
   it('keeps the sanctioned amber→ember ring in both themes', () => {
