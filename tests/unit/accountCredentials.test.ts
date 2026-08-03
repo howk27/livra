@@ -213,6 +213,26 @@ describe('error mapping', () => {
     expect(mapPasswordChangeError({ message: 'Password is too weak' })).toMatch(/longer password/i);
     expect(mapPasswordChangeError(null)).toMatch(/could not change your password/i);
   });
+
+  // Supabase leaked-password protection (HaveIBeenPwned) was enabled on this
+  // project 2026-08-03 and refused a real password the founder uses elsewhere.
+  // Its message contains the word "weak", so it matched the LENGTH branch and
+  // the app answered "choose a longer password" — advice that can never work,
+  // because length is not the reason. Padding a breached password gets the same
+  // refusal forever. The branch order is the fix, so the order is what is pinned.
+  it('tells a breached password the truth instead of blaming its length', () => {
+    const verbatim = {
+      code: 'weak_password',
+      message: 'Password is known to be weak and easy to guess, please choose a different one.',
+    };
+    expect(mapPasswordChangeError(verbatim)).toMatch(/data breach/i);
+    expect(mapPasswordChangeError(verbatim)).not.toMatch(/longer|characters/i);
+
+    // The genuinely-short case must keep the length advice it needs.
+    expect(mapPasswordChangeError({ message: 'Password should be at least 8 characters' })).toMatch(
+      /longer password/i,
+    );
+  });
 });
 
 describe('copy rules', () => {

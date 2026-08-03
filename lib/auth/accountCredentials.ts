@@ -264,10 +264,31 @@ export function mapReauthError(error?: AuthErrorLike | null): string {
   return 'We could not confirm your current password. Please try again.';
 }
 
+/**
+ * A password rejected for being in a known breach corpus, NOT for being short.
+ *
+ * Supabase's leaked-password protection (HaveIBeenPwned) was enabled on this
+ * project 2026-08-03 and answers `weak_password` with "Password is known to be
+ * weak and easy to guess". That string contains "weak", so it fell into the
+ * length branch below and the app told the user to make the password LONGER.
+ * That advice cannot work, because length is not why it was refused: a user who
+ * pads a breached password still gets refused, with the same message, forever.
+ *
+ * MUST be tested before the length branch for exactly that reason.
+ */
+function isBreachedPasswordError(t: string): boolean {
+  return /known to be weak|easy to guess|pwned|breach|compromised/.test(t);
+}
+
 export function mapPasswordChangeError(error?: AuthErrorLike | null): string {
   const t = text(error);
   if (/should be different|same_password|different from the old/.test(t)) {
     return 'That is already your password. Pick a different one.';
+  }
+  if (isBreachedPasswordError(t)) {
+    // Name the real reason. "It works on my other sites" is the symptom of the
+    // problem, not evidence against it.
+    return 'That password has appeared in a known data breach, so it is not safe to use here. Pick one you have not used elsewhere.';
   }
   if (/weak|password_strength|at least/.test(t)) {
     return `Please choose a longer password · at least ${MIN_PASSWORD_LENGTH} characters.`;

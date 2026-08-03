@@ -25,6 +25,7 @@ import {
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { getSupabaseClient } from '../../lib/supabase';
 import { clearRecoveryPending } from '../../lib/auth/recoveryPending';
+import { mapPasswordChangeError, MIN_PASSWORD_LENGTH } from '../../lib/auth/accountCredentials';
 import { logger } from '../../lib/utils/logger';
 import { useNotification } from '../../contexts/NotificationContext';
 import { confirm } from '../../components/ui/overlays';
@@ -106,8 +107,12 @@ export default function ResetPasswordCompleteScreen() {
         ? 'We could not confirm a valid reset session on this device.'
         : 'Choose a new password for your account.';
 
+  // MIN_PASSWORD_LENGTH, not a local 6: signin, Edit Profile and this screen are
+  // three doors to the same credential, and this one was two characters looser
+  // than the other two — a password accepted here would be rejected on the next
+  // change.
   const validatePassword = (password: string) => {
-    return password.length >= 6;
+    return password.length >= MIN_PASSWORD_LENGTH;
   };
 
   const handleResetPassword = async () => {
@@ -124,7 +129,7 @@ export default function ResetPasswordCompleteScreen() {
     }
 
     if (!validatePassword(newPassword)) {
-      setError('Password must be at least 6 characters');
+      setError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
       return;
     }
 
@@ -159,7 +164,13 @@ export default function ResetPasswordCompleteScreen() {
           setRecoveryGate('invalid');
           throw new Error('This reset link has expired. Please request a new password reset.');
         }
-        throw updateError;
+        // Curate the server's words here, not in the catch: everything else
+        // thrown in this block is already user-facing copy, and `setError` puts
+        // whatever it receives straight on screen. Before this, GoTrue's raw
+        // string reached the user — the same raw-`.message` echo ec5dfa1 fixed
+        // on export and avatar upload. Newly load-bearing since 2026-08-03,
+        // when leaked-password protection started refusing real passwords here.
+        throw new Error(mapPasswordChangeError(updateError));
       }
 
       // T4: the password is proven — take the leash off BEFORE navigating, or
