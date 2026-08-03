@@ -25,6 +25,7 @@
     },
     "production": {
       "distribution": "store",
+      "channel": "production",
       "ios": {
         "simulator": false
       },
