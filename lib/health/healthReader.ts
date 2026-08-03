@@ -1,5 +1,9 @@
-import AppleHealthKit from 'react-native-health';
+import { getHealthNative } from './healthNative';
 import type { HealthKitType } from './healthTypes';
+
+// Every reader treats a callback error as "no days"; an unavailable native
+// module (see healthNative) gets the same quiet empty result rather than a
+// synchronous throw inside the Promise executor.
 
 function isoStart(dateStr: string): string {
   return new Date(`${dateStr}T00:00:00`).toISOString();
@@ -12,7 +16,9 @@ export async function readWorkoutDays(weekDates: string[]): Promise<Set<string>>
   const start = isoStart(weekDates[0]!);
   const end = isoEnd(weekDates[weekDates.length - 1]!);
   return new Promise(resolve => {
-    AppleHealthKit.getSamples(
+    const native = getHealthNative();
+    if (!native) { resolve(new Set()); return; }
+    native.getSamples(
       { startDate: start, endDate: end, type: 'Workout' } as any,
       (err: any, results: any[]) => {
         if (err || !results) { resolve(new Set()); return; }
@@ -30,7 +36,9 @@ export async function readSleepDays(weekDates: string[]): Promise<Set<string>> {
   const end = new Date(`${weekDates[weekDates.length - 1]!}T10:00:00`);
 
   return new Promise(resolve => {
-    AppleHealthKit.getSleepSamples(
+    const native = getHealthNative();
+    if (!native) { resolve(new Set()); return; }
+    native.getSleepSamples(
       { startDate: start.toISOString(), endDate: end.toISOString() } as any,
       (err: any, results: any[]) => {
         if (err || !results) { resolve(new Set()); return; }
@@ -50,7 +58,9 @@ export async function readHydrationDays(weekDates: string[]): Promise<Set<string
   const start = isoStart(weekDates[0]!);
   const end = isoEnd(weekDates[weekDates.length - 1]!);
   return new Promise(resolve => {
-    AppleHealthKit.getWaterSamples(
+    const native = getHealthNative();
+    if (!native) { resolve(new Set()); return; }
+    native.getWaterSamples(
       { startDate: start, endDate: end, unit: 'ml' } as any,
       (err: any, results: any[]) => {
         if (err || !results) { resolve(new Set()); return; }
@@ -65,7 +75,9 @@ export async function readMindfulDays(weekDates: string[]): Promise<Set<string>>
   const start = isoStart(weekDates[0]!);
   const end = isoEnd(weekDates[weekDates.length - 1]!);
   return new Promise(resolve => {
-    AppleHealthKit.getMindfulSession(
+    const native = getHealthNative();
+    if (!native) { resolve(new Set()); return; }
+    native.getMindfulSession(
       { startDate: start, endDate: end } as any,
       (err: any, results: any[]) => {
         if (err || !results) { resolve(new Set()); return; }
@@ -80,7 +92,9 @@ export async function readStepDays(weekDates: string[], stepGoal: number): Promi
   const start = isoStart(weekDates[0]!);
   const end = isoEnd(weekDates[weekDates.length - 1]!);
   return new Promise(resolve => {
-    AppleHealthKit.getDailyStepCountSamples(
+    const native = getHealthNative();
+    if (!native) { resolve(new Set()); return; }
+    native.getDailyStepCountSamples(
       { startDate: start, endDate: end, includeManuallyAdded: false } as any,
       (err: any, results: any[]) => {
         if (err || !results) { resolve(new Set()); return; }
@@ -100,7 +114,9 @@ export async function readRunningDays(weekDates: string[]): Promise<Set<string>>
   const start = isoStart(weekDates[0]!);
   const end = isoEnd(weekDates[weekDates.length - 1]!);
   return new Promise(resolve => {
-    AppleHealthKit.getSamples(
+    const native = getHealthNative();
+    if (!native) { resolve(new Set()); return; }
+    native.getSamples(
       { startDate: start, endDate: end, type: 'Running' } as any,
       (err: any, results: any[]) => {
         if (err || !results) { resolve(new Set()); return; }

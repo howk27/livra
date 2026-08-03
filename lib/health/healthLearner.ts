@@ -1,4 +1,4 @@
-import AppleHealthKit from 'react-native-health';
+import { getHealthNative } from './healthNative';
 
 export function roundToNearest(value: number, multiple: number): number {
   return Math.round(value / multiple) * multiple;
@@ -33,7 +33,9 @@ export async function suggestStepGoal(): Promise<number | null> {
   start.setDate(end.getDate() - 30);
 
   return new Promise(resolve => {
-    AppleHealthKit.getDailyStepCountSamples(
+    const native = getHealthNative();
+    if (!native) { resolve(null); return; }
+    native.getDailyStepCountSamples(
       { startDate: start.toISOString(), endDate: end.toISOString(), includeManuallyAdded: false } as any,
       (err: any, results: any[]) => {
         if (err || !results || results.length === 0) { resolve(null); return; }
@@ -49,7 +51,9 @@ export async function suggestWakeTime(): Promise<string | null> {
   start.setDate(end.getDate() - 14);
 
   return new Promise(resolve => {
-    AppleHealthKit.getSleepSamples(
+    const native = getHealthNative();
+    if (!native) { resolve(null); return; }
+    native.getSleepSamples(
       { startDate: start.toISOString(), endDate: end.toISOString() } as any,
       (err: any, results: any[]) => {
         if (err || !results || results.length === 0) { resolve(null); return; }

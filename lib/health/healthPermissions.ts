@@ -1,4 +1,4 @@
-import AppleHealthKit from 'react-native-health';
+import { getHealthNative, describeHealthNativeAbsence } from './healthNative';
 import { HEALTH_KIT_PERMISSIONS } from './healthTypes';
 import type { HealthKitType } from './healthTypes';
 
@@ -13,8 +13,10 @@ export const HEALTH_UNAVAILABLE = 'health/unavailable';
 
 export class HealthUnavailableError extends Error {
   readonly code = HEALTH_UNAVAILABLE;
-  constructor() {
-    super('Apple Health is not available in this build (native module missing)');
+  constructor(detail?: string) {
+    super(
+      `Apple Health is not available in this build (native module missing)${detail ? ` — ${detail}` : ''}`,
+    );
     this.name = 'HealthUnavailableError';
   }
 }
@@ -36,13 +38,16 @@ export async function requestPermissions(types: HealthKitType[]): Promise<void> 
   // authorization, and the two used to arrive at the UI as one sentence. This
   // one is worth naming: it means the build lacks the HealthKit pod or the
   // entitlement, which no amount of tapping in iOS Settings will fix.
-  if (!AppleHealthKit || typeof AppleHealthKit.initHealthKit !== 'function') {
-    throw new HealthUnavailableError();
+  // Resolution goes through healthNative — the packaged export alone reads as
+  // "missing" on every New Architecture build even with the pod compiled in.
+  const native = getHealthNative();
+  if (!native) {
+    throw new HealthUnavailableError(describeHealthNativeAbsence());
   }
 
   return new Promise((resolve, reject) => {
     try {
-      AppleHealthKit.initHealthKit(
+      native.initHealthKit(
         { permissions: { read: readPermissions as any[], write: [] } },
         (error: string) => {
           if (error) { reject(new Error(error)); return; }
