@@ -11,8 +11,31 @@ import {
   mapSendCodeError,
   needsEmailVerification,
   shouldAskToVerify,
+  shouldRecheckVerification,
 } from '../../lib/auth/emailVerification';
 import type { CredentialUser } from '../../lib/auth/accountCredentials';
+
+// 2026-08-02 QA: the stamp was written server-side while the app was in Mail,
+// and the banner never noticed because nothing re-read it. Foreground re-check
+// replaces the manual "I opened the link" button.
+describe('shouldRecheckVerification', () => {
+  it('rechecks a signed-in account known to be unverified', () => {
+    expect(shouldRecheckVerification('u1', null)).toBe(true);
+  });
+
+  it('rechecks when the stamp is still unknown — the mount read may have failed offline', () => {
+    expect(shouldRecheckVerification('u1', undefined)).toBe(true);
+  });
+
+  it('never rechecks a verified account', () => {
+    expect(shouldRecheckVerification('u1', '2026-08-03T00:27:55Z')).toBe(false);
+  });
+
+  it('never rechecks signed out', () => {
+    expect(shouldRecheckVerification(null, null)).toBe(false);
+    expect(shouldRecheckVerification(undefined, undefined)).toBe(false);
+  });
+});
 
 const user = (over: Partial<CredentialUser> = {}): CredentialUser =>
   ({ id: 'u1', email: 'dei@example.com', ...over } as CredentialUser);

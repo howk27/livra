@@ -28,7 +28,6 @@ import { caughtErrorCopy } from '../../lib/copy';
 import { useNotification } from '../../contexts/NotificationContext';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import {
-  LINK_NOT_VERIFIED_YET_COPY,
   RESEND_COOLDOWN_SECONDS,
   describeLinkSent,
   describeResend,
@@ -36,10 +35,8 @@ import {
   type VerificationStamp,
   resendSecondsLeft,
 } from '../../lib/auth/emailVerification';
-import {
-  fetchEmailVerifiedAt,
-  sendVerificationLink,
-} from '../../lib/auth/emailVerificationService';
+import { sendVerificationLink } from '../../lib/auth/emailVerificationService';
+import { useEmailVerificationAutoRefresh } from '../../hooks/useEmailVerificationAutoRefresh';
 import {
   describeEmailChangeOutcome,
   emailChangeReauthMethod,
@@ -102,7 +99,7 @@ export default function ProfileScreen() {
   // and re-reads the stamp).
   // `undefined` until the profile row is read — see shouldAskToVerify (QC-1061).
   const [emailVerifiedAt, setEmailVerifiedAt] = useState<VerificationStamp>(undefined);
-  const [verifyStage, setVerifyStage] = useState<'idle' | 'sending' | 'link' | 'checking'>('idle');
+  const [verifyStage, setVerifyStage] = useState<'idle' | 'sending' | 'link'>('idle');
   const [codeSentAt, setCodeSentAt] = useState<number | null>(null);
   const [resendLeft, setResendLeft] = useState(0);
   const [verifyError, setVerifyError] = useState<string | null>(null);
@@ -261,7 +258,7 @@ export default function ProfileScreen() {
   // profiles.email_verified_at — a column the client cannot write. Here the
   // app only sends, waits, and re-reads.
   const handleSendVerificationLink = useCallback(async () => {
-    if (!userEmail || verifyStage === 'sending' || verifyStage === 'checking') return;
+    if (!userEmail || verifyStage === 'sending') return;
     setVerifyError(null);
     setVerifyStage('sending');
     const result = await sendVerificationLink(supabase, userEmail);
@@ -289,24 +286,18 @@ export default function ProfileScreen() {
     return () => clearInterval(id);
   }, [codeSentAt]);
 
-  // "I opened the link" — re-read the stamp the website flow wrote. Only the
-  // row can say yes; the app never declares success on its own.
-  const handleCheckVerified = useCallback(async () => {
-    if (verifyStage === 'checking' || !user?.id) return;
+  // The stamp is re-read AUTOMATICALLY on return to the foreground (2026-08-02
+  // QA: verification completes in Mail/Safari, so coming back IS the moment to
+  // look). The manual "I opened the link" button is gone; only the row can say
+  // yes, the app still never declares success on its own.
+  useEmailVerificationAutoRefresh(supabase, user?.id, emailVerifiedAt, (stamp) => {
+    setEmailVerifiedAt(stamp);
     setVerifyError(null);
-    setVerifyStage('checking');
-    const stamped = await fetchEmailVerifiedAt(supabase, user.id);
-    if (stamped) {
-      setEmailVerifiedAt(stamped);
+    if (verifyStage === 'link') {
       setVerifyStage('idle');
       showSuccess('Your email is verified.');
-      return;
     }
-    setVerifyError(LINK_NOT_VERIFIED_YET_COPY);
-    setVerifyStage('link');
-    // showSuccess is a stable context callback, deliberately omitted: listing it
-    // makes the React compiler drop this memo (same note as pickImage).
-  }, [verifyStage, supabase, user?.id]);
+  });
 
   const handleEmailChange = useCallback(async () => {
     if (savingEmail) return;
@@ -711,22 +702,15 @@ export default function ProfileScreen() {
                 the reward for verifying is that the app stops mentioning it. */}
             {shouldAskToVerify(user, emailVerifiedAt) && !emailEditing ? (
               <>
-                {verifyStage === 'link' || verifyStage === 'checking' ? (
+                {verifyStage === 'link' ? (
                   <>
                     <Text style={styles.note}>{describeLinkSent(userEmail)}</Text>
                     {verifyError ? <Text style={styles.errorText}>{verifyError}</Text> : null}
                     <View style={styles.actionRow}>
-                      <PillButton
-                        variant="ghost"
-                        label={verifyStage === 'checking' ? 'Checking…' : 'I opened the link'}
-                        onPress={() => { void handleCheckVerified(); }}
-                        disabled={verifyStage === 'checking'}
-                        style={styles.actionFlex}
-                      />
                       <TouchableOpacity
                         onPress={() => { void handleSendVerificationLink(); }}
                         style={styles.resendBtn}
-                        disabled={verifyStage === 'checking' || resendLeft > 0}
+                        disabled={resendLeft > 0}
                         accessibilityRole="button"
                         accessibilityState={{ disabled: resendLeft > 0 }}
                         accessibilityLabel={

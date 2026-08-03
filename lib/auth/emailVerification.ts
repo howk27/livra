@@ -67,6 +67,25 @@ export function shouldAskToVerify(
   return needsEmailVerification(user, emailVerifiedAt);
 }
 
+/**
+ * Should a return to the foreground re-read the stamp? (2026-08-02 QA: the
+ * website flow stamped the row while the app sat in the background, and the
+ * banner never noticed — both screens read the stamp exactly once, on mount.)
+ *
+ * True for a signed-in account whose stamp is null OR still unknown: unknown
+ * means the mount read may have failed (offline, transient), and coming back
+ * to the foreground is exactly the moment to retry. This deliberately differs
+ * from shouldAskToVerify, where unknown must stay silent (QC-1061) — an extra
+ * SELECT is harmless, an extra banner is not.
+ */
+export function shouldRecheckVerification(
+  userId: string | null | undefined,
+  emailVerifiedAt: VerificationStamp,
+): boolean {
+  if (!userId) return false;
+  return !emailVerifiedAt;
+}
+
 /** GoTrue's own rejections when ASKING for a link (signInWithOtp). */
 export function mapSendCodeError(message?: string | null): string {
   const m = (message ?? '').toLowerCase();

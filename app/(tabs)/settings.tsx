@@ -45,6 +45,7 @@ import type { FrequencyKind } from '../../types';
 import { getSupabaseClient } from '../../lib/supabase';
 import { isApplePrivateRelayEmail } from '../../lib/auth/accountCredentials';
 import { shouldAskToVerify, type VerificationStamp } from '../../lib/auth/emailVerification';
+import { useEmailVerificationAutoRefresh } from '../../hooks/useEmailVerificationAutoRefresh';
 import { queryClient } from '../../lib/data/queryClient';
 import { queryKeys } from '../../lib/data/queryKeys';
 import { flushOutbox, pendingOutboxEntries } from '../../lib/data/outbox';
@@ -212,6 +213,10 @@ export default function SettingsScreen() {
   // auto-confirms at signup, so that column is stamped for everyone and can
   // never drive a banner (verified live 2026-07-25).
   const needsVerification = shouldAskToVerify(user, emailVerifiedAt);
+  // Verification completes outside the app (Mail → website stamps the row), so
+  // returning to the foreground re-reads the stamp and the banner clears on its
+  // own — no manual tap (2026-08-02 QA).
+  useEmailVerificationAutoRefresh(supabase, user?.id, emailVerifiedAt, setEmailVerifiedAt);
   const onPrivateRelay = isApplePrivateRelayEmail(user?.email);
 
   // --- Load profile display name ---
