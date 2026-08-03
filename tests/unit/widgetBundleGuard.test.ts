@@ -149,11 +149,38 @@ describe('LivraWidget is theme-aware (light + dark surfaces)', () => {
     expect(views).toContain('entry.data.colorSchemeOverride');
   });
 
-  it('drops the redundant goal glyph from the ring', () => {
-    // The ring must no longer render the goal's own icon; the mark tile in
-    // LogMarkLabel is the only glyph left. `goal.icon` reaching an Image() is
-    // the regression.
-    expect(views).not.toMatch(/Image\(goal\.icon/);
+  // Founder redesign 2026-08-03 INVERTED the 2026-08-02 removal: the medium
+  // ring carries the GOAL glyph again, and the duplication that justified the
+  // removal is resolved the other way — the medium mark row is now text-only.
+  it('renders the goal glyph inside the ring (medium), and nowhere on the mark row', () => {
+    expect(views).toMatch(/Image\(goal\.icon/);
+    const labelFrom = views.indexOf('struct LogMarkLabel');
+    const labelTo = views.indexOf('struct ', labelFrom + 1);
+    expect(labelFrom).toBeGreaterThan(-1);
+    expect(views.slice(labelFrom, labelTo)).not.toMatch(/Image\(mark\.icon/);
+  });
+
+  // Founder redesign 2026-08-03: the small widget is the Next Queue Mark —
+  // mark icon leading, NO ring, and a dedicated full-width + pill that logs
+  // without opening the app (everything else falls through to widgetURL).
+  it('small widget: no ring, mark icon leads, + pill logs via the intent', () => {
+    const smallFrom = views.indexOf('struct SmallWidgetView');
+    const smallTo = views.indexOf('struct MediumWidgetView');
+    expect(smallFrom).toBeGreaterThan(-1);
+    const small = views.slice(smallFrom, smallTo);
+    expect(small).not.toContain('GoalRingView');
+    expect(small).toMatch(/Image\(mark\.icon/);
+    expect(small).toContain('LogPlusButton(mark: mark)');
+    // The + pill must be the interactive kind on iOS 17 (in-widget log, no app
+    // launch) with the deep-link fallback below it.
+    const plusFrom = views.indexOf('struct LogPlusButton');
+    const plusTo = views.indexOf('struct LogPlusLabel');
+    expect(plusFrom).toBeGreaterThan(-1);
+    const plusButton = views.slice(plusFrom, plusTo);
+    expect(plusButton).toContain('Button(intent: LogMarkIntent(markId: mark.id))');
+    expect(plusButton).toContain('livra://log-mark?markId=');
+    // Full width = the generous target the founder asked for.
+    expect(views.slice(plusTo)).toMatch(/\.frame\(maxWidth: \.infinity\)\s*\n\s*\.frame\(height: 36\)/);
   });
 
   it('centers the done row on Small, where the ring above it is centered', () => {

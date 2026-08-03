@@ -142,14 +142,16 @@ struct GoalRingView: View {
                     style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
                 )
                 .rotationEffect(.degrees(-90))
-            // GOAL GLYPH REMOVED 2026-08-02 (founder: "the goal icon feels
-            // redundant"). The widget showed TWO icons at once — this one inside
-            // the ring and the mark's category tile in LogMarkLabel — and since
-            // the goal glyph is derived from the majority category of the goal's
-            // marks (widgetSync.ts majorityCategory), it was usually the SAME
-            // glyph as the mark tile right beside it. Two copies of one symbol
-            // read as two different things. The ring alone carries the goal; the
-            // tile carries the mark.
+            // GOAL GLYPH RESTORED 2026-08-03 (founder redesign: "Bigger = shows
+            // the goal ring progress WITH the goal icon"). The 2026-08-02
+            // removal fixed a DUPLICATION — this glyph next to the mark tile's
+            // identical glyph — and that duplication is gone the other way now:
+            // the medium mark row is text-only (no icon tile), so the ring's
+            // glyph is the only one on the medium widget and it names the GOAL.
+            Image(goal.icon.isEmpty ? "livra_circle" : goal.icon)
+                .resizable()
+                .scaledToFit()
+                .frame(width: diameter * 0.34, height: diameter * 0.34)
         }
         .frame(width: diameter, height: diameter)
     }
@@ -159,17 +161,16 @@ struct GoalRingView: View {
 
 struct LogMarkButton: View {
     let mark: WidgetMarkData
-    var compact: Bool = false
 
     var body: some View {
         if #available(iOS 17.0, *) {
             Button(intent: LogMarkIntent(markId: mark.id)) {
-                LogMarkLabel(mark: mark, compact: compact)
+                LogMarkLabel(mark: mark)
             }
             .buttonStyle(.plain)
         } else {
             Link(destination: URL(string: "livra://log-mark?markId=\(mark.id)")!) {
-                LogMarkLabel(mark: mark, compact: compact)
+                LogMarkLabel(mark: mark)
             }
         }
     }
@@ -177,7 +178,6 @@ struct LogMarkButton: View {
 
 struct LogMarkLabel: View {
     let mark: WidgetMarkData
-    var compact: Bool = false
 
     private var accent: Color {
         mark.accent.isEmpty ? WidgetPalette.accent : Color(hex: mark.accent)
@@ -185,33 +185,73 @@ struct LogMarkLabel: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            // Category icon tile — mirrors the in-app MarkRow icon tile
-            // (Phosphor duotone glyph on an accent-tinted rounded tile).
-            Image(mark.icon.isEmpty ? "livra_circle" : mark.icon)
-                .resizable()
-                .scaledToFit()
-                .frame(width: compact ? 15 : 18, height: compact ? 15 : 18)
-                .frame(width: compact ? 24 : 30, height: compact ? 24 : 30)
-                .background(accent.opacity(0.14))
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            // NO icon tile here — founder redesign 2026-08-03: on the medium
+            // widget the next mark is text-only; the goal glyph inside the ring
+            // is the only icon. (The small widget shows the mark icon
+            // prominently in its own layout instead.)
             Text(mark.name)
-                .font(.system(size: compact ? 12 : 15, weight: .semibold))
+                .font(.system(size: 15, weight: .semibold))
                 .foregroundColor(WidgetPalette.ink)
                 .lineLimit(1)
                 .truncationMode(.tail)
             Spacer(minLength: 4)
             Image(systemName: "plus.circle.fill")
-                .font(.system(size: compact ? 17 : 23))
+                .font(.system(size: 23))
                 .foregroundColor(accent)
         }
-        // Medium's pill is 10/30/10 = 50pt tall and AllDoneOrEmpty's matches it
-        // exactly, so logging the last mark of the day changes the pill's
-        // CONTENTS and nothing else moves.
-        .padding(.vertical, compact ? 8 : 10)
-        .padding(.horizontal, compact ? 8 : 12)
+        // minHeight 30 keeps the pill at 10/30/10 = 50pt — the height the icon
+        // tile used to enforce and AllDoneOrEmpty still matches exactly, so
+        // logging the last mark of the day changes the pill's CONTENTS and
+        // nothing else moves.
+        .frame(minHeight: 30)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 12)
         .frame(maxWidth: .infinity)
         .background(accent.opacity(0.10))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+}
+
+// MARK: - Small-widget log button (a full-width + pill, nothing else in it)
+//
+// Founder redesign 2026-08-03: on the small widget the + must be "easy to tap
+// without accidentally opening the app". Everything outside an interactive
+// Button falls through to widgetURL and LAUNCHES Livra, so the log affordance
+// is a full-width pill anchored at the bottom — the largest tap target the
+// family allows, spatially separate from the icon/name zone that opens the app.
+
+struct LogPlusButton: View {
+    let mark: WidgetMarkData
+
+    var body: some View {
+        if #available(iOS 17.0, *) {
+            Button(intent: LogMarkIntent(markId: mark.id)) {
+                LogPlusLabel(mark: mark)
+            }
+            .buttonStyle(.plain)
+        } else {
+            Link(destination: URL(string: "livra://log-mark?markId=\(mark.id)")!) {
+                LogPlusLabel(mark: mark)
+            }
+        }
+    }
+}
+
+struct LogPlusLabel: View {
+    let mark: WidgetMarkData
+
+    private var accent: Color {
+        mark.accent.isEmpty ? WidgetPalette.accent : Color(hex: mark.accent)
+    }
+
+    var body: some View {
+        Image(systemName: "plus")
+            .font(.system(size: 16, weight: .bold))
+            .foregroundColor(accent)
+            .frame(maxWidth: .infinity)
+            .frame(height: 36)
+            .background(accent.opacity(0.14))
+            .clipShape(Capsule())
     }
 }
 
@@ -306,24 +346,53 @@ struct AllDoneOrEmpty: View {
     }
 }
 
-// MARK: - Small Widget (2×2): ring + one queued mark to log
+// MARK: - Small Widget (2×2): the Next Queue Mark — icon first, no ring
+//
+// Founder redesign 2026-08-03: the small widget IS the next queued mark of the
+// first goal in the working order. The mark's icon leads (the same
+// currentGoal/currentMark queue derivation as before picks it), the name under
+// it, and the + pill anchored at the bottom is the only thing that logs —
+// icon and name fall through to widgetURL and open the app.
 
 struct SmallWidgetView: View {
     let data: WidgetData
 
+    private func accent(for mark: WidgetMarkData) -> Color {
+        mark.accent.isEmpty ? WidgetPalette.accent : Color(hex: mark.accent)
+    }
+
     var body: some View {
-        VStack(spacing: 8) {
-            if let goal = data.currentGoal {
-                GoalRingView(goal: goal, diameter: 58, lineWidth: 6)
+        if let mark = data.currentMark {
+            VStack(alignment: .leading, spacing: 6) {
+                // The mark's category glyph, prominent — the widget's identity.
+                Image(mark.icon.isEmpty ? "livra_circle" : mark.icon)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 26, height: 26)
+                    .frame(width: 44, height: 44)
+                    .background(accent(for: mark).opacity(0.14))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                Text(mark.name)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(WidgetPalette.ink)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
+                Spacer(minLength: 2)
+                LogPlusButton(mark: mark)
             }
-            if let mark = data.currentMark {
-                LogMarkButton(mark: mark, compact: true)
-            } else {
+            .padding(12)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        } else {
+            // Done / empty keep the centered treatment — with no ring above,
+            // center is simply the small family's axis.
+            VStack {
+                Spacer()
                 AllDoneOrEmpty(data: data, alignment: .center, compact: true)
+                Spacer()
             }
+            .padding(12)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -365,7 +434,7 @@ struct MediumWidgetView: View {
                         .truncationMode(.tail)
 
                     if let mark = data.currentMark {
-                        LogMarkButton(mark: mark, compact: false)
+                        LogMarkButton(mark: mark)
                         QueueStatusText(data: data)
                     } else {
                         AllDoneOrEmpty(data: data)
@@ -450,7 +519,7 @@ struct LivraWidget: Widget {
             LivraWidgetEntryView(entry: entry)
         }
         .configurationDisplayName("Livra")
-        .description("Your goal ring and the next mark to log in one tap.")
+        .description("Your next mark, one tap to log — with your goal ring on the medium size.")
         .supportedFamilies([.systemSmall, .systemMedium])
         // iOS 17+ adds default content margins (~16pt) on top of the views'
         // explicit padding, squeezing the ring + tiles past the content region
