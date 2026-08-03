@@ -14,6 +14,7 @@ import { useEffectiveTheme } from '../../state/uiSlice';
 import { useMotion } from '../../hooks/useMotion';
 import { useSettleEntrance } from '../../hooks/useSettleEntrance';
 import { applyOpacity } from '../../src/components/icons/color';
+import { goalCardSurface } from '../../theme/goalCardSurface';
 import { GoalTitle } from '../ui/GoalTitle';
 import { CATEGORY_MAP } from '../ui/MarkRow';
 import { goalCardContent } from '../../lib/creation/creationPreview';
@@ -129,15 +130,15 @@ export function GoalCardPreview({
   const hasTitle = !!title?.trim();
   const shownTitle = hasTitle ? (title as string) : (titlePlaceholder ?? '');
 
-  // FU-5 hollow treatment, verbatim from the Goals screen: hairline accent
-  // border + translucent forest wash (denser on the dark ground).
-  const cardWash = applyOpacity(c.forest, theme === 'dark' ? 0.1 : 0.07);
-  const cardBorder = applyOpacity(c.accent, 0.55);
+  // FU-5 hollow treatment, now SHARED with the Goals screen rather than copied
+  // from it (theme/goalCardSurface.ts) — this preview promises the card the user
+  // is about to get, so the two must not be able to drift.
+  const cardSurface = goalCardSurface(theme);
 
   return (
     <Animated.View
       testID={testID}
-      style={[styles.card, { backgroundColor: cardWash, borderColor: cardBorder }, entranceStyle]}
+      style={[styles.card, cardSurface, entranceStyle]}
     >
       <View style={styles.topRow}>
         <View style={[styles.dot, { backgroundColor: c.accent }]} />

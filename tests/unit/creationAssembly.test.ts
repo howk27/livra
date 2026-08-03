@@ -68,11 +68,32 @@ describe('the artifact anchors every creation screen (QC2-H)', () => {
 
 describe('the previews are the real components, not lookalikes (QC2-H)', () => {
   it('GoalCardPreview reuses GoalTitle and the FU-5 hollow treatment', () => {
-    const src = read('components/creation/GoalCardPreview.tsx');
+    // This used to assert the literal expressions `applyOpacity(c.accent, 0.55)`
+    // and `applyOpacity(c.forest,` in this file — a proxy for "wears the same
+    // treatment as the Goals card", which held only while both files happened to
+    // spell it identically. They no longer spell it at all: 2026-08-03 moved the
+    // treatment into theme/goalCardSurface.ts because the light card was reading
+    // greyed-out and had to be fixed in both places at once. Asserting the SHARED
+    // SOURCE is what the guard was always reaching for, and it cannot drift.
+    //
+    // stripComments because this file's own comments name goalCardSurface — the
+    // sixth time a source-scanner in this repo would otherwise match prose.
+    const src = stripComments(read('components/creation/GoalCardPreview.tsx'));
     expect(src).toContain("from '../ui/GoalTitle'");
-    // FU-5: hairline accent border + translucent forest wash.
-    expect(src).toContain('applyOpacity(c.accent, 0.55)');
-    expect(src).toContain('applyOpacity(c.forest,');
+    expect(src).toContain("from '../../theme/goalCardSurface'");
+    expect(src).toContain('goalCardSurface(theme)');
+  });
+
+  it('the Goals card and the creation preview share ONE treatment', () => {
+    // The preview promises the card the user is about to get. If either side
+    // stops calling the shared module, the promise is broken silently.
+    const preview = stripComments(read('components/creation/GoalCardPreview.tsx'));
+    const goalsTab = stripComments(read('app/(tabs)/goals.tsx'));
+    for (const src of [preview, goalsTab]) {
+      expect(src).toContain('goalCardSurface(theme)');
+      // The old inline wash must not come back alongside the shared call.
+      expect(src).not.toContain('applyOpacity(c.forest, theme');
+    }
   });
 
   it('MarkRowPreview reuses the real MarkRow through the Focus resolution pipeline', () => {

@@ -22,6 +22,7 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated';
 import { fonts, spacing, radius, themedColors, fontSize, motion, dragHandle } from '../../theme/tokens';
+import { goalCardSurface } from '../../theme/goalCardSurface';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { LivraHeader } from '../../components/ui/LivraHeader';
 import { SpeedDialFAB } from '../../components/ui/SpeedDialFAB';
@@ -212,19 +213,17 @@ function ActiveGoalCard({ goal, marks, progress, threshold, canComplete, readyTo
   const pct = threshold > 0 ? Math.min(100, (progress / threshold) * 100) : 0;
   const deadlineStr = goal.deadline_date ?? goal.target_date ?? null;
 
-  // Hollow card: hairline accent border + translucent forest wash over the
-  // linen ground (FU-5). `c.accent` is forest on light / mint on dark, so the
-  // same expressions resolve to a contrast-safe accent in both modes. The
-  // dark wash runs slightly denser because the dark ground swallows low alphas.
-  const cardWash = applyOpacity(c.forest, theme === 'dark' ? 0.1 : 0.07);
-  const cardBorder = applyOpacity(c.accent, 0.55);
+  // Hollow card (FU-5): hairline accent border over a ground that LIFTS off the
+  // page. Both halves live in theme/goalCardSurface.ts — shared with the
+  // creation preview, which used to carry a copy of this and drift from it.
+  const cardSurface = goalCardSurface(theme);
 
   return (
     <TouchableOpacity
       style={[
         styles.activeCard,
         reserveHandleGutter && styles.activeCardDraggable,
-        { backgroundColor: cardWash, borderColor: cardBorder },
+        cardSurface,
       ]}
       onPress={onPress}
       activeOpacity={0.85}

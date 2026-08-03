@@ -41,6 +41,12 @@ export const colors = {
   // amber, a sanctioned exception to "forest/mint = navigation" for that one
   // tab. Dark mode reuses the bright dark-ember, which already passes (7.51:1).
   emberInk: '#8F621F',
+  // The ground of a raised card (the FU-5 hollow goal card). MUST stay LIGHTER
+  // than `linen`, the page it sits on — see `theme/goalCardSurface.ts` for why
+  // that direction is the whole point and `tests/unit/goalCardSurface.test.ts`
+  // for the guard. Light value = `mint` at 8% over `surface`, flattened to an
+  // opaque hex so the lift does not depend on what is behind the card.
+  cardRaised: '#F1F4F1',
   dangerLight: '#FDECEA',
   success: '#2D6A4F',
   borderLight: '#E0DBD4',
@@ -91,6 +97,11 @@ const colorsDark: typeof colors = {
   progressGradient: ['#E0B36A', '#D8A658'] as [string, string],
   // See `emberInk` in `colors` — dark ember already reads on the dark chrome.
   emberInk: '#D8A658',
+  // See `cardRaised` in `colors`. This is the exact flattening of the wash the
+  // dark card already rendered (`forest` #2D5446 at 10% over `linen` #15211D),
+  // so dark is pixel-unchanged by the 2026-08-03 light-card fix — dark was
+  // never the broken half.
+  cardRaised: '#172621',
   dangerLight: '#3A2422',
   success: '#5FA585',
   borderLight: '#2A3A35',
