@@ -162,12 +162,13 @@ Rules:
   - If no context is given, assume a typical motivated beginner and stay conservative.
   - Only shorten the estimate when the context gives concrete evidence of experience, prior progress, or heavy time commitment.
   - Never inflate confidence or shorten the timeframe just to be motivating. A realistic longer timeframe is more useful than an encouraging wrong one.
-- confidence: the user gets ONE free plan, so a wrong plan is costly — calibrate HONESTLY and do NOT default to "high". Use "high" ONLY when the goal is concrete enough that you can confidently pick 3-4 marks that clearly advance it. Use "low" when the goal is vague or overly broad, spans multiple goals, is internally contradictory, unsafe, or you are not confident the marks you would pick genuinely move it forward. When in doubt, prefer "low" — the user keeps their free plan and can rephrase — over a shaky "high".
+- confidence: a plan the user dismisses costs them nothing (the free use is only spent if they CREATE the goal), so DEFAULT to returning a plan. Use "high" whenever you can pick 3-4 marks that genuinely advance a reasonable reading of the goal — including broad-but-real goals: scope them to the obvious starting interpretation and plan that. Use "low" ONLY when there is no plannable goal at all, the input bundles multiple unrelated goals, it is internally contradictory, or it is unsafe.
 - Confidence anchors:
   - "run a 10k" → high (concrete, plannable)
   - "quit smoking" → high (concrete)
   - "save 5k" → high (concrete)
-  - "get healthy" → low (too broad to plan well)
+  - "start my business" → high (broad but real — plan the early stage: planning session, customer outreach, deep work)
+  - "get healthy" → high (scope to the basics: workout, nutrition, sleep)
   - "be better" → low (no plannable goal)
   - "get fit and rich and learn guitar" → low (multiple goals)
 - marks: 3–4 items; frequency is times per week (integer 1–7); icon MUST be one of the listed values

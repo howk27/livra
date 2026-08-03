@@ -135,7 +135,11 @@ export const MARK_CEILING_MESSAGE =
 // that mock the AI module still resolve real copy, because no runtime import of
 // goalGeneration is created.
 export const GENERATION_ERROR_COPY: Record<GenerationFailReason, string> = {
-  low_confidence: 'Couldn’t make sense of that. Try describing your goal in one sentence.',
+  // With the 2026-08-02 prompt recalibration, low now means "no plannable goal /
+  // several goals at once", not "broad". The copy asks for the missing shape
+  // instead of blaming the user's phrasing.
+  low_confidence:
+    'Couldn’t build a confident plan from that. Try one goal at a time, with a detail about what done looks like.',
   free_use_exhausted:
     'You’ve used your free AI plan. Livra+ unlocks unlimited AI goal plans. Or continue manually below.',
   // Answered by waiting, not by paying, so these must never mention Livra+: a
