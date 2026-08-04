@@ -6,7 +6,8 @@
  *   1. createGoal through `lib/data/mutations/goals` (the 2-goal cap is checked
  *      here as UX and throws GoalLimitError — the caller's soft-cap popup — while
  *      RLS stays the enforcement)
- *   2. createMark per selected mark (weekly_target = AI frequency), which writes
+ *   2. createMark per selected mark (weekly_target = AI frequency for variable
+ *      marks; library recommended for fixed/abstinence), which writes
  *      the goal link in the same call — never `marks.goal_id`
  *   3. writeGoalPackageCache (confirmed=true; future generations hit cache free)
  *
@@ -137,7 +138,16 @@ export async function createFromAIPackage(args: CreateFromAIPackageArgs): Promis
           frequency_min: libraryMark.frequency_min,
           frequency_recommended: libraryMark.frequency_recommended,
           frequency_max: libraryMark.frequency_max,
-          weekly_target: m.frequency,
+          // The AI's per-week count only steers marks that are genuinely
+          // variable. fixed/abstinence marks are whole-day states — every-day
+          // by rule (see `water` in lib/suggestedCounters.ts) — and the AI
+          // suggesting "Nutrition 5x/week" must not override that: this exact
+          // override shipped weekly_target 5 on a fixed 7/7/7 Nutrition mark
+          // (backfilled live 2026-08-04).
+          weekly_target:
+            libraryMark.frequencyKind === 'variable'
+              ? m.frequency
+              : libraryMark.frequency_recommended,
           // Binary by default (1 = one tap completes the day); water and other
           // quantitative marks start at their count-up target.
           dailyTarget: defaultDailyTargetForMarkId(libraryMark.id),

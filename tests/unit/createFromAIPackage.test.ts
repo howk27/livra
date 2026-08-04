@@ -171,7 +171,7 @@ describe('createFromAIPackage — confirm path', () => {
     expect(mockCreateGoal).toHaveBeenCalledWith(expect.objectContaining({ sortIndex: 1 }));
   });
 
-  test('creates each selected AI mark linked to the goal, weekly_target = AI frequency', async () => {
+  test('creates each selected AI mark linked to the goal, weekly_target = AI frequency (variable marks)', async () => {
     await createFromAIPackage({
       userId: 'user-1',
       isPro: false,
@@ -198,6 +198,45 @@ describe('createFromAIPackage — confirm path', () => {
         name: 'Stretch',
         goalId: 'goal-1',
         cadence: expect.objectContaining({ weekly_target: 2 }),
+      }),
+    );
+  });
+
+  test('the AI frequency never overrides a fixed/abstinence mark — whole-day states stay every-day', async () => {
+    // The 2026-07-27 rule (see `water` in lib/suggestedCounters.ts): a mark that
+    // measures a whole-day state is 7/7/7 and not an intensity dial. The AI
+    // suggesting "Nutrition 5x/week" shipped weekly_target 5 on a fixed mark
+    // (found live 2026-08-04, backfilled); this pins the fix.
+    await createFromAIPackage({
+      userId: 'user-1',
+      isPro: false,
+      goalText: 'eat better',
+      pkg: {
+        goalTitle: 'Eat better',
+        timeframeWeeks: 8,
+        confidence: 'high',
+        marks: [
+          { name: 'Eat clean', icon: 'nutrition', frequency: 5, why: 'Consistency beats intensity' },
+          { name: 'Skip dessert', icon: 'no-sugar', frequency: 4, why: 'Cut the spikes' },
+        ],
+      },
+      title: 'Eat better',
+      marks: [
+        { name: 'Eat clean', icon: 'nutrition', frequency: 5, why: 'Consistency beats intensity' },
+        { name: 'Skip dessert', icon: 'no-sugar', frequency: 4, why: 'Cut the spikes' },
+      ],
+    });
+
+    expect(mockCreateMark).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Nutrition',
+        cadence: expect.objectContaining({ frequency_kind: 'fixed', weekly_target: 7 }),
+      }),
+    );
+    expect(mockCreateMark).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'No Sugar',
+        cadence: expect.objectContaining({ frequency_kind: 'abstinence', weekly_target: 7 }),
       }),
     );
   });
