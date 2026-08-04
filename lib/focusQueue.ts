@@ -63,6 +63,26 @@ export function remainingThisWeek(
 }
 
 /**
+ * Check-ins still owed TODAY across marks — the number the Focus header
+ * speaks (founder QC64 2026-08-04: the weekly count read as a mountain and
+ * "harder to hit"; the day's ask is the honest header number, weekly/total
+ * stay on the goal screen). A mark owes today when its week is not done AND
+ * its daily bar is unmet — the exact complement of focus.tsx's allDoneForDay
+ * over the same mark set, so 0 here ⟺ the all-done banner takes over.
+ */
+export function remainingToday(
+  marks: readonly QueueMark[],
+  weeklyCounts: ReadonlyMap<string, number>,
+  todayCounts: ReadonlyMap<string, number>,
+): number {
+  return marks.filter(
+    (m) =>
+      markWeeklyState(m as Pick<Mark, 'weekly_target' | 'frequency_kind'>, weeklyCounts.get(m.id) ?? 0) === 'due' &&
+      !isMarkDoneToday(m, todayCounts.get(m.id) ?? 0),
+  ).length;
+}
+
+/**
  * A goal has no work left TODAY: every week-due mark has met its daily bar
  * today (marks already done for the week ask nothing more). An empty mark
  * list counts as done — there is nothing to spotlight.

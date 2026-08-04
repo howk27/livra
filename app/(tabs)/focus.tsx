@@ -62,6 +62,7 @@ import {
   pickSpotlightGoalId,
   pickNextMove,
   remainingThisWeek,
+  remainingToday,
 } from '../../lib/focusQueue';
 import { isComebackState, endsComebackGap, pickComebackMove, resolveComebackAsk } from '../../lib/comeback';
 import { resolveFirstName } from '../../lib/profile/displayName';
@@ -452,6 +453,15 @@ export default function FocusScreen() {
   const comeback = useMemo(() => isComebackState(allEvents, todayStr), [allEvents, todayStr]);
 
   // True when nothing is still loggable today: every mark is doneForWeek OR already hit daily target
+  // Founder QC64 2026-08-04: the header line counts TODAY, not the week — the
+  // weekly aggregate read as a mountain ("harder to hit"); weekly/total live
+  // on the goal screen. Same mark set as allDoneForDay so the two can never
+  // disagree (0 left ⟺ the banner shows).
+  const todayRemaining = useMemo(
+    () => remainingToday(pressureMarks, weeklyCountsMap, todayCountsMap),
+    [pressureMarks, weeklyCountsMap, todayCountsMap],
+  );
+
   const allDoneForDay = useMemo(() => {
     if (pressureMarks.length === 0) return false;
     return pressureMarks.every((m) => {
@@ -765,12 +775,12 @@ export default function FocusScreen() {
           </View>
         )}
 
-        {/* ── Forgiveness line ── */}
-        {consistencyResult && !consistencyResult.strong && consistencyResult.remaining > 0 && (
+        {/* ── Forgiveness line (today's count — founder QC64 2026-08-04) ── */}
+        {consistencyResult && !consistencyResult.strong && todayRemaining > 0 && (
           <Text style={[styles.forgivenessLine, { color: c.inkMuted }]}>
-            {'Still on track. You need '}
-            <Text style={{ color: c.inkDark }}>{consistencyResult.remaining}</Text>
-            {` more check-in${consistencyResult.remaining !== 1 ? 's' : ''} this week.`}
+            {'Still on track. '}
+            <Text style={{ color: c.inkDark }}>{todayRemaining}</Text>
+            {` check-in${todayRemaining !== 1 ? 's' : ''} left today.`}
           </Text>
         )}
 

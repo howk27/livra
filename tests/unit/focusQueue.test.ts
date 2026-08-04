@@ -5,6 +5,7 @@ import {
   pickSpotlightGoalId,
   pickNextMove,
   remainingThisWeek,
+  remainingToday,
   NEXT_MOVE_CHIP_CAP,
   type QueueMark,
 } from '../../lib/focusQueue';
@@ -76,6 +77,42 @@ describe('remainingThisWeek (the on-pace fold number)', () => {
     for (const m of marks) {
       expect(markWeeklyState(m, weekly.get(m.id) ?? 0)).toBe('doneForWeek');
     }
+  });
+});
+
+describe('remainingToday (the Focus header number — founder QC64 2026-08-04)', () => {
+  it('counts week-due marks whose daily bar is unmet today', () => {
+    const marks = [mark('a'), mark('b'), mark('c')];
+    // a logged today, b not, c not — 2 left today.
+    expect(remainingToday(marks, counts({}), counts({ a: 1 }))).toBe(2);
+  });
+
+  it('a mark done for the WEEK asks nothing more today', () => {
+    const marks = [mark('a', { weekly_target: 2 }), mark('b')];
+    expect(remainingToday(marks, counts({ a: 2 }), counts({}))).toBe(1);
+  });
+
+  it('a multi-log daily target counts as ONE check-in left, not N taps', () => {
+    const m = mark('a', { dailyTarget: 3 });
+    expect(remainingToday([m], counts({}), counts({ a: 2 }))).toBe(1);
+    expect(remainingToday([m], counts({}), counts({ a: 3 }))).toBe(0);
+  });
+
+  it('reads 0 exactly when every mark is doneForWeek or done today — the header and the all-done banner cannot disagree', () => {
+    // Mirrors focus.tsx allDoneForDay's predicate over the same mark set.
+    const marks = [mark('a', { weekly_target: 2 }), mark('b'), mark('c')];
+    const weekly = counts({ a: 2 });
+    const today = counts({ b: 1, c: 1 });
+    expect(remainingToday(marks, weekly, today)).toBe(0);
+    const allDone = marks.every((m) => {
+      if (markWeeklyState(m, weekly.get(m.id) ?? 0) === 'doneForWeek') return true;
+      return isMarkDoneToday(m, today.get(m.id) ?? 0);
+    });
+    expect(allDone).toBe(true);
+  });
+
+  it('no marks means nothing owed', () => {
+    expect(remainingToday([], counts({}), counts({}))).toBe(0);
   });
 });
 
