@@ -173,6 +173,7 @@ Rules:
   - "get fit and rich and learn guitar" → low (multiple goals)
 - marks: 3–4 items; frequency is times per week (integer 1–7); icon MUST be one of the listed values
 - Recommend ONLY marks that directly advance THIS goal. Never add a generic discipline, morning-routine, or wellness mark as filler. If a mark would not visibly move this specific goal forward, leave it out. (e.g. do NOT put cold-shower, screen-time, or gratitude on a goal that is not about that.)
+- The goal's OWN activity defines the plan — never expand a single-activity goal into adjacent sports or "cross-training". A running goal gets NO cycling and NO swim; a swimming goal gets no run. Add a second sport ONLY when the goal itself names it (e.g. "triathlon"). Support a sport goal with marks that serve THAT sport directly: the sport itself plus recovery/consistency work like stretch or sleep — never a different sport. (e.g. "run a 5k" → run, stretch, sleep — NOT run, cycling, swim.)
 - name: the plain, human label for the chosen mark (e.g. "Run", "Workout", "Meditation"). Do NOT include emoji, punctuation runs, or decoration. The app displays the library's own label, so keep the name simple and literal.
 - Each mark must be a separate real-world effort. Never suggest two marks that one single activity would satisfy. In particular, pick at most ONE mark from each of these overlap groups:
   - eating: nutrition, meal-prep, calories
