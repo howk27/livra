@@ -212,13 +212,14 @@ struct LogMarkLabel: View {
     }
 }
 
-// MARK: - Small-widget log button (a full-width + pill, nothing else in it)
+// MARK: - Small-widget log button (a round +, centered under the name)
 //
-// Founder redesign 2026-08-03: on the small widget the + must be "easy to tap
-// without accidentally opening the app". Everything outside an interactive
-// Button falls through to widgetURL and LAUNCHES Livra, so the log affordance
-// is a full-width pill anchored at the bottom — the largest tap target the
-// family allows, spatially separate from the icon/name zone that opens the app.
+// Founder QC64 2026-08-04, revising the 2026-08-03 full-width bottom pill: the
+// button sits "higher up in the center", BIGGER, "rounded button not a pill".
+// A 48pt circle centered under the name — above the iOS 44pt touch floor, and
+// the log affordance stays an interactive Button (everything outside it falls
+// through to widgetURL and LAUNCHES Livra), so accidental app-opens remain the
+// icon/name zone's job, now separated by geometry instead of an edge anchor.
 
 struct LogPlusButton: View {
     let mark: WidgetMarkData
@@ -246,12 +247,11 @@ struct LogPlusLabel: View {
 
     var body: some View {
         Image(systemName: "plus")
-            .font(.system(size: 16, weight: .bold))
+            .font(.system(size: 20, weight: .bold))
             .foregroundColor(accent)
-            .frame(maxWidth: .infinity)
-            .frame(height: 36)
+            .frame(width: 48, height: 48)
             .background(accent.opacity(0.14))
-            .clipShape(Capsule())
+            .clipShape(Circle())
     }
 }
 
@@ -346,13 +346,15 @@ struct AllDoneOrEmpty: View {
     }
 }
 
-// MARK: - Small Widget (2×2): the Next Queue Mark — icon first, no ring
+// MARK: - Small Widget (2×2): the Next Queue Mark — centered column, no ring
 //
-// Founder redesign 2026-08-03: the small widget IS the next queued mark of the
-// first goal in the working order. The mark's icon leads (the same
-// currentGoal/currentMark queue derivation as before picks it), the name under
-// it, and the + pill anchored at the bottom is the only thing that logs —
-// icon and name fall through to widgetURL and open the app.
+// Founder redesign 2026-08-03, geometry revised at QC64 2026-08-04 ("Icon
+// center... button higher up in the center and bigger... rounded button not a
+// pill"): the small widget IS the next queued mark of the first goal in the
+// working order (same currentGoal/currentMark queue derivation). One centered
+// column — icon, name, round + button — vertically centered as a group, so
+// the button rides the middle of the card instead of hugging the bottom edge.
+// Only the + logs; icon and name fall through to widgetURL and open the app.
 
 struct SmallWidgetView: View {
     let data: WidgetData
@@ -363,7 +365,7 @@ struct SmallWidgetView: View {
 
     var body: some View {
         if let mark = data.currentMark {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(spacing: 8) {
                 // The mark's category glyph, prominent — the widget's identity.
                 Image(mark.icon.isEmpty ? "livra_circle" : mark.icon)
                     .resizable()
@@ -376,12 +378,12 @@ struct SmallWidgetView: View {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(WidgetPalette.ink)
                     .lineLimit(2)
+                    .multilineTextAlignment(.center)
                     .truncationMode(.tail)
-                Spacer(minLength: 2)
                 LogPlusButton(mark: mark)
             }
             .padding(12)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             // Done / empty keep the centered treatment — with no ring above,
             // center is simply the small family's axis.

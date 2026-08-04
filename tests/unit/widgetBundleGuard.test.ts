@@ -160,10 +160,10 @@ describe('LivraWidget is theme-aware (light + dark surfaces)', () => {
     expect(views.slice(labelFrom, labelTo)).not.toMatch(/Image\(mark\.icon/);
   });
 
-  // Founder redesign 2026-08-03: the small widget is the Next Queue Mark —
-  // mark icon leading, NO ring, and a dedicated full-width + pill that logs
-  // without opening the app (everything else falls through to widgetURL).
-  it('small widget: no ring, mark icon leads, + pill logs via the intent', () => {
+  // Founder redesign 2026-08-03, geometry revised at QC64 2026-08-04: the
+  // small widget is the Next Queue Mark — NO ring, one CENTERED column (icon,
+  // name, round + button), and the + is a circle, not a pill or a bottom bar.
+  it('small widget: no ring, centered column, round + button logs via the intent', () => {
     const smallFrom = views.indexOf('struct SmallWidgetView');
     const smallTo = views.indexOf('struct MediumWidgetView');
     expect(smallFrom).toBeGreaterThan(-1);
@@ -171,7 +171,14 @@ describe('LivraWidget is theme-aware (light + dark surfaces)', () => {
     expect(small).not.toContain('GoalRingView');
     expect(small).toMatch(/Image\(mark\.icon/);
     expect(small).toContain('LogPlusButton(mark: mark)');
-    // The + pill must be the interactive kind on iOS 17 (in-widget log, no app
+    // CENTERED, not leading: the mark branch's column must not carry a leading
+    // alignment (2026-08-03's shape), and the name centers its wrap.
+    expect(small).not.toContain('VStack(alignment: .leading');
+    expect(small).toContain('multilineTextAlignment(.center)');
+    // No Spacer pinning the button to the bottom edge — the group centers as a
+    // whole, which is what puts the button "higher up in the center".
+    expect(small).not.toMatch(/Spacer\(minLength: 2\)/);
+    // The + must be the interactive kind on iOS 17 (in-widget log, no app
     // launch) with the deep-link fallback below it.
     const plusFrom = views.indexOf('struct LogPlusButton');
     const plusTo = views.indexOf('struct LogPlusLabel');
@@ -179,8 +186,12 @@ describe('LivraWidget is theme-aware (light + dark surfaces)', () => {
     const plusButton = views.slice(plusFrom, plusTo);
     expect(plusButton).toContain('Button(intent: LogMarkIntent(markId: mark.id))');
     expect(plusButton).toContain('livra://log-mark?markId=');
-    // Full width = the generous target the founder asked for.
-    expect(views.slice(plusTo)).toMatch(/\.frame\(maxWidth: \.infinity\)\s*\n\s*\.frame\(height: 36\)/);
+    // A CIRCLE at 48pt — bigger than the old 36pt pill and above the 44pt
+    // iOS touch floor. Capsule() coming back is the regression.
+    const plusLabel = views.slice(plusTo, views.indexOf('struct ', plusTo + 1));
+    expect(plusLabel).toMatch(/\.frame\(width: 48, height: 48\)/);
+    expect(plusLabel).toContain('.clipShape(Circle())');
+    expect(plusLabel).not.toContain('Capsule()');
   });
 
   it('centers the done row on Small, where the ring above it is centered', () => {
