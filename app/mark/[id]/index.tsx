@@ -306,9 +306,9 @@ function MarkDetailContent() {
 
   // "Logged from Apple Health" (health-auto-sync T4, spec §2.8). Reads the RAW
   // query rows, not the adapted `events` — the strangler adapter drops `source`.
-  // KNOWN LIMIT (T3 finding 2): until the server migration applies and 'source'
-  // joins MARK_EVENT_COLUMNS, pulled rows carry no attribution, so this shows
-  // only for check-ins written on this device this session.
+  // Since 2026-08-05 'source' is in MARK_EVENT_COLUMNS (server column live), so
+  // pulled rows carry attribution too — this shows on every device, not just
+  // the one that wrote the check-in.
   const healthLoggedToday = useMemo(
     () => hasHealthCheckinOn(checkinsQuery.data ?? EMPTY_CHECKIN_ROWS, id ?? '', todayStr),
     [checkinsQuery.data, id, todayStr],
