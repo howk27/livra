@@ -135,7 +135,7 @@ export default function PrivacyPolicyScreen() {
           <View style={styles.bulletList}>
             <AppText variant="body" style={[styles.bulletItem, { color: c.inkDark }]}>
               • Your health readings stay on your device. Livra checks each day against your mark
-              and keeps only whether that day qualified — the underlying values, such as workout
+              and keeps only whether that day qualified. The underlying values, such as workout
               durations, step counts, sleep hours and water amounts, are discarded on your device
               and never sent to us
             </AppText>
