@@ -33,7 +33,7 @@ import {
 } from '../lib/data/mutations/checkins';
 import { readCachedCheckins } from '../lib/data/checkins';
 import { creditMarkToGoals } from '../lib/goals/goalLifecycle';
-import { readGoalDataSnapshot } from '../lib/goals/momentumEvaluation';
+import { holderByMarkFromSnapshot, readGoalDataSnapshot } from '../lib/goals/momentumEvaluation';
 import { toGoal, toMark } from '../lib/data/adapters';
 import { totalsByMark } from '../lib/data/derived';
 import { useAuth } from './useAuth';
@@ -123,10 +123,11 @@ export function useCheckin(): UseCheckinResult {
         // one goal is what the retired column carried.
         const snapshot = readGoalDataSnapshot(client, userId);
         const totals = totalsByMark(snapshot.events);
-        const holderByMark = new Map<string, string>();
-        for (const [goalId, list] of Object.entries(snapshot.marksByGoal)) {
-          for (const m of list) if (!holderByMark.has(m.id)) holderByMark.set(m.id, goalId);
-        }
+        // A shared mark speaks under ONE goal per log (selectMoment takes a
+        // single goalId): the first holder in canonical goal order — see
+        // holderByMarkFromSnapshot for the full contract and the deliberate
+        // divergence from Focus's every-holder lifetime counts.
+        const holderByMark = holderByMarkFromSnapshot(snapshot);
         const voiceData = {
           marks: snapshot.marks.map((row) => ({
             ...toMark(row, totals),

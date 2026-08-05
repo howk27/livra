@@ -54,6 +54,24 @@ export function readGoalDataSnapshot(client: QueryClient, userId: string): GoalD
   };
 }
 
+/**
+ * Each mark's single holder goal — the FIRST holder in the goals array's
+ * canonical order (the goals query's sort), NOT object-key iteration luck.
+ * A shared mark therefore speaks its goal-scoped voice lines under exactly
+ * one goal per log, while Focus's lifetime counts deliberately credit every
+ * holder (lifetimeLogCountsFromLinks, spec D-6) — that divergence is pinned
+ * in tests/unit/checkinSharedMarkHolder.test.ts.
+ */
+export function holderByMarkFromSnapshot(snapshot: GoalDataSnapshot): Map<string, string> {
+  const holder = new Map<string, string>();
+  for (const g of snapshot.goals) {
+    for (const m of snapshot.marksByGoal[g.id] ?? []) {
+      if (!holder.has(m.id)) holder.set(m.id, g.id);
+    }
+  }
+  return holder;
+}
+
 /** Goals in the `PlanGoal` shape the notification planners take —
  * `linked_mark_ids` projected from live links, exactly as the store did. */
 export function planGoalsFromSnapshot(

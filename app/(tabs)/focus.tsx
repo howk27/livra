@@ -201,7 +201,10 @@ export default function FocusScreen() {
   // `error` renders the CLASSIFIED line for the failure (M9 Phase 3, T3). It used
   // to render `marksQuery.error.message`, which is the data layer's LOG label —
   // safe, but written for a logger, not for a person reading a Focus screen.
-  const loading = marksQuery.isLoading;
+  // T7b (build 65): marksByGoal joined the gate — the greeting's lifetime
+  // counts resolve through links, so a one-frame lag on that query flashed
+  // the day-one line before real counts arrived (QC64 carried finding c).
+  const loading = marksQuery.isLoading || marksByGoalQuery.isLoading;
   const error = dataErrorCopy(asDataError(marksQuery.error));
 
   // All-time totals derived from the events this screen already fetches; feeds

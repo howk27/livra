@@ -61,7 +61,13 @@ import { canExportData } from '../../lib/gating';
 import { logger } from '../../lib/utils/logger';
 import { useNotification } from '../../contexts/NotificationContext';
 import { getAvatarUrl, refreshAvatarUrl } from '../../lib/storage/avatarStorage';
-import { getPace, setPace, paceWeeklyTarget, PACE_LABELS, type PaceLevel } from '../../lib/paceSetting';
+import {
+  getPace,
+  setPace,
+  paceWeeklyTarget,
+  PACE_LABELS,
+  type PaceLevel,
+} from '../../lib/paceSetting';
 import Constants from 'expo-constants';
 import { Linking } from 'react-native';
 
@@ -111,7 +117,10 @@ function SettingsRow({
   const RowIcon = icon;
   return (
     <TouchableOpacity
-      style={[rowStyles.row, !isLast && [rowStyles.rowBorder, { borderBottomColor: c.borderLight }]]}
+      style={[
+        rowStyles.row,
+        !isLast && [rowStyles.rowBorder, { borderBottomColor: c.borderLight }],
+      ]}
       onPress={onPress}
       activeOpacity={onPress ? 0.7 : 1}
       disabled={!onPress}
@@ -171,43 +180,50 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     let active = true;
-    getPace().then((p) => { if (active) setPaceState(p); });
-    return () => { active = false; };
+    getPace().then((p) => {
+      if (active) setPaceState(p);
+    });
+    return () => {
+      active = false;
+    };
   }, []);
 
   // M9 Phase 5A Task 6: the recalculation reads and writes the QUERY layer —
   // every mark's weekly_target is a server column, and `editMark` sends only
   // the marks whose target actually moves. One invalidation at the end.
-  const handlePaceChange = useCallback(async (next: PaceLevel) => {
-    const prior = pace;
-    setPaceState(next); // optimistic
-    try {
-      await setPace(next);
-      const marks = user?.id
-        ? (queryClient.getQueryData<MarkRow[]>(queryKeys.marks(user.id)) ?? [])
-        : [];
-      let changed = false;
-      for (const mark of marks) {
-        if (mark.deleted_at) continue;
-        const target = paceWeeklyTarget(
-          { ...mark, frequency_kind: mark.frequency_kind as FrequencyKind | null },
-          next,
-        );
-        if (target != null && target !== mark.weekly_target) {
-          await editMark(mark.id, { cadence: { weekly_target: target } });
-          changed = true;
+  const handlePaceChange = useCallback(
+    async (next: PaceLevel) => {
+      const prior = pace;
+      setPaceState(next); // optimistic
+      try {
+        await setPace(next);
+        const marks = user?.id
+          ? (queryClient.getQueryData<MarkRow[]>(queryKeys.marks(user.id)) ?? [])
+          : [];
+        let changed = false;
+        for (const mark of marks) {
+          if (mark.deleted_at) continue;
+          const target = paceWeeklyTarget(
+            { ...mark, frequency_kind: mark.frequency_kind as FrequencyKind | null },
+            next
+          );
+          if (target != null && target !== mark.weekly_target) {
+            await editMark(mark.id, { cadence: { weekly_target: target } });
+            changed = true;
+          }
         }
+        if (changed && user?.id) {
+          void queryClient.invalidateQueries({ queryKey: queryKeys.marks(user.id) });
+        }
+        showSuccess('Pace updated across your marks.');
+      } catch (e: any) {
+        logger.error('[Settings] pace change failed:', e);
+        setPaceState(prior);
+        showError('Could not update your pace. Please try again.');
       }
-      if (changed && user?.id) {
-        void queryClient.invalidateQueries({ queryKey: queryKeys.marks(user.id) });
-      }
-      showSuccess('Pace updated across your marks.');
-    } catch (e: any) {
-      logger.error('[Settings] pace change failed:', e);
-      setPaceState(prior);
-      showError('Could not update your pace. Please try again.');
-    }
-  }, [pace, user, showSuccess, showError]);
+    },
+    [pace, user, showSuccess, showError]
+  );
 
   // The app's own proof, not auth.users.email_confirmed_at: this project
   // auto-confirms at signup, so that column is stamped for everyone and can
@@ -221,7 +237,10 @@ export default function SettingsScreen() {
 
   // --- Load profile display name ---
   useEffect(() => {
-    if (!user?.id) { setProfileDisplayName(null); return; }
+    if (!user?.id) {
+      setProfileDisplayName(null);
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
@@ -233,9 +252,16 @@ export default function SettingsScreen() {
         if (cancelled) return;
         setProfileDisplayName(data?.display_name?.trim() || null);
         setEmailVerifiedAt(data?.email_verified_at ?? null);
-      } catch { if (!cancelled) { setProfileDisplayName(null); setEmailVerifiedAt(null); } }
+      } catch {
+        if (!cancelled) {
+          setProfileDisplayName(null);
+          setEmailVerifiedAt(null);
+        }
+      }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [user?.id, supabase]);
 
   // --- Load profile image ---
@@ -265,9 +291,13 @@ export default function SettingsScreen() {
             setProfileImageUri(null);
           }
         }
-      } catch { /* silent */ }
+      } catch {
+        /* silent */
+      }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [user?.id]);
 
   // --- Derived values ---
@@ -287,8 +317,13 @@ export default function SettingsScreen() {
   const memberSince = useMemo(() => {
     if (!user?.created_at) return null;
     try {
-      return new Date(user.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    } catch { return null; }
+      return new Date(user.created_at).toLocaleDateString('en-US', {
+        month: 'long',
+        year: 'numeric',
+      });
+    } catch {
+      return null;
+    }
   }, [user?.created_at]);
 
   // --- Handlers ---
@@ -348,7 +383,9 @@ export default function SettingsScreen() {
         logger.error('[Settings] Account deletion failed:', error?.message ?? data);
         setIsDeletingAccount(false);
         setDeleteDialogVisible(false);
-        showError('Something went wrong deleting your account. Please check your connection and try again.');
+        showError(
+          'Something went wrong deleting your account. Please check your connection and try again.'
+        );
         return;
       }
 
@@ -371,7 +408,9 @@ export default function SettingsScreen() {
       logger.error('[Settings] Account deletion threw:', e);
       setIsDeletingAccount(false);
       setDeleteDialogVisible(false);
-      showError('Something went wrong deleting your account. Please check your connection and try again.');
+      showError(
+        'Something went wrong deleting your account. Please check your connection and try again.'
+      );
     }
   };
 
@@ -379,7 +418,8 @@ export default function SettingsScreen() {
     if (!canExportData(isProUnlocked)) {
       const seePlus = await confirm({
         title: 'Export is a Livra+ perk',
-        message: 'Your history is always yours to see. Livra+ adds CSV export so you can take it anywhere.',
+        message:
+          'Your history is always yours to see. Livra+ adds CSV export so you can take it anywhere.',
         confirmLabel: 'See Livra+',
         cancelLabel: 'Not now',
       });
@@ -405,7 +445,10 @@ export default function SettingsScreen() {
       const allEvents = eventRows.map(toMarkEvent);
       const eventsMap = new Map();
       counters.forEach((counter) => {
-        eventsMap.set(counter.id, allEvents.filter((e) => e.mark_id === counter.id));
+        eventsMap.set(
+          counter.id,
+          allEvents.filter((e) => e.mark_id === counter.id)
+        );
       });
       const csv = generateAllCountersCSV(counters, eventsMap);
 
@@ -442,8 +485,9 @@ export default function SettingsScreen() {
     <View style={[styles.screen, { backgroundColor: c.linen }]}>
       <LivraHeader title="Settings" />
 
-      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: scrollContentBottomPad }]}>
-
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingBottom: scrollContentBottomPad }]}
+      >
         {/* ── Profile Mini-Card — the single entry point to profile editing ── */}
         <TouchableOpacity
           style={[styles.profileCard, { backgroundColor: c.surface }]}
@@ -451,7 +495,12 @@ export default function SettingsScreen() {
           activeOpacity={0.8}
         >
           <View style={styles.profileCardRow}>
-            <View style={[styles.avatarCircle, { backgroundColor: c.surfaceAlt, borderColor: c.forest }]}>
+            <View
+              style={[
+                styles.avatarCircle,
+                { backgroundColor: c.surfaceAlt, borderColor: c.forest },
+              ]}
+            >
               {profileImageUri ? (
                 <Image source={{ uri: profileImageUri }} style={styles.avatarImage} />
               ) : (
@@ -464,7 +513,9 @@ export default function SettingsScreen() {
                 <Text style={[styles.profileEmail, { color: c.inkMuted }]}>{user.email}</Text>
               ) : null}
               {memberSince ? (
-                <Text style={[styles.profileSince, { color: c.inkMuted }]}>Member since {memberSince}</Text>
+                <Text style={[styles.profileSince, { color: c.inkMuted }]}>
+                  Member since {memberSince}
+                </Text>
               ) : null}
             </View>
             <PencilSimple size={16} color={c.inkMuted} weight="regular" />
@@ -477,7 +528,10 @@ export default function SettingsScreen() {
             says nothing. The verify flow itself lives once, in Edit Profile. */}
         {needsVerification ? (
           <TouchableOpacity
-            style={[styles.verifyBanner, { backgroundColor: c.surface, borderColor: c.borderLight }]}
+            style={[
+              styles.verifyBanner,
+              { backgroundColor: c.surface, borderColor: c.borderLight },
+            ]}
             onPress={() => router.push('/settings/profile' as any)}
             activeOpacity={0.7}
             accessibilityRole="button"
@@ -495,7 +549,10 @@ export default function SettingsScreen() {
              banner taps through to Edit Profile (where they can add an address);
              the × dismisses it for good (persisted in uiSlice). */
           <TouchableOpacity
-            style={[styles.verifyBanner, { backgroundColor: c.surface, borderColor: c.borderLight }]}
+            style={[
+              styles.verifyBanner,
+              { backgroundColor: c.surface, borderColor: c.borderLight },
+            ]}
             onPress={() => router.push('/settings/profile' as any)}
             activeOpacity={0.7}
             accessibilityRole="button"
@@ -506,7 +563,9 @@ export default function SettingsScreen() {
               Apple hides your real email. Add your own so account mail reaches you.
             </Text>
             <TouchableOpacity
-              onPress={() => { void setRelayNoticeDismissed(true); }}
+              onPress={() => {
+                void setRelayNoticeDismissed(true);
+              }}
               hitSlop={8}
               accessibilityRole="button"
               accessibilityLabel="Dismiss"
@@ -563,7 +622,9 @@ export default function SettingsScreen() {
                     <TouchableOpacity
                       key={t}
                       style={[styles.themeTogglePill, active && { backgroundColor: c.forest }]}
-                      onPress={() => { void setThemeMode(t); }}
+                      onPress={() => {
+                        void setThemeMode(t);
+                      }}
                       activeOpacity={0.7}
                     >
                       <Text
@@ -593,7 +654,9 @@ export default function SettingsScreen() {
                     <TouchableOpacity
                       key={p}
                       style={[styles.themeTogglePill, active && { backgroundColor: c.forest }]}
-                      onPress={() => { void handlePaceChange(p); }}
+                      onPress={() => {
+                        void handlePaceChange(p);
+                      }}
                       activeOpacity={0.7}
                     >
                       <Text
@@ -611,8 +674,8 @@ export default function SettingsScreen() {
             }
           />
           <Text style={[styles.paceFootnote, { color: c.inkMuted }]}>
-            Sets how many days a week your flexible marks ask for. Your logged check-ins
-            always count; daily marks stay daily.
+            Sets how many days a week your flexible marks ask for. Your logged check-ins always
+            count; daily marks stay daily.
           </Text>
         </SettingsCard>
 
@@ -652,14 +715,18 @@ export default function SettingsScreen() {
             label="Send Feedback"
             onPress={() =>
               Linking.openURL('mailto:support@livralife.com?subject=Livra%20Feedback').catch(
-                () => {},
+                () => {}
               )
             }
           />
           <SettingsRow
             icon={Star}
             label="Rate Livra"
-            onPress={() => Linking.openURL('itms-apps://itunes.apple.com/app/id6741537890?action=write-review').catch(() => {})}
+            onPress={() =>
+              Linking.openURL(
+                'itms-apps://itunes.apple.com/app/id6741537890?action=write-review'
+              ).catch(() => {})
+            }
           />
           <SettingsRow
             icon={Info}
@@ -677,7 +744,11 @@ export default function SettingsScreen() {
             </TouchableOpacity>
           ) : null}
           {user ? (
-            <TouchableOpacity onPress={handleDeleteAccount} disabled={isDeletingAccount} activeOpacity={0.7}>
+            <TouchableOpacity
+              onPress={handleDeleteAccount}
+              disabled={isDeletingAccount}
+              activeOpacity={0.7}
+            >
               <Text style={[styles.deleteAccountText, { color: c.danger }]}>
                 {isDeletingAccount ? 'Deleting...' : 'Delete Account'}
               </Text>
@@ -697,7 +768,9 @@ export default function SettingsScreen() {
         visible={deleteDialogVisible}
         deleting={isDeletingAccount}
         onClose={() => setDeleteDialogVisible(false)}
-        onConfirm={() => { void performAccountDeletion(); }}
+        onConfirm={() => {
+          void performAccountDeletion();
+        }}
       />
     </View>
   );
