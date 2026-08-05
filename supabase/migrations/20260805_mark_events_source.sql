@@ -1,6 +1,6 @@
--- STATUS: NOT YET APPLIED to production (jhsxeibhxrvqrgkadyfk).
--- Apply by hand or via MCP execute_sql — NEVER `supabase db push` (see PROJECT-CONTEXT.md).
--- After applying, read information_schema back and rewrite this header to APPLIED with the date.
+-- STATUS: APPLIED 2026-08-05 to production (jhsxeibhxrvqrgkadyfk) via MCP execute_sql,
+-- founder go in-session. VERIFIED by reading information_schema back the same minute:
+-- source | text | nullable YES | default NULL. NEVER `supabase db push` (PROJECT-CONTEXT.md).
 --
 -- Health auto-sync attribution (spec: docs/superpowers/specs/2026-08-05-health-auto-sync-design.md §2.5).
 -- NULL = manual check-in (every existing row); 'health' = written by the auto-sync engine.
