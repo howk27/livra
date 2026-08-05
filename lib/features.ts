@@ -143,6 +143,33 @@ export function buildGoalLifetimeLogCounts(
   return counts;
 }
 
+/**
+ * goalId → lifetime log count, resolved through goal_mark_links rows
+ * (useMarksByGoal's Record<goalId, rows> shape). The query layer's Mark has
+ * NO goal_id field (lib/data/marks.ts: links are the only truth), so calling
+ * buildGoalLifetimeLogCounts with query-layer marks reads 0 forever — which
+ * kept the "Day one of {goalTitle}" greeting alive after days of logging.
+ * A mark serving several goals is counted under each of them.
+ */
+export function lifetimeLogCountsFromLinks(
+  marksByGoal: Record<string, { id: string }[]>,
+  goalIds: string[],
+  events: MarkEvent[],
+): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const id of goalIds) counts[id] = 0;
+  const eventsByMark = new Map<string, number>();
+  for (const e of events) {
+    if (!isCountedIncrement(e)) continue;
+    eventsByMark.set(e.mark_id, (eventsByMark.get(e.mark_id) ?? 0) + 1);
+  }
+  for (const [goalId, rows] of Object.entries(marksByGoal)) {
+    if (counts[goalId] === undefined) continue;
+    for (const r of rows) counts[goalId] += eventsByMark.get(r.id) ?? 0;
+  }
+  return counts;
+}
+
 // ── Feature 1: Goal Progress ──────────────────────────────
 
 export function getPeriodTotal(events: MarkEvent[], markId: string, period: GoalPeriod): number {

@@ -51,7 +51,7 @@ import { resolveDailyTarget } from '../../lib/markDailyTarget';
 import { dayJustCompleted } from '../../lib/motionTriggers';
 import {
   currentWeekDates,
-  buildGoalLifetimeLogCounts,
+  lifetimeLogCountsFromLinks,
   buildWeeklyCountsMap,
   markWeeklyState,
 } from '../../lib/features';
@@ -510,17 +510,18 @@ export default function FocusScreen() {
 
   // ── Moment engine context (PL-2: M2 + M3 · PL-3: M1 first week + M6 greeting) ─
 
-  // M1: lifetime log events per active goal (counted across the goal's marks,
-  // same events source todayCounts uses). 0 = never logged; 1 = first-ever log.
-  // Pure derivation lives in lib/features (buildWeeklyCountsMap pattern).
+  // M1: lifetime log events per active goal. Resolved through goal_mark_links
+  // (marksByGoalRows) — query-layer marks carry NO goal_id, and counting
+  // through it read 0 forever, which kept the "Day one of {goalTitle}"
+  // greeting alive after days of logging (founder QC64 side-note 1).
   const goalLifetimeLogCounts = useMemo(
     () =>
-      buildGoalLifetimeLogCounts(
-        activeCounters,
+      lifetimeLogCountsFromLinks(
+        marksByGoalRows,
         activeGoals.map((g) => g.id),
         allEvents,
       ),
-    [activeCounters, activeGoals, allEvents],
+    [marksByGoalRows, activeGoals, allEvents],
   );
 
   const momentCtx = useMemo(
