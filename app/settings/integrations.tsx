@@ -1,5 +1,14 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+  Platform,
+} from 'react-native';
+import { useQueryClient } from '@tanstack/react-query';
 import { Heart, Plug, Check } from 'phosphor-react-native';
 import { LivraHeader } from '../../components/ui/LivraHeader';
 import { SectionLabel } from '../../components/ui/SectionLabel';
@@ -9,6 +18,10 @@ import { requestPermissions, isHealthUnavailable } from '../../lib/health/health
 import type { HealthKitType } from '../../lib/health/healthTypes';
 import { useNotification } from '../../contexts/NotificationContext';
 import { logger } from '../../lib/utils/logger';
+import { useAuth } from '../../hooks/useAuth';
+import { queryKeys } from '../../lib/data/queryKeys';
+import type { MarkRow } from '../../lib/data/types';
+import { autoBindHealthMarks } from '../../lib/health/autoBind';
 
 const APPLE_HEALTH_RED = '#FF2D55';
 
@@ -37,6 +50,21 @@ export default function IntegrationsScreen() {
   const setHealthConnected = useUIStore((s) => s.setHealthConnected);
   const { showSuccess, showError } = useNotification();
   const [connecting, setConnecting] = useState(false);
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  const activeMarkRows = () =>
+    (user?.id ? (queryClient.getQueryData<MarkRow[]>(queryKeys.marks(user.id)) ?? []) : [])
+      .filter((r) => !r.deleted_at)
+      .map((r) => ({ id: r.id, name: r.name }));
+
+  // Retro-bind for users who connected BEFORE this shipped (the founder's
+  // exact state): already-connected accounts get the same pass on mount.
+  useEffect(() => {
+    if (!healthConnected) return;
+    void autoBindHealthMarks(activeMarkRows());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [healthConnected, user?.id]);
 
   const handleConnectHealth = async () => {
     if (Platform.OS !== 'ios') {
@@ -51,7 +79,13 @@ export default function IntegrationsScreen() {
       // connected on a successful request and let per-mark auto-log take over.
       await requestPermissions(HEALTH_CONNECT_TYPES);
       await setHealthConnected(true);
-      showSuccess('Apple Health connected.');
+      const bound = await autoBindHealthMarks(activeMarkRows());
+      const markWord = bound.length === 1 ? 'mark' : 'marks';
+      showSuccess(
+        bound.length > 0
+          ? `Apple Health connected. ${bound.length} ${markWord} will sync automatically.`
+          : 'Apple Health connected.'
+      );
     } catch (e) {
       // This used to be a bare `catch {}`: the one screen that knew WHY Apple
       // Health failed threw the reason away, so a missing entitlement, a
@@ -70,7 +104,7 @@ export default function IntegrationsScreen() {
       showError(
         isHealthUnavailable(e)
           ? 'Apple Health isn’t available on this device.'
-          : 'Livra couldn’t reach Apple Health. Give it access in the Health app under Sharing → Apps.',
+          : 'Livra couldn’t reach Apple Health. Give it access in the Health app under Sharing → Apps.'
       );
     } finally {
       setConnecting(false);
@@ -81,7 +115,6 @@ export default function IntegrationsScreen() {
     <View style={[styles.screen, { backgroundColor: c.linen }]}>
       <LivraHeader showBack title="Integrations" />
       <ScrollView contentContainerStyle={styles.content}>
-
         <SectionLabel style={styles.sectionLabel}>HEALTH</SectionLabel>
         <View style={[styles.card, { backgroundColor: c.surface }]}>
           <TouchableOpacity
@@ -98,12 +131,16 @@ export default function IntegrationsScreen() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[styles.rowLabel, { color: c.inkDark }]}>Apple Health</Text>
-              <Text style={[styles.rowMeta, { color: c.inkMuted }]}>Auto-log sleep, workouts & steps</Text>
+              <Text style={[styles.rowMeta, { color: c.inkMuted }]}>
+                Auto-log sleep, workouts & steps
+              </Text>
             </View>
             {connecting ? (
               <ActivityIndicator size="small" color={APPLE_HEALTH_RED} />
             ) : healthConnected ? (
-              <View style={[styles.badge, styles.badgeConnected, { backgroundColor: c.surfaceAlt }]}>
+              <View
+                style={[styles.badge, styles.badgeConnected, { backgroundColor: c.surfaceAlt }]}
+              >
                 <Check size={13} color={c.inkMuted} weight="bold" />
                 <Text style={[styles.badgeText, { color: c.inkMuted }]}>Connected</Text>
               </View>
@@ -141,7 +178,6 @@ export default function IntegrationsScreen() {
             </View>
           </View>
         </View>
-
       </ScrollView>
     </View>
   );
