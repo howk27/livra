@@ -19,7 +19,7 @@ export const HEALTH_KIT_BINDINGS_KEY = 'livra_health_kit_bindings_v1';
 
 export interface HealthKitBinding {
   type: HealthKitType;
-  config: { stepGoal?: number } | null;
+  config: { stepGoal?: number; sleepHours?: number } | null;
 }
 
 type BindingMap = Record<string, HealthKitBinding>;

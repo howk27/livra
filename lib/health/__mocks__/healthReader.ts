@@ -6,7 +6,12 @@ export const readHydrationDays = jest.fn().mockResolvedValue(new Set<string>());
 export const readMindfulDays = jest.fn().mockResolvedValue(new Set<string>());
 export const readStepDays = jest.fn().mockResolvedValue(new Set<string>());
 export const readRunningDays = jest.fn().mockResolvedValue(new Set<string>());
+export const readAverageDailySteps = jest.fn().mockResolvedValue(null);
+export const readSleepQualifiedDays = jest.fn().mockResolvedValue(new Set<string>());
 export const readHealthDays = jest.fn(
-  (_type: HealthKitType, _weekDates: string[], _config?: { stepGoal?: number }) =>
-    Promise.resolve(new Set<string>()),
+  (
+    _type: HealthKitType,
+    _weekDates: string[],
+    _config?: { stepGoal?: number; sleepHours?: number },
+  ) => Promise.resolve(new Set<string>()),
 );
