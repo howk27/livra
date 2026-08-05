@@ -611,7 +611,8 @@ export default function SettingsScreen() {
             }
           />
           <Text style={[styles.paceFootnote, { color: c.inkMuted }]}>
-            Sets how many days a week your flexible marks ask for. Marks already done this week keep their credit; daily marks stay daily.
+            Sets how many days a week your flexible marks ask for. Marks already done this week
+            keep their credit; daily marks stay daily.
           </Text>
         </SettingsCard>
 

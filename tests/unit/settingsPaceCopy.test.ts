@@ -9,9 +9,15 @@ import * as path from 'path';
 const stripComments = (src: string) =>
   src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
+// Prettier reflows JSX text across lines at printWidth, so the scan collapses
+// all whitespace before matching — the guard pins the words, not the wrapping.
+const normalize = (src: string) => src.replace(/\s+/g, ' ');
+
 describe('Pace row footnote', () => {
-  const src = stripComments(
-    fs.readFileSync(path.join(__dirname, '../../app/(tabs)/settings.tsx'), 'utf8'),
+  const src = normalize(
+    stripComments(
+      fs.readFileSync(path.join(__dirname, '../../app/(tabs)/settings.tsx'), 'utf8'),
+    ),
   );
   it('explains what Pace changes and what it leaves alone', () => {
     expect(src).toContain('Sets how many days a week your flexible marks ask for.');
@@ -20,5 +26,8 @@ describe('Pace row footnote', () => {
   });
   it('meta-assertion: the stripper still strips', () => {
     expect(stripComments('// gone\nkept')).not.toContain('gone');
+  });
+  it('meta-assertion: normalize joins text split across source lines', () => {
+    expect(normalize('keep\n            their credit')).toContain('keep their credit');
   });
 });
