@@ -1,0 +1,38 @@
+{
+  "$schema": "./node_modules/fallow/schema.json",
+
+  // Packages fallow cannot see a use for because nothing imports them — they
+  // are consumed by Expo's config-plugin system, the native build, or a
+  // toolchain that names them in strings. Each line was grep-verified against
+  // the repo on 2026-08-05 before being listed; this is not a blanket suppress.
+  //
+  // DELIBERATELY NOT LISTED (measured genuinely unreferenced the same day —
+  // zero hits in app/, components/, lib/, hooks/, or any config file):
+  //   @expo/vector-icons, expo-application, expo-document-picker
+  // They stay visible as findings so the removal task does not get forgotten.
+  // Not removed yet only because dependency/lockfile churn immediately before
+  // a paid EAS build is not worth the risk.
+  "ignoreDependencies": [
+    // app.json → expo.plugins. Config plugins run at prebuild; no JS import.
+    "expo-build-properties",
+    "expo-local-authentication",
+    "expo-localization",
+    "expo-mail-composer",
+
+    // app.json → expo.updates.url + expo.runtimeVersion. Autolinked native
+    // module; the OTA pipeline is built on it (channel production).
+    "expo-updates",
+
+    // Dev builds only: `npx expo start --dev-client`.
+    "expo-dev-client",
+
+    // The expo-web export, which the milestone e2e journey gate runs against.
+    "react-native-web",
+    "react-dom",
+
+    // eslint.config.js pulls these in via eslint-config-expo/flat, and the
+    // TS-only override names their rules as strings — invisible to a resolver.
+    "@typescript-eslint/parser",
+    "@typescript-eslint/eslint-plugin"
+  ]
+}
