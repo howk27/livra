@@ -198,6 +198,21 @@ describe('LivraWidget is theme-aware (light + dark surfaces)', () => {
     expect(views).toContain('AllDoneOrEmpty(data: data, alignment: .center, compact: true)');
   });
 
+  // QC64 founder call, decided 2026-08-05: on Medium the ring stays pinned
+  // left but the TEXT COLUMN centers — title wrap, button, captions and the
+  // done/empty branch all center within their column. A leading alignment
+  // creeping back into the column is the regression.
+  it('medium widget: text column centers, ring stays left', () => {
+    const from = views.indexOf('struct MediumWidgetView');
+    const to = views.indexOf('struct LivraWidgetEntryView');
+    expect(from).toBeGreaterThan(-1);
+    const medium = views.slice(from, to);
+    expect(medium).not.toContain('VStack(alignment: .leading');
+    expect(medium).not.toContain('alignment: .leading)');
+    expect(medium).toContain('multilineTextAlignment(.center)');
+    expect(medium).toContain('AllDoneOrEmpty(data: data, alignment: .center)');
+  });
+
   // THE BUILD-62 LIGHT-THEME BUG, PINNED SO IT CANNOT COME BACK.
   //
   // 057a18a made the widget follow the app's theme by overriding the

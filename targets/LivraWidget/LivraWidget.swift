@@ -422,7 +422,9 @@ struct MediumWidgetView: View {
                 // Both branches below are title → pill → caption. That is the
                 // point: the done state is not a different layout, so logging
                 // the last mark of the day cannot re-arrange the card.
-                VStack(alignment: .leading, spacing: 6) {
+                // QC64 founder call (2026-08-05): the column CENTERS its text —
+                // ring pinned left, everything right of it on a centered axis.
+                VStack(alignment: .center, spacing: 6) {
                     // Serif goal title — echoes the signature Cormorant voice via the
                     // system serif (New York); no font bundling into the appex in v1.
                     Text(data.currentGoal?.title ?? "No active goal")
@@ -434,12 +436,13 @@ struct MediumWidgetView: View {
                         // the widget was wasting anyway.
                         .lineLimit(2)
                         .truncationMode(.tail)
+                        .multilineTextAlignment(.center)
 
                     if let mark = data.currentMark {
                         LogMarkButton(mark: mark)
                         QueueStatusText(data: data)
                     } else {
-                        AllDoneOrEmpty(data: data)
+                        AllDoneOrEmpty(data: data, alignment: .center)
                         // The day count only earns its place once the day is
                         // DONE — it is what the founder asked the empty half of
                         // the done state to say. Gated on marks existing so the
@@ -449,7 +452,7 @@ struct MediumWidgetView: View {
                         }
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .center)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
