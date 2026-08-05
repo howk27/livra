@@ -56,6 +56,7 @@ import {
   setHealthKitBinding,
   type HealthKitBinding,
 } from '../../../lib/health/healthKitBinding';
+import { hasHealthCheckinOn } from '../../../lib/health/healthAttribution';
 import { caughtErrorCopy } from '../../../lib/copy';
 import { useArchiveMarkMutation } from '@/lib/data/mutations/marks';
 import { LoadingScreen } from '../../../components/LoadingScreen';
@@ -301,6 +302,16 @@ function MarkDetailContent() {
         .filter((e) => e.event_type === 'increment' && e.occurred_local_date === todayStr)
         .reduce((sum, e) => sum + (e.amount ?? 1), 0),
     [events, todayStr],
+  );
+
+  // "Logged from Apple Health" (health-auto-sync T4, spec §2.8). Reads the RAW
+  // query rows, not the adapted `events` — the strangler adapter drops `source`.
+  // KNOWN LIMIT (T3 finding 2): until the server migration applies and 'source'
+  // joins MARK_EVENT_COLUMNS, pulled rows carry no attribution, so this shows
+  // only for check-ins written on this device this session.
+  const healthLoggedToday = useMemo(
+    () => hasHealthCheckinOn(checkinsQuery.data ?? EMPTY_CHECKIN_ROWS, id ?? '', todayStr),
+    [checkinsQuery.data, id, todayStr],
   );
 
   const allActiveCounters = useMemo<Mark[]>(
@@ -755,7 +766,9 @@ function MarkDetailContent() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.settingLabel}>Apple Health</Text>
                   <Text style={styles.settingMeta}>
-                    {healthBinding
+                    {healthLoggedToday
+                      ? 'Logged from Apple Health'
+                      : healthBinding
                       ? `Logging from ${healthBinding.type.charAt(0).toUpperCase() + healthBinding.type.slice(1)}`
                       : 'Log this mark automatically.'}
                   </Text>

@@ -28,6 +28,7 @@ import { useIdentityStore } from '../state/identitySlice';
 import { useEffectiveTheme } from '../state/uiSlice';
 import { useAuth } from '../hooks/useAuth';
 import { useDayRollover } from '../hooks/useDayRollover';
+import { useHealthAutoSync } from '../hooks/useHealthAutoSync';
 import { themedColors } from '../theme/tokens';
 import { NotificationProvider } from '../contexts/NotificationContext';
 import { ConfirmHost, ActionSheetHost } from '../components/ui/overlays';
@@ -581,6 +582,7 @@ export default function RootLayout() {
               <View style={{ flex: 1 }}>
                 <RootNavigator />
                 <WidgetQuerySync />
+                <HealthAutoSyncMount />
                 <AuthPersistenceGate />
                 <ConfirmHost />
                 <ActionSheetHost />
@@ -632,6 +634,15 @@ function WidgetQuerySync() {
     }
   }, [initialized, markCount, activeGoalTitle, activeGoalIdsKey, widgetTheme]);
 
+  return null;
+}
+
+// Health auto-sync trigger (health-auto-sync T4, spec §2.2): launch +
+// background→active, debounced inside the hook. Mounted HERE and not in
+// RootLayout's body for the same reason as WidgetQuerySync above — the hook
+// uses React Query hooks, which must render INSIDE PersistQueryClientProvider.
+function HealthAutoSyncMount() {
+  useHealthAutoSync();
   return null;
 }
 

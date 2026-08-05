@@ -107,6 +107,9 @@ export const ACCOUNT_SCOPED_STORAGE_KEYS = [
   // health-auto-sync T3). Same class as 'last_synced_at' above: a new sign-in
   // inheriting another account's watermark would skip its own catch-up days.
   'livra_health_auto_sync_state_v1',
+  // Master auto-sync toggle (lib/health/autoSyncSettings.ts, T4): rides the
+  // Health connection, which is account-scoped ('health_connected' above).
+  'livra_health_auto_sync_enabled_v1',
   // Onboarding: completion is device-wide, so whatever account finished it last
   // would otherwise make the NEXT account skip onboarding (uiSlice's
   // resetOnboardingState covers the same ground; kept here so a purge is

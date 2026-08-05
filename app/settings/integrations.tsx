@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Platform,
+  Switch,
 } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { Heart, Plug, Check } from 'phosphor-react-native';
@@ -22,7 +23,10 @@ import { useAuth } from '../../hooks/useAuth';
 import { queryKeys } from '../../lib/data/queryKeys';
 import type { MarkRow } from '../../lib/data/types';
 import { autoBindHealthMarks } from '../../lib/health/autoBind';
+import { onHealthConnected, useAutoSyncSettings } from '../../lib/health/autoSyncSettings';
 import { checkProStatus } from '../../lib/iap/iap';
+import { formatDate } from '../../lib/date';
+import { getAppDate } from '../../lib/appDate';
 
 const APPLE_HEALTH_RED = '#FF2D55';
 
@@ -53,6 +57,16 @@ export default function IntegrationsScreen() {
   const [connecting, setConnecting] = useState(false);
   const { user } = useAuth();
   const queryClient = useQueryClient();
+
+  // Master auto-sync toggle (health-auto-sync T4, spec §2.8): default ON,
+  // device-persisted; the trigger (hooks/useHealthAutoSync.ts) reads it per run.
+  const autoSyncEnabled = useAutoSyncSettings((s) => s.autoSyncEnabled);
+  const autoSyncHydrated = useAutoSyncSettings((s) => s.hydrated);
+  const setAutoSyncEnabled = useAutoSyncSettings((s) => s.setAutoSyncEnabled);
+  const hydrateAutoSync = useAutoSyncSettings((s) => s.hydrate);
+  useEffect(() => {
+    void hydrateAutoSync();
+  }, [hydrateAutoSync]);
 
   const activeMarkRows = () =>
     (user?.id ? (queryClient.getQueryData<MarkRow[]>(queryKeys.marks(user.id)) ?? []) : [])
@@ -87,6 +101,10 @@ export default function IntegrationsScreen() {
       // connected on a successful request and let per-mark auto-log take over.
       await requestPermissions(HEALTH_CONNECT_TYPES);
       await setHealthConnected(true);
+      // Auto-sync side effects (T4): stamp the connect-day floor explicitly —
+      // otherwise the engine lazily stamps the day of its first RUN (T3 finding
+      // 4) — and turn the master toggle ON (spec §2.8 default at connect).
+      await onHealthConnected(formatDate(getAppDate()));
       // Bulk auto-bind is a Pro perk, same gate as the per-mark connect path
       // (app/mark/[id]/index.tsx handleConnectHealth). Connect itself stays
       // free — a non-Pro user just doesn't get marks bound automatically.
@@ -163,6 +181,31 @@ export default function IntegrationsScreen() {
               </View>
             )}
           </TouchableOpacity>
+
+          {/* Master auto-sync toggle — shown once Health is connected (before
+              that there is nothing for it to govern). The native Switch is the
+              house toggle (app/settings/notifications.tsx). */}
+          {healthConnected && (
+            <>
+              <View style={[styles.separator, { backgroundColor: c.borderLight }]} />
+              <View style={styles.row}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.rowLabel, { color: c.inkDark }]}>Auto-sync</Text>
+                  <Text style={[styles.rowMeta, { color: c.inkMuted }]}>
+                    Logs bound marks from Health when you open Livra.
+                  </Text>
+                </View>
+                <Switch
+                  value={autoSyncEnabled}
+                  onValueChange={(v) => void setAutoSyncEnabled(v)}
+                  disabled={!autoSyncHydrated}
+                  trackColor={{ false: c.borderMid, true: c.forest }}
+                  thumbColor={c.surface}
+                  accessibilityLabel="Auto-sync from Apple Health"
+                />
+              </View>
+            </>
+          )}
         </View>
 
         <SectionLabel style={[styles.sectionLabel, { opacity: 0.5 }]}>COMING SOON</SectionLabel>
