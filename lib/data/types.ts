@@ -767,6 +767,7 @@ export type Database = {
           meta: Json | null
           occurred_at: string
           occurred_local_date: string
+          source: string | null
           updated_at: string | null
           user_id: string
         }
@@ -780,6 +781,7 @@ export type Database = {
           meta?: Json | null
           occurred_at?: string
           occurred_local_date: string
+          source?: string | null
           updated_at?: string | null
           user_id: string
         }
@@ -793,6 +795,7 @@ export type Database = {
           meta?: Json | null
           occurred_at?: string
           occurred_local_date?: string
+          source?: string | null
           updated_at?: string | null
           user_id?: string
         }
@@ -1285,19 +1288,14 @@ export const Constants = {
 export type GoalRow = Tables<"goals">;
 export type MarkRow = Tables<"marks">;
 /**
- * `source` is HAND-ADDED ahead of its server column (health-auto-sync T3,
- * migration 20260805_mark_events_source.sql — NOT YET APPLIED to production).
- * 'health' = written by the Apple Health auto-sync engine; absent/null = manual.
- * OPTIONAL on purpose: manual writes never carry the key, so the hot path's
- * request body is byte-identical to before. The push degrades per-column when
- * the server lacks it (`missingOptionalColumnFromError`, lib/data/mutations/
- * checkins.ts), and the column is deliberately NOT in MARK_EVENT_COLUMNS —
- * selecting it pre-migration would 400 every check-in read (the `dailyTarget`
- * 42703 disaster, 2026-07-26). Once the migration is applied and this file is
- * REGENERATED, the column joins the generated block: delete this intersection
- * and add 'source' to MARK_EVENT_COLUMNS then.
+ * `source` lives in the generated block since 2026-08-05: migration
+ * 20260805_mark_events_source.sql is APPLIED live (read back from
+ * information_schema before this regen). 'health' = written by the Apple
+ * Health auto-sync engine; null = manual. Manual writes still omit the key
+ * (spread in buildCheckinRow), and the per-column degrade in insertCheckin
+ * stays as a safety net for any schema-cache lag.
  */
-export type MarkEventRow = Tables<"mark_events"> & { source?: string | null };
+export type MarkEventRow = Tables<"mark_events">;
 export type GoalNoteRow = Tables<"goal_notes">;
 export type GoalMarkLinkRow = Tables<"goal_mark_links">;
 

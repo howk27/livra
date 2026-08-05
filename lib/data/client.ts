@@ -99,6 +99,9 @@ export const MARK_EVENT_COLUMNS = [
   'occurred_at',
   'occurred_local_date',
   'meta',
+  // Applied live 2026-08-05 (20260805_mark_events_source.sql) — selectable
+  // only since then; a select before the migration would have 42703'd.
+  'source',
   'created_at',
   'updated_at',
   'deleted_at',

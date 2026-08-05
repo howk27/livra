@@ -11,10 +11,9 @@ import type { MarkEventRow } from '../data/types';
  * True when a live (non-tombstoned) increment attributed `source: 'health'`
  * exists for `markId` on local date `day`.
  *
- * KNOWN LIMIT (T3 finding 2, post-migration follow-up): pulled rows carry no
- * `source` until the server migration applies and 'source' joins
- * MARK_EVENT_COLUMNS — until then only rows written locally this session are
- * visible here. The predicate needs no change when that lands.
+ * Since 2026-08-05 'source' is in MARK_EVENT_COLUMNS (server migration
+ * applied), so pulled rows carry attribution too — not just rows written
+ * locally this session. The predicate itself never needed to change.
  */
 export function hasHealthCheckinOn(
   rows: readonly MarkEventRow[] | undefined,

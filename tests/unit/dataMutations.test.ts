@@ -288,10 +288,10 @@ describe('optimistic update and rollback', () => {
 
 // ─── Attribution: mark_events.source (health-auto-sync T3, spec §2.5) ────────
 //
-// The server column does not exist yet (migration 20260805_mark_events_source.sql,
-// NOT applied). The contract is per-column degrade: a column-less server loses
-// only attribution, NEVER the event — and the manual hot path never mentions the
-// column at all, so nothing changes for it before or after the migration.
+// The server column is LIVE (migration 20260805_mark_events_source.sql, applied
+// 2026-08-05 and read back). Every row carries the key — null for manual — and
+// the per-column degrade survives only as a safety net for a stale PostgREST
+// schema cache: a refusal naming `source` loses attribution, NEVER the event.
 
 describe('check-in attribution (source: health)', () => {
   /** Like install(), but each from() call consumes the NEXT queued result, so a
@@ -306,11 +306,11 @@ describe('check-in attribution (source: health)', () => {
     return { calls, client };
   }
 
-  it('buildCheckinRow threads source through; a manual row has NO source key at all', () => {
+  it('buildCheckinRow threads source through; a manual row carries source: null', () => {
     const health = buildCheckinRow({ markId: MARK, userId: USER, source: 'health' });
     expect(health.source).toBe('health');
     const manual = buildCheckinRow({ markId: MARK, userId: USER });
-    expect('source' in manual).toBe(false);
+    expect(manual.source).toBeNull();
   });
 
   it('missingOptionalColumnFromError recognises PGRST204 for the named column only', () => {
@@ -353,7 +353,7 @@ describe('check-in attribution (source: health)', () => {
     expect('source' in (inserts[1].args[0] as Record<string, unknown>)).toBe(false);
   });
 
-  it('does NOT retry a source-less row or a non-column failure (no blind second insert)', async () => {
+  it('does NOT retry a non-column failure (no blind second insert)', async () => {
     const { calls } = installQueue([
       { data: null, error: { code: '42501', message: 'denied' } },
     ]);
@@ -361,7 +361,7 @@ describe('check-in attribution (source: health)', () => {
     expect(calls.filter((c) => c.method === 'insert')).toHaveLength(1);
   });
 
-  it('the offline enqueue strips source — the flusher has no per-column degrade', async () => {
+  it('the offline enqueue keeps source — the live column makes queued attribution durable', async () => {
     const { onlineManager } = require('@tanstack/react-query');
     const outbox = require('@/lib/data/outbox');
     const spy = jest.spyOn(outbox, 'enqueueOutboxEntry').mockResolvedValue(undefined);
@@ -373,9 +373,9 @@ describe('check-in attribution (source: health)', () => {
       const healthRow = row();
       (healthRow as MarkEventRow & { source?: string | null }).source = 'health';
       const returned = await options.mutationFn(healthRow);
-      expect(returned).toBe(healthRow); // the caller keeps full attribution locally
+      expect(returned).toBe(healthRow);
       const queued = spy.mock.calls[0][0] as { row: Record<string, unknown> };
-      expect('source' in queued.row).toBe(false);
+      expect(queued.row.source).toBe('health');
     } finally {
       onlineManager.setOnline(wasOnline);
       spy.mockRestore();
