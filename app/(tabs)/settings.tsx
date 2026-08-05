@@ -610,6 +610,9 @@ export default function SettingsScreen() {
               </View>
             }
           />
+          <Text style={[styles.paceFootnote, { color: c.inkMuted }]}>
+            Sets how many days a week your flexible marks ask for. Marks already done this week keep their credit; daily marks stay daily.
+          </Text>
         </SettingsCard>
 
         {/* ── DATA ── */}
@@ -827,6 +830,15 @@ const styles = StyleSheet.create({
   deleteAccountText: {
     fontFamily: fonts.sans,
     fontSize: fontSize[13],
+  },
+
+  // Pace footnote
+  paceFootnote: {
+    fontFamily: fonts.sans,
+    fontSize: fontSize.xs,
+    lineHeight: 16,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md,
   },
 
   // Footer
