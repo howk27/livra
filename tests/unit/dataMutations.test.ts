@@ -21,6 +21,7 @@ import {
   removeCheckinFromCaches,
   logCheckinMutationOptions,
   undoCheckinMutationOptions,
+  missingOptionalColumnFromError,
 } from '@/lib/data/mutations/checkins';
 import type { MarkEventRow } from '@/lib/data/types';
 
@@ -282,6 +283,103 @@ describe('optimistic update and rollback', () => {
 
     options.onError({ kind: 'server', message: 'x' }, input);
     expect(client.getQueryData<MarkEventRow[]>(key)).toEqual([existing]);
+  });
+});
+
+// ─── Attribution: mark_events.source (health-auto-sync T3, spec §2.5) ────────
+//
+// The server column does not exist yet (migration 20260805_mark_events_source.sql,
+// NOT applied). The contract is per-column degrade: a column-less server loses
+// only attribution, NEVER the event — and the manual hot path never mentions the
+// column at all, so nothing changes for it before or after the migration.
+
+describe('check-in attribution (source: health)', () => {
+  /** Like install(), but each from() call consumes the NEXT queued result, so a
+   * failed insert followed by a degrade retry can be scripted. */
+  function installQueue(results: QueryResult[]) {
+    const calls: { method: string; args: unknown[] }[] = [];
+    let i = 0;
+    const client = {
+      from: jest.fn(() => makeBuilder(results[Math.min(i++, results.length - 1)], calls)),
+    };
+    setSupabaseClientOverride(client as unknown as Parameters<typeof setSupabaseClientOverride>[0]);
+    return { calls, client };
+  }
+
+  it('buildCheckinRow threads source through; a manual row has NO source key at all', () => {
+    const health = buildCheckinRow({ markId: MARK, userId: USER, source: 'health' });
+    expect(health.source).toBe('health');
+    const manual = buildCheckinRow({ markId: MARK, userId: USER });
+    expect('source' in manual).toBe(false);
+  });
+
+  it('missingOptionalColumnFromError recognises PGRST204 for the named column only', () => {
+    const pgrst204 = {
+      code: 'PGRST204',
+      message: "Could not find the 'source' column of 'mark_events' in the schema cache",
+    };
+    expect(missingOptionalColumnFromError(pgrst204, 'source')).toBe(true);
+    expect(missingOptionalColumnFromError(pgrst204, 'meta')).toBe(false);
+    expect(
+      missingOptionalColumnFromError(
+        { code: '42703', message: 'column mark_events.source does not exist' },
+        'source',
+      ),
+    ).toBe(true);
+    expect(missingOptionalColumnFromError({ code: '42501', message: 'denied' }, 'source')).toBe(
+      false,
+    );
+    expect(missingOptionalColumnFromError(null, 'source')).toBe(false);
+  });
+
+  it('insertCheckin retries WITHOUT source when the server lacks the column — the event lands', async () => {
+    const healthRow = row();
+    (healthRow as MarkEventRow & { source?: string | null }).source = 'health';
+    const { calls } = installQueue([
+      {
+        data: null,
+        error: {
+          code: 'PGRST204',
+          message: "Could not find the 'source' column of 'mark_events' in the schema cache",
+        },
+      },
+      { data: row(), error: null },
+    ]);
+
+    await expect(insertCheckin(healthRow)).resolves.toMatchObject({ id: healthRow.id });
+    const inserts = calls.filter((c) => c.method === 'insert');
+    expect(inserts).toHaveLength(2);
+    expect(inserts[0].args[0]).toMatchObject({ source: 'health' });
+    expect('source' in (inserts[1].args[0] as Record<string, unknown>)).toBe(false);
+  });
+
+  it('does NOT retry a source-less row or a non-column failure (no blind second insert)', async () => {
+    const { calls } = installQueue([
+      { data: null, error: { code: '42501', message: 'denied' } },
+    ]);
+    await expect(insertCheckin(row())).rejects.toMatchObject({ kind: 'permission' });
+    expect(calls.filter((c) => c.method === 'insert')).toHaveLength(1);
+  });
+
+  it('the offline enqueue strips source — the flusher has no per-column degrade', async () => {
+    const { onlineManager } = require('@tanstack/react-query');
+    const outbox = require('@/lib/data/outbox');
+    const spy = jest.spyOn(outbox, 'enqueueOutboxEntry').mockResolvedValue(undefined);
+    const wasOnline = onlineManager.isOnline();
+    onlineManager.setOnline(false);
+    try {
+      const client = new QueryClient();
+      const options = logCheckinMutationOptions(client);
+      const healthRow = row();
+      (healthRow as MarkEventRow & { source?: string | null }).source = 'health';
+      const returned = await options.mutationFn(healthRow);
+      expect(returned).toBe(healthRow); // the caller keeps full attribution locally
+      const queued = spy.mock.calls[0][0] as { row: Record<string, unknown> };
+      expect('source' in queued.row).toBe(false);
+    } finally {
+      onlineManager.setOnline(wasOnline);
+      spy.mockRestore();
+    }
   });
 });
 

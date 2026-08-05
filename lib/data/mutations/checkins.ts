@@ -50,6 +50,11 @@ export interface LogCheckinInput {
   userId: string;
   /** Reps recorded by this tap. Whole and positive; the UI only ever sends 1. */
   amount?: number;
+  /** Attribution (health-auto-sync T3, spec §2.5): 'health' marks a row written
+   * by the auto-sync engine. Manual taps NEVER set this — and the built row then
+   * carries no `source` key at all, so the hot path's request body is unchanged
+   * whether or not the server column exists yet. */
+  source?: 'health';
 }
 
 /**
@@ -64,7 +69,7 @@ export function buildCheckinRow(
   input: LogCheckinInput,
   now: Date = getAppDateTime(),
 ): MarkEventRow {
-  const { markId, userId, amount = 1 } = input;
+  const { markId, userId, amount = 1, source } = input;
 
   if (!UUID_RE.test(userId)) throw invalid('userId is not a uuid');
   if (!UUID_RE.test(markId)) throw invalid('markId is not a uuid');
@@ -105,6 +110,9 @@ export function buildCheckinRow(
     created_at: stamp,
     updated_at: stamp,
     deleted_at: null,
+    // Spread, not `source: source ?? null`: a manual row must have NO `source`
+    // key, or every pre-migration insert would trip on the absent column.
+    ...(source ? { source } : {}),
   };
 }
 
@@ -116,6 +124,25 @@ function invalid(reason: string): DataError {
   return { kind: 'unknown', message: 'The check-in could not be built from that input.' };
 }
 
+/**
+ * Whether a raw PostgREST/Postgres error means "the named column does not exist
+ * on the server". This is the per-column degrade seam for OPTIONAL columns that
+ * ship in code before their migration is applied (mark_events.source, spec
+ * §2.5): the write retries without the column and loses only attribution, never
+ * the event. PGRST204 is PostgREST's "column not in schema cache" refusal for an
+ * insert/update body; 42703 is Postgres's own undefined-column SQLSTATE. Both
+ * must NAME the column — any other failure is not this one and must not trigger
+ * a blind second insert.
+ */
+export function missingOptionalColumnFromError(raw: unknown, column: string): boolean {
+  if (typeof raw !== 'object' || raw === null) return false;
+  const { code, message } = raw as { code?: unknown; message?: unknown };
+  const text = typeof message === 'string' ? message : '';
+  if (code === 'PGRST204') return text.includes(`'${column}'`);
+  if (code === '42703') return text.includes(column);
+  return false;
+}
+
 /** The single INSERT. Returns the SERVER's row so the optimistic guess is replaced
  * by the stored truth (defaults, triggers, any normalisation). */
 export async function insertCheckin(row: MarkEventRow): Promise<MarkEventRow> {
@@ -124,9 +151,26 @@ export async function insertCheckin(row: MarkEventRow): Promise<MarkEventRow> {
     .insert(row)
     .select(selectList(MARK_EVENT_COLUMNS))
     .single();
-  if (error) throw toDataError(error);
-  // No representation returned is not a failure — we know exactly what we sent.
-  return (data ?? row) as unknown as MarkEventRow;
+  if (!error) {
+    // No representation returned is not a failure — we know exactly what we sent.
+    return (data ?? row) as unknown as MarkEventRow;
+  }
+  // Per-column degrade (health-auto-sync T3): the binary can predate the
+  // `source` migration on the server. The EVENT must land regardless; only the
+  // attribution is expendable. Retried once, source-less, and only when the
+  // error names this exact column on a row that actually carried it.
+  if (row.source != null && missingOptionalColumnFromError(error, 'source')) {
+    logger.warn('[data] mark_events.source missing on server — check-in re-sent without attribution');
+    const { source: _unsupported, ...bare } = row;
+    const retry = await dataClient()
+      .from('mark_events')
+      .insert(bare)
+      .select(selectList(MARK_EVENT_COLUMNS))
+      .single();
+    if (retry.error) throw toDataError(retry.error);
+    return (retry.data ?? bare) as unknown as MarkEventRow;
+  }
+  throw toDataError(error);
 }
 
 /** Undo: tombstone the row (D-8). Reads filter `deleted_at is null`, so this is
@@ -219,7 +263,14 @@ export function logCheckinMutationOptions(client: QueryClient) {
     // before the enqueue branch could execute.
     mutationFn: async (row: MarkEventRow): Promise<MarkEventRow> => {
       if (!onlineManager.isOnline()) {
-        await enqueueOutboxEntry({ table: 'mark_events', row });
+        // Attribution is stripped BEFORE the queue: the outbox flusher
+        // (lib/data/outbox.ts) has no per-column degrade, and a queued row
+        // carrying `source` against a column-less server would classify
+        // 'server' and retry at the backoff cadence forever. The caller keeps
+        // the full row (returned below) so the day still reads as health-logged
+        // on screen; only the durable attribution is lost — never the event.
+        const { source: _unsent, ...bare } = row;
+        await enqueueOutboxEntry({ table: 'mark_events', row: bare });
         return row;
       }
       return insertCheckin(row);

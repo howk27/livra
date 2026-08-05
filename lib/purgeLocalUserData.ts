@@ -103,6 +103,10 @@ export const ACCOUNT_SCOPED_STORAGE_KEYS = [
   // Per-mark HealthKit bindings (lib/health/healthKitBinding.ts, M9 Phase 5A
   // Task 6): they reference the signed-out account's mark ids.
   'livra_health_kit_bindings_v1',
+  // Health auto-sync connect day + watermark (lib/health/autoSync.ts,
+  // health-auto-sync T3). Same class as 'last_synced_at' above: a new sign-in
+  // inheriting another account's watermark would skip its own catch-up days.
+  'livra_health_auto_sync_state_v1',
   // Onboarding: completion is device-wide, so whatever account finished it last
   // would otherwise make the NEXT account skip onboarding (uiSlice's
   // resetOnboardingState covers the same ground; kept here so a purge is

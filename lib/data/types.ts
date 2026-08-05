@@ -1284,7 +1284,20 @@ export const Constants = {
 /** A row exactly as `public.<table>` returns it (nullability included). */
 export type GoalRow = Tables<"goals">;
 export type MarkRow = Tables<"marks">;
-export type MarkEventRow = Tables<"mark_events">;
+/**
+ * `source` is HAND-ADDED ahead of its server column (health-auto-sync T3,
+ * migration 20260805_mark_events_source.sql — NOT YET APPLIED to production).
+ * 'health' = written by the Apple Health auto-sync engine; absent/null = manual.
+ * OPTIONAL on purpose: manual writes never carry the key, so the hot path's
+ * request body is byte-identical to before. The push degrades per-column when
+ * the server lacks it (`missingOptionalColumnFromError`, lib/data/mutations/
+ * checkins.ts), and the column is deliberately NOT in MARK_EVENT_COLUMNS —
+ * selecting it pre-migration would 400 every check-in read (the `dailyTarget`
+ * 42703 disaster, 2026-07-26). Once the migration is applied and this file is
+ * REGENERATED, the column joins the generated block: delete this intersection
+ * and add 'source' to MARK_EVENT_COLUMNS then.
+ */
+export type MarkEventRow = Tables<"mark_events"> & { source?: string | null };
 export type GoalNoteRow = Tables<"goal_notes">;
 export type GoalMarkLinkRow = Tables<"goal_mark_links">;
 
