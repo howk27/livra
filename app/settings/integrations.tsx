@@ -22,6 +22,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { queryKeys } from '../../lib/data/queryKeys';
 import type { MarkRow } from '../../lib/data/types';
 import { autoBindHealthMarks } from '../../lib/health/autoBind';
+import { checkProStatus } from '../../lib/iap/iap';
 
 const APPLE_HEALTH_RED = '#FF2D55';
 
@@ -60,11 +61,18 @@ export default function IntegrationsScreen() {
 
   // Retro-bind for users who connected BEFORE this shipped (the founder's
   // exact state): already-connected accounts get the same pass on mount.
+  // Skipped while `connecting` is in flight — the handler's own bind pass
+  // owns that window, and racing an unlocked read-modify-write can drop
+  // writes (QC64 fix wave, finding 4).
   useEffect(() => {
-    if (!healthConnected) return;
-    void autoBindHealthMarks(activeMarkRows());
+    if (!healthConnected || connecting) return;
+    (async () => {
+      const status = await checkProStatus();
+      if (!status.effectiveUnlocked) return;
+      await autoBindHealthMarks(activeMarkRows());
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [healthConnected, user?.id]);
+  }, [healthConnected, connecting, user?.id]);
 
   const handleConnectHealth = async () => {
     if (Platform.OS !== 'ios') {
@@ -79,12 +87,17 @@ export default function IntegrationsScreen() {
       // connected on a successful request and let per-mark auto-log take over.
       await requestPermissions(HEALTH_CONNECT_TYPES);
       await setHealthConnected(true);
-      const bound = await autoBindHealthMarks(activeMarkRows());
-      const markWord = bound.length === 1 ? 'mark' : 'marks';
+      // Bulk auto-bind is a Pro perk, same gate as the per-mark connect path
+      // (app/mark/[id]/index.tsx handleConnectHealth). Connect itself stays
+      // free — a non-Pro user just doesn't get marks bound automatically.
+      const status = await checkProStatus();
+      const bound = status.effectiveUnlocked
+        ? await autoBindHealthMarks(activeMarkRows())
+        : [];
       showSuccess(
         bound.length > 0
-          ? `Apple Health connected. ${bound.length} ${markWord} will sync automatically.`
-          : 'Apple Health connected.'
+          ? `Apple Health connected. ${bound.length} mark${bound.length === 1 ? '' : 's'} linked.`
+          : 'Apple Health connected.',
       );
     } catch (e) {
       // This used to be a bare `catch {}`: the one screen that knew WHY Apple

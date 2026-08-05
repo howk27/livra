@@ -21,7 +21,7 @@ describe('Pace row footnote', () => {
   );
   it('explains what Pace changes and what it leaves alone', () => {
     expect(src).toContain('Sets how many days a week your flexible marks ask for.');
-    expect(src).toContain('done this week keep their credit');
+    expect(src).toContain('logged check-ins always count');
     expect(src).toContain('daily marks stay daily');
   });
   it('meta-assertion: the stripper still strips', () => {

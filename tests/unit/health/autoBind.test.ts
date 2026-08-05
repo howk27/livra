@@ -33,6 +33,18 @@ describe('autoBindHealthMarks', () => {
     });
   });
 
+  it('skips a steps-type mark: stepGoal is the mark-detail flow\'s business', async () => {
+    const bound = await autoBindHealthMarks([{ id: 'm-steps2', name: 'Walk 10k steps' }]);
+    expect(bound).toEqual([]);
+    expect(await getHealthKitBinding('m-steps2')).toBeNull();
+  });
+
+  it('skips a sleep-type mark: wake-time notification is the mark-detail flow\'s business', async () => {
+    const bound = await autoBindHealthMarks([{ id: 'm-sleep', name: 'Sleep by 11' }]);
+    expect(bound).toEqual([]);
+    expect(await getHealthKitBinding('m-sleep')).toBeNull();
+  });
+
   it('is idempotent: a second pass binds nothing new', async () => {
     await autoBindHealthMarks([{ id: 'm-run', name: 'Run' }]);
     expect(await autoBindHealthMarks([{ id: 'm-run', name: 'Run' }])).toEqual([]);

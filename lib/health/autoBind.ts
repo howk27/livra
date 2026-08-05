@@ -12,6 +12,11 @@
 // - never throws: binding is a convenience layered over the connect toast.
 import { detectHealthKitType } from './autoSuggest';
 import { allHealthKitBindings, setHealthKitBinding } from './healthKitBinding';
+import type { HealthKitType } from './healthTypes';
+
+// steps needs a stepGoal and sleep schedules a wake-time notification — both are
+// the mark-detail flow's business; auto-bind covers only the config-free types.
+const AUTO_BINDABLE: readonly HealthKitType[] = ['running', 'workout', 'hydration', 'mindful'];
 
 export async function autoBindHealthMarks(
   marks: { id: string; name: string }[]
@@ -23,6 +28,7 @@ export async function autoBindHealthMarks(
       if (existing[m.id]) continue;
       const type = detectHealthKitType(m.name);
       if (!type) continue;
+      if (!AUTO_BINDABLE.includes(type)) continue;
       await setHealthKitBinding(m.id, { type, config: null });
       bound.push(m.id);
     }
