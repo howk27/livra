@@ -29,7 +29,7 @@
         "NSPhotoLibraryUsageDescription": "Livra needs access to your photo library to set a profile picture.",
         "NSPhotoLibraryAddUsageDescription": "Livra needs access to save photos to your library.",
         "NSCameraUsageDescription": "Livra needs access to your camera to take a profile picture.",
-        "NSHealthShareUsageDescription": "Livra reads your workout, sleep, and activity data to power your weekly reflection. Your health data is never stored on our servers."
+        "NSHealthShareUsageDescription": "Livra reads your workouts, mindful sessions, steps, and sleep to automatically log check-ins for your connected marks and power your weekly reflection."
       },
       "entitlements": {
         "com.apple.developer.healthkit": true,
@@ -112,7 +112,7 @@
       [
         "react-native-health",
         {
-          "NSHealthShareUsageDescription": "Livra reads your workout, sleep, and activity data to power your weekly reflection."
+          "NSHealthShareUsageDescription": "Livra reads your workouts, mindful sessions, steps, and sleep to automatically log check-ins for your connected marks and power your weekly reflection."
         }
       ],
       [
