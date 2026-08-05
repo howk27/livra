@@ -37,7 +37,7 @@ export default function PrivacyPolicyScreen() {
           showsVerticalScrollIndicator={false}
         >
           <AppText variant="caption" style={[styles.lastUpdated, { color: c.inkMuted }]}>
-            Last updated: August 2, 2026
+            Last updated: August 5, 2026
           </AppText>
 
           <AppText variant="body" style={[styles.paragraph, { color: c.inkDark }]}>
@@ -113,24 +113,51 @@ export default function PrivacyPolicyScreen() {
 
           {/* HealthKit 5.1.3 drift fix: the binary declares the HealthKit
               entitlement, so the policy must describe the data — claims below
-              mirror NSHealthShareUsageDescription and are pinned by
-              tests/unit/copyHealthPrivacy.test.ts. */}
+              mirror NSHealthShareUsageDescription (app.json:32) and are pinned
+              by tests/unit/copyHealthPrivacy.test.ts.
+              2026-08-05, health auto-sync: the old "never stored on our
+              servers" line became false the moment a health-qualified day
+              started writing a mark_events row (lib/health/autoSync.ts,
+              lib/data/mutations/checkins.ts, source column applied
+              20260805_mark_events_source.sql). What is still true is narrower
+              and stated below: the readers reduce every sample to a day-set
+              on device (lib/health/healthReader.ts), so the VALUES never
+              leave — the qualifying day and its attribution do. */}
           <AppText variant="body" style={[styles.subsectionTitle, { color: c.inkDark }]}>
             1.4. Apple Health Data (Optional)
           </AppText>
           <AppText variant="body" style={[styles.paragraph, { color: c.inkDark }]}>
-            If you choose to connect Apple Health, Livra reads your workout, sleep, and activity data
-            to power your weekly reflection.
+            If you connect a mark to Apple Health, Livra reads your workouts, mindful sessions,
+            steps, and sleep to automatically log check-ins for that mark and to power your weekly
+            reflection. Connecting is optional, is part of Livra Pro, and always starts with the
+            iOS permission prompt.
           </AppText>
           <View style={styles.bulletList}>
             <AppText variant="body" style={[styles.bulletItem, { color: c.inkDark }]}>
-              • Health data is read on your device and is never stored on our servers
+              • Your health readings stay on your device. Livra checks each day against your mark
+              and keeps only whether that day qualified — the underlying values, such as workout
+              durations, step counts, sleep hours and water amounts, are discarded on your device
+              and never sent to us
+            </AppText>
+            <AppText variant="body" style={[styles.bulletItem, { color: c.inkDark }]}>
+              • When a day qualifies, Livra creates a check-in for that mark. Those check-ins are
+              synced to our servers like any other check-in, and are labeled as logged from Apple
+              Health so you can tell them apart
+            </AppText>
+            <AppText variant="body" style={[styles.bulletItem, { color: c.inkDark }]}>
+              • Which marks you connected and the targets you set for them are kept on your device
+              only
+            </AppText>
+            <AppText variant="body" style={[styles.bulletItem, { color: c.inkDark }]}>
+              • Our usage analytics record that a check-in was logged from Apple Health. They never
+              carry your health readings
             </AppText>
             <AppText variant="body" style={[styles.bulletItem, { color: c.inkDark }]}>
               • We never sell health data or use it for advertising or marketing
             </AppText>
             <AppText variant="body" style={[styles.bulletItem, { color: c.inkDark }]}>
-              • You can revoke access anytime in the iOS Health app under Sharing
+              • You can revoke access anytime in the iOS Health app under Sharing. Check-ins already
+              logged stay in your history until you delete them
             </AppText>
           </View>
 

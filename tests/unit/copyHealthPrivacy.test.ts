@@ -1,11 +1,21 @@
 /**
  * The binary declares com.apple.developer.healthkit and ships
- * NSHealthShareUsageDescription ("Livra reads your workout, sleep, and activity
- * data... never stored on our servers"). Apple's HealthKit rules (5.1.3) require
- * the privacy policy to describe that collection and forbid advertising use —
- * and until 2026-08-02 the in-app policy never mentioned health data at all.
- * This guard pins the policy's health section to the same claims the usage
- * string makes, because nothing else in the suite reads this prose.
+ * NSHealthShareUsageDescription ("Livra reads your workouts, mindful sessions,
+ * steps, and sleep to automatically log check-ins for your connected marks and
+ * power your weekly reflection" — app.json:32). Apple's HealthKit rules (5.1.3)
+ * require the privacy policy to describe that collection and forbid advertising
+ * use, and nothing else in the suite reads this prose, so this guard pins the
+ * policy's health section to the same claims the usage string makes.
+ *
+ * 2026-08-05 — INVERTED CASE. Until health auto-sync shipped, this file asserted
+ * the policy SAYS "never stored on our servers". Auto-sync writes a mark_events
+ * row for every qualifying day (lib/health/autoSync.ts →
+ * lib/data/mutations/checkins.ts, attribution column
+ * 20260805_mark_events_source.sql), so health-DERIVED data now reaches the
+ * server and that sentence became a false claim in a published policy. The case
+ * below is its mirror image: the phrase must be ABSENT, and the truthful
+ * replacement — values stay on device, qualifying days sync as check-ins — must
+ * be present. Re-introducing the old sentence fails the suite by design.
  *
  * Scans the SHIPPED source with comments stripped, same as
  * copySubscriptionRenewal.test.ts — this repo has shipped source-scanners that
@@ -42,8 +52,23 @@ describe('privacy policy covers Apple Health data', () => {
     expect(text).toMatch(/sleep/i);
   });
 
-  it('states health data is never stored on our servers — matching the usage string', () => {
-    expect(readableText(policySource())).toMatch(/never stored on our servers/i);
+  it('never re-asserts that health data is not stored on our servers — auto-sync made that false', () => {
+    const text = readableText(policySource());
+    // The exact retired sentence, plus the near-misses a rewrite might reach for.
+    expect(text).not.toMatch(/never stored on our servers/i);
+    expect(text).not.toMatch(/never (?:stored|kept|saved|held|transmitted|sent)[^.]{0,60}our servers/i);
+    expect(text).not.toMatch(/health data[^.]{0,60}never (?:leaves|leave) your (?:device|phone)/i);
+  });
+
+  it('discloses that qualifying days sync to our servers as check-ins, values excepted', () => {
+    const text = readableText(policySource());
+    // A check-in born from Health reaches Supabase.
+    expect(text).toMatch(/check-?ins?[^.]{0,80}synced to our servers/i);
+    // ...and what does NOT: the raw readings behind it.
+    expect(text).toMatch(/health readings stay on your device/i);
+    expect(text).toMatch(/discarded on your device and never sent to us/i);
+    // The attribution the mark_events.source column carries is disclosed too.
+    expect(text).toMatch(/labeled as logged from Apple Health/i);
   });
 
   it('excludes advertising and sale of health data (HealthKit 5.1.3)', () => {
