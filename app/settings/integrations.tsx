@@ -71,7 +71,7 @@ export default function IntegrationsScreen() {
   const activeMarkRows = () =>
     (user?.id ? (queryClient.getQueryData<MarkRow[]>(queryKeys.marks(user.id)) ?? []) : [])
       .filter((r) => !r.deleted_at)
-      .map((r) => ({ id: r.id, name: r.name }));
+      .map((r) => ({ id: r.id, name: r.name, emoji: r.emoji }));
 
   // Retro-bind for users who connected BEFORE this shipped (the founder's
   // exact state): already-connected accounts get the same pass on mount.

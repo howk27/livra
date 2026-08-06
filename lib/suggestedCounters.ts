@@ -13,6 +13,7 @@ import {
   CigaretteIcon, CoffeeIcon, SparkleIcon,
 } from 'phosphor-react-native';
 import type { TimeAffinity } from './nextStep';
+import type { HealthKitType } from './health/healthTypes';
 
 export type MarkDefinition = {
   id: string;
@@ -25,7 +26,16 @@ export type MarkDefinition = {
   unit: 'sessions' | 'days' | 'items';
   category: string;
   tags: string[];
-  healthKitType: string | null;
+  /**
+   * The ONE health type this mark may bind to, or null = not health-able.
+   * Founder 2026-08-06: this column is the single source of truth for which
+   * marks offer Apple Health — the old name-regex (lib/health/autoSuggest.ts)
+   * said 6 types and could bind "Vitality" to hydration; the curated set here
+   * is deliberately narrower ("the most honest and trustable kit, even if it
+   * means just 3 marks"). Widening Health coverage means assigning a type
+   * HERE, never loosening a matcher.
+   */
+  healthKitType: HealthKitType | null;
   frequency_min: number;
   frequency_recommended: number;
   frequency_max: number;

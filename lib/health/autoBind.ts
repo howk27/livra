@@ -7,25 +7,17 @@
 //
 // Deliberate limits, matching the manual flow's semantics minus its prompts:
 // - an EXISTING binding is never touched (manual config wins);
+// - only marks the LIBRARY declares health-able bind (resolveHealthKitType —
+//   founder 2026-08-06, the curated 3, not the old name regex);
 // - steps and sleep bind WITH defaults (health-auto-sync spec §2.9): stepGoal =
 //   the user's 30-day average daily steps rounded to the nearest 500 (8000 when
 //   Health has no history), sleepHours = 7 — both editable on mark detail,
 //   where the sleep wake-time notification also still lives;
 // - never throws: binding is a convenience layered over the connect toast.
-import { detectHealthKitType } from './autoSuggest';
+import { resolveHealthKitType } from './autoSuggest';
 import { allHealthKitBindings, setHealthKitBinding } from './healthKitBinding';
 import type { HealthKitBinding } from './healthKitBinding';
 import { readAverageDailySteps } from './healthReader';
-import type { HealthKitType } from './healthTypes';
-
-const AUTO_BINDABLE: readonly HealthKitType[] = [
-  'running',
-  'workout',
-  'hydration',
-  'mindful',
-  'steps',
-  'sleep',
-];
 
 const STEP_GOAL_FALLBACK = 8000;
 const SLEEP_HOURS_DEFAULT = 7;
@@ -40,7 +32,7 @@ async function computeStepGoalDefault(): Promise<number> {
 }
 
 export async function autoBindHealthMarks(
-  marks: { id: string; name: string }[]
+  marks: { id: string; name: string; emoji?: string | null }[]
 ): Promise<string[]> {
   const bound: string[] = [];
   try {
@@ -50,9 +42,8 @@ export async function autoBindHealthMarks(
     let stepGoal: number | undefined;
     for (const m of marks) {
       if (existing[m.id]) continue;
-      const type = detectHealthKitType(m.name);
+      const type = resolveHealthKitType(m);
       if (!type) continue;
-      if (!AUTO_BINDABLE.includes(type)) continue;
       let config: HealthKitBinding['config'] = null;
       if (type === 'steps') {
         if (stepGoal === undefined) stepGoal = await computeStepGoalDefault();

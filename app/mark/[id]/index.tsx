@@ -251,6 +251,10 @@ function MarkDetailContent() {
   // QC2-A: shared resolver — name-first, emoji fallback (immune to library
   // emoji collisions like '🚫').
   const libraryMark = counter ? resolveLibraryMark(counter) : undefined;
+  // The ONE health type this mark may bind to (founder 2026-08-06: the
+  // library's curated column is the single truth — see resolveHealthKitType).
+  // Null = not health-able: no banner, no connect, no type to pick.
+  const healthKitType = libraryMark?.healthKitType ?? null;
 
   const [historyExpanded, setHistoryExpanded] = useState(false);
   const undoInFlight = useRef(false);
@@ -261,9 +265,10 @@ function MarkDetailContent() {
   const [isDeleting, setIsDeleting] = useState(false);
   const appDateKey = useAppDateStore(selectAppDateKey);
 
+  // The modal exists solely for the steps goal input now — every other type
+  // connects directly (the type comes from the library, not a picker).
   const [healthModalVisible, setHealthModalVisible] = useState(false);
   const [healthStepGoal, setHealthStepGoal] = useState<string>('');
-  const [healthPendingType, setHealthPendingType] = useState<HealthKitType | null>(null);
   const [healthConnecting, setHealthConnecting] = useState(false);
   // The mark's device-local HealthKit binding (null = not connected).
   const [healthBinding, setHealthBinding] = useState<HealthKitBinding | null>(null);
@@ -524,23 +529,24 @@ function MarkDetailContent() {
     }
   };
 
+  // Connects straight to the mark's OWN health type — there is no picker any
+  // more. The old flow offered all six types for any mark ("Practice Spanish"
+  // could bind hydration); with the library as the only truth, the mark's type
+  // is already known. Steps alone still needs input (the step goal).
   const handleConnectHealth = async () => {
+    if (!healthKitType) return; // button not rendered without a type
     const status = await checkProStatus();
     if (!status.effectiveUnlocked) {
       router.push('/paywall');
       return;
     }
-    setHealthModalVisible(true);
-  };
-
-  const handleHealthTypeSelect = async (type: HealthKitType) => {
-    if (type === 'steps') {
-      setHealthPendingType(type);
+    if (healthKitType === 'steps') {
       const suggested = await suggestStepGoal();
       setHealthStepGoal(suggested !== null ? String(suggested) : '');
+      setHealthModalVisible(true);
       return;
     }
-    await confirmHealthConnection(type, undefined);
+    await confirmHealthConnection(healthKitType, undefined);
   };
 
   const confirmHealthConnection = async (type: HealthKitType, stepGoal: number | undefined) => {
@@ -564,7 +570,6 @@ function MarkDetailContent() {
     } finally {
       setHealthConnecting(false);
       setHealthModalVisible(false);
-      setHealthPendingType(null);
     }
   };
 
@@ -759,8 +764,11 @@ function MarkDetailContent() {
 
           {/* Apple Health — the per-mark automation binding. iOS only: the
               permission bridge is react-native-health. Connect is Pro-gated
-              inside handleConnectHealth (paywall push). */}
-          {Platform.OS === 'ios' && (
+              inside handleConnectHealth (paywall push). Rendered ONLY when the
+              library says this mark is health-able (founder 2026-08-06 — the
+              banner used to show on EVERY mark, including Practice), or when a
+              legacy binding already exists so its owner can still disconnect. */}
+          {Platform.OS === 'ios' && (healthKitType !== null || healthBinding !== null) && (
             <View style={styles.settingCard}>
               <View style={styles.settingRow}>
                 <View style={{ flex: 1 }}>
@@ -815,68 +823,51 @@ function MarkDetailContent() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* Health type picker modal */}
+      {/* Steps goal input — the only thing a Health connect still has to ask.
+          The old six-type picker is gone: the mark's type comes from the
+          library (handleConnectHealth), so non-steps types connect directly. */}
       <Modal
         visible={healthModalVisible}
         transparent
         animationType="slide"
-        onRequestClose={() => { setHealthModalVisible(false); setHealthPendingType(null); }}
+        onRequestClose={() => setHealthModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalSheet}>
             <Text style={styles.modalTitle}>Connect to Apple Health</Text>
-            {healthPendingType === 'steps' ? (
-              <View style={{ gap: spacing.md }}>
-                <Text style={styles.modalBody}>How many steps counts as an active day?</Text>
-                <TextInput
-                  value={healthStepGoal}
-                  onChangeText={setHealthStepGoal}
-                  keyboardType="number-pad"
-                  placeholder="e.g. 8000"
-                  placeholderTextColor={c.inkMuted}
-                  style={styles.modalInput}
-                />
-                <TouchableOpacity
-                  style={styles.modalBtn}
-                  disabled={healthConnecting}
-                  onPress={() => {
-                    const goal = parseInt(healthStepGoal, 10);
-                    if (isNaN(goal) || goal <= 0) {
-                      showError('Enter a number greater than 0.');
-                      return;
-                    }
-                    void confirmHealthConnection('steps', goal);
-                  }}
-                >
-                  <Text style={styles.modalBtnText}>
-                    {healthConnecting ? 'Connecting…' : 'Save & Connect'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View>
-                {(['workout', 'sleep', 'hydration', 'mindful', 'steps', 'running'] as HealthKitType[]).map((type, i, arr) => (
-                  <TouchableOpacity
-                    key={type}
-                    style={[
-                      styles.modalOption,
-                      { borderBottomWidth: i < arr.length - 1 ? 1 : 0, borderBottomColor: c.borderLight },
-                    ]}
-                    onPress={() => void handleHealthTypeSelect(type)}
-                  >
-                    <Text style={styles.modalOptionText}>
-                      {type.charAt(0).toUpperCase() + type.slice(1)}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-                <TouchableOpacity
-                  style={styles.modalCancel}
-                  onPress={() => { setHealthModalVisible(false); setHealthPendingType(null); }}
-                >
-                  <Text style={styles.modalCancelText}>Cancel</Text>
-                </TouchableOpacity>
-              </View>
-            )}
+            <View style={{ gap: spacing.md }}>
+              <Text style={styles.modalBody}>How many steps counts as an active day?</Text>
+              <TextInput
+                value={healthStepGoal}
+                onChangeText={setHealthStepGoal}
+                keyboardType="number-pad"
+                placeholder="e.g. 8000"
+                placeholderTextColor={c.inkMuted}
+                style={styles.modalInput}
+              />
+              <TouchableOpacity
+                style={styles.modalBtn}
+                disabled={healthConnecting}
+                onPress={() => {
+                  const goal = parseInt(healthStepGoal, 10);
+                  if (isNaN(goal) || goal <= 0) {
+                    showError('Enter a number greater than 0.');
+                    return;
+                  }
+                  void confirmHealthConnection('steps', goal);
+                }}
+              >
+                <Text style={styles.modalBtnText}>
+                  {healthConnecting ? 'Connecting…' : 'Save & Connect'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalCancel}
+                onPress={() => setHealthModalVisible(false)}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -1154,8 +1145,6 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     backgroundColor: c.forest,
   },
   modalBtnText: { color: c.inkInverse, fontSize: fontSize.lg, fontFamily: fonts.sansMedium },
-  modalOption: { paddingVertical: spacing.md },
-  modalOptionText: { fontSize: fontSize.lg, fontFamily: fonts.sans, color: c.inkDark },
   modalCancel: { paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.xs },
   modalCancelText: { fontSize: fontSize.base, fontFamily: fonts.sans, color: c.inkMuted },
   });
