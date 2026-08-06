@@ -186,11 +186,16 @@ describe('LivraWidget is theme-aware (light + dark surfaces)', () => {
     const plusButton = views.slice(plusFrom, plusTo);
     expect(plusButton).toContain('Button(intent: LogMarkIntent(markId: mark.id))');
     expect(plusButton).toContain('livra://log-mark?markId=');
-    // A CIRCLE at 48pt — bigger than the old 36pt pill and above the 44pt
-    // iOS touch floor. Capsule() coming back is the regression.
+    // 2026-08-06 founder polish: the PAINTED circle is 36pt, but the tappable
+    // area must stay the full 48pt (above the 44pt iOS touch floor) — outer
+    // frame + contentShape after the clip. The clip coming after the 48 frame,
+    // or the contentShape disappearing, is the hit-box regression.
     const plusLabel = views.slice(plusTo, views.indexOf('struct ', plusTo + 1));
-    expect(plusLabel).toMatch(/\.frame\(width: 48, height: 48\)/);
+    expect(plusLabel).toMatch(/\.frame\(width: 36, height: 36\)/);
     expect(plusLabel).toContain('.clipShape(Circle())');
+    expect(plusLabel).toMatch(
+      /\.clipShape\(Circle\(\)\)\s*\n\s*\.frame\(width: 48, height: 48\)\s*\n\s*\.contentShape\(Circle\(\)\)/
+    );
     expect(plusLabel).not.toContain('Capsule()');
   });
 

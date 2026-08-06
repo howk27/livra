@@ -252,12 +252,17 @@ struct LogPlusLabel: View {
     }
 
     var body: some View {
+        // Painted circle is 36pt for visual weight, but the tappable area must
+        // stay the full 48pt (iOS HIG minimum): the outer frame + contentShape
+        // keep the Link/Button hit region unchanged.
         Image(systemName: "plus")
-            .font(.system(size: 20, weight: .bold))
+            .font(.system(size: 16, weight: .bold))
             .foregroundColor(accent)
-            .frame(width: 48, height: 48)
+            .frame(width: 36, height: 36)
             .background(accent.opacity(0.14))
             .clipShape(Circle())
+            .frame(width: 48, height: 48)
+            .contentShape(Circle())
     }
 }
 
@@ -378,7 +383,7 @@ struct SmallWidgetView: View {
                     .resizable()
                     .scaledToFit()
                     .foregroundStyle(accent(for: mark))
-                    .frame(width: 26, height: 26)
+                    .frame(width: 32, height: 32)
                     .frame(width: 44, height: 44)
                     .background(accent(for: mark).opacity(0.14))
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
