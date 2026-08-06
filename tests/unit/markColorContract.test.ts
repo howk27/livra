@@ -2,7 +2,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { categoryAccents, iconAccents, themedColors } from '../../theme/tokens';
 import { MARK_LIBRARY } from '../../lib/suggestedCounters';
-import { resolveMarkAccent } from '../../lib/markCategoryResolve';
+import { resolveMarkAccent, resolveMarkFace } from '../../lib/markCategoryResolve';
 import {
   CATEGORY_LABELS,
   colorForSuggestedCounter,
@@ -391,18 +391,32 @@ describe('QC4-M — legacy stored colors heal on read', () => {
     }
   });
 
-  it('the widget resolves mark visuals through the category resolver, never raw mark.color', () => {
+  it('the widget renders only sanctioned accents, whatever a mark has stored', () => {
+    // 2026-08-06: this was a SOURCE SCAN asserting widgetSync never mentions
+    // `mark.color`. The widget now resolves a mark's face with the same function
+    // the in-app row uses (parity work), and that function DOES consider the
+    // stored colour — honouring it only when sanctioned and healing it when not.
+    // So the old literal assertion measured a mechanism, not the intent.
+    //
+    // The intent is QC4-M's: a legacy or hand-picked hex must never reach a
+    // rendered surface. Asserted behaviourally now, which the scan could not do.
+    const legacyHexes = ['#F97316', '#3B82F6', '#C47E8A', 'not-a-colour', ''];
+    for (const stored of legacyHexes) {
+      const face = resolveMarkFace({ name: 'Run', emoji: null, color: stored });
+      expect(`${stored} -> ${face.accent}`).toBe(
+        `${stored} -> ${SANCTIONED.has(face.accent) ? face.accent : 'UNSANCTIONED'}`,
+      );
+    }
+    // A sanctioned stored colour is still honoured for a non-library mark.
+    const sanctioned = [...SANCTIONED][0];
+    expect(
+      resolveMarkFace({ name: 'Xyzzy custom thing', emoji: null, color: sanctioned }).accent,
+    ).toBe(sanctioned);
+  });
+
+  it('the widget still never bypasses the palette with a private fallback', () => {
     const src = readFileSync(join(ROOT, 'lib/widgets/widgetSync.ts'), 'utf8');
-    // Post widget-redesign (2026-07-19, spec §5): the widget mirrors the in-app
-    // mark tile — category-accent tinting via categoryVisual(resolveMarkCategory)
-    // — drawing from the SAME sanctioned `categoryAccents` palette as
-    // getCategoryColorForMark. The QC4-M intent (never render the raw stored
-    // mark.color; only sanctioned palette values) is preserved by a stronger
-    // mechanism: the widget no longer reads mark.color at all.
-    expect(src).toContain('categoryVisual');
-    expect(src).toContain('resolveMarkCategory');
-    expect(src).not.toMatch(/\bmark\.color\b/);
-    // The private fallback that bypassed the palette entirely.
+    expect(src).toContain('resolveMarkFace');
     expect(src).not.toContain('#C47E8A');
   });
 });

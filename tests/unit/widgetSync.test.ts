@@ -41,6 +41,8 @@ import { APP_GROUP_ID, WIDGET_DATA_KEY } from '../../lib/widgets/widgetTypes';
 import { queryClient } from '../../lib/data/queryClient';
 import { queryKeys } from '../../lib/data/queryKeys';
 import type { GoalRow, MarkRow, MarkEventRow } from '../../lib/data/types';
+import { resolveMarkFace, resolveGoalFace } from '../../lib/markCategoryResolve';
+import { iconAccents } from '../../theme/tokens';
 /* eslint-enable import/first */
 
 const USER = 'user-1';
@@ -199,14 +201,40 @@ describe('buildWidgetData v2 (query-layer)', () => {
     expect(g1.marks.find((m) => m.id === 'm2')?.completed).toBe(false);
   });
 
-  it('renders category glyph assets + accents, never raw emoji', async () => {
+  it('renders each mark’s OWN glyph + accent, never raw emoji', async () => {
+    // 2026-08-06 parity. This used to expect `livra_moon` + the RECOVERY CATEGORY
+    // accent (#6B8FA6) for a mark named Sleep — i.e. it pinned the bug: the
+    // widget drew one glyph and one hue per category while the app drew the
+    // mark's own. The Sleep mark's real face is MoonStars in iconAccents.sleep.
     seed();
     const data = await buildWidgetData();
     const g1 = data.goals[0];
-    expect(g1.marks.find((m) => m.id === 'm1')?.icon).toBe('livra_moon');
-    expect(g1.marks.find((m) => m.id === 'm1')?.accent).toBe('#6B8FA6');
-    expect(g1.icon).toMatch(/^livra_/);
+    const sleepMark = g1.marks.find((m) => m.id === 'm1');
+    expect(sleepMark?.icon).toBe(resolveMarkFace({ name: 'Sleep', emoji: '😴' }).icon);
+    expect(sleepMark?.icon).toBe('livra_moon_stars');
+    expect(sleepMark?.accent).toBe(iconAccents.sleep);
     expect(JSON.stringify(data)).not.toMatch(/😴|💧|📖/);
+  });
+
+  it('marks sharing a category keep DIFFERENT faces in the widget', async () => {
+    // Sleep (Recovery) vs Drink water (Health) vs Read (Deep Work) all used to
+    // collapse onto their category glyph; more importantly two marks in ONE
+    // category collapsed onto one identical asset.
+    seed();
+    const data = await buildWidgetData();
+    const marks = data.goals.flatMap((g) => g.marks);
+    const icons = marks.map((m) => m.icon);
+    expect(new Set(icons).size).toBe(icons.length);
+  });
+
+  it('a goal’s glyph comes from its own title, not from its marks', async () => {
+    // goalA is "Run a 5K" — its face is the running glyph even though none of
+    // its marks is Run, and it does not change as marks are logged.
+    seed();
+    const data = await buildWidgetData();
+    const runGoal = data.goals.find((g) => g.id === 'goal-1');
+    expect(runGoal?.icon).toBe(resolveGoalFace({ title: 'Run a 5K' }).icon);
+    expect(runGoal?.icon).toBe('livra_person_simple_run');
   });
 
   it('skips active goals that have no marks', async () => {

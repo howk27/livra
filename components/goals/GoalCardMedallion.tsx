@@ -11,31 +11,35 @@ import { radius } from '../../theme/tokens';
 import { applyOpacity } from '@/src/components/icons/color';
 import { CATEGORY_MAP } from '../ui/MarkRow';
 import {
-  dominantMark,
   majorityCategory,
-  resolveMarkIcon,
-  resolveMarkAccent,
+  resolveGoalIcon,
+  resolveGoalAccent,
 } from '../../lib/markCategoryResolve';
 import type { Mark } from '../../types';
 
 interface GoalCardMedallionProps {
-  /** The goal's live (non-deleted) linked marks. */
+  /** The goal's own words — what the glyph is derived from. */
+  title?: string | null;
+  description?: string | null;
+  /** The goal's live (non-deleted) linked marks. Fallback signal only. */
   marks: Mark[];
   testID?: string;
 }
 
 /**
- * Small tinted medallion. The tint is the dominant mark's OWN accent (per-icon,
- * QC Fail #3), not a category hue, so two goals with different marks are
- * tellable apart at a glance. No marks → custom fallback icon + accent.
+ * Small tinted medallion.
+ *
+ * Founder call 2026-08-06: the glyph comes from the GOAL'S OWN WORDS, not from
+ * its marks. It used to be the dominant (most-logged) mark's icon — but a new
+ * goal has no logs, so every mark tied at zero and the FIRST mark always won,
+ * then the icon could shift once logging started. "Save $5k" now wears a piggy
+ * bank from the moment it is created, and keeps it.
  */
-export function GoalCardMedallion({ marks, testID }: GoalCardMedallionProps) {
-  const heroMark = dominantMark(marks);
+export function GoalCardMedallion({ title, description, marks, testID }: GoalCardMedallionProps) {
+  const goal = { title, description, marks };
   const catData = CATEGORY_MAP[majorityCategory(marks)] ?? CATEGORY_MAP.custom;
-  const Icon = (heroMark ? resolveMarkIcon(heroMark) : null) ?? catData.Icon;
-  const accent = heroMark
-    ? resolveMarkAccent({ name: heroMark.name, emoji: heroMark.emoji, color: heroMark.color })
-    : catData.accent;
+  const Icon = resolveGoalIcon(goal) ?? catData.Icon;
+  const accent = resolveGoalAccent(goal);
 
   return (
     <View

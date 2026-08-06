@@ -32,7 +32,7 @@ jest.mock('phosphor-react-native', () => {
 
 import { GoalCardMedallion } from '../../components/goals/GoalCardMedallion';
 import { CATEGORY_MAP } from '../../components/ui/MarkRow';
-import { resolveMarkAccent } from '../../lib/markCategoryResolve';
+import { resolveMarkAccent, resolveGoalAccent } from '../../lib/markCategoryResolve';
 import type { Mark } from '../../types';
 
 // Two library marks with distinct per-icon accents.
@@ -47,22 +47,43 @@ describe('GoalCardMedallion', () => {
     expect(resolveMarkAccent(sleep)).not.toBe(resolveMarkAccent(water));
   });
 
-  it('renders an icon tinted with the DOMINANT (most-logged) mark’s own accent', () => {
-    // Water has the higher total → it is the dominant mark.
-    const tree = render(<GoalCardMedallion marks={[sleep, water]} />);
-    expect(iconColor(tree)).toBe(resolveMarkAccent(water));
+  // SUPERSEDED (founder call, 2026-08-06). These two asserted that the medallion
+  // wears the DOMINANT (most-logged) mark's own accent, and that flipping the
+  // totals flips the face. That rule was replaced because of what it does on a
+  // NEW goal: every mark has zero logs, so they all tie, and `dominantMark`'s
+  // first-wins tie-break meant a fresh goal ALWAYS wore its first mark's icon —
+  // then silently changed once logging began. Two AI-created goals showed the
+  // identical face, which is how it surfaced.
+  //
+  // The goal's face now comes from the GOAL'S OWN WORDS and is stable from
+  // creation. The marks survive only as a fallback for a goal whose text matches
+  // nothing, and then only to pick a CATEGORY.
+  it('takes its accent from the goal’s own title, not from any mark', () => {
+    // NB "Save $5k" is deliberately NOT used here: its signature mark (`saving`)
+    // has no picker twin, so its accent is HASHED — and that hash lands on
+    // #4F8295, which is byte-identical to iconAccents.water. Real collision,
+    // pre-existing, filed rather than fixed (rehashing would repaint existing
+    // goals). It would have made this assertion pass or fail for the wrong
+    // reason, so the case uses a title whose accent is genuinely distinct.
+    const tree = render(<GoalCardMedallion title="Learn Spanish" marks={[sleep, water]} />);
+    expect(iconColor(tree)).toBe(resolveGoalAccent({ title: 'Learn Spanish' }));
+    // Explicitly NOT the dominant mark's accent (water, total 5).
+    expect(iconColor(tree)).not.toBe(resolveMarkAccent(water));
+    expect(iconColor(tree)).not.toBe(resolveMarkAccent(sleep));
   });
 
-  it('follows the marks: flipping the totals flips the resolved icon accent', () => {
-    const tree = render(
-      <GoalCardMedallion
-        marks={[
-          { ...sleep, total: 9 } as Mark,
-          { ...water, total: 1 } as Mark,
-        ]}
-      />,
+  it('does not change when the marks or their totals change', () => {
+    const face = (marks: Mark[]) =>
+      iconColor(render(<GoalCardMedallion title="Learn Spanish" marks={marks} />));
+    expect(face([sleep, water])).toBe(
+      face([{ ...sleep, total: 9 } as Mark, { ...water, total: 1 } as Mark]),
     );
-    expect(iconColor(tree)).toBe(resolveMarkAccent(sleep));
+    expect(face([sleep, water])).toBe(face([]));
+  });
+
+  it('falls back to the marks’ category only when the title matches nothing', () => {
+    const tree = render(<GoalCardMedallion title="???" marks={[sleep]} />);
+    expect(iconColor(tree)).toBe(CATEGORY_MAP.Recovery.accent);
   });
 
   it('falls back to the custom glyph/accent for a goal with no marks', () => {

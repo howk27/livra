@@ -229,10 +229,16 @@ function ActiveGoalCard({ goal, marks, progress, threshold, canComplete, readyTo
       activeOpacity={0.85}
     >
       <View style={styles.activeTopRow}>
-        {/* M7-QC (b): a calm leading medallion tinted with the goal's dominant
-            mark's own accent, so the list reads as more than text and each goal
-            wears the same face it shows on its detail hero. */}
-        <GoalCardMedallion marks={marks} testID={`goal-medallion-${goal.id}`} />
+        {/* M7-QC (b): a calm leading medallion so the list reads as more than
+            text and each goal wears the same face it shows on its detail hero
+            and in the widget. 2026-08-06: the face is derived from the goal's
+            own title, not from its marks. */}
+        <GoalCardMedallion
+          title={goal.title}
+          description={goal.description}
+          marks={marks}
+          testID={`goal-medallion-${goal.id}`}
+        />
         {!canComplete && <CaretRight size={18} color={c.inkMid} weight="bold" />}
       </View>
 

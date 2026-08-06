@@ -15,11 +15,10 @@ import { fetchMarksByGoal, fetchMarksForUser } from '../data/marks';
 import { fetchUserCheckins, mergePendingCheckins, todayLocalDate } from '../data/checkins';
 import { pendingOutboxEntries } from '../data/outbox';
 import { toGoal, toMarkEvent } from '../data/adapters';
-import { resolveMarkCategory, majorityCategory } from '../markCategoryResolve';
+import { resolveMarkFace, resolveGoalFace } from '../markCategoryResolve';
 import type { MarkRow, MarkEventRow } from '../data/types';
 import type { WidgetData, WidgetMarkData, WidgetGoalData } from './widgetTypes';
 import { APP_GROUP_ID, WIDGET_DATA_KEY } from './widgetTypes';
-import { categoryVisual } from './widgetIcons';
 
 const MAX_GOALS = 4;
 const MAX_MARKS_PER_GOAL = 6;
@@ -87,15 +86,22 @@ export async function buildWidgetData(): Promise<WidgetData> {
       .map((e) => e.mark_id),
   );
 
+  // 2026-08-06 parity: a mark's widget face is now resolved by the SAME function
+  // the in-app row uses. It used to be `categoryVisual(resolveMarkCategory(...))`
+  // — one glyph and one accent per CATEGORY — so 40 of 41 library marks showed a
+  // different icon here than in the app, and two marks sharing a category (Water
+  // + Calories, both Health) were one identical drop in the widget.
   const toWidgetMark = (mark: MarkRow): WidgetMarkData => {
-    const visual = categoryVisual(
-      resolveMarkCategory({ name: mark.name, emoji: mark.emoji ?? undefined }),
-    );
+    const face = resolveMarkFace({
+      name: mark.name,
+      emoji: mark.emoji ?? undefined,
+      color: mark.color ?? undefined,
+    });
     return {
       id: mark.id,
       name: mark.name,
-      icon: visual.icon,
-      accent: visual.accent,
+      icon: face.icon,
+      accent: face.accent,
       completed: loggedTodayIds.has(mark.id),
     };
   };
@@ -117,11 +123,15 @@ export async function buildWidgetData(): Promise<WidgetData> {
       // widget's day count reads identically to the goal card's.
       const commitment = goalCommitmentTarget(goal);
       const threshold = commitment ?? calculateUnlockThreshold(goal);
-      const goalVisual = categoryVisual(
-        majorityCategory(
-          limitedMarks.map((m) => ({ name: m.name, emoji: m.emoji ?? undefined })),
-        ),
-      );
+      // The goal's face comes from the goal's OWN WORDS (founder 2026-08-06),
+      // the same rule the Goals card and the detail hero now use — not
+      // majorityCategory, and not the marks at all unless the text matches
+      // nothing.
+      const goalVisual = resolveGoalFace({
+        title: goal.title,
+        description: goal.description,
+        marks: limitedMarks.map((m) => ({ name: m.name, emoji: m.emoji ?? undefined })),
+      });
       return {
         id: goal.id,
         title: goal.title,
@@ -138,9 +148,12 @@ export async function buildWidgetData(): Promise<WidgetData> {
   // preserving the pre-rework goal-less behavior.
   if (goals.length === 0 && allMarks.length > 0) {
     const fallbackMarks = allMarks.slice(0, MAX_MARKS_PER_GOAL);
-    const goalVisual = categoryVisual(
-      majorityCategory(fallbackMarks.map((m) => ({ name: m.name, emoji: m.emoji ?? undefined }))),
-    );
+    // The "Today" pseudo-goal has no title of its own, so it keeps the
+    // category-derived face over its marks.
+    const goalVisual = resolveGoalFace({
+      title: null,
+      marks: fallbackMarks.map((m) => ({ name: m.name, emoji: m.emoji ?? undefined })),
+    });
     goals.push({
       id: 'today',
       title: 'Today',

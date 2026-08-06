@@ -92,6 +92,7 @@ import { buildGoalWeekSentence } from '../../lib/goalWeekSentence';
 import {
   resolveMarkCategory,
   majorityCategory,
+  resolveGoalIcon,
   resolveMarkIcon,
   dominantMark,
   resolveMarkAccent,
@@ -265,14 +266,14 @@ function RingHero({
   progress,
   threshold,
   weekLabel,
-  heroMark,
+  heroIcon,
   fallbackIcon,
 }: {
   c: ThemeColors;
   progress: number;
   threshold: number;
   weekLabel: string | null;
-  heroMark: Mark | null;
+  heroIcon: ComponentType<any> | null;
   fallbackIcon: ComponentType<any>;
 }) {
   const { timing } = useMotion();
@@ -298,7 +299,11 @@ function RingHero({
   // fill needs a real mask primitive (@react-native-masked-view/masked-view);
   // RingIconFill.tsx is kept for that future restore. Static-but-visible beats
   // fancy-but-blank.
-  const HeroIcon = (heroMark ? resolveMarkIcon(heroMark) : null) ?? fallbackIcon;
+  // 2026-08-06 (founder): the hero glyph is derived from the GOAL'S OWN WORDS,
+  // not its dominant mark — a new goal has no logs, so "dominant" was really
+  // "first mark". `heroIcon` is resolved by the caller and already carries that
+  // rule; `fallbackIcon` stays the majority-category glyph.
+  const HeroIcon = heroIcon ?? fallbackIcon;
   const iconColor = c.progressGradient[1];
 
   return (
@@ -1158,7 +1163,12 @@ export default function GoalDetailScreen() {
 
   const heroCategory = useMemo(() => majorityCategory(linkedMarks), [linkedMarks]);
   const heroCat = CATEGORY_MAP[heroCategory] ?? CATEGORY_MAP.custom;
-  const heroMark = useMemo(() => dominantMark(linkedMarks), [linkedMarks]);
+  // The goal's face comes from the goal, so it is stable from creation and
+  // identical on the Goals card, this hero, and the widget.
+  const heroIcon = useMemo(
+    () => resolveGoalIcon({ title: goal?.title, description: goal?.description }),
+    [goal?.title, goal?.description],
+  );
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -1339,7 +1349,7 @@ export default function GoalDetailScreen() {
           progress={progress}
           threshold={threshold}
           weekLabel={weekLabel}
-          heroMark={heroMark}
+          heroIcon={heroIcon}
           fallbackIcon={heroCat.Icon}
         />
 

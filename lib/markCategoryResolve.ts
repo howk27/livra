@@ -7,6 +7,7 @@
 
 import type { ComponentType } from 'react';
 import { MARK_LIBRARY, type MarkDefinition } from './suggestedCounters';
+import { getMarksForGoal, tokenize } from './goalMarkSuggestions';
 import { resolveCounterIconType } from '../src/components/icons/IconResolver';
 import {
   colorForSuggestedCounter,
@@ -189,21 +190,74 @@ export function resolveMarkFace(mark: MarkCategoryInput & { color?: string | nul
 }
 
 /**
- * A GOAL's face, by the same rule the Goals-screen medallion and the goal-detail
- * hero already use: the DOMINANT (most-logged) mark's own face, falling back to
- * the majority category when the goal has no marks.
+ * A GOAL's identity comes from the GOAL'S OWN WORDS — founder call 2026-08-06.
  *
- * 2026-08-06: the widget used to pick with `majorityCategory` while both in-app
- * surfaces picked with `dominantMark` — two different selection algorithms over
- * the same goal, so the same goal wore two different faces even before the
- * per-mark/per-category collapse. One function now, called by both.
+ * It used to come from its marks, two different ways: both in-app surfaces used
+ * `dominantMark` (most-logged) and the widget used `majorityCategory`, so the
+ * same goal wore two faces. Worse, `dominantMark` ties at zero for a goal with
+ * no history yet — every mark has 0 logs — so a NEW goal always showed its
+ * FIRST mark's icon, and the icon could then silently change once logging
+ * started. Two AI-created goals showed this identically, which is what surfaced
+ * it.
+ *
+ * So the face is now derived from the goal's title (and description, when the
+ * title alone finds nothing): `getMarksForGoal` scores the whole library against
+ * the goal's text with deterministic tie-breaks — it is the same matcher that
+ * chooses which marks to suggest, so the glyph is the one belonging to the mark
+ * that best REPRESENTS the goal. Stable from creation, never shifts under the
+ * user, and independent of which marks were kept or how often they are logged.
+ *
+ * The mark list survives only as a fallback for a goal whose text matches
+ * nothing (a title that is punctuation, or a language the matcher has no tokens
+ * for), and even then only to pick a category — never a specific mark.
  */
-export function resolveGoalFace<T extends MarkCategoryInput & { total?: number | null; color?: string | null }>(
-  marks: T[],
-): MarkFace {
-  const hero = dominantMark(marks);
-  if (hero) return resolveMarkFace(hero);
-  const category = majorityCategory(marks);
+function goalSignatureMark(goalText: string | null | undefined): MarkDefinition | null {
+  const text = (goalText ?? '').trim();
+  // `getMarksForGoal` returns the first three library entries when the title
+  // tokenizes to nothing — a FALSE match that would put a Moon on every goal
+  // whose title is punctuation. Asked with the SAME tokenizer it uses, so this
+  // cannot drift from the sentinel it is guarding against. (A character-count
+  // guard was tried first and was wrong: '???' is three characters and zero
+  // tokens.)
+  if (tokenize(text).length === 0) return null;
+  return getMarksForGoal(text)[0] ?? null;
+}
+
+export interface GoalFaceInput {
+  title?: string | null;
+  description?: string | null;
+  /** Fallback only — used when the goal's text matches nothing. */
+  marks?: MarkCategoryInput[];
+}
+
+/** The library mark whose glyph represents this goal, or null. */
+export function resolveGoalSignatureMark(goal: GoalFaceInput): MarkDefinition | null {
+  return goalSignatureMark(goal.title) ?? goalSignatureMark(goal.description);
+}
+
+/** The goal's glyph COMPONENT (in-app), or null → caller keeps its fallback. */
+export function resolveGoalIcon(goal: GoalFaceInput): ComponentType<any> | null {
+  return resolveGoalSignatureMark(goal)?.icon ?? null;
+}
+
+/** The goal's accent — its signature mark's own hue. */
+export function resolveGoalAccent(goal: GoalFaceInput): string {
+  const signature = resolveGoalSignatureMark(goal);
+  if (signature) return colorForSuggestedCounter(signature);
+  const category = majorityCategory(goal.marks ?? []);
+  return getCategoryColor(MAP_KEY_TO_CATEGORY[category] ?? 'custom');
+}
+
+/** The goal's face as the WIDGET needs it: asset name + accent. */
+export function resolveGoalFace(goal: GoalFaceInput): MarkFace {
+  const signature = resolveGoalSignatureMark(goal);
+  if (signature) {
+    return {
+      icon: widgetAsset(MARK_GLYPH_DEFS[signature.id] ?? FALLBACK_GLYPH_DEF),
+      accent: colorForSuggestedCounter(signature),
+    };
+  }
+  const category = majorityCategory(goal.marks ?? []);
   return {
     icon: widgetAsset(CATEGORY_GLYPH_DEFS[category] ?? FALLBACK_GLYPH_DEF),
     accent: getCategoryColor(MAP_KEY_TO_CATEGORY[category] ?? 'custom'),

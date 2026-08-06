@@ -4,6 +4,8 @@ import {
   resolveLibraryMark,
   resolveMarkIcon,
   dominantMark,
+  resolveGoalSignatureMark,
+  resolveGoalFace,
 } from '../../lib/markCategoryResolve';
 import { MARK_LIBRARY, MARK_LIBRARY_BY_ID } from '../../lib/suggestedCounters';
 
@@ -210,5 +212,50 @@ describe('resolveMarkCategory: the MarkType/category namespace collision', () =>
         `${name} -> ${CATEGORY_MAP_KEYS.has(key) ? key : 'UNRENDERABLE'}`,
       );
     }
+  });
+});
+
+describe('goal face: derived from the GOAL, not its marks (founder 2026-08-06)', () => {
+  // A goal used to take its icon from its marks — `dominantMark` in-app,
+  // `majorityCategory` in the widget. Both are wrong for a NEW goal: every mark
+  // ties at 0 logs, so the FIRST mark always won, and the icon could then shift
+  // once logging began. Two AI-created goals showed this identically.
+  it.each([
+    ['Run a 5k', 'run'],
+    ['Save $5k', 'saving'],
+    ['Fix my sleep', 'sleep'],
+    ['Learn Spanish', 'language'],
+    ['Write a book', 'writing'],
+    ['Be more present with my family', 'family'],
+    ['Quit smoking for good', 'no-nicotine'],
+    ['Read 12 books this year', 'reading'],
+  ])('%s takes its glyph from its own words', (title, expectedId) => {
+    expect(resolveGoalSignatureMark({ title })?.id).toBe(expectedId);
+  });
+
+  it('is stable regardless of which marks the goal holds or how they are logged', () => {
+    const face = (marks: { name: string; total: number }[]) =>
+      resolveGoalFace({ title: 'Run a 5k', marks });
+    const a = face([{ name: 'Water', total: 99 }]);
+    const b = face([{ name: 'Sleep', total: 0 }]);
+    const c = face({ marks: undefined } as never as { name: string; total: number }[]);
+    expect(a).toEqual(b);
+    expect(a.icon).toBe('livra_person_simple_run');
+    expect(c).toEqual(a);
+  });
+
+  it('does NOT match on a title too short to tokenize (no false Moon on every goal)', () => {
+    // getMarksForGoal returns the first three library entries for empty tokens.
+    expect(resolveGoalSignatureMark({ title: '' })).toBeNull();
+    expect(resolveGoalSignatureMark({ title: '?' })).toBeNull();
+  });
+
+  it('falls back to the description when the title matches nothing', () => {
+    expect(resolveGoalSignatureMark({ title: '??', description: 'Run a 5k' })?.id).toBe('run');
+  });
+
+  it('falls back to a CATEGORY glyph — never a specific mark — with no usable text', () => {
+    const face = resolveGoalFace({ title: '', marks: [{ name: 'Sleep', emoji: null }] });
+    expect(face.icon).toBe('livra_moon');
   });
 });

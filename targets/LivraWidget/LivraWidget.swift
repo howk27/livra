@@ -148,9 +148,15 @@ struct GoalRingView: View {
             // identical glyph — and that duplication is gone the other way now:
             // the medium mark row is text-only (no icon tile), so the ring's
             // glyph is the only one on the medium widget and it names the GOAL.
+            // 2026-08-06: glyphs ship COLOURLESS (duotone ratio in the alpha
+            // channel) and are tinted here from the accent the snapshot carries,
+            // so a goal wears its own hue without a per-colour asset. The goal's
+            // glyph now comes from the GOAL'S OWN WORDS, not its marks.
             Image(goal.icon.isEmpty ? "livra_circle" : goal.icon)
+                .renderingMode(.template)
                 .resizable()
                 .scaledToFit()
+                .foregroundStyle(goal.accent.isEmpty ? WidgetPalette.accent : Color(hex: goal.accent))
                 .frame(width: diameter * 0.34, height: diameter * 0.34)
         }
         .frame(width: diameter, height: diameter)
@@ -368,8 +374,10 @@ struct SmallWidgetView: View {
             VStack(spacing: 8) {
                 // The mark's category glyph, prominent — the widget's identity.
                 Image(mark.icon.isEmpty ? "livra_circle" : mark.icon)
+                    .renderingMode(.template)
                     .resizable()
                     .scaledToFit()
+                    .foregroundStyle(accent(for: mark))
                     .frame(width: 26, height: 26)
                     .frame(width: 44, height: 44)
                     .background(accent(for: mark).opacity(0.14))

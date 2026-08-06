@@ -1,52 +1,74 @@
 {
-  "moon.png": {
-    "def": "Moon",
-    "accent": "#6B8FA6",
-    "sha256": "b6348315b86e84847be288e9167f6ed3b577655f967dfc60c5d09ce7219617d5",
+  "barbell.png": {
+    "def": "Barbell",
+    "template": true,
+    "sha256": "ca7458b8284b92e9c7c9e8c39f031b0064e7ac0064f8c6007a8de9a3933c4563",
     "bbox": {
-      "minX": 30,
-      "minY": 18,
-      "maxX": 220,
+      "minX": 0,
+      "minY": 45,
+      "maxX": 239,
+      "maxY": 194
+    }
+  },
+  "bicycle.png": {
+    "def": "Bicycle",
+    "template": true,
+    "sha256": "0d0b678037c874ab571112f1f683a056358a7a1577c4870e3e3244678b58bc3e",
+    "bbox": {
+      "minX": 0,
+      "minY": 52,
+      "maxX": 239,
+      "maxY": 195
+    }
+  },
+  "book_open.png": {
+    "def": "BookOpen",
+    "template": true,
+    "sha256": "b5c703361b993fffae018118d0a592530acfa7da008c99c0a4f174d8279b728e",
+    "bbox": {
+      "minX": 15,
+      "minY": 45,
+      "maxX": 224,
+      "maxY": 224
+    }
+  },
+  "book_open_text.png": {
+    "def": "BookOpenText",
+    "template": true,
+    "sha256": "03916eadcd9c6d357585bec916a18e0ecb6afed11900f53415ca4446a7e3b768",
+    "bbox": {
+      "minX": 15,
+      "minY": 45,
+      "maxX": 224,
+      "maxY": 224
+    }
+  },
+  "bowl_food.png": {
+    "def": "BowlFood",
+    "template": true,
+    "sha256": "f36bd428aeaf4b18165894b2b9795a72b7f9a5dbafa2c3e56ecdd2e56d69cfb5",
+    "bbox": {
+      "minX": 22,
+      "minY": 22,
+      "maxX": 217,
       "maxY": 209
     }
   },
-  "pulse.png": {
-    "def": "Pulse",
-    "accent": "#A0614A",
-    "sha256": "636d6eddf3ef9dd2a14ebf2b036fb8bf97a320f04f87032c74f8b290f0982c38",
+  "brain.png": {
+    "def": "Brain",
+    "template": true,
+    "sha256": "67cda6bf3f59bcc942ba3baf87ae62b115a0441c09f802591e1a3f5709cf99a9",
     "bbox": {
-      "minX": 15,
-      "minY": 30,
-      "maxX": 224,
-      "maxY": 202
-    }
-  },
-  "drop.png": {
-    "def": "Drop",
-    "accent": "#4A8C7A",
-    "sha256": "055a287178e4e0609c0634cadc3c1580be4b7455a74e5f98c1c7e2f1c0da5728",
-    "bbox": {
-      "minX": 37,
-      "minY": 7,
-      "maxX": 202,
-      "maxY": 217
-    }
-  },
-  "heart.png": {
-    "def": "Heart",
-    "accent": "#8A6B7B",
-    "sha256": "ab571cbe0adafc302083772216f464dce51a65d9d29637aec2794aae7e06fad0",
-    "bbox": {
-      "minX": 15,
-      "minY": 37,
-      "maxX": 224,
-      "maxY": 217
+      "minX": 7,
+      "minY": 22,
+      "maxX": 232,
+      "maxY": 209
     }
   },
   "briefcase.png": {
     "def": "Briefcase",
-    "accent": "#4A6A8C",
-    "sha256": "679ee714ed56ead09b7625190550387b4c13105c012b1cd2f2388c4c26f52c70",
+    "template": true,
+    "sha256": "940c1001288e14e0bc9ca2b04c4d6b64a5b6a0c0d01c3a02b0d31d3aea1a9594",
     "bbox": {
       "minX": 22,
       "minY": 22,
@@ -54,43 +76,98 @@
       "maxY": 202
     }
   },
-  "pencil.png": {
-    "def": "PencilSimple",
-    "accent": "#7A4A8C",
-    "sha256": "5fbf6b2784b7c8867699b6da8ccdcdb03a6edf2e3ca25aa2589da3f126cc1f0d",
+  "cake.png": {
+    "def": "Cake",
+    "template": true,
+    "sha256": "619d5481a5bef1c093022af5b0ee771c658170417bb496237c3f61c4b3e62da4",
     "bbox": {
-      "minX": 30,
-      "minY": 22,
+      "minX": 22,
+      "minY": 0,
       "maxX": 217,
       "maxY": 209
     }
   },
-  "shield.png": {
-    "def": "Shield",
-    "accent": "#8A7E6B",
-    "sha256": "8a8f7478a809d1461d0190cc0d4aa3402aa69707948579306bbb65f2454c74b2",
+  "calendar.png": {
+    "def": "Calendar",
+    "template": true,
+    "sha256": "5eec48807a61131afc2a87fedc093ffdb4ac694a3ae81c0a52952b1b75c7a3b7",
     "bbox": {
       "minX": 30,
-      "minY": 37,
+      "minY": 15,
       "maxX": 209,
-      "maxY": 224
+      "maxY": 209
     }
   },
-  "users.png": {
-    "def": "Users",
-    "accent": "#9E7B6B",
-    "sha256": "2b0de9672d7f75b25982bcf18a6eae6a44a0f25bd206e8c400bd77f2d9783fda",
+  "calendar_check.png": {
+    "def": "CalendarCheck",
+    "template": true,
+    "sha256": "17a3ba0c7930c965d117b59babd8f50803cea6f0b25332e09b6a8c378270b6f7",
     "bbox": {
-      "minX": 2,
-      "minY": 45,
-      "maxX": 237,
-      "maxY": 194
+      "minX": 30,
+      "minY": 15,
+      "maxX": 209,
+      "maxY": 209
     }
   },
-  "currency.png": {
+  "cigarette.png": {
+    "def": "Cigarette",
+    "template": true,
+    "sha256": "5f9ba109243c9dfb3710515faa39e10f5145d5248161fc5d67faa8f5fc714835",
+    "bbox": {
+      "minX": 15,
+      "minY": 15,
+      "maxX": 224,
+      "maxY": 179
+    }
+  },
+  "circle.png": {
+    "def": "Circle",
+    "template": true,
+    "sha256": "8ee3889d7483e092f1bae002268d7db0592acefaf89b312839feda1da0db691e",
+    "bbox": {
+      "minX": 22,
+      "minY": 22,
+      "maxX": 217,
+      "maxY": 217
+    }
+  },
+  "coffee.png": {
+    "def": "Coffee",
+    "template": true,
+    "sha256": "3086d361cdf453223e1df475a557787543aa9516248713ec084d634e96bf669a",
+    "bbox": {
+      "minX": 22,
+      "minY": 15,
+      "maxX": 232,
+      "maxY": 209
+    }
+  },
+  "cooking_pot.png": {
+    "def": "CookingPot",
+    "template": true,
+    "sha256": "5f11b6b4ac4194411997b6d24c191da0888a5ee2d3483d0186b2ed35baf984ff",
+    "bbox": {
+      "minX": 0,
+      "minY": 7,
+      "maxX": 239,
+      "maxY": 202
+    }
+  },
+  "currency_circle_dollar.png": {
+    "def": "CurrencyCircleDollar",
+    "template": true,
+    "sha256": "d31e9f6bcdb564686a2a0e77b85a79e14404b042f33c5a42a91027d58fb4be77",
+    "bbox": {
+      "minX": 22,
+      "minY": 22,
+      "maxX": 217,
+      "maxY": 217
+    }
+  },
+  "currency_dollar.png": {
     "def": "CurrencyDollar",
-    "accent": "#9E8A6B",
-    "sha256": "57d9218136311961448bdaeed23080058c4e1f6c7acea04551d604cb161e55ca",
+    "template": true,
+    "sha256": "0c47616ec35f050411a792b90258955877c49ce8ddea48c3d0b1432d4cfffb5c",
     "bbox": {
       "minX": 52,
       "minY": 15,
@@ -98,10 +175,21 @@
       "maxY": 224
     }
   },
-  "envelope.png": {
+  "drop.png": {
+    "def": "Drop",
+    "template": true,
+    "sha256": "b1469bb089e18838aed12bed19241cffcca816f1a589dc14d64ade77bb51fd4b",
+    "bbox": {
+      "minX": 37,
+      "minY": 7,
+      "maxX": 202,
+      "maxY": 217
+    }
+  },
+  "envelope_simple.png": {
     "def": "EnvelopeSimple",
-    "accent": "#4A7A8C",
-    "sha256": "98816358c4ce3c03a167c02c6587e766307b277420ccd72f93c221b2dc1ee681",
+    "template": true,
+    "sha256": "a40a7a772d591ee710507838192846d0e0a047c92cc479583c0fc8706a784079",
     "bbox": {
       "minX": 22,
       "minY": 45,
@@ -109,37 +197,367 @@
       "maxY": 194
     }
   },
-  "calendar.png": {
-    "def": "Calendar",
-    "accent": "#8C7A3A",
-    "sha256": "8158028249fdc6fa188abb3677d967f6707f3248b00d007db02c3aceb5f31387",
+  "fire.png": {
+    "def": "Fire",
+    "template": true,
+    "sha256": "c535e9980c2bdbb6f9a9aa799e4b2c2c5f0bee432ee5ea4c11917a54fa745b78",
+    "bbox": {
+      "minX": 37,
+      "minY": 15,
+      "maxX": 202,
+      "maxY": 217
+    }
+  },
+  "footprints.png": {
+    "def": "Footprints",
+    "template": true,
+    "sha256": "62b800055a1e7c070be2bf7479eb49313841a2eb7d4eccb6305a4b61a979a678",
     "bbox": {
       "minX": 30,
       "minY": 15,
       "maxX": 209,
-      "maxY": 209
-    }
-  },
-  "book.png": {
-    "def": "BookOpen",
-    "accent": "#7A4A8C",
-    "sha256": "49bae76f4fc09805540079bb1977831e09c66434af57c0394e30c54190f1a392",
-    "bbox": {
-      "minX": 15,
-      "minY": 45,
-      "maxX": 224,
       "maxY": 224
     }
   },
-  "circle.png": {
-    "def": "Circle",
-    "accent": "#6B7A6B",
-    "sha256": "66026eb8d4797cf8acb9b5c556ceccd02cf202554e8a3e216eb3ab70e5284b03",
+  "fork_knife.png": {
+    "def": "ForkKnife",
+    "template": true,
+    "sha256": "586beefb5fa2debc1dab6f1cd1c24dbdecb31747d631fbd404d4038b20026c1e",
+    "bbox": {
+      "minX": 30,
+      "minY": 30,
+      "maxX": 202,
+      "maxY": 217
+    }
+  },
+  "globe_simple.png": {
+    "def": "GlobeSimple",
+    "template": true,
+    "sha256": "0a8c416db3a1936b188c35186f5884927c2b6059b5ca84b97355372333618c82",
     "bbox": {
       "minX": 22,
       "minY": 22,
       "maxX": 217,
       "maxY": 217
+    }
+  },
+  "graduation_cap.png": {
+    "def": "GraduationCap",
+    "template": true,
+    "sha256": "289b1f37cd0745b1b9dbba846daf6489a74aab247c7c601f356ef824c6936a7b",
+    "bbox": {
+      "minX": 0,
+      "minY": 22,
+      "maxX": 239,
+      "maxY": 232
+    }
+  },
+  "hand_heart.png": {
+    "def": "HandHeart",
+    "template": true,
+    "sha256": "9c7e09c2df191d60eca88f0852bfcede11dc307c2e027596187e4e75c8ce3e14",
+    "bbox": {
+      "minX": 0,
+      "minY": 30,
+      "maxX": 224,
+      "maxY": 202
+    }
+  },
+  "handshake.png": {
+    "def": "Handshake",
+    "template": true,
+    "sha256": "428f2a2ccbbcc5ae294a16f9f706bdb2bbc5877464b66da656c9bf9bd4b8bf87",
+    "bbox": {
+      "minX": 0,
+      "minY": 45,
+      "maxX": 239,
+      "maxY": 209
+    }
+  },
+  "heart.png": {
+    "def": "Heart",
+    "template": true,
+    "sha256": "9da1a5a97e3ba86300c51c66ad18c5a70e82fde7e744b2690a839147c386ed2c",
+    "bbox": {
+      "minX": 15,
+      "minY": 37,
+      "maxX": 224,
+      "maxY": 217
+    }
+  },
+  "hourglass.png": {
+    "def": "Hourglass",
+    "template": true,
+    "sha256": "0c9df6c79de88a3048013bf22e3b35fea0cad3f40b01708e360a2c7fc35a63fd",
+    "bbox": {
+      "minX": 52,
+      "minY": 22,
+      "maxX": 187,
+      "maxY": 217
+    }
+  },
+  "house.png": {
+    "def": "House",
+    "template": true,
+    "sha256": "3653a6efcf9d20db037e623df5ec7f6f18322111266fb1f16c3eacd002d79f88",
+    "bbox": {
+      "minX": 30,
+      "minY": 22,
+      "maxX": 209,
+      "maxY": 209
+    }
+  },
+  "metronome.png": {
+    "def": "Metronome",
+    "template": true,
+    "sha256": "d2353a113f71473c9ccd40433dd4c5adff77c2bbc23dbf13909107c6b5f2deac",
+    "bbox": {
+      "minX": 37,
+      "minY": 30,
+      "maxX": 202,
+      "maxY": 209
+    }
+  },
+  "monitor.png": {
+    "def": "Monitor",
+    "template": true,
+    "sha256": "c2a8db8273b2bdaf8afe1d89e2e58f0474073e8d349ee996294f0871c809b235",
+    "bbox": {
+      "minX": 22,
+      "minY": 37,
+      "maxX": 217,
+      "maxY": 217
+    }
+  },
+  "moon.png": {
+    "def": "Moon",
+    "template": true,
+    "sha256": "e37ddf3da1835072356a4a5e328d36c91db03909f374e0d05c2b02f4891de0e7",
+    "bbox": {
+      "minX": 30,
+      "minY": 18,
+      "maxX": 220,
+      "maxY": 209
+    }
+  },
+  "moon_stars.png": {
+    "def": "MoonStars",
+    "template": true,
+    "sha256": "b20d0d3ee2d153ea5efc01404148301f2a65ceac0e1ea44aa59caddc14f9b4d2",
+    "bbox": {
+      "minX": 30,
+      "minY": 22,
+      "maxX": 224,
+      "maxY": 209
+    }
+  },
+  "note_pencil.png": {
+    "def": "NotePencil",
+    "template": true,
+    "sha256": "d5c758a656ad118c196d8a21be6ff52f15a5719db8c422c4658483187c9426d1",
+    "bbox": {
+      "minX": 30,
+      "minY": 22,
+      "maxX": 217,
+      "maxY": 209
+    }
+  },
+  "paint_brush.png": {
+    "def": "PaintBrush",
+    "template": true,
+    "sha256": "c6da75d2f528aa8115c0a8edf47f2983ea6a691d78dfe5bd484c67dfeba7ccb5",
+    "bbox": {
+      "minX": 7,
+      "minY": 22,
+      "maxX": 217,
+      "maxY": 209
+    }
+  },
+  "pen_nib.png": {
+    "def": "PenNib",
+    "template": true,
+    "sha256": "714a93f3eb256bfb8d18ed9b081bf79e2de4687dafb97b3ffe683da15216df1f",
+    "bbox": {
+      "minX": 30,
+      "minY": 7,
+      "maxX": 232,
+      "maxY": 209
+    }
+  },
+  "pencil_simple.png": {
+    "def": "PencilSimple",
+    "template": true,
+    "sha256": "02e57ae47d38d000cf12e651aea6a4a87780d446fad94983b12ce73aed7abf1b",
+    "bbox": {
+      "minX": 30,
+      "minY": 22,
+      "maxX": 217,
+      "maxY": 209
+    }
+  },
+  "person_simple.png": {
+    "def": "PersonSimple",
+    "template": true,
+    "sha256": "afb0ce7d34b61add741420a75acd5ace001a9125190b411d324d2980986a8147",
+    "bbox": {
+      "minX": 22,
+      "minY": 15,
+      "maxX": 217,
+      "maxY": 217
+    }
+  },
+  "person_simple_run.png": {
+    "def": "PersonSimpleRun",
+    "template": true,
+    "sha256": "89f7a3346148a2c9b3e673793280ccc9e346302b27f62939b8d055fe11d0c3d4",
+    "bbox": {
+      "minX": 22,
+      "minY": 22,
+      "maxX": 209,
+      "maxY": 224
+    }
+  },
+  "piggy_bank.png": {
+    "def": "PiggyBank",
+    "template": true,
+    "sha256": "10c549f92e17f6c7a11ba32b68acfc6baeacbe09b797c79a56f537341d00cc25",
+    "bbox": {
+      "minX": 0,
+      "minY": 30,
+      "maxX": 232,
+      "maxY": 209
+    }
+  },
+  "prohibit.png": {
+    "def": "Prohibit",
+    "template": true,
+    "sha256": "e19015ca1d01a30b495f23fdae6d30cd95a93b79d1bb3de4479cc48d24ae2172",
+    "bbox": {
+      "minX": 22,
+      "minY": 22,
+      "maxX": 217,
+      "maxY": 217
+    }
+  },
+  "pulse.png": {
+    "def": "Pulse",
+    "template": true,
+    "sha256": "2880d97be8c66529dc406f3021a9b9b2967b61aee485f17460bb42c30e66f807",
+    "bbox": {
+      "minX": 15,
+      "minY": 30,
+      "maxX": 224,
+      "maxY": 202
+    }
+  },
+  "shield.png": {
+    "def": "Shield",
+    "template": true,
+    "sha256": "29d14448cec24f8623704deb982236497c6b3b4d7b252e25114fa00dac6d265b",
+    "bbox": {
+      "minX": 30,
+      "minY": 37,
+      "maxX": 209,
+      "maxY": 224
+    }
+  },
+  "shower.png": {
+    "def": "Shower",
+    "template": true,
+    "sha256": "6acd2880220a94b1267f00645caa1701757f5c4de1e8d639ac3ab37c5c21122b",
+    "bbox": {
+      "minX": 7,
+      "minY": 30,
+      "maxX": 239,
+      "maxY": 232
+    }
+  },
+  "sparkle.png": {
+    "def": "Sparkle",
+    "template": true,
+    "sha256": "891c5375594d45bd1ecd6664c4aaeff098d19409e0f1eb24f902d317a51ede54",
+    "bbox": {
+      "minX": 15,
+      "minY": 7,
+      "maxX": 232,
+      "maxY": 224
+    }
+  },
+  "target.png": {
+    "def": "Target",
+    "template": true,
+    "sha256": "93fd949d4b8a8b159b13e2cea80b3e4d2eccc93991a5cc81c33da058fdbc5715",
+    "bbox": {
+      "minX": 22,
+      "minY": 22,
+      "maxX": 217,
+      "maxY": 217
+    }
+  },
+  "trend_up.png": {
+    "def": "TrendUp",
+    "template": true,
+    "sha256": "c34316edce3a91540ed37814f400716348b6b59d1fe883291eb87002f6d8159f",
+    "bbox": {
+      "minX": 15,
+      "minY": 45,
+      "maxX": 224,
+      "maxY": 179
+    }
+  },
+  "users.png": {
+    "def": "Users",
+    "template": true,
+    "sha256": "b2921d9d80335d08be497e29bdc0b9a7c1a50bcd42cc56dcd595e283ab328641",
+    "bbox": {
+      "minX": 2,
+      "minY": 45,
+      "maxX": 237,
+      "maxY": 194
+    }
+  },
+  "users_three.png": {
+    "def": "UsersThree",
+    "template": true,
+    "sha256": "e2f2bb3bc94459f73a9f66b7c063655bcddbeb137b76c5691eae5cea465f3e97",
+    "bbox": {
+      "minX": 7,
+      "minY": 45,
+      "maxX": 232,
+      "maxY": 210
+    }
+  },
+  "wallet.png": {
+    "def": "Wallet",
+    "template": true,
+    "sha256": "9b6355ba0f0c5b11c5afc5c923bf0aa9d308e0790e38763fe315fe6700d7080b",
+    "bbox": {
+      "minX": 30,
+      "minY": 30,
+      "maxX": 217,
+      "maxY": 194
+    }
+  },
+  "waves.png": {
+    "def": "Waves",
+    "template": true,
+    "sha256": "60f025bd1b9fd46c77ab0bc3349da9eea12392e3ffead82f335f8a8b97f80c67",
+    "bbox": {
+      "minX": 29,
+      "minY": 45,
+      "maxX": 209,
+      "maxY": 194
+    }
+  },
+  "wind.png": {
+    "def": "Wind",
+    "template": true,
+    "sha256": "43262ce4a811af39dcf063a2c9146d013ccdf65439540da6baacd94c44009ab0",
+    "bbox": {
+      "minX": 15,
+      "minY": 37,
+      "maxX": 224,
+      "maxY": 202
     }
   }
 }
