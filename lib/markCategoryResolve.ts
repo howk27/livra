@@ -8,7 +8,19 @@
 import type { ComponentType } from 'react';
 import { MARK_LIBRARY, type MarkDefinition } from './suggestedCounters';
 import { resolveCounterIconType } from '../src/components/icons/IconResolver';
-import { colorForSuggestedCounter, getCategoryColorForMark } from './markCategory';
+import {
+  colorForSuggestedCounter,
+  getCategoryColorForMark,
+  getCategoryForIcon,
+  getCategoryColor,
+  type MarkCategory,
+} from './markCategory';
+import {
+  MARK_GLYPH_DEFS,
+  CATEGORY_GLYPH_DEFS,
+  FALLBACK_GLYPH_DEF,
+  widgetAsset,
+} from './markGlyphs';
 
 export type MarkCategoryInput = { name: string; emoji?: string | null };
 
@@ -71,15 +83,131 @@ export function resolveMarkAccent(mark: MarkCategoryInput & { color?: string | n
 }
 
 /**
+ * A `MarkCategory` key → the CATEGORY_MAP key that renders it.
+ *
+ * Three of the twelve are lowercase in CATEGORY_MAP (`email`, `planning`,
+ * `custom`) so this is NOT `CATEGORY_LABELS` — using that table would send
+ * `email` marks to a nonexistent `'Email'` row and back into the circle.
+ */
+const CATEGORY_TO_MAP_KEY: Record<MarkCategory, string> = {
+  recovery: 'Recovery',
+  fitness: 'Fitness',
+  health: 'Health',
+  mindset: 'Mindset',
+  deepWork: 'Deep Work',
+  creative: 'Creative',
+  discipline: 'Discipline',
+  relationships: 'Relationships',
+  finance: 'Finance',
+  email: 'email',
+  planning: 'planning',
+  custom: 'custom',
+};
+
+/**
+ * The inverse: a CATEGORY_MAP key → the accent bucket it draws from. Needed
+ * because CATEGORY_MAP carries six LEGACY rows (`sleep`, `workout`, `water`,
+ * `reading`, `work`, plus lowercase `email`/`planning`) that are not category
+ * names, and a goal with no marks still has to land on a sanctioned hue.
+ * Mirrors the accents in the CATEGORY_MAP rows themselves — `reading` draws the
+ * creative accent, `work` the deepWork one.
+ */
+const MAP_KEY_TO_CATEGORY: Record<string, MarkCategory> = {
+  Recovery: 'recovery',
+  Fitness: 'fitness',
+  Health: 'health',
+  Mindset: 'mindset',
+  'Deep Work': 'deepWork',
+  Creative: 'creative',
+  Discipline: 'discipline',
+  Relationships: 'relationships',
+  Finance: 'finance',
+  email: 'email',
+  sleep: 'recovery',
+  workout: 'fitness',
+  water: 'health',
+  planning: 'planning',
+  reading: 'creative',
+  work: 'deepWork',
+  custom: 'custom',
+};
+
+/**
  * CATEGORY_MAP key for a mark: MARK_LIBRARY match (name-first, emoji fallback)
  * → resolveCounterIconType → 'custom'.
+ *
+ * 2026-08-06 — THE NAMESPACE COLLISION, FIXED. `resolveCounterIconType` returns
+ * a **MarkType** (`'gym'`, `'calories'`, `'meditation'`…) and this fed it
+ * straight into a table keyed by **category**. Only 5 of its 23 possible
+ * returns existed there (`email`, `planning`, `reading`, `sleep`, `water`); the
+ * other 18 missed and rendered the plain custom CIRCLE, in the app AND the
+ * widget. A hand-built mark called "Gym" resolved to `'gym'` while the table's
+ * key is `'workout'` — circle.
+ *
+ * A MarkType that IS a CATEGORY_MAP key still wins, because those legacy rows
+ * are more specific than their category (`reading` → BookOpen beats Deep Work →
+ * Briefcase). Everything else now routes through the mark's real category.
  */
 export function resolveMarkCategory(mark: MarkCategoryInput): string {
-  return (
-    resolveLibraryMark(mark)?.category ??
-    resolveCounterIconType({ name: mark.name, emoji: mark.emoji ?? '' }) ??
-    'custom'
-  );
+  const library = resolveLibraryMark(mark);
+  if (library) return library.category;
+
+  const iconType = resolveCounterIconType({ name: mark.name, emoji: mark.emoji ?? '' });
+  if (!iconType || iconType === 'custom') return 'custom';
+  // A legacy CATEGORY_MAP row for this exact icon type is the narrower answer.
+  if (iconType in CATEGORY_GLYPH_DEFS) return iconType;
+  return CATEGORY_TO_MAP_KEY[getCategoryForIcon(iconType)] ?? 'custom';
+}
+
+/**
+ * A mark's FACE as the widget needs it: a bundled asset name + the accent, both
+ * resolved from exactly the same inputs the in-app render uses.
+ *
+ * This is the app↔widget contract. The app draws `resolveMarkIcon` (the mark's
+ * OWN library component) tinted `resolveMarkAccent`; the widget cannot hold a
+ * component, so it gets the same glyph's asset key and the same accent hex.
+ * Both sides now answer "what does this mark look like?" from one function —
+ * before, the widget asked a different question (what does its CATEGORY look
+ * like?) and got a different answer for 40 of 41 library marks.
+ */
+export interface MarkFace {
+  /** Bundled widget imageset name, e.g. `livra_moon_stars`. */
+  icon: string;
+  /** Accent hex — the mark's own per-icon hue, not a category hue. */
+  accent: string;
+}
+
+export function resolveMarkFace(mark: MarkCategoryInput & { color?: string | null }): MarkFace {
+  const library = resolveLibraryMark(mark);
+  const def = library
+    ? MARK_GLYPH_DEFS[library.id]
+    : CATEGORY_GLYPH_DEFS[resolveMarkCategory(mark)];
+  return {
+    icon: widgetAsset(def ?? FALLBACK_GLYPH_DEF),
+    accent: resolveMarkAccent(mark),
+  };
+}
+
+/**
+ * A GOAL's face, by the same rule the Goals-screen medallion and the goal-detail
+ * hero already use: the DOMINANT (most-logged) mark's own face, falling back to
+ * the majority category when the goal has no marks.
+ *
+ * 2026-08-06: the widget used to pick with `majorityCategory` while both in-app
+ * surfaces picked with `dominantMark` — two different selection algorithms over
+ * the same goal, so the same goal wore two different faces even before the
+ * per-mark/per-category collapse. One function now, called by both.
+ */
+export function resolveGoalFace<T extends MarkCategoryInput & { total?: number | null; color?: string | null }>(
+  marks: T[],
+): MarkFace {
+  const hero = dominantMark(marks);
+  if (hero) return resolveMarkFace(hero);
+  const category = majorityCategory(marks);
+  return {
+    icon: widgetAsset(CATEGORY_GLYPH_DEFS[category] ?? FALLBACK_GLYPH_DEF),
+    accent: getCategoryColor(MAP_KEY_TO_CATEGORY[category] ?? 'custom'),
+  };
 }
 
 /**

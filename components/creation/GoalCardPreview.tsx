@@ -17,6 +17,7 @@ import { applyOpacity } from '../../src/components/icons/color';
 import { goalCardSurface } from '../../theme/goalCardSurface';
 import { GoalTitle } from '../ui/GoalTitle';
 import { CATEGORY_MAP } from '../ui/MarkRow';
+import { accentForLibraryId } from '../../lib/markCategory';
 import { goalCardContent } from '../../lib/creation/creationPreview';
 
 export type GoalCardPreviewMark = {
@@ -68,13 +69,16 @@ function MarkTile({ mark }: { mark: GoalCardPreviewMark }) {
 
   const catData = CATEGORY_MAP[mark.category ?? 'custom'] ?? CATEGORY_MAP.custom;
   const Icon = mark.icon ?? catData.Icon;
+  // The mark's OWN per-icon accent, the hue it will wear on Focus and its detail
+  // screen — not the category hue this tile used to paint (2026-08-06 parity).
+  const accent = mark.id ? accentForLibraryId(mark.id) : catData.accent;
   return (
     <Animated.View
       testID="goal-card-preview-mark-tile"
       accessibilityLabel={mark.name}
-      style={[styles.markTile, { backgroundColor: applyOpacity(catData.accent, 0.14) }, style]}
+      style={[styles.markTile, { backgroundColor: applyOpacity(accent, 0.14) }, style]}
     >
-      <Icon size={14} color={catData.accent} weight="duotone" />
+      <Icon size={14} color={accent} weight="duotone" />
     </Animated.View>
   );
 }

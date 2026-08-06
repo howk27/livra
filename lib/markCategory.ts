@@ -178,10 +178,25 @@ export function getCategoryForSuggestedCounter(counter: SuggestedCounter): MarkC
  * from the same table. Sanctioned palette in, sanctioned palette out.
  */
 export function colorForSuggestedCounter(counter: SuggestedCounter): string {
-  if (counter.id in iconAccents) {
-    return iconAccents[counter.id as keyof typeof iconAccents];
+  return accentForLibraryId(counter.id);
+}
+
+/**
+ * The same per-mark accent, keyed by library id alone.
+ *
+ * 2026-08-06: the creation surfaces (CommitmentScreen chips, GoalCardPreview
+ * tiles, goal/new preview chips + example pills) hold only `{id, name, icon,
+ * category}` — not a full SuggestedCounter — so they had been tinting the
+ * per-mark glyph with the CATEGORY accent while every live surface used the
+ * per-icon one. Same mark, right glyph, different colour between the screen you
+ * build it on and the screen you use it on. This is the residue of the M7-QC3
+ * fix (2026-07-18), which repointed the live surfaces and missed these three.
+ */
+export function accentForLibraryId(id: string): string {
+  if (id in iconAccents) {
+    return iconAccents[id as keyof typeof iconAccents];
   }
-  return hashedIconAccent(counter.id);
+  return hashedIconAccent(id);
 }
 
 export function getCategoryForMark(mark: Pick<Mark, 'name' | 'color'>): MarkCategory {

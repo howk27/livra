@@ -11,6 +11,7 @@ import { useRouter } from 'expo-router';
 import { themedColors, spacing, fontSize, fontWeight, borderRadius, fonts, headerControl, headerControlBoxLeading } from '../theme/tokens';
 import { applyOpacity } from '../src/components/icons/color';
 import { CATEGORY_MAP } from './ui/MarkRow';
+import { accentForLibraryId } from '../lib/markCategory';
 import { GoalCardPreview } from './creation/GoalCardPreview';
 import { goalPlanMeta } from '../lib/creation/creationPreview';
 import { useEffectiveTheme } from '../state/uiSlice';
@@ -215,7 +216,9 @@ export function CommitmentScreen({
               {(() => {
                 const cat = CATEGORY_MAP[s.category] ?? CATEGORY_MAP.custom;
                 const Icon = s.icon ?? cat.Icon;
-                return <Icon size={16} color={cat.accent} weight="duotone" />;
+                // Per-mark accent (2026-08-06 parity): the chip now wears the
+                // hue the mark keeps once created, not its category's.
+                return <Icon size={16} color={accentForLibraryId(s.id)} weight="duotone" />;
               })()}
               <Text style={[styles.markChipText, { color: isSelected ? c.inkDark : c.inkMid }]}>
                 {s.name}

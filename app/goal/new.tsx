@@ -30,6 +30,7 @@ import { AIHatchButton } from '../../components/ui/AIHatchButton';
 import { PillButton } from '../../components/ui/PillButton';
 import { GoalLimitDialog } from '../../components/ui/GoalLimitDialog';
 import { CATEGORY_MAP } from '../../components/ui/MarkRow';
+import { accentForLibraryId } from '../../lib/markCategory';
 import { useEffectiveTheme } from '../../state/uiSlice';
 import { useMarksForUser } from '../../lib/data/marks';
 import { useAuth } from '../../hooks/useAuth';
@@ -97,7 +98,13 @@ const EXAMPLE_GOALS = [
 const EXAMPLE_GOAL_PARTS = EXAMPLE_GOALS.map((title) => {
   const top = getMarksForGoal(title)[0];
   const cat = CATEGORY_MAP[top?.category ?? 'custom'] ?? CATEGORY_MAP.custom;
-  return { title, accent: cat.accent, Icon: top?.icon ?? cat.Icon };
+  // Per-mark accent (2026-08-06 parity) — the pill wears the hue its top mark
+  // keeps once created, not the category hue.
+  return {
+    title,
+    accent: top ? accentForLibraryId(top.id) : cat.accent,
+    Icon: top?.icon ?? cat.Icon,
+  };
 });
 
 // Batch 2 (founder 2026-07-18): the bin opens as two tidy rows (2-3 pills per
@@ -128,6 +135,8 @@ function MarkPreviewChip({
 
   const cat = CATEGORY_MAP[mark.category] ?? CATEGORY_MAP.custom;
   const Icon = mark.icon ?? cat.Icon;
+  // Per-mark accent (2026-08-06 parity), matching the eventual Focus row.
+  const accent = accentForLibraryId(mark.id);
 
   return (
     <Animated.View style={style}>
@@ -145,18 +154,18 @@ function MarkPreviewChip({
         style={[
           styles.previewChip,
           {
-            backgroundColor: applyOpacity(cat.accent, expanded ? 0.14 : 0.1),
-            borderColor: applyOpacity(cat.accent, expanded ? 0.45 : 0.3),
+            backgroundColor: applyOpacity(accent, expanded ? 0.14 : 0.1),
+            borderColor: applyOpacity(accent, expanded ? 0.45 : 0.3),
           },
         ]}
       >
-        <Icon size={18} color={cat.accent} weight="duotone" />
+        <Icon size={18} color={accent} weight="duotone" />
         <Text style={[styles.previewChipLabel, { color: labelColor }]} numberOfLines={1}>
           {mark.name}
         </Text>
         {/* Batch 2 (founder): the explanation is announced, not discovered —
             the "i" says "tap me and I'll tell you what this expects of you". */}
-        <Info size={14} color={cat.accent} weight="bold" />
+        <Info size={14} color={accent} weight="bold" />
       </TouchableOpacity>
     </Animated.View>
   );

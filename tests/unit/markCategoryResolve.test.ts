@@ -156,3 +156,59 @@ describe('dominantMark (goal-detail medallion derivation)', () => {
     expect(resolveMarkIcon(hero!)).toBe(MARK_LIBRARY_BY_ID.run.icon);
   });
 });
+
+// ── 2026-08-06 icon-parity work ──────────────────────────────────────────────
+
+describe('resolveMarkCategory: the MarkType/category namespace collision', () => {
+  // resolveCounterIconType returns a MarkType ('gym', 'calories', …) and this
+  // used to be fed straight into a table keyed by CATEGORY. Only 5 of its 23
+  // returns existed there, so the other 18 silently rendered the custom CIRCLE
+  // — in the app AND the widget. Nothing covered it, which is why it shipped.
+  const CATEGORY_MAP_KEYS = new Set([
+    'Recovery', 'Fitness', 'Health', 'Mindset', 'Deep Work', 'Creative',
+    'Discipline', 'Relationships', 'Finance', 'email', 'sleep', 'workout',
+    'water', 'planning', 'reading', 'work', 'custom',
+  ]);
+
+  it('resolves a hand-built "Gym" mark to Fitness, not the custom circle', () => {
+    // The headline case: MarkType 'gym' vs CATEGORY_MAP key 'workout'.
+    expect(resolveMarkCategory({ name: 'Gym session', emoji: '🏋️' })).toBe('Fitness');
+  });
+
+  // emoji stays null throughout: a library emoji match wins BEFORE the icon-type
+  // path and would test the wrong branch. (It is also how 🧘 resolves to
+  // `stretch`/Recovery rather than meditation — pre-existing, documented above.)
+  it.each([
+    ['Burn calories', 'Health'],
+    ['Evening meditation', 'Mindset'],
+    ['Deep focus block', 'Deep Work'],
+    ['Daily gratitude', 'Mindset'],
+    ['No spending today', 'Finance'],
+    ['Screen free hour', 'Discipline'],
+    ['Learn Spanish', 'Deep Work'],
+    ['Track my mood', 'Mindset'],
+  ])('routes non-library mark %s to a real category', (name, expected) => {
+    expect(resolveMarkCategory({ name, emoji: null })).toBe(expected);
+  });
+
+  it('keeps the narrower legacy row when the icon type IS a CATEGORY_MAP key', () => {
+    // 'reading' → BookOpen is more specific than Deep Work → Briefcase.
+    expect(resolveMarkCategory({ name: 'Read before bed', emoji: null })).toBe('reading');
+    expect(resolveMarkCategory({ name: 'Inbox zero', emoji: null })).toBe('email');
+  });
+
+  it('never returns a key CATEGORY_MAP cannot render', () => {
+    const probes = [
+      'Gym session', 'Burn calories', 'Learn Spanish', 'Study set', 'Rest day',
+      'Track my mood', 'Quit smoking', 'No sugar week', 'Daily steps',
+      'Journal entry', 'Plan the week', 'Drink water', 'Sleep by 11',
+      'Some totally unmatched thing',
+    ];
+    for (const name of probes) {
+      const key = resolveMarkCategory({ name, emoji: null });
+      expect(`${name} -> ${key}`).toBe(
+        `${name} -> ${CATEGORY_MAP_KEYS.has(key) ? key : 'UNRENDERABLE'}`,
+      );
+    }
+  });
+});
