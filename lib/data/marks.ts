@@ -21,19 +21,34 @@ import type { MarkRow } from '@/lib/data/types';
 // Marks, like goals, change only on deliberate user action.
 const MARKS_STALE_TIME = 5 * 60 * 1000;
 
+/**
+ * A mark row carrying the ONE link-owned field the read surface needs:
+ * `goal_mark_links.why`, the AI's rationale for this mark serving THIS goal.
+ * It is a property of the PAIR, not the mark — the same mark under two goals
+ * carries a different (cloned) `link_why` per goal — so it rides on the row
+ * under a link-prefixed name that can never collide with a `marks` column.
+ * Null = no rationale (manual links, pre-feature AI links); callers render
+ * nothing for null.
+ */
+export type LinkedMarkRow = MarkRow & { link_why: string | null };
+
 /** The live marks linked to a goal, resolved through live `goal_mark_links`. */
-export async function fetchMarksForGoal(goalId: string): Promise<MarkRow[]> {
+export async function fetchMarksForGoal(goalId: string): Promise<LinkedMarkRow[]> {
   const client = dataClient();
 
   const { data: links, error: linkError } = await client
     .from('goal_mark_links')
-    .select('mark_id')
+    .select('mark_id, why')
     .eq('goal_id', goalId)
     .is('deleted_at', null);
   if (linkError) throw toDataError(linkError);
 
-  const markIds = (links ?? []).map((row) => (row as { mark_id: string }).mark_id);
+  const linkRows = (links ?? []) as unknown as { mark_id: string; why: string | null }[];
+  const markIds = linkRows.map((row) => row.mark_id);
   if (markIds.length === 0) return [];
+
+  // UNIQUE (goal_id, mark_id) means one link per mark within this goal.
+  const whyByMarkId = new Map(linkRows.map((row) => [row.mark_id, row.why ?? null]));
 
   const { data, error } = await client
     .from('marks')
@@ -42,7 +57,10 @@ export async function fetchMarksForGoal(goalId: string): Promise<MarkRow[]> {
     .is('deleted_at', null)
     .order('sort_index', { ascending: true });
   if (error) throw toDataError(error);
-  return (data ?? []) as unknown as MarkRow[];
+  return ((data ?? []) as unknown as MarkRow[]).map((mark) => ({
+    ...mark,
+    link_why: whyByMarkId.get(mark.id) ?? null,
+  }));
 }
 
 /**
@@ -52,16 +70,16 @@ export async function fetchMarksForGoal(goalId: string): Promise<MarkRow[]> {
  * goals appears under each (Spec D-6). Link `goal_id` is aliased to `gid` in the
  * select so the T6 source guard (no `.goal_id` access) stays valid.
  */
-export async function fetchMarksByGoal(): Promise<Record<string, MarkRow[]>> {
+export async function fetchMarksByGoal(): Promise<Record<string, LinkedMarkRow[]>> {
   const client = dataClient();
 
   const { data: links, error: linkError } = await client
     .from('goal_mark_links')
-    .select('gid:goal_id, mid:mark_id')
+    .select('gid:goal_id, mid:mark_id, why')
     .is('deleted_at', null);
   if (linkError) throw toDataError(linkError);
 
-  const rows = (links ?? []) as unknown as { gid: string; mid: string }[];
+  const rows = (links ?? []) as unknown as { gid: string; mid: string; why: string | null }[];
   if (rows.length === 0) return {};
 
   const markIds = [...new Set(rows.map((row) => row.mid))];
@@ -76,11 +94,13 @@ export async function fetchMarksByGoal(): Promise<Record<string, MarkRow[]>> {
   const byId = new Map<string, MarkRow>(
     ((data ?? []) as unknown as MarkRow[]).map((mark) => [mark.id, mark]),
   );
-  const grouped: Record<string, MarkRow[]> = {};
+  const grouped: Record<string, LinkedMarkRow[]> = {};
   for (const row of rows) {
     const mark = byId.get(row.mid);
     if (!mark) continue; // link points at a soft-deleted mark
-    (grouped[row.gid] ??= []).push(mark);
+    // CLONED per link, not shared: the why belongs to the (goal, mark) PAIR, so
+    // a mark serving two goals must carry each pair's own rationale (D-6).
+    (grouped[row.gid] ??= []).push({ ...mark, link_why: row.why ?? null });
   }
   return grouped;
 }

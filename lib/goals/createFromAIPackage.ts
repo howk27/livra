@@ -133,6 +133,11 @@ export async function createFromAIPackage(args: CreateFromAIPackageArgs): Promis
         enableStreak: false,
         sortIndex: 0,
         goalId: goal.id,
+        // The AI's one-line rationale for this mark serving THIS goal — the
+        // sentence the review screen shows. It rides the same call onto the
+        // goal_mark_links row (never the mark); createMark trims/caps it at the
+        // boundary because AI output is input, validator or not.
+        why: m.why,
         cadence: {
           frequency_kind: libraryMark.frequencyKind,
           frequency_min: libraryMark.frequency_min,

@@ -17,6 +17,14 @@
 // is worth re-running rather than trusting a paste: it is the check that would have
 // caught the `dailyTarget` drift years earlier than the API log did.
 //
+// UPDATED 2026-08-06 for `goal_mark_links.why` (migration
+// 20260806_goal_mark_links_why.sql — APPLIED LIVE and read back from
+// information_schema + pg_policy by the orchestrator before this edit; the
+// existing single ALL policy covers the column). Same goal_notes precedent: the
+// three added lines (Row `why: string | null`, Insert/Update `why?: string |
+// null`) are the generator's exact output shape for a nullable text column.
+// Fold into the next full regeneration.
+//
 // App-facing row types are DERIVED from that block (never re-typed by hand) below
 // the generated section.
 //
@@ -320,6 +328,7 @@ export type Database = {
           mark_id: string
           updated_at: string
           user_id: string
+          why: string | null
         }
         Insert: {
           created_at?: string
@@ -329,6 +338,7 @@ export type Database = {
           mark_id: string
           updated_at?: string
           user_id: string
+          why?: string | null
         }
         Update: {
           created_at?: string
@@ -338,6 +348,7 @@ export type Database = {
           mark_id?: string
           updated_at?: string
           user_id?: string
+          why?: string | null
         }
         Relationships: [
           {

@@ -1,0 +1,11 @@
+-- STATUS: APPLIED 2026-08-06 via MCP execute_sql (never `supabase db push`).
+-- Verified by reading information_schema.columns back: why | text | nullable.
+-- RLS read back from pg_policy: single ALL policy "Users manage own
+-- goal_mark_links" — (auth.uid() = user_id) AND goal-ownership subquery on
+-- both USING and WITH CHECK — covers the new column; no policy change.
+--
+-- Spec: docs/superpowers/specs/2026-08-06-ai-mark-why.md — the AI generator's
+-- per-mark rationale is a property of the goal↔mark PAIR, so it lives on the
+-- link row and dies with the link. No CHECK constraint server-side; the client
+-- trims and caps (~200 chars) at the boundary.
+alter table public.goal_mark_links add column why text;

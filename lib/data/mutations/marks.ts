@@ -29,6 +29,26 @@ import type { MarkRow } from '@/lib/data/types';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_NAME_LENGTH = 120;
 
+/**
+ * Cap for the per-link AI rationale (`goal_mark_links.why`). The column carries
+ * no server-side CHECK (consistent with `mark_events.source` — filed Low, T8),
+ * so this boundary is the only length gate.
+ */
+export const MAX_WHY_LENGTH = 200;
+
+/**
+ * Normalize a rationale at the write boundary. AI output is INPUT: trim it,
+ * collapse empty/whitespace to null, cap at MAX_WHY_LENGTH. Every path that
+ * writes `goal_mark_links.why` goes through here.
+ */
+function normalizeWhy(why: string | null | undefined): string | null {
+  if (why == null) return null;
+  const trimmed = why.trim();
+  if (trimmed.length === 0) return null;
+  if (trimmed.length <= MAX_WHY_LENGTH) return trimmed;
+  return trimmed.slice(0, MAX_WHY_LENGTH).trimEnd();
+}
+
 function invalid(reason: string): DataError {
   logger.error('[data] mark write rejected before send', { reason });
   return { kind: 'unknown', message: 'The change could not be built from that input.' };
@@ -67,6 +87,14 @@ export interface CreateMarkInput {
   cadence: MarkCadence;
   /** Link the new mark to this goal. A LINK is written; `goal_id` is not. */
   goalId?: string | null;
+  /**
+   * The AI generator's one-line rationale for THIS goal↔mark pair. Written onto
+   * the LINK row (`goal_mark_links.why`), never the mark, and ONLY when `goalId`
+   * is present — a why with no goal has nowhere to live and is dropped. Trimmed
+   * and capped at the boundary; empty/whitespace becomes null. Manual creation
+   * surfaces pass nothing, so their links carry null and no UI shows.
+   */
+  why?: string | null;
 }
 
 // ─── Create ─────────────────────────────────────────────────────────────────
@@ -110,7 +138,7 @@ export async function createMark(input: CreateMarkInput): Promise<MarkRow> {
   if (error) throw toDataError(error);
 
   if (input.goalId != null) {
-    await linkMarkToGoal({ goalId: input.goalId, markId, userId: input.userId });
+    await linkMarkToGoal({ goalId: input.goalId, markId, userId: input.userId, why: input.why });
   }
 
   return (data ?? null) as unknown as MarkRow;
@@ -231,6 +259,12 @@ export interface LinkInput {
   goalId: string;
   markId: string;
   userId: string;
+  /**
+   * Per-pair rationale, written ONLY on a genuinely new link insert. A revive
+   * deliberately KEEPS the stored why (or null) — same pair, same reason; see
+   * the function doc. Normalized (trim / cap / empty→null) before the write.
+   */
+  why?: string | null;
 }
 
 /**
@@ -270,7 +304,7 @@ export interface LinkInput {
  * pass. Doing it here would break build 60, which is still live.
  */
 export async function linkMarkToGoal(input: LinkInput): Promise<void> {
-  const { goalId, markId, userId } = input;
+  const { goalId, markId, userId, why } = input;
   if (!UUID_RE.test(goalId)) throw invalid('goalId is not a uuid');
   if (!UUID_RE.test(markId)) throw invalid('markId is not a uuid');
   if (!UUID_RE.test(userId)) throw invalid('userId is not a uuid');
@@ -294,6 +328,11 @@ export async function linkMarkToGoal(input: LinkInput): Promise<void> {
     // The link's owner is the goal's owner — the rule the RLS policy uses. A link
     // whose user_id is not auth.uid() is refused, which is how M6-B lost links.
     user_id: userId,
+    // The AI's rationale for THIS pair — written only on this genuinely-new
+    // insert. The revive path above never touches it, so a re-linked pair's old
+    // rationale returns with the link (same pair, same reason — decided in the
+    // 2026-08-06 spec). Manual links pass no why and store null.
+    why: normalizeWhy(why),
     created_at: now,
     updated_at: now,
   });

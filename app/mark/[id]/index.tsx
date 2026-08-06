@@ -75,7 +75,7 @@ import { deriveStreakForMark } from '../../../hooks/useStreaks';
 import { CATEGORY_MAP } from '../../../components/ui/MarkRow';
 import { resolveCounterIconType } from '@/src/components/icons/IconResolver';
 // M9 Phase 2 Task 3 — reads come from the query layer; writes stay in the stores.
-import { useMark, useMarksForUser, useMarksByGoal } from '@/lib/data/marks';
+import { useMark, useMarksForUser, useMarksByGoal, type LinkedMarkRow } from '@/lib/data/marks';
 import { useUserCheckins } from '@/lib/data/checkins';
 import { totalsByMark } from '@/lib/data/derived';
 import { useGoals } from '@/lib/data/goals';
@@ -134,7 +134,7 @@ export default function MarkDetailScreen() {
 const EMPTY_MARK_ROWS: MarkRow[] = [];
 const EMPTY_CHECKIN_ROWS: MarkEventRow[] = [];
 const EMPTY_GOAL_ROWS: GoalRow[] = [];
-const EMPTY_MARKS_BY_GOAL: Record<string, MarkRow[]> = {};
+const EMPTY_MARKS_BY_GOAL: Record<string, LinkedMarkRow[]> = {};
 
 // `total` is DERIVED from the event log (M9 Phase 4) — the stored `marks.total`
 // left the client contract; Phase 3 had already stopped maintaining it.
@@ -708,12 +708,23 @@ function MarkDetailContent() {
                 const progress = goal.target_mark_count && goal.target_mark_count > 0
                   ? Math.round(((goal.current_mark_count ?? 0) / goal.target_mark_count) * 100)
                   : null;
+                // The AI's rationale for THIS (goal, mark) pair — a link-row
+                // property, so the same mark under two goals shows each pair's
+                // own line. Rendered VERBATIM (no copy authored here); null =
+                // manual or pre-feature link = nothing shows.
+                const why =
+                  marksByGoal[goal.id]?.find((m) => m.id === id)?.link_why ?? null;
                 return (
-                  <View key={goal.id} style={styles.linkedGoalRow}>
-                    <Flag size={14} color={c.inkMuted} weight="duotone" />
-                    <Text style={styles.linkedGoalTitle}>{goal.title}</Text>
-                    {progress !== null && (
-                      <Text style={styles.linkedGoalProgress}>→ {progress}% complete</Text>
+                  <View key={goal.id} style={styles.linkedGoalItem}>
+                    <View style={styles.linkedGoalTopRow}>
+                      <Flag size={14} color={c.inkMuted} weight="duotone" />
+                      <Text style={styles.linkedGoalTitle}>{goal.title}</Text>
+                      {progress !== null && (
+                        <Text style={styles.linkedGoalProgress}>→ {progress}% complete</Text>
+                      )}
+                    </View>
+                    {why !== null && (
+                      <Text style={styles.linkedGoalWhy}>{why}</Text>
                     )}
                   </View>
                 );
@@ -1034,6 +1045,29 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     paddingVertical: spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: c.borderLight,
+  },
+  // A linked goal with its optional why line: same footprint as linkedGoalRow,
+  // with the border on the wrapper so the rationale sits inside the row's rule.
+  linkedGoalItem: {
+    paddingVertical: spacing.sm,
+    gap: spacing.xs,
+    borderBottomWidth: 1,
+    borderBottomColor: c.borderLight,
+  },
+  linkedGoalTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  // The AI's own sentence, verbatim — a quiet one-liner in the mentor register
+  // (sansItalic + muted, like the other quiet lines on this screen), indented
+  // to sit under the goal title rather than the flag icon.
+  linkedGoalWhy: {
+    fontFamily: fonts.sansItalic,
+    fontSize: fontSize.sm,
+    lineHeight: 18,
+    color: c.inkMuted,
+    paddingLeft: 14 + spacing.sm,
   },
   linkedGoalTitle: {
     flex: 1,

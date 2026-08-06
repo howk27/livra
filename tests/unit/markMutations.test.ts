@@ -152,6 +152,79 @@ describe('createMark', () => {
   });
 });
 
+// AI-MARK-WHY (2026-08-06): the generator's per-mark rationale lands on the
+// LINK row — a property of the (goal, mark) PAIR — normalized at this boundary
+// because AI output is input.
+describe('createMark — per-link why (AI rationale)', () => {
+  const input = { userId: USER, name: 'Drink water', sortIndex: 0, cadence: CADENCE };
+  const linked = [
+    { data: { id: MARK }, error: null }, // mark insert
+    { data: [], error: null }, // revive attempt finds nothing
+    { data: null, error: null }, // link insert
+  ];
+
+  it('writes the why onto the LINK row — never the mark', async () => {
+    const { calls } = makeClient([...linked]);
+    await createMark({ ...input, goalId: GOAL, why: 'Builds endurance over time' });
+    expect(bodyOf(calls, 'goal_mark_links', 'insert')).toMatchObject({
+      why: 'Builds endurance over time',
+    });
+    expect(bodyOf(calls, 'marks', 'insert')).not.toHaveProperty('why');
+  });
+
+  it('trims the why before it is stored', async () => {
+    const { calls } = makeClient([...linked]);
+    await createMark({ ...input, goalId: GOAL, why: '  Builds endurance  ' });
+    expect(bodyOf(calls, 'goal_mark_links', 'insert').why).toBe('Builds endurance');
+  });
+
+  it('caps the why at 200 characters', async () => {
+    const { calls } = makeClient([...linked]);
+    await createMark({ ...input, goalId: GOAL, why: 'x'.repeat(300) });
+    expect((bodyOf(calls, 'goal_mark_links', 'insert').why as string).length).toBe(200);
+  });
+
+  it('stores null for an empty or whitespace-only why', async () => {
+    const { calls } = makeClient([...linked]);
+    await createMark({ ...input, goalId: GOAL, why: '   ' });
+    expect(bodyOf(calls, 'goal_mark_links', 'insert').why).toBeNull();
+  });
+
+  it('a why with no goal writes no link at all — it has nowhere to live', async () => {
+    const { calls } = makeClient([{ data: { id: MARK }, error: null }]);
+    await createMark({ ...input, why: 'orphaned rationale' });
+    expect(writes(calls)).toEqual(['marks.insert']);
+  });
+});
+
+describe('linkMarkToGoal — the why rides new inserts only', () => {
+  it('a REVIVE keeps the stored why — no new write on the column', async () => {
+    const { calls } = makeClient([{ data: [{ id: 'link-1' }], error: null }]);
+    await linkMarkToGoal({ goalId: GOAL, markId: MARK, userId: USER, why: 'new words' });
+    // Same pair, same reason: the old rationale returns with the link.
+    expect(writes(calls)).toEqual(['goal_mark_links.update']);
+    expect(bodyOf(calls, 'goal_mark_links', 'update')).not.toHaveProperty('why');
+  });
+
+  it('a genuinely new link inserts the normalized why', async () => {
+    const { calls } = makeClient([
+      { data: [], error: null },
+      { data: null, error: null },
+    ]);
+    await linkMarkToGoal({ goalId: GOAL, markId: MARK, userId: USER, why: '  keep this  ' });
+    expect(bodyOf(calls, 'goal_mark_links', 'insert').why).toBe('keep this');
+  });
+
+  it('a manual link (no why) stores null', async () => {
+    const { calls } = makeClient([
+      { data: [], error: null },
+      { data: null, error: null },
+    ]);
+    await linkMarkToGoal({ goalId: GOAL, markId: MARK, userId: USER });
+    expect(bodyOf(calls, 'goal_mark_links', 'insert').why).toBeNull();
+  });
+});
+
 describe('linkMarkToGoal — idempotency (UNIQUE goal_id, mark_id)', () => {
   it('REVIVES a previously unlinked pair instead of inserting a duplicate', async () => {
     // The failure mode of the shorter `upsert(..., ignoreDuplicates)` version:

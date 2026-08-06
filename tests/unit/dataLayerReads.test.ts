@@ -80,14 +80,16 @@ describe('goals reads', () => {
 });
 
 describe('marks reads resolve through goal_mark_links', () => {
-  it('fetchMarksForGoal queries links FIRST, then marks by id', async () => {
+  it('fetchMarksForGoal queries links FIRST, then marks by id, carrying the per-link why', async () => {
     const client = install([
-      { data: [{ mark_id: 'm1' }, { mark_id: 'm2' }], error: null },
+      { data: [{ mark_id: 'm1', why: 'Builds endurance' }, { mark_id: 'm2' }], error: null },
       { data: [{ id: 'm1', name: 'Run' }, { id: 'm2', name: 'Stretch' }], error: null },
     ]);
+    // AI-MARK-WHY: each row carries its link's rationale as `link_why`
+    // (a PAIR property, not a mark column); an absent why reads as null.
     await expect(fetchMarksForGoal('g1')).resolves.toEqual([
-      { id: 'm1', name: 'Run' },
-      { id: 'm2', name: 'Stretch' },
+      { id: 'm1', name: 'Run', link_why: 'Builds endurance' },
+      { id: 'm2', name: 'Stretch', link_why: null },
     ]);
     // The link table is read before the marks table — this is the T6 fix.
     expect(client.__fromTables).toEqual(['goal_mark_links', 'marks']);
@@ -107,7 +109,14 @@ describe('marks reads resolve through goal_mark_links', () => {
 
   it('fetchMarksByGoal groups marks by goal via links (aliased gid/mid)', async () => {
     const client = install([
-      { data: [{ gid: 'g1', mid: 'm1' }, { gid: 'g1', mid: 'm2' }, { gid: 'g2', mid: 'm1' }], error: null },
+      {
+        data: [
+          { gid: 'g1', mid: 'm1', why: 'Feeds the endurance base' },
+          { gid: 'g1', mid: 'm2' },
+          { gid: 'g2', mid: 'm1', why: 'Keeps the streak honest' },
+        ],
+        error: null,
+      },
       { data: [{ id: 'm1', name: 'Run' }, { id: 'm2', name: 'Stretch' }], error: null },
     ]);
     const grouped = await fetchMarksByGoal();
@@ -115,6 +124,11 @@ describe('marks reads resolve through goal_mark_links', () => {
     // A mark serving two goals appears under each (D-6).
     expect(grouped.g1.map((m) => m.name)).toEqual(['Run', 'Stretch']);
     expect(grouped.g2.map((m) => m.name)).toEqual(['Run']);
+    // AI-MARK-WHY: the why is a PAIR property — the SAME mark carries a
+    // different rationale under each goal (cloned per link, never shared).
+    expect(grouped.g1[0].link_why).toBe('Feeds the endurance base');
+    expect(grouped.g2[0].link_why).toBe('Keeps the streak honest');
+    expect(grouped.g1[1].link_why).toBeNull();
   });
 
   it('fetchMarksByGoal short-circuits with no links', async () => {
