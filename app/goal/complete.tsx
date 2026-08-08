@@ -21,6 +21,7 @@ import { checkProStatus } from '../../lib/iap/iap';
 import { canCustomizeShareCard } from '../../lib/gating';
 import { logger } from '../../lib/utils/logger';
 import { generateShareCard } from '../../lib/sharing/generateShareCard';
+import { SHARE_CARD_ENABLED } from '../../lib/sharing/shareCardEnabled';
 import { useShareCardStore } from '../../state/shareCardSlice';
 import { GoalCompletionShareCard } from '../../components/GoalCompletionShareCard';
 import { SharePreviewModal } from '../../components/SharePreviewModal';
@@ -227,31 +228,35 @@ export default function GoalCompleteScreen() {
               onPress={handleNext}
               fullWidth
             />
-            <TouchableOpacity
-              style={styles.shareBtn}
-              onPress={handleSharePress}
-              accessibilityRole="button"
-            >
-              <Text style={styles.shareBtnText}>Share this moment</Text>
-            </TouchableOpacity>
+            {SHARE_CARD_ENABLED && (
+              <TouchableOpacity
+                style={styles.shareBtn}
+                onPress={handleSharePress}
+                accessibilityRole="button"
+              >
+                <Text style={styles.shareBtnText}>Share this moment</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </Animated.View>
       </View>
 
-      <View style={styles.offScreen} pointerEvents="none">
-        <GoalCompletionShareCard
-          forwardRef={shareCardRef}
-          goalTitle={goalTitle ?? ''}
-          completedDate={getAppDate().toISOString().slice(0, 10)}
-          daysTaken={daysTaken}
-          targetDateLabel={targetDateLabel}
-          bankedMomentumDays={completedGoal?.banked_momentum_days}
-          style={style}
-        />
-      </View>
+      {SHARE_CARD_ENABLED && (
+        <View style={styles.offScreen} pointerEvents="none">
+          <GoalCompletionShareCard
+            forwardRef={shareCardRef}
+            goalTitle={goalTitle ?? ''}
+            completedDate={getAppDate().toISOString().slice(0, 10)}
+            daysTaken={daysTaken}
+            targetDateLabel={targetDateLabel}
+            bankedMomentumDays={completedGoal?.banked_momentum_days}
+            style={style}
+          />
+        </View>
+      )}
 
       <SharePreviewModal
-        visible={shareModalVisible}
+        visible={SHARE_CARD_ENABLED && shareModalVisible}
         goalTitle={goalTitle ?? ''}
         canCustomize={canCustomize}
         style={style}

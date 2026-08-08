@@ -94,27 +94,25 @@ jest.mock('expo-media-library', () => ({
 import GoalCompleteScreen from '../../app/goal/complete';
 import { checkProStatus } from '../../lib/iap/iap';
 
-describe('GoalCompleteScreen share integration', () => {
-  it('renders "Share this moment" button', () => {
-    const { getByText } = render(<GoalCompleteScreen />);
-    expect(getByText('Share this moment')).toBeTruthy();
+// Founder ruling 2026-08-08: the share card is HIDDEN and does not ship in V2
+// (lib/sharing/shareCardEnabled.ts). These used to pin "Share this moment" as
+// reachable and a free user reaching the modal without a paywall bounce; they
+// now pin the hide. Re-enabling the flag turns them red on purpose — the
+// reachability claims below are the ones to restore when it comes back.
+describe('GoalCompleteScreen share integration (hidden)', () => {
+  it('does not render the "Share this moment" button', () => {
+    const { queryByText } = render(<GoalCompleteScreen />);
+    expect(queryByText('Share this moment')).toBeNull();
   });
 
-  it('calls checkProStatus when share button is pressed', async () => {
-    const { getByText } = render(<GoalCompleteScreen />);
-    fireEvent.press(getByText('Share this moment'));
-    await waitFor(() => {
-      expect(checkProStatus).toHaveBeenCalled();
-    });
+  it('never checks Pro status, because there is no share entry point to gate', async () => {
+    render(<GoalCompleteScreen />);
+    await waitFor(() => expect(checkProStatus).not.toHaveBeenCalled());
   });
 
-  it('free user can open the share modal without being sent to the paywall', async () => {
-    const push = jest.fn();
-    jest.spyOn(require('expo-router'), 'useRouter').mockReturnValue({ replace: jest.fn(), push });
-    const { getByText, findByText } = render(<GoalCompleteScreen />);
-    fireEvent.press(getByText('Share this moment'));
-    // modal opens; Save to Photos button visible; paywall NOT pushed
-    expect(await findByText('Save to Photos')).toBeTruthy();
-    expect(push).not.toHaveBeenCalledWith('/paywall');
+  it('leaves the completion screen itself intact', () => {
+    const { getByText, queryByText } = render(<GoalCompleteScreen />);
+    expect(getByText('Continue')).toBeTruthy();
+    expect(queryByText('Save to Photos')).toBeNull();
   });
 });

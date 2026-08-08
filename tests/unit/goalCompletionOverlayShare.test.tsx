@@ -90,12 +90,17 @@ const goal: any = {
   banked_momentum_days: 12,
 };
 
-describe('GoalCompletionOverlay share', () => {
-  it('opens the share modal when "Share your win" is tapped', async () => {
+// Founder ruling 2026-08-08: the share card is HIDDEN and does not ship in V2
+// (lib/sharing/shareCardEnabled.ts). This suite used to pin the entry point as
+// reachable; it now pins the hide, so re-enabling the feature turns these red
+// and forces a deliberate revert rather than a silent reappearance.
+describe('GoalCompletionOverlay share (hidden)', () => {
+  it('offers no share entry point while SHARE_CARD_ENABLED is false', () => {
     useGoalCompletionStore.setState({ completedGoal: goal, show: true });
     const { getByText, queryByText } = render(<GoalCompletionOverlay />);
+    // The celebration itself is untouched — only the share affordance is gone.
+    expect(getByText('Continue')).toBeTruthy();
+    expect(queryByText('Share your win')).toBeNull();
     expect(queryByText('Save to Photos')).toBeNull();
-    fireEvent.press(getByText('Share your win'));
-    await waitFor(() => expect(getByText('Save to Photos')).toBeTruthy());
   });
 });

@@ -29,6 +29,7 @@ import { useGoalCompletionStore } from '../../state/goalCompletionStore';
 import { useShareCardStore } from '../../state/shareCardSlice';
 import { checkProStatus } from '../../lib/iap/iap';
 import { canCustomizeShareCard } from '../../lib/gating';
+import { SHARE_CARD_ENABLED } from '../../lib/sharing/shareCardEnabled';
 import { generateShareCard } from '../../lib/sharing/generateShareCard';
 import { logger } from '../../lib/utils/logger';
 import { formatBankedMomentum } from '../../lib/momentumPresenter';
@@ -224,15 +225,17 @@ export function GoalCompletionOverlay() {
                 onPress={dismiss}
                 style={styles.continueBtn}
               />
-              <TouchableOpacity onPress={handleSharePress}>
-                <Text style={[styles.shareText, { color: c.inkMuted }]}>Share your win</Text>
-              </TouchableOpacity>
+              {SHARE_CARD_ENABLED && (
+                <TouchableOpacity onPress={handleSharePress}>
+                  <Text style={[styles.shareText, { color: c.inkMuted }]}>Share your win</Text>
+                </TouchableOpacity>
+              )}
             </View>
           </AnimatedElement>
         </Animated.View>
       </GestureDetector>
 
-      {completedGoal && (
+      {SHARE_CARD_ENABLED && completedGoal && (
         <View
           style={{ position: 'absolute', left: -10000, top: 0, opacity: 0 }}
           pointerEvents="none"
@@ -250,7 +253,7 @@ export function GoalCompletionOverlay() {
       )}
 
       <SharePreviewModal
-        visible={shareModalVisible}
+        visible={SHARE_CARD_ENABLED && shareModalVisible}
         goalTitle={completedGoal?.title ?? ''}
         canCustomize={canCustomize}
         style={style}
