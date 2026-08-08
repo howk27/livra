@@ -60,7 +60,7 @@ import { caughtErrorCopy } from '../../lib/copy';
 import { canExportData } from '../../lib/gating';
 import { logger } from '../../lib/utils/logger';
 import { useNotification } from '../../contexts/NotificationContext';
-import { getAvatarUrl, refreshAvatarUrl } from '../../lib/storage/avatarStorage';
+import { useProfileAvatar } from '../../hooks/useProfileAvatar';
 import {
   getPace,
   setPace,
@@ -170,7 +170,14 @@ export default function SettingsScreen() {
   const { showSuccess, showError } = useNotification();
   const supabase = getSupabaseClient();
 
-  const [profileImageUri, setProfileImageUri] = useState<string | null>(null);
+  // Founder 2026-08-08: this screen used to load the avatar in a plain
+  // useEffect keyed on [user?.id]. Settings is a TAB screen — it stays mounted
+  // and user.id never changes — so that effect fired once per app launch and
+  // never again. Uploading a picture from the pushed Edit Profile route left
+  // the mounted Settings screen holding the old value until a cold restart,
+  // while the Goals/Focus header (useProfileAvatar, focus-driven) updated
+  // immediately. One loader now, focus-driven, same 'profile_image_uri' cache.
+  const profileImageUri = useProfileAvatar(!!user?.id);
   const [profileDisplayName, setProfileDisplayName] = useState<string | null>(null);
   // `undefined` until the profile row is read — see shouldAskToVerify (QC-1061).
   const [emailVerifiedAt, setEmailVerifiedAt] = useState<VerificationStamp>(undefined);
@@ -263,42 +270,6 @@ export default function SettingsScreen() {
       cancelled = true;
     };
   }, [user?.id, supabase]);
-
-  // --- Load profile image ---
-  useEffect(() => {
-    if (!user?.id) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const avatarUrl = await getAvatarUrl(user.id, 3600);
-        if (cancelled) return;
-        if (avatarUrl) {
-          setProfileImageUri(avatarUrl);
-          await AsyncStorage.setItem('profile_image_uri', avatarUrl);
-          return;
-        }
-        const storedUri = await AsyncStorage.getItem('profile_image_uri');
-        if (!storedUri) return;
-        if (!storedUri.startsWith('http')) {
-          setProfileImageUri(storedUri);
-        } else {
-          const refreshed = await refreshAvatarUrl(user.id, storedUri, 3600);
-          if (refreshed) {
-            setProfileImageUri(refreshed);
-            await AsyncStorage.setItem('profile_image_uri', refreshed);
-          } else {
-            await AsyncStorage.removeItem('profile_image_uri');
-            setProfileImageUri(null);
-          }
-        }
-      } catch {
-        /* silent */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.id]);
 
   // --- Derived values ---
   const profileName = useMemo(() => {
