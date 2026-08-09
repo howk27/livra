@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ScrollView,
   Linking,
+  Platform,
 } from 'react-native';
 import Constants from 'expo-constants';
 import { LivraHeader } from '../../components/ui/LivraHeader';
@@ -24,9 +25,29 @@ const LINKS = [
   },
 ];
 
+/**
+ * The build this binary actually is, read from the same app config that
+ * governs the build — NOT a literal.
+ *
+ * This screen shipped "(Build 1)" hardcoded, so every release since build 1
+ * told the user the wrong number. It is the one place a person looks to report
+ * "which build am I on", which is exactly when a wrong answer costs the most.
+ * Falls back to the version string's own trailing segment rather than to a
+ * number that would be a fresh lie.
+ */
+function resolveBuildLabel(): string {
+  const config = Constants.expoConfig;
+  const native =
+    Platform.OS === 'ios'
+      ? config?.ios?.buildNumber
+      : config?.android?.versionCode?.toString();
+  return native ?? config?.version?.split('.').pop() ?? '—';
+}
+
 export default function AboutScreen() {
   const theme = useEffectiveTheme();
   const c = themedColors(theme);
+  const buildLabel = resolveBuildLabel();
   return (
     <View style={[styles.screen, { backgroundColor: c.linen }]}>
       <LivraHeader showBack title="About" />
@@ -38,7 +59,7 @@ export default function AboutScreen() {
           </View>
 
           <Text style={[styles.version, { color: c.inkMuted }]}>
-            Version {Constants.expoConfig?.version ?? '1.0.0'} (Build 1)
+            Version {Constants.expoConfig?.version ?? '1.0.0'} (Build {buildLabel})
           </Text>
           <Text style={[styles.company, { color: c.inkMuted }]}>Sierra Link LLC</Text>
         </View>
