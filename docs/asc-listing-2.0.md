@@ -141,32 +141,57 @@ See § 6 — this one needs trimming to fit; the trimmed version is there.
 
 ---
 
-## 5. What's New — low priority now, but still required
+## 5. What's New — now carries the whole story
 
-With no install base this is mostly for App Review. Short is correct.
-
-```
-The widget now shows the same icons as the app. Every mark carries its own on
-the home screen, and a goal takes an icon from its own name, so it stays put
-from the day you create it.
-
-Marks that Livra suggested for a goal now tell you why they're there.
-
-Apple Health only offers to connect where it can actually measure something:
-sleep, workouts and steps.
-
-There's also a truer first day greeting, a clearer note about your weekly pace,
-and a good number of smaller repairs underneath.
-```
-
-2.0.0 carries the 2026-08-08 batch (commits `86b207b`..`ccb62a9`), so append
-this — those commits are in build 67, not in the build 66 already at Apple:
+The live store page still sells the marks tracker. Anyone who reads this field is
+being told, for the first time, that Livra is a goal app.
 
 ```
-Your profile picture shows up in Settings the moment you change it, instead of
-waiting for the next launch. And marks made before Livra tracked weekly rhythm
-now read their real cadence rather than falling back to three days a week.
+Livra started out as a way to track daily marks. This version makes it a goal
+app, which is what it was always trying to be.
+
+Goals come first now
+You name something you actually want to finish, and your marks live underneath
+it instead of floating on their own. Progress adds up toward the goal, and
+completing one is a real moment rather than a counter going back to zero.
+
+One next thing, not a list
+The Focus screen picks a single thing to do next out of whatever is due. Once
+you've met the week's rhythm it says so and stops asking.
+
+Momentum instead of streaks
+Each goal keeps its own day count, earned by holding the rhythm you set rather
+than by never missing. A rest day doesn't break it.
+
+Marks have a cadence
+Daily, three times a week, once. Choose a pace of easing, steady or pushing and
+every flexible mark retunes together.
+
+Describe a goal and get a plan
+Type what you're after and Livra drafts the marks to get there, with a line on
+why each one is in the plan. You can change any of it before it saves. Every
+account gets one free draft.
+
+Apple Health and a home screen widget
+Sleep, workouts and steps can log themselves with Livra+. The widget keeps the
+goal in front of you and logs a mark without opening the app, and it now shows
+the same icons you see inside Livra.
+
+Also in this version: a goal takes its icon from its own name and keeps it,
+marks Livra suggested tell you why they're there, Apple Health only offers to
+connect where it can actually measure something, your profile picture updates
+the moment you change it, and marks made before Livra tracked weekly rhythm now
+read their real cadence instead of falling back to three days a week.
 ```
+
+**This block assumes build 67.** The final paragraph names the 2026-08-08 batch
+(commits `86b207b`..`ccb62a9`), which is NOT in the build 66 sitting at Apple. If
+you ever ship 66 instead, cut the profile-picture and cadence clauses.
+
+**Why it is long now, deliberately:** the live App Store page still describes the
+old app ("simple daily marks, clean stats"), so for anyone who reads it, the
+goal model IS the news. With no install base there is no one to bore, and this
+field is the only place the change gets explained.
 
 Left out deliberately: the recovery-link confirmation and the journal-edit
 repair (security fixes for situations no user knowingly hit — naming them
@@ -176,7 +201,6 @@ advertises a weakness and tells the reader nothing), and the hidden share card
 ---
 
 ## 6. Verified character counts
-
 | Field | Limit | Count | Status |
 | --- | --- | --- | --- |
 | Description (core) | 4000 | 1764 | OK |
@@ -186,8 +210,8 @@ advertises a weakness and tells the reader nothing), and the hidden share card
 | Promotional text | 170 | 150 | OK |
 | Keywords as written above | 100 | 102 | **OVER by 2** |
 | Keywords trimmed (use this) | 100 | 87 | OK |
-| What's New (core) | 4000 | 488 | OK |
-| What's New + add-on | 4000 | 722 | OK |
+| What's New (build 67) | 4000 | 1672 | OK |
+
 
 **Note on the alternative subtitle:** "A calm app for finishing goals" is
 exactly 30 of 30. It fits, but there is no margin, and ASC has rejected
