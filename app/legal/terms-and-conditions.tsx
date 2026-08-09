@@ -378,7 +378,14 @@ export default function TermsAndConditionsScreen() {
             cancel that in your Apple Account settings as described in section 5.
           </AppText>
 
-          {/* Section 15 */}
+          {/* Section 15
+              FOUNDER-CONFIRMED 2026-08-09, along with the liability cap in §12.
+              Both were adopted from the live livralife.com/terms rather than
+              invented here — the in-app document was the outlier, still carrying
+              "the United States and your state of residence" from the January
+              2025 boilerplate. The founder confirmed he intends both in-app too.
+              These are legal positions, not code: change them on his word, not
+              on a reviewer's preference. */}
           <AppText variant="subtitle" style={[styles.sectionTitle, { color: c.inkDark }]}>
             15. Governing Law
           </AppText>
