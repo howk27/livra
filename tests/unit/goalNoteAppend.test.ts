@@ -135,6 +135,20 @@ describe('editGoalNote', () => {
     await expect(editGoalNote(NOTE, '  ')).rejects.toMatchObject({ kind: 'unknown' });
     expect(from).not.toHaveBeenCalled();
   });
+
+  // 2026-08-08: editGoalNote carried no `deleted_at` filter while its sibling
+  // softDeleteGoalNote did — so an edit could rewrite the text of a note the
+  // user had already archived. Unreachable from the journal UI (it cannot show
+  // an archived entry), but the outbox may replay an edit that was queued
+  // BEFORE the archive landed, which resurrects deleted text.
+  it('GUARD: never edits an archived entry', async () => {
+    const { calls } = makeClient([{ data: null, error: null }]);
+    await editGoalNote(NOTE, 'revised');
+
+    const isFilters = calls.filter((c) => c.method === 'is');
+    expect(isFilters).toHaveLength(1);
+    expect(isFilters[0].args).toEqual(['deleted_at', null]);
+  });
 });
 
 describe('softDeleteGoalNote', () => {

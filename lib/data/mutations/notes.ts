@@ -109,7 +109,13 @@ export async function editGoalNote(noteId: string, rawText: string): Promise<voi
   const { error } = await dataClient()
     .from('goal_notes')
     .update({ text, updated_at: new Date().toISOString() })
-    .eq('id', noteId);
+    .eq('id', noteId)
+    // Same filter `softDeleteGoalNote` carries, for the same reason: an archived
+    // note is a tombstone, and an edit must not resurrect its text. Unreachable
+    // from the journal UI today (it cannot show an archived entry), but the
+    // outbox may replay an edit queued BEFORE the archive landed — without this,
+    // that replay silently rewrites a row the user already deleted.
+    .is('deleted_at', null);
   if (error) throw toDataError(error);
 }
 
