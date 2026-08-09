@@ -28,8 +28,9 @@ Name a goal that matters. Livra turns it into a few small, repeatable actions �
 marks — and asks you to log each one as you do it. One tap. That is the whole
 gesture.
 
-You run up to two goals at a time, each with a handful of marks. Not a grid of
-forty habits. Not a dashboard to maintain.
+Two goals at a time, each with a handful of marks. Not a grid of forty habits.
+Not a dashboard to maintain. That much is free, and it stays free — the core
+loop is never behind a paywall.
 
 Momentum, not streaks
 Each goal builds a momentum count: days earned by honoring the rhythm you set,
@@ -46,7 +47,9 @@ your pace to easing, steady or pushing and Livra retunes them together.
 
 Describe it, and Livra drafts it
 Type the goal in your own words. Livra proposes the marks to get there and tells
-you why each one is in the plan. Edit anything before it lands.
+you why each one is in the plan. Edit anything before it lands. Every account
+gets one free AI draft; presets and templates are always free, and always the
+main way in.
 
 Apple Health where it fits
 Sleep, workouts and steps can log themselves. Nothing else pretends to.
@@ -72,9 +75,10 @@ appended rather than separate.
 
 ```
 Livra+
-Unlimited goals, unlimited marks per goal, AI goal drafting, Apple Health sync,
-data export, and styling for your finish card. Livra is free for two goals and
-six marks — Livra+ removes the ceiling.
+Livra is free for two goals and six marks, and finishing them is never gated.
+Livra+ adds room and reach rather than removing an obstacle: unlimited goals,
+unlimited marks per goal, repeat AI drafting, Apple Health sync, and CSV export
+of your history.
 
 Livra+ is an auto-renewing subscription, offered monthly or annually. Payment is
 charged to your Apple ID at confirmation of purchase. It renews automatically
@@ -114,7 +118,7 @@ The single highest-leverage field you own: it sits above the description and can
 be changed any day without resubmitting.
 
 ```
-Most habit apps help you track many things. Livra helps you finish one. Two goals at a time, a few marks each, and momentum that survives a rest day.
+Most habit apps help you track many things. Livra helps you finish one. Two goals, a few marks each, free — and momentum that survives a rest day.
 ```
 
 ---
@@ -169,11 +173,11 @@ advertises a weakness and tells the reader nothing), and the hidden share card
 
 | Field | Limit | Count | Status |
 | --- | --- | --- | --- |
-| Description (core) | 4000 | 1589 | OK |
-| Description + Livra+ block | 4000 | 2165 | OK |
+| Description (core) | 4000 | 1760 | OK |
+| Description + Livra+ block | 4000 | 2390 | OK |
 | Subtitle — "Finish one goal at a time" | 30 | 25 | OK |
 | Subtitle — alternative | 30 | 30 | Exactly at limit — see note |
-| Promotional text | 170 | 149 | OK |
+| Promotional text | 170 | 146 | OK |
 | Keywords as written above | 100 | 102 | **OVER by 2** |
 | Keywords trimmed (use this) | 100 | 87 | OK |
 | What's New (core) | 4000 | 453 | OK |
@@ -190,7 +194,7 @@ at-limit strings before when it counts a character differently than expected.
 goal,habit,routine,momentum,consistency,discipline,focus,daily,tracker,planner,progress
 ```
 
-Slop scan: clean. No forbidden phrase from the `copy` skill appears in any
+Slop scan: clean, re-run after the 2026-08-09 marketing pass. No forbidden phrase from the `copy` skill appears in any
 field, and no "Submit" / "Learn more" / "Get started" CTA.
 
 ---

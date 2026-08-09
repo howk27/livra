@@ -40,6 +40,7 @@ import { MONTHLY_PRODUCT_ID, YEARLY_PRODUCT_ID } from '../lib/iap/iap';
 import { parseLocalizedPrice, priceToNumber } from '../lib/iap/price';
 import { paywallAutoCloseStep } from '../lib/iap/paywallAutoClose';
 import { logger } from '../lib/utils/logger';
+import { SHARE_CARD_ENABLED } from '../lib/sharing/shareCardEnabled';
 import { getIapService } from '../lib/services/iap/getIapService';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { diagEvent, exportSupportBundle, getSupportDiagnosticsEnabled } from '../lib/debug/iapDiagnostics';
@@ -72,7 +73,9 @@ import { confirm } from '../components/ui/overlays';
 // chip grammar: an accent glyph on an applyOpacity(accent, .14) wash of itself,
 // the same shape the mark chips already use.
 type FeatureAccent = string | 'ember';
-const PRO_FEATURES: { icon: Icon; title: string; description: string; accent: FeatureAccent }[] = [
+type ProFeature = { icon: Icon; title: string; description: string; accent: FeatureAccent };
+
+const ALL_PRO_FEATURES: ProFeature[] = [
   { icon: Flag,         title: 'Unlimited Goals',      description: 'Run as many goals at once as you want, past the 2 free.', accent: categoryAccents.fitness },
   { icon: InfinityIcon, title: 'Unlimited Marks',      description: 'Add as many marks per goal as you need.',                 accent: categoryAccents.discipline },
   { icon: Sparkle,      title: 'AI Goal Plans',        description: 'Describe a goal; Livra drafts the marks to get there.',   accent: 'ember' },
@@ -81,14 +84,30 @@ const PRO_FEATURES: { icon: Icon; title: string; description: string; accent: Fe
   { icon: ChartBar,     title: 'CSV Export',           description: 'Your history is yours. Export anytime.',                  accent: categoryAccents.deepWork },
 ];
 
-const SHIPPED_PREMIUM_FEATURE_TITLES = [
+/**
+ * Hiding the share card (2026-08-08) left this screen still SELLING it.
+ * "Custom Share Cards" sat in both the pitch and the shipped-titles list, so the
+ * drift guard below compared two copies of the same mistake and never fired —
+ * Livra+ was advertising a surface the user cannot reach, which is a metadata
+ * and consumer-protection problem, not a copy nit.
+ *
+ * Both lists now derive from SHARE_CARD_ENABLED, so the row disappears and comes
+ * back with the feature itself. Flip the flag and the pitch returns intact.
+ */
+const PRO_FEATURES: ProFeature[] = ALL_PRO_FEATURES.filter(
+  (f) => SHARE_CARD_ENABLED || f.title !== 'Custom Share Cards'
+);
+
+export const SHIPPED_PREMIUM_FEATURE_TITLES = [
   'Unlimited Goals',
   'Unlimited Marks',
   'AI Goal Plans',
-  'Custom Share Cards',
+  ...(SHARE_CARD_ENABLED ? ['Custom Share Cards'] : []),
   'Apple Health',
   'CSV Export',
 ];
+
+export const PAYWALL_FEATURE_TITLES = PRO_FEATURES.map((f) => f.title);
 
 type PlanType = 'monthly' | 'yearly';
 
