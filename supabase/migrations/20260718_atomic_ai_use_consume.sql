@@ -1,3 +1,9 @@
+-- APPLIED — verified live 2026-08-08 by reading pg_proc on jhsxeibhxrvqrgkadyfk:
+-- consume_free_ai_use(p_user_id uuid), refund_free_ai_use(p_user_id uuid) and
+-- increment_ai_uses_count(p_user_id uuid) all exist. This header was missing
+-- while the functions were live, which is the same "a migration header lies"
+-- trap this project has hit before — the check was run, not assumed.
+--
 -- Atomic free-AI-use consume/refund — closes the TOCTOU race in the
 -- ai-goal-generation Edge Function.
 --
