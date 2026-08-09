@@ -2,7 +2,7 @@
   "expo": {
     "name": "Livra",
     "slug": "livra",
-    "version": "1.0.66",
+    "version": "2.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "description": "Livra is where goals actually get done — one at a time, in sequence.",
@@ -14,7 +14,7 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.livra.app",
       "appleTeamId": "AL8YGQMBQG",
-      "buildNumber": "66",
+      "buildNumber": "67",
       "associatedDomains": [
         "applinks:livralife.com",
         "applinks:www.livralife.com"
@@ -44,7 +44,7 @@
     },
     "android": {
       "package": "com.livra.app",
-      "versionCode": 66,
+      "versionCode": 67,
       "adaptiveIcon": {
         "foregroundImage": "./assets/Livra-Clean-Dark.png",
         "backgroundColor": "#ffffff"

@@ -1,6 +1,6 @@
 {
   "name": "livra",
-  "version": "1.0.44",
+  "version": "2.0.0",
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
