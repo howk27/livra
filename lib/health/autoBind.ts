@@ -11,8 +11,14 @@
 //   founder 2026-08-06, the curated 3, not the old name regex);
 // - steps and sleep bind WITH defaults (health-auto-sync spec §2.9): stepGoal =
 //   the user's 30-day average daily steps rounded to the nearest 500 (8000 when
-//   Health has no history), sleepHours = 7 — both editable on mark detail,
-//   where the sleep wake-time notification also still lives;
+//   Health has no history), sleepHours = 7.
+//   CORRECTED 2026-08-09: this comment used to say BOTH were "editable on mark
+//   detail". Only stepGoal is — app/mark/[id]/index.tsx:554-559 passes a
+//   stepGoal and nothing anywhere writes sleepHours, so the 7-hour bar cannot
+//   be changed by a user. A 6h30 night therefore never qualifies and the app
+//   says nothing about why. Making it editable is PINNED until after 2.0 ships
+//   (founder 2026-08-09) — see .reports/polish.md. Do not "fix" the threshold
+//   logic; it is correct. The missing thing is the control;
 // - never throws: binding is a convenience layered over the connect toast.
 import { resolveHealthKitType } from './autoSuggest';
 import { allHealthKitBindings, setHealthKitBinding } from './healthKitBinding';
