@@ -32,6 +32,12 @@ import { useHealthAutoSync } from '../hooks/useHealthAutoSync';
 import { themedColors } from '../theme/tokens';
 import { NotificationProvider } from '../contexts/NotificationContext';
 import { ConfirmHost, ActionSheetHost } from '../components/ui/overlays';
+import { confirm } from '../components/ui/overlays/confirmController';
+import {
+  readRecoveryTokenIdentity,
+  shouldConfirmRecoverySwap,
+  recoverySwapConfirmCopy,
+} from '../lib/auth/recoveryAccountGuard';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { AuthPersistenceGate } from '../components/AuthPersistenceGate';
 import { logger } from '../lib/utils/logger';
@@ -459,6 +465,32 @@ export default function RootLayout() {
 
         if (type === 'recovery' && accessToken && refreshToken && isLikelyAccessToken(accessToken)) {
           const supabase = getSupabaseClient();
+
+          // A recovery link installs whatever account its tokens belong to. If a
+          // DIFFERENT account is signed in right now, that is a session swap and
+          // the user has to agree to it first (founder ruling 2026-08-08:
+          // confirm, do not refuse — resetting a second account on your own
+          // device is a real workflow). GoTrue still verifies the tokens at
+          // setSession; the decoded claims below only decide whether to ask.
+          const { data: existing } = await supabase.auth.getSession();
+          const currentUser = existing.session?.user ?? null;
+          const incoming = readRecoveryTokenIdentity(accessToken.trim());
+
+          if (shouldConfirmRecoverySwap(currentUser?.id, incoming.userId)) {
+            // confirm() resolves false when no host is mounted yet, so a link
+            // opened during a cold start refuses the swap rather than performing
+            // it silently — the safe direction, and the user can tap again.
+            const agreed = await confirm({
+              ...recoverySwapConfirmCopy(currentUser?.email, incoming.email),
+              destructive: true,
+            });
+            if (!agreed) {
+              logger.warn('[Deep Link] Recovery session swap declined; existing session kept');
+              router.replace('/(tabs)/focus' as any);
+              return;
+            }
+          }
+
           const { error: sessionError } = await supabase.auth.setSession({
             access_token: accessToken.trim(),
             refresh_token: refreshToken.trim(),
