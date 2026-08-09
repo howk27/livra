@@ -13,56 +13,62 @@ verbatim ("Most habit apps help you track many things; Livra helps you finish
 one") plus § Product Purpose and § Anti-references. Voice per
 `.reports/design-decisions.md` Direction: calm executor.
 
-**App Store descriptions render PLAIN TEXT.** No markdown survives — the short
+**App Store descriptions render PLAIN TEXT.** No markdown survives, so the short
 standalone lines below are doing the work of headings on purpose. Do not add
 `**bold**`; it will render as literal asterisks.
+
+**No em dashes anywhere in the copy blocks, by instruction (2026-08-09), and
+verified at 0.** They are a tell, and Apple renders them inconsistently across
+storefront fonts anyway. Use commas, colons or a full stop. If you edit a block,
+re-check with a search for the character before pasting.
 
 ---
 
 ## 1. Description — the field that matters
 
 ```
-Most habit apps help you track many things. Livra helps you finish one.
+Most habit apps help you track a lot of things. Livra is built to help you
+finish one.
 
-Name a goal that matters. Livra turns it into a few small, repeatable actions —
-marks — and asks you to log each one as you do it. One tap. That is the whole
-gesture.
+You name a goal, and Livra breaks it into a few small actions you repeat. Those
+are your marks. You tap one each time you do it, and that's really all there is
+to using it.
 
-Two goals at a time, each with a handful of marks. Not a grid of forty habits.
-Not a dashboard to maintain. That much is free, and it stays free — the core
-loop is never behind a paywall.
+You can run two goals at once with a handful of marks under each. There's no
+grid of forty habits and no dashboard to keep up with. That much is free and
+stays free. Finishing a goal never costs anything.
 
-Momentum, not streaks
-Each goal builds a momentum count: days earned by honoring the rhythm you set,
-not by never missing. Rest is part of the plan. A quiet day does not wipe the
-board, and nothing panics at you to come back.
+Momentum instead of streaks
+Each goal builds a day count you earn by keeping the rhythm you picked, not by
+never missing. You're allowed to rest. A quiet day doesn't wipe anything out,
+and Livra won't panic at you to come back.
 
-One next move
-Livra shows a single thing to do next, chosen from what is actually due. When
-the week's rhythm is met, it says so and gets out of the way.
+One next thing
+Livra picks a single thing to do next from whatever is actually due. Once you've
+met the week's rhythm it says so and stops asking.
 
-Marks that fit your week
-Every mark carries its own cadence — every day, three times a week, once. Set
-your pace to easing, steady or pushing and Livra retunes them together.
+Marks that match your week
+Every mark has its own cadence: daily, three times a week, once. Choose a pace
+of easing, steady or pushing and Livra retunes all of them together.
 
-Describe it, and Livra drafts it
-Type the goal in your own words. Livra proposes the marks to get there and tells
-you why each one is in the plan. Edit anything before it lands. Every account
-gets one free AI draft; presets and templates are always free, and always the
-main way in.
+Type a goal, get a plan
+Describe what you're after in your own words. Livra suggests the marks to get
+there and says why each one made the list. You can change any of it before it
+saves. Every account gets one free AI draft, and the presets are free for good.
 
-Apple Health where it fits
-Sleep, workouts and steps can log themselves. Nothing else pretends to.
+Apple Health, where it fits
+Sleep, workouts and steps can log themselves. Nothing else claims to.
 
-On your home screen
-A widget keeps the goal in front of you and logs a mark without opening the app.
+A widget on your home screen
+It keeps the goal in front of you, and you can log a mark without opening Livra
+at all.
 
-Finishing is the point
-Completing a goal is the moment Livra is built around. It marks it, and then it
-lets go. You come back for the next goal — not out of obligation.
+Finishing counts
+Completing a goal is the part this app is actually for. Livra marks the moment,
+then leaves you alone until you pick the next one.
 
-What Livra will not do: punish you for a missed day, bury you in charts, or
-engineer notifications to pull you back.
+Livra won't punish you for a missed day, bury you in charts, or send you
+notifications designed to pull you back in.
 ```
 
 Character count: see § 6 (verified, not estimated).
@@ -76,7 +82,7 @@ appended rather than separate.
 ```
 Livra+
 Livra is free for two goals and six marks, and finishing them is never gated.
-Livra+ adds room and reach rather than removing an obstacle: unlimited goals,
+Livra+ gives you more room rather than removing an obstacle: unlimited goals,
 unlimited marks per goal, repeat AI drafting, Apple Health sync, and CSV export
 of your history.
 
@@ -118,7 +124,7 @@ The single highest-leverage field you own: it sits above the description and can
 be changed any day without resubmitting.
 
 ```
-Most habit apps help you track many things. Livra helps you finish one. Two goals, a few marks each, free — and momentum that survives a rest day.
+Most habit apps help you track a lot of things. Livra helps you finish one. Two goals, a few marks each, free, with momentum that survives a rest day.
 ```
 
 ---
@@ -140,26 +146,26 @@ See § 6 — this one needs trimming to fit; the trimmed version is there.
 With no install base this is mostly for App Review. Short is correct.
 
 ```
-Your widget now wears the same faces as the app. Every mark shows its own icon
-on the home screen, and a goal carries an icon drawn from its own name — steady
+The widget now shows the same icons as the app. Every mark carries its own on
+the home screen, and a goal takes an icon from its own name, so it stays put
 from the day you create it.
 
-Marks that Livra suggested for a goal now say why they are there.
+Marks that Livra suggested for a goal now tell you why they're there.
 
-Apple Health connects only where it can actually measure: sleep, workouts and
-steps.
+Apple Health only offers to connect where it can actually measure something:
+sleep, workouts and steps.
 
-Plus a truer first-day greeting, a clearer note on your weekly pace, and a
-number of smaller repairs underneath.
+There's also a truer first day greeting, a clearer note about your weekly pace,
+and a good number of smaller repairs underneath.
 ```
 
 2.0.0 carries the 2026-08-08 batch (commits `86b207b`..`ccb62a9`), so append
 this — those commits are in build 67, not in the build 66 already at Apple:
 
 ```
-Your profile picture now appears in Settings the moment you change it. And marks
-created before Livra tracked weekly rhythm now read their real cadence instead
-of defaulting to three days a week.
+Your profile picture shows up in Settings the moment you change it, instead of
+waiting for the next launch. And marks made before Livra tracked weekly rhythm
+now read their real cadence rather than falling back to three days a week.
 ```
 
 Left out deliberately: the recovery-link confirmation and the journal-edit
@@ -173,15 +179,15 @@ advertises a weakness and tells the reader nothing), and the hidden share card
 
 | Field | Limit | Count | Status |
 | --- | --- | --- | --- |
-| Description (core) | 4000 | 1760 | OK |
-| Description + Livra+ block | 4000 | 2390 | OK |
+| Description (core) | 4000 | 1764 | OK |
+| Description + Livra+ block | 4000 | 2394 | OK |
 | Subtitle — "Finish one goal at a time" | 30 | 25 | OK |
 | Subtitle — alternative | 30 | 30 | Exactly at limit — see note |
-| Promotional text | 170 | 146 | OK |
+| Promotional text | 170 | 150 | OK |
 | Keywords as written above | 100 | 102 | **OVER by 2** |
 | Keywords trimmed (use this) | 100 | 87 | OK |
-| What's New (core) | 4000 | 453 | OK |
-| What's New + add-on | 4000 | 650 | OK |
+| What's New (core) | 4000 | 488 | OK |
+| What's New + add-on | 4000 | 722 | OK |
 
 **Note on the alternative subtitle:** "A calm app for finishing goals" is
 exactly 30 of 30. It fits, but there is no margin, and ASC has rejected
