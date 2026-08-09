@@ -423,22 +423,50 @@ feel the product's value before they're ever asked to pay.
 
 **The split (locked model):**
 
+**Corrected 2026-08-09 against `lib/gating.ts` and the live code, which is what
+actually binds. The previous table was wrong in four places and had been quoted
+into a drafted App Store listing before anyone re-read it — see the note below
+the table. Re-derive from `gating.ts`, never from memory.**
+
 | | Free | Livra+ |
 | --- | --- | --- |
 | Active goals | 2 | Unlimited |
-| Marks per goal | 3 | Unlimited |
-| Daily habit marks (un-goaled) | Up to 3 | Unlimited |
+| Marks per goal | 4 | Unlimited |
+| Marks per account (linked + unlinked) | 6 | Unlimited |
 | Goal history & stats | ✅ Full | ✅ Full |
 | Presets / templates | ✅ All | ✅ All |
 | AI goal/mark generation | 1 free, ever | Repeat use |
 | Momentum & at-risk status | ✅ | ✅ |
-| Share card | ✅ Preset designs | ✅ Custom designs |
-| Custom reminders, CSV export, Apple Health, mark reordering, pace projection | — | ✅ |
+| Apple Health auto-sync | — | ✅ |
+| CSV export | — | ✅ |
+| Custom reminders, mark reordering, pace projection | ✅ | ✅ |
+| Share card | **Not shipping** | **Not shipping** |
 
-> **Share cards:** preset share-card designs are free — finishing a goal is a moment any
-> user should be able to share. Livra+ adds *custom* designs (themes, layout, branding), so
-> the upgrade sells expression, not the ability to share at all.
+> **What changed and why, so this does not drift again:**
+>
+> - **Marks per goal was 3; the enforced number is 4** (`FREE_MARKS_PER_GOAL`).
+> - **"Daily habit marks (un-goaled), up to 3" is retired.** `gating.ts:5` says so
+>   explicitly: there is no separate bucket, and `FREE_MARK_CEILING` (6) counts
+>   goal-linked and unlinked marks together. The row is replaced by the account
+>   ceiling, which is the rule that exists.
+> - **Custom reminders, mark reordering and pace projection are NOT gated.** No
+>   gating function covers them and no code path checks `isPro` for any of the
+>   three — the table sold three free features as paid. Only `canExportData` and
+>   the Health auto-sync gate (`lib/health/autoSync.ts:267`) are real, alongside
+>   the three limits.
+> - **Share cards do not ship.** The goal-completion share card is hidden behind
+>   `SHARE_CARD_ENABLED` (2026-08-08, founder ruling: not in V2). Nothing is
+>   deleted, so this row returns as "✅ Preset designs / ✅ Custom designs" if the
+>   flag is ever flipped — and the paywall row and the store listing must come
+>   back with it, since both were selling it after the feature was hidden.
+>
+> This table is a claim about code. When it and `lib/gating.ts` disagree,
+> `gating.ts` is right and this file is the bug.
 
+> **SUPERSEDED 2026-08-08 — the share card is HIDDEN and does not ship in V2
+> (`lib/sharing/shareCardEnabled.ts`). Nothing below is deleted and all of it returns
+> if the flag is flipped; it simply does not describe the shipping app today.**
+>
 > **Stress point — RESOLVED (Phase 2.2):** Sharing the completion card is now free (the inline
 > Pro bounce in `app/goal/complete.tsx` is gone). Customization is the Livra+ tier:
 > `canCustomizeShareCard(isPro)` in `lib/gating.ts` gates a 4-theme picker, accent swatches, and
@@ -465,7 +493,9 @@ goal — Livra+ adds room, not the basics.
 - [ ] History, stats, and presets are never behind the paywall.
 - [ ] The free AI generation discloses it's one-time *before* it's spent; presets/templates
       remain a full free path to a first goal.
-- [ ] Preset share cards work for free users; only custom designs are Livra+.
+- [x] N/A while the share card is hidden (`SHARE_CARD_ENABLED`, 2026-08-08 founder ruling:
+      not in V2). Restore this gate when the flag is flipped — with the paywall row and the
+      store listing, both of which kept selling the feature after it was hidden.
 - [ ] Upsell language is soft and contextual — no fake urgency, no full-screen interruption
       of the core loop.
 
@@ -540,7 +570,7 @@ real app against each line.
 - [ ] No part of the core loop is paywalled; history/stats/presets are free.
 - [ ] The free AI generation discloses it's one-time before it's spent; presets are a full
       free path to a first goal.
-- [ ] Preset share cards work for free; only custom designs are Livra+.
+- [x] N/A while the share card is hidden (`SHARE_CARD_ENABLED`). Restore with the flag.
 - [ ] Upsells are soft and contextual — no fake urgency, no full-screen interruption.
 
 **Feel (anti-references)**
