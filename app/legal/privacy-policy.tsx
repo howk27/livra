@@ -37,7 +37,7 @@ export default function PrivacyPolicyScreen() {
           showsVerticalScrollIndicator={false}
         >
           <AppText variant="caption" style={[styles.lastUpdated, { color: c.inkMuted }]}>
-            Last updated: August 5, 2026
+            Last updated: August 9, 2026
           </AppText>
 
           <AppText variant="body" style={[styles.paragraph, { color: c.inkDark }]}>
@@ -161,6 +161,90 @@ export default function PrivacyPolicyScreen() {
             </AppText>
           </View>
 
+          {/* 1.5 — AI drafting, added 2026-08-09. The policy said nothing about
+              AI while typed goal text was leaving the device AND being retained.
+              Grounded facts only:
+                - model + provider + endpoint: supabase/functions/ai-goal-generation/index.ts:47-48
+                  (api.openai.com, gpt-4o-mini); key read from Deno.env at :249, so
+                  it is server-side only
+                - what is sent: goalText + optional context (capped 400 chars,
+                  index.ts:56, :272) and the app's own prompt scaffolding
+                  (buildSystemPrompt/buildUserMessage, :150-193). No name, email
+                  or user id is put in the message body (:207-215)
+                - what is retained: public.ai_goal_packages — goal_text,
+                  goal_text_normalized, package_json, confirmed, user_id,
+                  created_at (20260613_ai_uses.sql:24-36). Written CLIENT-side on
+                  confirm+activate only (lib/ai/goalGeneration.ts:354-376, called
+                  from lib/goals/createFromAIPackage.ts:169 and
+                  app/onboarding.tsx:341) — a discarded draft writes no row
+                - who can read it: RLS SELECT is auth.uid() = user_id
+                  (20260613_ai_uses.sql:50-51)
+                - deletion: there is NO DELETE policy on the table (only
+                  INSERT/SELECT/UPDATE), so a user cannot remove one saved draft;
+                  the FK is REFERENCES auth.users(id) ON DELETE CASCADE
+                  (:26) and 20260614_delete_account_cascade_check.sql asserts that
+                  cascade, so account deletion DOES remove these rows. The text
+                  below promises exactly that and nothing more.
+                - rate-limit rows: ai_generation_events holds id/user_id/created_at
+                  only, pruned past 25 hours
+                  (20260727_ai_generation_rate_limit.sql:47-51, :105-107)
+                - the training/30-day sentence is OpenAI's published API policy,
+                  verified 2026-08-09 at developers.openai.com/api/docs/guides/your-data,
+                  and is attributed to them on purpose — it is not our guarantee.
+              Mirrors the Terms section 6; do not write that goal text is only
+              relayed or not stored. It is stored. */}
+          <AppText variant="body" style={[styles.subsectionTitle, { color: c.inkDark }]}>
+            1.5. AI Goal Drafting (Optional)
+          </AppText>
+          <AppText variant="body" style={[styles.paragraph, { color: c.inkDark }]}>
+            AI goal drafting is optional and runs only when you ask for a draft. When you do, the
+            goal text you type, plus any optional context you add (up to 400 characters), is sent
+            from your device to our server, and from our server to OpenAI, which returns a suggested
+            goal and marks. The model used is gpt-4o-mini. Our access key stays on our server and is
+            not included in the app.
+          </AppText>
+          <View style={styles.bulletList}>
+            <AppText variant="body" style={[styles.bulletItem, { color: c.inkDark }]}>
+              • What goes to OpenAI: the goal text you type, the optional context, and the
+              instructions our app sends with it. We do not put your name, email address, or account
+              identifier in that request
+            </AppText>
+            <AppText variant="body" style={[styles.bulletItem, { color: c.inkDark }]}>
+              • What we keep: when you create a goal from a draft, we save the goal text you typed, a
+              simplified copy of that text used to recognise repeat requests, and the generated plan.
+              These are stored on our servers, in your account, alongside your other data. A draft
+              you discard is not saved
+            </AppText>
+            <AppText variant="body" style={[styles.bulletItem, { color: c.inkDark }]}>
+              • Why we keep it: so that asking for the same goal again returns your saved plan
+              instead of calling the model a second time
+            </AppText>
+            <AppText variant="body" style={[styles.bulletItem, { color: c.inkDark }]}>
+              • Who can see it: database access rules limit these records to your own account. Our
+              administrators can access them to operate, support, and troubleshoot the service
+            </AppText>
+            <AppText variant="body" style={[styles.bulletItem, { color: c.inkDark }]}>
+              • How long we keep it: until you delete your account, which removes these records along
+              with the rest of your data. The App does not currently offer a way to delete a single
+              saved goal text on its own, and deleting a goal in the App does not remove it. To have
+              them removed sooner, email support@livralife.com or delete your account
+            </AppText>
+            <AppText variant="body" style={[styles.bulletItem, { color: c.inkDark }]}>
+              • Training: OpenAI publishes that data sent through its API is not used to train or
+              improve its models unless the developer opts in, and that it is retained by OpenAI for
+              up to 30 days for abuse monitoring and then deleted. That is the policy OpenAI states
+              for API use; it is set and applied by OpenAI, not by us
+            </AppText>
+            <AppText variant="body" style={[styles.bulletItem, { color: c.inkDark }]}>
+              • Usage limits: we record the time of each AI request against your account so we can
+              apply hourly and daily limits. Those records hold no goal text and are removed after
+              about a day
+            </AppText>
+            <AppText variant="body" style={[styles.bulletItem, { color: c.inkDark }]}>
+              • AI drafts are suggestions, not professional advice, and can be wrong or incomplete
+            </AppText>
+          </View>
+
           {/* Section 2 */}
           <AppText variant="subtitle" style={[styles.sectionTitle, { color: c.inkDark }]}>
             2. How We Use Your Information
@@ -183,6 +267,9 @@ export default function PrivacyPolicyScreen() {
             </AppText>
             <AppText variant="body" style={[styles.bulletItem, { color: c.inkDark }]}>
               • Communicate account-related information
+            </AppText>
+            <AppText variant="body" style={[styles.bulletItem, { color: c.inkDark }]}>
+              • Generate and save the AI goal drafts you ask for, as described in section 1.5
             </AppText>
           </View>
           <AppText variant="body" style={[styles.paragraph, { color: c.inkDark }]}>
@@ -211,6 +298,10 @@ export default function PrivacyPolicyScreen() {
               • Service providers (analytics, authentication, crash reporting)
             </AppText>
             <AppText variant="body" style={[styles.bulletItem, { color: c.inkDark }]}>
+              • OpenAI, in the United States, which receives the goal text and optional context you
+              submit for AI goal drafting, as described in section 1.5
+            </AppText>
+            <AppText variant="body" style={[styles.bulletItem, { color: c.inkDark }]}>
               • Legal authorities if required by law
             </AppText>
           </View>
@@ -234,7 +325,10 @@ export default function PrivacyPolicyScreen() {
             5.2. Deletion
           </AppText>
           <AppText variant="body" style={[styles.paragraph, { color: c.inkDark }]}>
-            You may delete your account anytime to remove personal data.
+            You may delete your account anytime to remove personal data. Deleting your account also
+            removes the AI goal drafts saved under it, described in section 1.5. The App does not
+            currently offer a way to delete an individual saved goal text on its own; email
+            support@livralife.com if you want one removed.
           </AppText>
 
           <AppText variant="body" style={[styles.subsectionTitle, { color: c.inkDark }]}>
