@@ -38,6 +38,7 @@ import { useGoals } from '@/lib/data/goals';
 import { useMarksByGoal } from '@/lib/data/marks';
 import { asDataError } from '@/lib/data/errors';
 import { caughtErrorCopy, dataErrorCopy } from '@/lib/copy';
+import { resolveRowCadence } from '@/lib/markCadence';
 import { useUserCheckins } from '@/lib/data/checkins';
 import { totalsByMark } from '@/lib/data/derived';
 import { currentWeekDates, computeCompletionsThisWeek } from '../../lib/features';
@@ -129,6 +130,7 @@ function toGoal(row: GoalRow, linkedMarkIds: string[]): Goal {
 // `total` is DERIVED from the event log (M9 Phase 4) — the stored `marks.total`
 // left the client contract; Phase 3 had already stopped maintaining it.
 function toMark(row: MarkRow, totals: ReadonlyMap<string, number>): Mark {
+  const cadence = resolveRowCadence(row, row);
   return {
     id: row.id,
     user_id: row.user_id,
@@ -144,12 +146,12 @@ function toMark(row: MarkRow, totals: ReadonlyMap<string, number>): Mark {
     created_at: row.created_at ?? '',
     updated_at: row.updated_at ?? '',
     maintenance_of: row.maintenance_of,
-    frequency_min: row.frequency_min,
-    frequency_recommended: row.frequency_recommended,
-    frequency_max: row.frequency_max,
-    weekly_target: row.weekly_target,
+    frequency_min: cadence.frequency_min,
+    frequency_recommended: cadence.frequency_recommended,
+    frequency_max: cadence.frequency_max,
+    weekly_target: cadence.weekly_target,
     dailyTarget: row.dailyTarget,
-    frequency_kind: row.frequency_kind as FrequencyKind | null,
+    frequency_kind: cadence.frequency_kind,
   };
 }
 
