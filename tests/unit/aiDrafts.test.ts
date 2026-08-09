@@ -1,0 +1,111 @@
+// Erasure for saved AI goal drafts (ai_goal_packages holds the user's typed
+// goal text verbatim). Founder decision 2026-08-09: build the real control
+// rather than route people to a support email.
+
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import { deleteSavedAiDrafts, countSavedAiDrafts } from '@/lib/data/mutations/aiDrafts';
+import { setSupabaseClientOverride } from '@/lib/supabase';
+
+jest.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: null }) }));
+
+const USER = '3fe1a23e-2ec2-4830-a68b-42b65fc3bcb0';
+const OTHER = 'a3e8ffaf-a013-41a4-a86b-572da101a04d';
+
+type Call = { table: string; method: string; args: unknown[] };
+
+function makeClient(result: { data: unknown; error: unknown; count?: number }) {
+  const calls: Call[] = [];
+  const from = jest.fn((table: string) => {
+    const builder: Record<string, unknown> = {};
+    const chain =
+      (method: string) =>
+      (...args: unknown[]) => {
+        calls.push({ table, method, args });
+        return builder;
+      };
+    for (const m of ['select', 'delete', 'eq', 'insert', 'update']) {
+      builder[m] = jest.fn(chain(m));
+    }
+    builder.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) =>
+      Promise.resolve(result).then(res, rej);
+    return builder;
+  });
+  setSupabaseClientOverride({ from } as never);
+  return { calls, from };
+}
+
+afterEach(() => setSupabaseClientOverride(null as never));
+
+describe('deleteSavedAiDrafts', () => {
+  it('deletes from ai_goal_packages, scoped to the user', async () => {
+    const { calls } = makeClient({ data: [{ id: 'a' }, { id: 'b' }], error: null });
+    const n = await deleteSavedAiDrafts(USER);
+
+    expect(n).toBe(2);
+    expect(calls.some((c) => c.method === 'delete' && c.table === 'ai_goal_packages')).toBe(true);
+    const eqs = calls.filter((c) => c.method === 'eq');
+    expect(eqs).toHaveLength(1);
+    expect(eqs[0].args).toEqual(['user_id', USER]);
+  });
+
+  it('reports 0 rather than throwing when there was nothing to erase', async () => {
+    makeClient({ data: [], error: null });
+    await expect(deleteSavedAiDrafts(USER)).resolves.toBe(0);
+  });
+
+  it('scopes by the id it was given — never a wildcard delete', async () => {
+    const { calls } = makeClient({ data: [], error: null });
+    await deleteSavedAiDrafts(OTHER);
+    // RLS is the real boundary; this pins that the statement never goes
+    // unfiltered, which is what would make a bug catastrophic instead of refused.
+    expect(calls.filter((c) => c.method === 'eq')[0].args).toEqual(['user_id', OTHER]);
+  });
+
+  it('surfaces a refusal as a DataError instead of swallowing it', async () => {
+    makeClient({ data: null, error: { code: '42501', message: 'denied' } });
+    await expect(deleteSavedAiDrafts(USER)).rejects.toMatchObject({ kind: 'permission' });
+  });
+});
+
+describe('countSavedAiDrafts', () => {
+  it('counts without fetching the rows', async () => {
+    const { calls } = makeClient({ data: null, error: null, count: 3 });
+    await expect(countSavedAiDrafts(USER)).resolves.toBe(3);
+    const select = calls.find((c) => c.method === 'select');
+    expect(select?.args[1]).toMatchObject({ head: true, count: 'exact' });
+  });
+
+  it('treats a null count as 0', async () => {
+    makeClient({ data: null, error: null });
+    await expect(countSavedAiDrafts(USER)).resolves.toBe(0);
+  });
+});
+
+describe('GUARD: the D-8 hard-delete exception stays exactly one call', () => {
+  // D-8 forbids hard deletes and every other mutation tombstones via deleted_at.
+  // This module is the deliberate exception, because a tombstone would leave
+  // goal_text in the row and make the privacy policy's deletion sentence untrue.
+  // If a second .delete() ever appears in the mutations directory, that is the
+  // one to question — so this fails when the exception spreads.
+  const MUTATIONS = join(__dirname, '..', '..', 'lib', 'data', 'mutations');
+
+  it('ai_goal_packages is the only table any mutation hard-deletes', () => {
+    const files = require('fs').readdirSync(MUTATIONS) as string[];
+    const offenders: string[] = [];
+    for (const f of files.filter((n) => n.endsWith('.ts'))) {
+      const src = readFileSync(join(MUTATIONS, f), 'utf8')
+        // Strip comments — this repo has three times shipped a source scan that
+        // matched prose instead of code.
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/^\s*\/\/.*$/gm, '');
+      if (/\.delete\s*\(/.test(src) && f !== 'aiDrafts.ts') offenders.push(f);
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('the scan is non-vacuous — it finds an injected .delete()', () => {
+    const src = 'const x = client.from("goals").delete().eq("id", id);';
+    expect(/\.delete\s*\(/.test(src)).toBe(true);
+  });
+});

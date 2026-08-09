@@ -188,9 +188,17 @@ export default function PrivacyPolicyScreen() {
                 - rate-limit rows: ai_generation_events holds id/user_id/created_at
                   only, pruned past 25 hours
                   (20260727_ai_generation_rate_limit.sql:47-51, :105-107)
-                - the training/30-day sentence is OpenAI's published API policy,
-                  verified 2026-08-09 at developers.openai.com/api/docs/guides/your-data,
-                  and is attributed to them on purpose — it is not our guarantee.
+                - training/retention: FOUNDER-CONFIRMED 2026-08-09 — the Livra
+                  OpenAI org has NOT opted in to data sharing, and Zero Data
+                  Retention IS enabled. So the generic "retained up to 30 days
+                  for abuse monitoring" line that applies to ordinary API use
+                  does NOT apply to us, and saying it would have been a third
+                  wrong retention claim in this codebase. Re-confirm both toggles
+                  in the OpenAI dashboard before restating them; they are account
+                  settings that can change without any commit here.
+                - deletion is now a real control, not a support email:
+                  ai_packages_delete RLS policy (20260809_ai_goal_packages_user_delete.sql)
+                  + lib/data/mutations/aiDrafts.ts + Settings › Data.
               Mirrors the Terms section 6; do not write that goal text is only
               relayed or not stored. It is stored. */}
           <AppText variant="body" style={[styles.subsectionTitle, { color: c.inkDark }]}>
@@ -224,16 +232,17 @@ export default function PrivacyPolicyScreen() {
               administrators can access them to operate, support, and troubleshoot the service
             </AppText>
             <AppText variant="body" style={[styles.bulletItem, { color: c.inkDark }]}>
-              • How long we keep it: until you delete your account, which removes these records along
-              with the rest of your data. The App does not currently offer a way to delete a single
-              saved goal text on its own, and deleting a goal in the App does not remove it. To have
-              them removed sooner, email support@livralife.com or delete your account
+              • How long we keep it: until you delete it or delete your account. Settings › Data ›
+              Delete Saved AI Drafts removes every saved goal text from your account at any time,
+              and it does not touch the goals or marks you already created. Deleting a goal on its
+              own does not remove the saved text
             </AppText>
             <AppText variant="body" style={[styles.bulletItem, { color: c.inkDark }]}>
-              • Training: OpenAI publishes that data sent through its API is not used to train or
-              improve its models unless the developer opts in, and that it is retained by OpenAI for
-              up to 30 days for abuse monitoring and then deleted. That is the policy OpenAI states
-              for API use; it is set and applied by OpenAI, not by us
+              • Training and retention at OpenAI: we have not opted in to data sharing, so OpenAI
+              does not use what we send to train or improve its models. Our account also has Zero
+              Data Retention enabled, which means OpenAI does not store the request after it answers
+              — the 30-day abuse-monitoring window that applies to ordinary API use does not apply
+              to ours
             </AppText>
             <AppText variant="body" style={[styles.bulletItem, { color: c.inkDark }]}>
               • Usage limits: we record the time of each AI request against your account so we can
@@ -326,9 +335,9 @@ export default function PrivacyPolicyScreen() {
           </AppText>
           <AppText variant="body" style={[styles.paragraph, { color: c.inkDark }]}>
             You may delete your account anytime to remove personal data. Deleting your account also
-            removes the AI goal drafts saved under it, described in section 1.5. The App does not
-            currently offer a way to delete an individual saved goal text on its own; email
-            support@livralife.com if you want one removed.
+            removes the AI goal drafts saved under it, described in section 1.5. You can remove
+            those separately at any time, without deleting your account, from Settings › Data ›
+            Delete Saved AI Drafts.
           </AppText>
 
           <AppText variant="body" style={[styles.subsectionTitle, { color: c.inkDark }]}>

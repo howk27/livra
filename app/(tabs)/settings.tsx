@@ -17,6 +17,7 @@ import {
   Star,
   Sun,
   DownloadSimple,
+  Sparkle,
   Question,
   ChatText,
   Gauge,
@@ -61,6 +62,7 @@ import { canExportData } from '../../lib/gating';
 import { logger } from '../../lib/utils/logger';
 import { useNotification } from '../../contexts/NotificationContext';
 import { useProfileAvatar } from '../../hooks/useProfileAvatar';
+import { deleteSavedAiDrafts, countSavedAiDrafts } from '../../lib/data/mutations/aiDrafts';
 import {
   getPace,
   setPace,
@@ -385,6 +387,43 @@ export default function SettingsScreen() {
     }
   };
 
+  /**
+   * Erase the saved AI goal drafts — the verbatim goal text `ai_goal_packages`
+   * keeps so a repeated request can skip the model call.
+   *
+   * Counted BEFORE the confirmation so the prompt can say what erasing would
+   * actually do. A control that asks "are you sure?" and then reports nothing
+   * happened is a control that teaches people their taps are meaningless, and
+   * this one carries a privacy promise, so it has to be legible.
+   *
+   * Not gated on Livra+: an erasure control behind a paywall is not an erasure
+   * control.
+   */
+  const handleDeleteAiDrafts = async () => {
+    if (!user?.id) return;
+    try {
+      const count = await countSavedAiDrafts(user.id);
+      if (count === 0) {
+        showSuccess('No saved AI drafts to delete.');
+        return;
+      }
+      const agreed = await confirm({
+        title: count === 1 ? 'Delete 1 saved draft?' : `Delete ${count} saved drafts?`,
+        message:
+          'Livra saves the goal text you typed so asking again returns the same plan without calling the model. Deleting it does not touch the goals or marks you already created.',
+        confirmLabel: 'Delete',
+        cancelLabel: 'Keep',
+        destructive: true,
+      });
+      if (!agreed) return;
+
+      const deleted = await deleteSavedAiDrafts(user.id);
+      showSuccess(deleted === 1 ? '1 saved draft deleted.' : `${deleted} saved drafts deleted.`);
+    } catch (e) {
+      showError(caughtErrorCopy(e));
+    }
+  };
+
   const handleExportMarks = async () => {
     if (!canExportData(isProUnlocked)) {
       const seePlus = await confirm({
@@ -657,8 +696,16 @@ export default function SettingsScreen() {
             icon={DownloadSimple}
             label="Export Marks"
             onPress={handleExportMarks}
+          />
+          <SettingsRow
+            icon={Sparkle}
+            label="Delete Saved AI Drafts"
+            onPress={handleDeleteAiDrafts}
             isLast
           />
+          <Text style={[styles.paceFootnote, { color: c.inkMuted }]}>
+            Removes the goal text you typed for AI drafting. Your goals and marks stay.
+          </Text>
         </SettingsCard>
 
         {/* ── SUPPORT ── */}
