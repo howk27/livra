@@ -54,7 +54,7 @@ import { applyOpacity } from '../../src/components/icons/color';
 import { useMotion } from '../../hooks/useMotion';
 import { GoalCardMedallion } from '../../components/goals/GoalCardMedallion';
 import type { Goal } from '../../types/goal';
-import type { Mark, MarkEvent, FrequencyKind } from '../../types';
+import type { Mark, MarkEvent } from '../../types';
 import type { GoalRow, MarkRow, MarkEventRow } from '@/lib/data/types';
 import type { TierId, FrequencyId } from '../../lib/goalMarkSuggestions';
 

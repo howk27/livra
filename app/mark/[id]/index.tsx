@@ -81,7 +81,7 @@ import { totalsByMark } from '@/lib/data/derived';
 import { useGoals } from '@/lib/data/goals';
 import { resolveRowCadence } from '@/lib/markCadence';
 import type { GoalRow, MarkRow, MarkEventRow } from '@/lib/data/types';
-import type { Mark, MarkEvent, FrequencyKind } from '../../../types';
+import type { Mark, MarkEvent } from '../../../types';
 import type { Goal } from '../../../types/goal';
 import type { TierId, FrequencyId } from '../../../lib/goalMarkSuggestions';
 

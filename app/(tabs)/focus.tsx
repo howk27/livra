@@ -77,7 +77,7 @@ import {
   SpotlightGoalCard,
 } from '../../components/focus/GoalCards';
 
-import type { Counter, Mark, MarkEvent, FrequencyKind } from '../../types';
+import type { Counter, Mark, MarkEvent } from '../../types';
 import type { Goal } from '../../types/goal';
 // M9 Phase 2 Task 4 — reads come from the query layer.
 import { useQueryClient } from '@tanstack/react-query';

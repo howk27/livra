@@ -41,7 +41,7 @@ import {
   headerControlBoxLeading,
   headerControlBoxTrailing,
 } from '../../theme/tokens';
-import type { Mark, MarkEvent, GoalNote, FrequencyKind } from '../../types';
+import type { Mark, MarkEvent, GoalNote } from '../../types';
 import type { Goal } from '../../types/goal';
 import type { GoalRow, MarkRow, MarkEventRow } from '@/lib/data/types';
 import type { TierId, FrequencyId } from '../../lib/goalMarkSuggestions';

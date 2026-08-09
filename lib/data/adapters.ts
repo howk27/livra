@@ -9,7 +9,7 @@
 // canonical copies in app/(tabs)/goals.tsx.
 
 import type { Goal } from '@/types/goal';
-import type { Mark, MarkEvent, FrequencyKind } from '@/types';
+import type { Mark, MarkEvent } from '@/types';
 import type { GoalRow, MarkRow, MarkEventRow } from '@/lib/data/types';
 import type { TierId, FrequencyId } from '@/lib/goalMarkSuggestions';
 import { resolveRowCadence } from '@/lib/markCadence';
