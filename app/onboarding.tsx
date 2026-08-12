@@ -563,6 +563,16 @@ export default function OnboardingScreen() {
           })}
         </View>
 
+        {/* App Review 2026-08-12: HealthKit functionality must be clearly
+            identified in the UI. This names Apple Health on a screen every new
+            user passes; the connect surfaces stay Settings → Integrations and
+            the mark detail screen. iOS-only — Android has no Apple Health. */}
+        {Platform.OS === 'ios' && (
+          <Text style={styles.paceFootnote}>
+            Marks like Sleep, Workout, and Steps can auto-log from Apple Health.
+            Connect anytime in Settings → Integrations.
+          </Text>
+        )}
         <Text style={styles.paceFootnote}>
           Free tier includes up to 4 marks per goal · 6 marks in total.
         </Text>

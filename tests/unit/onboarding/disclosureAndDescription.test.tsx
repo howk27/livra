@@ -208,6 +208,35 @@ describe('Task 10: upfront AI disclosure in onboarding step 1', () => {
   });
 });
 
+// ─── App Review 2026-08-12: HealthKit identification on the marks screen ──────
+// Apple rejected 2.0.0 for not "clearly identifying" HealthKit functionality in
+// the UI. Onboarding step 3 now names Apple Health on iOS (jest's default
+// Platform.OS). If this copy is removed, the App Store rejection comes back.
+
+describe('HealthKit identification in onboarding step 3', () => {
+  beforeEach(() => {
+    useOnboardingStore.getState().reset();
+    jest.clearAllMocks();
+  });
+
+  test('the marks screen names Apple Health on iOS', async () => {
+    const { getByText, findByText } = renderAtStep1();
+
+    await act(async () => {
+      useOnboardingStore.getState().setGoalTitle('Run a half marathon');
+    });
+    // Step 1 → 2 (goal title) → 3 (pace Continue)
+    await act(async () => {
+      fireEvent.press(getByText('Next →'));
+    });
+    await act(async () => {
+      fireEvent.press(getByText('Continue'));
+    });
+
+    expect(await findByText(/auto-log from Apple Health/)).toBeTruthy();
+  }, 20000);
+});
+
 // ─── Task 11: Editable description in AI review ───────────────────────────────
 
 describe('Task 11: editable description in AI review', () => {
