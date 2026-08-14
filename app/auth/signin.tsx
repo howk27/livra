@@ -41,7 +41,10 @@ export default function SignInScreen() {
   const supabase = getSupabaseClient();
   const { requestPermissions, permissionGranted } = useNotifications();
 
-  const [mode, setMode] = useState<AuthMode>('login');
+  // Fresh installs are almost always new users, so the screen opens on sign-up;
+  // returning users reach login via the toggle (and the not-found/already-
+  // registered flows below still switch modes automatically).
+  const [mode, setMode] = useState<AuthMode>('signup');
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
   const [password, setPassword] = useState('');
