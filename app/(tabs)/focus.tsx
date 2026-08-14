@@ -601,10 +601,17 @@ export default function FocusScreen() {
   // ever, no logs ever) from one who cleared everything out. uniqueCounters
   // keeps soft-deleted marks; allEvents keeps soft-deleted logs — both are the
   // historical trace the derivation reads.
-  const emptyMarksLine = useMemo(
-    () => getEmptyStateCopy('focus', deriveFocusEmptyVariant(uniqueCounters, allEvents)).body,
+  const emptyVariant = useMemo(
+    () => deriveFocusEmptyVariant(uniqueCounters, allEvents),
     [uniqueCounters, allEvents],
   );
+  const emptyMarksLine = useMemo(
+    () => getEmptyStateCopy('focus', emptyVariant).body,
+    [emptyVariant],
+  );
+  // "first" is only true on a genuine first run; a user who cleared everything
+  // out gets the neutral ask.
+  const emptyCtaLabel = emptyVariant === 'firstRun' ? 'Create your first goal' : 'Start a new goal';
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -975,14 +982,21 @@ export default function FocusScreen() {
 
         {/* ── Empty state (no marks at all) ── */}
         {activeCounters.length === 0 && !loading && (
-          <View style={[styles.emptyMarks, { backgroundColor: c.surface }]}>
+          <TouchableOpacity
+            style={[styles.emptyMarks, { backgroundColor: c.surface }]}
+            onPress={() => router.push('/goal/new' as any)}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel={emptyCtaLabel}
+          >
             <Breathing>
               <Plus size={20} color={c.inkMuted} weight="duotone" />
             </Breathing>
             <Text style={[styles.emptyMarksText, { color: c.inkMid }]}>
               {emptyMarksLine}
             </Text>
-          </View>
+            <Text style={[styles.emptyMarksCta, { color: c.accent }]}>{emptyCtaLabel}</Text>
+          </TouchableOpacity>
         )}
 
         <View style={styles.bottomSpacer} />
@@ -1081,6 +1095,12 @@ const styles = StyleSheet.create({
     fontFamily: fonts.sansItalic,
     fontSize: fontSize.lg,
     lineHeight: 22,
+    textAlign: 'center',
+  },
+  emptyMarksCta: {
+    fontFamily: fonts.sansMedium,
+    fontSize: fontSize.md,
+    marginTop: spacing.xs,
     textAlign: 'center',
   },
 
