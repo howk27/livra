@@ -1,5 +1,5 @@
 // tests/unit/iapPrice.test.ts
-import { parseLocalizedPrice, priceToNumber } from '../../lib/iap/price';
+import { parseLocalizedPrice, priceToNumber, formatPriceLike } from '../../lib/iap/price';
 
 describe('parseLocalizedPrice', () => {
   it('parses US-style group/decimal separators', () => {
@@ -48,5 +48,36 @@ describe('priceToNumber', () => {
     expect(priceToNumber(NaN)).toBe(0);
     expect(priceToNumber(null, null)).toBe(0);
     expect(priceToNumber(undefined)).toBe(0);
+  });
+});
+
+describe('formatPriceLike', () => {
+  it('keeps a leading symbol and US decimal style', () => {
+    expect(formatPriceLike('$24.99', 24.99 / 12)).toBe('$2.08');
+  });
+
+  it('keeps a trailing symbol and EU comma decimal', () => {
+    expect(formatPriceLike('24,99 €', 24.99 / 12)).toBe('2,08 €');
+  });
+
+  it('keeps grouped EU prices intact around the replaced number', () => {
+    expect(formatPriceLike('1.234,56 €', 102.88)).toBe('102,88 €');
+  });
+
+  it('rounds to whole units when the template has no decimals (e.g. JPY)', () => {
+    expect(formatPriceLike('¥3800', 3800 / 12)).toBe('¥317');
+  });
+
+  it('formats a bare numeric template (raw price fallback, no symbol)', () => {
+    expect(formatPriceLike('24.99', 24.99 / 12)).toBe('2.08');
+  });
+
+  it("returns '' rather than guessing a currency", () => {
+    expect(formatPriceLike('', 2.08)).toBe('');
+    expect(formatPriceLike(null, 2.08)).toBe('');
+    expect(formatPriceLike(undefined, 2.08)).toBe('');
+    expect(formatPriceLike('Free', 2.08)).toBe('');
+    expect(formatPriceLike('$24.99', 0)).toBe('');
+    expect(formatPriceLike('$24.99', NaN)).toBe('');
   });
 });

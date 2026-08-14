@@ -32,6 +32,32 @@ export function parseLocalizedPrice(input: string | null | undefined): number {
  * locale-aware parsing of the localized/formatted display string. Never
  * returns NaN.
  */
+/**
+ * Format a derived value (e.g. the yearly price ÷ 12) in the same style as a
+ * localized price string from the store, so the currency symbol, its position,
+ * and the decimal separator all come from the storefront — never hardcoded.
+ * "24,99 €" + 2.0825 → "2,08 €"; "$24.99" → "$2.08"; "¥3800" → "¥317".
+ * Returns '' when the template has no digits or the value is not positive —
+ * callers drop the line rather than show a wrong currency.
+ */
+export function formatPriceLike(
+  template: string | null | undefined,
+  value: number
+): string {
+  if (!template || !Number.isFinite(value) || value <= 0) return '';
+  const s = String(template);
+  const match = s.match(/[0-9][0-9.,\s ]*[0-9]|[0-9]/);
+  if (!match) return '';
+  const numeric = match[0];
+  const lastComma = numeric.lastIndexOf(',');
+  const lastDot = numeric.lastIndexOf('.');
+  const decimalSep = lastComma > lastDot ? ',' : lastDot > -1 ? '.' : '';
+  const formatted = decimalSep
+    ? value.toFixed(2).replace('.', decimalSep)
+    : String(Math.round(value));
+  return s.replace(numeric, formatted);
+}
+
 export function priceToNumber(
   rawPrice: string | number | null | undefined,
   formatted?: string | null

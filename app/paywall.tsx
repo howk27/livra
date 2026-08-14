@@ -37,7 +37,7 @@ import {
 import { useEffectiveTheme } from '../state/uiSlice';
 import { useIapSubscriptions } from '../hooks/useIapSubscriptions';
 import { MONTHLY_PRODUCT_ID, YEARLY_PRODUCT_ID } from '../lib/iap/iap';
-import { parseLocalizedPrice, priceToNumber } from '../lib/iap/price';
+import { parseLocalizedPrice, priceToNumber, formatPriceLike } from '../lib/iap/price';
 import { paywallAutoCloseStep } from '../lib/iap/paywallAutoClose';
 import { logger } from '../lib/utils/logger';
 import { SHARE_CARD_ENABLED } from '../lib/sharing/shareCardEnabled';
@@ -125,7 +125,9 @@ function PaywallScreenContent() {
   const isDark = theme === 'dark';
   const router = useRouter();
   const { showSuccess, showError, showInfo } = useNotification();
-  const [selectedPlan, setSelectedPlan] = useState<PlanType>('monthly');
+  // Yearly is the default selection: it carries the "Best value" badge, and the
+  // anchor should match the badge rather than sit one card above it.
+  const [selectedPlan, setSelectedPlan] = useState<PlanType>('yearly');
   
   // STEP 5: Restore message state
   const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
@@ -403,9 +405,13 @@ function PaywallScreenContent() {
   const monthlyEquivalent = (yearlyPriceAsNumber > 0 && !isNaN(yearlyPriceAsNumber))
     ? yearlyPriceAsNumber / 12
     : 0;
-  const pricePerMonth = monthlyEquivalent > 0 && !isNaN(monthlyEquivalent)
-    ? `$${monthlyEquivalent.toFixed(2)}`
-    : '';
+  // Formatted in the storefront's own style (symbol, position, decimal
+  // separator) — a hardcoded "$" here showed mixed currency to non-USD users.
+  // '' when the style can't be derived; the render drops the line on ''.
+  const pricePerMonth = formatPriceLike(
+    yearlyProduct?.localizedPrice || yearlyProduct?.price,
+    monthlyEquivalent
+  );
   
   // Safe savings calculation with NaN checks
   const savingsPercent = (monthlyPriceAsNumber > 0 && yearlyPriceAsNumber > 0 && 
