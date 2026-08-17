@@ -50,9 +50,10 @@ import {
   Check,
   CheckCircle,
   Flag,
+  Heart,
   Trash,
 } from 'phosphor-react-native';
-import { themedColors, spacing, borderRadius, fontSize, fontWeight, shadow, fonts } from '../../../theme/tokens';
+import { themedColors, spacing, borderRadius, fontSize, fontWeight, shadow, fonts, appleHealthRed } from '../../../theme/tokens';
 import { useEffectiveTheme } from '../../../state/uiSlice';
 import { LivraHeader } from '../../../components/ui/LivraHeader';
 import { frequencyLabel } from '../../../components/ui/MarkFrequencyPicker';
@@ -822,7 +823,16 @@ function MarkDetailContent() {
               legacy binding already exists so its owner can still disconnect. */}
           {Platform.OS === 'ios' && (healthKitType !== null || healthBinding !== null) && (
             <View style={styles.settingCard}>
-              <View style={styles.settingRow}>
+              <View style={[styles.settingRow, styles.healthRow]}>
+                {/* App Review 2.5.1 (the 2026-08-12 rejection) requires HealthKit
+                    to be CLEARLY identified in the UI, and this banner is one of
+                    the four surfaces cited in the reply to Apple. Founder asked
+                    2026-08-17 for a quieter banner — so the footprint shrinks
+                    (padding lg -> md) while identification gets STRONGER, not
+                    weaker: Apple's own signifier heart now leads the row where
+                    before there was only the words. Do not remove this glyph
+                    without re-reading that rejection. */}
+                <Heart size={16} color={appleHealthRed} weight="duotone" />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.settingLabel}>Apple Health</Text>
                   <Text style={styles.settingMeta}>
@@ -853,7 +863,7 @@ function MarkDetailContent() {
                   move. Second row inside the SAME card because it is a
                   property of the connection, not a separate setting. */}
               {healthValueKind && (
-                <View style={[styles.settingRow, styles.settingRowDivided]}>
+                <View style={[styles.settingRow, styles.healthRow, styles.settingRowDivided]}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.settingLabel}>{healthValueLabel(healthValueKind)}</Text>
                     <Text style={styles.settingMeta}>
@@ -1224,13 +1234,19 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     borderTopWidth: 1,
     borderTopColor: c.borderLight,
   },
-  settingIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
+  // The health banner sits lower than the other setting cards on purpose
+  // (founder 2026-08-17): spacing.md, not spacing.lg. The action box still
+  // carries its own minHeight 44, so the touch target is unchanged — only the
+  // breathing room around it shrinks.
+  healthRow: {
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    gap: spacing.sm,
   },
+  // (settingIcon deleted 2026-08-17: a 36pt tile defined here and referenced by
+  // nothing — the tenth orphaned block found in this file's style sheet. The
+  // health banner's heart is a bare glyph, no tile, which is what "quieter"
+  // asked for.)
   settingLabel: { fontSize: fontSize.md, fontFamily: fonts.sansMedium, color: c.inkDark },
   settingMeta: { fontSize: fontSize.sm, fontFamily: fonts.sans, color: c.inkMuted, marginTop: 2 },
   settingAction: { fontSize: fontSize[13], fontFamily: fonts.sansMedium, color: c.accent },

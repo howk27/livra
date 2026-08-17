@@ -116,6 +116,17 @@ const colorsDark: typeof colors = {
  * the widget's icon palette (`lib/widgets/widgetIcons.ts`) — the widget reads
  * these same hexes, so a change here crosses the TS/Swift boundary.
  */
+/**
+ * Apple Health's own signifier red, NOT a Livra hue — it is a foreign brand
+ * mark and is used only where the UI must be recognisably identifying Apple
+ * Health (App Review guideline 2.5.1: HealthKit functionality has to be clearly
+ * identified in the interface, which is what rejected 2.0.0 (1) on 2026-08-12).
+ * Two call sites: Settings > Integrations and the mark-detail health banner.
+ * Lived as a local const in integrations.tsx until 2026-08-17; shared here
+ * because the second consumer arrived and this repo bans hardcoded hex.
+ */
+export const appleHealthRed = '#FF2D55';
+
 export const categoryAccents = {
   recovery: '#6B8FA6',
   fitness: '#A0614A',

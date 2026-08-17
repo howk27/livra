@@ -167,6 +167,7 @@ import React from 'react';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import MarkDetailScreen from '../../app/mark/[id]/index';
 import { SLEEP_HOURS_DEFAULT, STEP_GOAL_FALLBACK } from '../../lib/health/healthDefaults';
+import { appleHealthRed } from '../../theme/tokens';
 
 const mockMarkRow = {
   id: 'mark-1',
@@ -305,5 +306,29 @@ describe('editing the threshold', () => {
 
     expect(mockSetBinding).not.toHaveBeenCalled();
     expect(api.getByText('A night counts at 8 hours of sleep.')).toBeTruthy();
+  });
+});
+
+describe('App Review 2.5.1 — the banner identifies Apple Health', () => {
+  // 2.0.0 (1) was REJECTED 2026-08-12 for not clearly identifying HealthKit in
+  // the UI, and this banner is one of the four surfaces named in the reply to
+  // Apple. The 2026-08-17 "make it less prominent" pass shrank the footprint;
+  // this pins the identification so a later quietening cannot delete it.
+  it('names Apple Health in words on a health-able mark', async () => {
+    mockBinding = { type: 'sleep', config: null };
+    const api = await mount();
+    expect(api.getByText('Apple Health')).toBeTruthy();
+  });
+
+  it('carries the heart glyph in Apple Health red, not a Livra hue', async () => {
+    mockBinding = { type: 'sleep', config: null };
+    const api = await mount();
+
+    // phosphor is stubbed to a bare View, so the glyph is identified by the
+    // colour prop reaching it rather than by the rendered path.
+    const reds = api.UNSAFE_root.findAll(
+      (n) => typeof n.type !== 'string' && n.props?.color === appleHealthRed,
+    );
+    expect(reds.length).toBeGreaterThan(0);
   });
 });

@@ -13,7 +13,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Heart, Plug, Check } from 'phosphor-react-native';
 import { LivraHeader } from '../../components/ui/LivraHeader';
 import { SectionLabel } from '../../components/ui/SectionLabel';
-import { fonts, spacing, radius, shadow, themedColors, fontSize } from '../../theme/tokens';
+import { fonts, spacing, radius, shadow, themedColors, fontSize, appleHealthRed } from '../../theme/tokens';
 import { useEffectiveTheme, useUIStore } from '../../state/uiSlice';
 import { requestPermissions, isHealthUnavailable } from '../../lib/health/healthPermissions';
 import type { HealthKitType } from '../../lib/health/healthTypes';
@@ -28,7 +28,9 @@ import { checkProStatus } from '../../lib/iap/iap';
 import { formatDate } from '../../lib/date';
 import { getAppDate } from '../../lib/appDate';
 
-const APPLE_HEALTH_RED = '#FF2D55';
+// Moved to theme/tokens.ts as `appleHealthRed` (2026-08-17) — the mark-detail
+// health banner became a second consumer.
+const APPLE_HEALTH_RED = appleHealthRed;
 
 // The full set the app can auto-log from; a single Connect grants them once.
 const HEALTH_CONNECT_TYPES: HealthKitType[] = [
