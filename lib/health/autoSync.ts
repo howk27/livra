@@ -42,6 +42,7 @@ import {
 } from './healthReader';
 import type { HealthKitBinding } from './healthKitBinding';
 import type { HealthKitType } from './healthTypes';
+import { STEP_GOAL_FALLBACK, SLEEP_HOURS_DEFAULT } from './healthDefaults';
 
 /** Account-scoped: registered in ACCOUNT_SCOPED_STORAGE_KEYS
  * (lib/purgeLocalUserData.ts) — a new sign-in must not inherit another
@@ -52,8 +53,9 @@ export const HEALTH_AUTO_SYNC_STATE_KEY = 'livra_health_auto_sync_state_v1';
  * (spec §2.3). A user away longer resumes forward from there. */
 const CATCH_UP_LOOKBACK_DAYS = 6;
 
-const STEP_GOAL_FALLBACK = 8000;
-const SLEEP_HOURS_DEFAULT = 7;
+// Single-sourced in healthDefaults.ts: mark detail now RENDERS these numbers
+// and lets the user change them, so a local copy here would let the screen
+// print a threshold that is not the one enforced below.
 
 /**
  * Which binding types the engine may write for. Exhaustive over HealthKitType
@@ -171,7 +173,10 @@ const DEFAULT_READERS: QualifiedDayReaders = {
   sleep: readSleepQualifiedDays,
 };
 
-function qualifiedDays(
+/** Exported for the defaults guard in tests/unit/health/healthConfigValue.test.ts:
+ *  the thresholds mark detail displays must be the thresholds enforced here,
+ *  and that is only provable by calling the real thing. */
+export function qualifiedDays(
   readers: QualifiedDayReaders,
   binding: HealthKitBinding,
   window: string[],

@@ -27,6 +27,16 @@ import { requestPermissions } from '../../../lib/health/healthPermissions';
 import { suggestStepGoal, suggestWakeTime } from '../../../lib/health/healthLearner';
 import type { HealthKitType } from '../../../lib/health/healthTypes';
 import {
+  parseHealthValue,
+  resolveHealthValue,
+  withHealthValue,
+  describeHealthValue,
+  healthValueInputText,
+  healthValueLabel,
+  healthValuePrompt,
+} from '../../../lib/health/healthConfigValue';
+import type { HealthValueKind } from '../../../lib/health/healthConfigValue';
+import {
   scheduleSleepNotification,
   cancelSleepNotification,
   getSleepNotifTime,
@@ -267,10 +277,14 @@ function MarkDetailContent() {
   const [isDeleting, setIsDeleting] = useState(false);
   const appDateKey = useAppDateStore(selectAppDateKey);
 
-  // The modal exists solely for the steps goal input now — every other type
-  // connects directly (the type comes from the library, not a picker).
-  const [healthModalVisible, setHealthModalVisible] = useState(false);
-  const [healthStepGoal, setHealthStepGoal] = useState<string>('');
+  // The sheet asks for ONE number and serves two moments: 'connect' (steps
+  // only, the pre-2.0.1 behaviour — a steps mark cannot bind without a goal)
+  // and 'edit' (steps or sleep, already bound). Null = closed.
+  const [healthEditor, setHealthEditor] = useState<{
+    kind: HealthValueKind;
+    mode: 'connect' | 'edit';
+  } | null>(null);
+  const [healthValueDraft, setHealthValueDraft] = useState<string>('');
   const [healthConnecting, setHealthConnecting] = useState(false);
   // The mark's device-local HealthKit binding (null = not connected).
   const [healthBinding, setHealthBinding] = useState<HealthKitBinding | null>(null);
@@ -544,11 +558,36 @@ function MarkDetailContent() {
     }
     if (healthKitType === 'steps') {
       const suggested = await suggestStepGoal();
-      setHealthStepGoal(suggested !== null ? String(suggested) : '');
-      setHealthModalVisible(true);
+      setHealthValueDraft(suggested !== null ? String(suggested) : '');
+      setHealthEditor({ kind: 'steps', mode: 'connect' });
       return;
     }
     await confirmHealthConnection(healthKitType, undefined);
+  };
+
+  // The threshold this mark is actually judged against, defaults included, or
+  // null when the mark carries no editable number (workout is pass/fail: the
+  // workout either exists in Health that day or it does not).
+  const healthValueKind: HealthValueKind | null =
+    healthBinding?.type === 'steps' || healthBinding?.type === 'sleep' ? healthBinding.type : null;
+
+  const openHealthValueEditor = () => {
+    if (!healthValueKind) return;
+    const current = resolveHealthValue(healthValueKind, healthBinding?.config);
+    setHealthValueDraft(healthValueInputText(healthValueKind, current));
+    setHealthEditor({ kind: healthValueKind, mode: 'edit' });
+  };
+
+  // Edit path only: permissions were granted at connect, so this writes the
+  // config and nothing else. Optimistic like confirmHealthConnection — the
+  // persist never throws and the next set retries it.
+  const saveHealthValue = async (kind: HealthValueKind, value: number) => {
+    if (!id || !healthBinding) return;
+    const config = withHealthValue(kind, healthBinding.config, value);
+    const next = { ...healthBinding, config };
+    setHealthBinding(next);
+    setHealthEditor(null);
+    await setHealthKitBinding(id, next);
   };
 
   const confirmHealthConnection = async (type: HealthKitType, stepGoal: number | undefined) => {
@@ -571,7 +610,7 @@ function MarkDetailContent() {
       showError('Health permissions could not be requested. Try Settings → Privacy → Health.');
     } finally {
       setHealthConnecting(false);
-      setHealthModalVisible(false);
+      setHealthEditor(null);
     }
   };
 
@@ -807,6 +846,33 @@ function MarkDetailContent() {
                   </Text>
                 </TouchableOpacity>
               </View>
+
+              {/* The threshold that decides whether a day qualifies. It was
+                  invisible and, for sleep, unchangeable until 2.0.1: a 6h30
+                  night silently failed a 7-hour bar the user could not see or
+                  move. Second row inside the SAME card because it is a
+                  property of the connection, not a separate setting. */}
+              {healthValueKind && (
+                <View style={[styles.settingRow, styles.settingRowDivided]}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingLabel}>{healthValueLabel(healthValueKind)}</Text>
+                    <Text style={styles.settingMeta}>
+                      {describeHealthValue(
+                        healthValueKind,
+                        resolveHealthValue(healthValueKind, healthBinding?.config),
+                      )}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.settingActionBox}
+                    onPress={openHealthValueEditor}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Change ${healthValueLabel(healthValueKind).toLowerCase()}`}
+                  >
+                    <Text style={styles.settingAction}>Change</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
           )}
 
@@ -836,47 +902,68 @@ function MarkDetailContent() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* Steps goal input — the only thing a Health connect still has to ask.
-          The old six-type picker is gone: the mark's type comes from the
-          library (handleConnectHealth), so non-steps types connect directly. */}
+      {/* One number, two moments: connecting a steps mark (which cannot bind
+          without a goal) and changing either threshold afterwards. The old
+          six-type picker is gone — the mark's type comes from the library
+          (handleConnectHealth), so non-steps types connect directly. */}
       <Modal
-        visible={healthModalVisible}
+        visible={healthEditor !== null}
         transparent
         animationType="slide"
-        onRequestClose={() => setHealthModalVisible(false)}
+        onRequestClose={() => setHealthEditor(null)}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalSheet}>
-            <Text style={styles.modalTitle}>Connect to Apple Health</Text>
+            <Text style={styles.modalTitle}>
+              {healthEditor?.mode === 'connect'
+                ? 'Connect to Apple Health'
+                : healthEditor
+                ? healthValueLabel(healthEditor.kind)
+                : ''}
+            </Text>
             <View style={{ gap: spacing.md }}>
-              <Text style={styles.modalBody}>How many steps counts as an active day?</Text>
+              <Text style={styles.modalBody}>
+                {healthEditor ? healthValuePrompt(healthEditor.kind) : ''}
+              </Text>
               <TextInput
-                value={healthStepGoal}
-                onChangeText={setHealthStepGoal}
-                keyboardType="number-pad"
-                placeholder="e.g. 8000"
+                value={healthValueDraft}
+                onChangeText={setHealthValueDraft}
+                // Sleep accepts 6.5, so it needs the decimal pad; steps stay
+                // whole and keep the number pad.
+                keyboardType={healthEditor?.kind === 'sleep' ? 'decimal-pad' : 'number-pad'}
+                placeholder={healthEditor?.kind === 'sleep' ? 'e.g. 7' : 'e.g. 8000'}
                 placeholderTextColor={c.inkMuted}
                 style={styles.modalInput}
+                autoFocus
               />
               <TouchableOpacity
                 style={styles.modalBtn}
                 disabled={healthConnecting}
                 onPress={() => {
-                  const goal = parseInt(healthStepGoal, 10);
-                  if (isNaN(goal) || goal <= 0) {
-                    showError('Enter a number greater than 0.');
+                  if (!healthEditor) return;
+                  const parsed = parseHealthValue(healthEditor.kind, healthValueDraft);
+                  if (!parsed.ok) {
+                    showError(parsed.error);
                     return;
                   }
-                  void confirmHealthConnection('steps', goal);
+                  if (healthEditor.mode === 'connect') {
+                    void confirmHealthConnection('steps', parsed.value);
+                  } else {
+                    void saveHealthValue(healthEditor.kind, parsed.value);
+                  }
                 }}
               >
                 <Text style={styles.modalBtnText}>
-                  {healthConnecting ? 'Connecting…' : 'Save & Connect'}
+                  {healthEditor?.mode === 'connect'
+                    ? healthConnecting
+                      ? 'Connecting…'
+                      : 'Save & Connect'
+                    : 'Save'}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.modalCancel}
-                onPress={() => setHealthModalVisible(false)}
+                onPress={() => setHealthEditor(null)}
               >
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
@@ -1129,6 +1216,13 @@ function createStyles(c: ReturnType<typeof themedColors>) {
     alignItems: 'center',
     padding: spacing.lg,
     gap: spacing.md,
+  },
+  // A second row in the same card needs a seam, or the two read as one block.
+  // Hairline in borderLight, not a gap: the card is a single object and the
+  // rows are facets of it.
+  settingRowDivided: {
+    borderTopWidth: 1,
+    borderTopColor: c.borderLight,
   },
   settingIcon: {
     width: 36,

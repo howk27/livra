@@ -1,5 +1,6 @@
 import { getHealthNative } from './healthNative';
 import type { HealthKitType } from './healthTypes';
+import { STEP_GOAL_FALLBACK } from './healthDefaults';
 
 // Every reader treats a callback error as "no days"; an unavailable native
 // module (see healthNative) gets the same quiet empty result rather than a
@@ -238,7 +239,7 @@ export async function readHealthDays(
     case 'sleep':     return readSleepDays(weekDates);
     case 'hydration': return readHydrationDays(weekDates);
     case 'mindful':   return readMindfulDays(weekDates);
-    case 'steps':     return readStepDays(weekDates, config?.stepGoal ?? 8000);
+    case 'steps':     return readStepDays(weekDates, config?.stepGoal ?? STEP_GOAL_FALLBACK);
     case 'running':   return readRunningDays(weekDates);
   }
 }
