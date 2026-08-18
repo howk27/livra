@@ -1,6 +1,6 @@
 {
   "name": "livra",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
@@ -60,6 +60,7 @@
     "expo-splash-screen": "~56.0.13",
     "expo-sqlite": "~56.0.5",
     "expo-status-bar": "~56.0.4",
+    "expo-store-review": "~56.0.4",
     "expo-updates": "~56.0.23",
     "phosphor-react-native": "^3.0.6",
     "posthog-react-native": "^4.55.0",

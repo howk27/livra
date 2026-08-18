@@ -33,6 +33,7 @@ import { SHARE_CARD_ENABLED } from '../../lib/sharing/shareCardEnabled';
 import { generateShareCard } from '../../lib/sharing/generateShareCard';
 import { logger } from '../../lib/utils/logger';
 import { formatBankedMomentum } from '../../lib/momentumPresenter';
+import { scheduleReviewPrompt } from '../../lib/reviews/reviewPrompt';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const DISMISS_THRESHOLD = 120;
@@ -154,11 +155,16 @@ export function GoalCompletionOverlay() {
 
   const bankedLine = completedGoal ? formatBankedMomentum(completedGoal.banked_momentum_days) : null;
 
+  const finishDismiss = useCallback(() => {
+    hideCompletion();
+    scheduleReviewPrompt();
+  }, [hideCompletion]);
+
   const dismiss = useCallback(() => {
     translateY.value = withSpring(SCREEN_HEIGHT, { damping: 20, stiffness: 200 }, () => {
-      runOnJS(hideCompletion)();
+      runOnJS(finishDismiss)();
     });
-  }, [translateY, hideCompletion]);
+  }, [translateY, finishDismiss]);
 
   const panGesture = Gesture.Pan()
     .onUpdate((e) => {

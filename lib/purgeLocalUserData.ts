@@ -156,6 +156,12 @@ export const DEVICE_SCOPED_STORAGE_KEYS = [
   'livra_cutover_v1_done',
   '@livra_debug_app_date_override', // dev tool, gated to dev builds
   'iap_support_diagnostics_enabled', // support toggle, device-level
+  // The App Store rating throttle (lib/reviews/reviewPrompt.ts). Device-scoped
+  // DELIBERATELY: Apple's own 3-per-365d cap is per Apple ID, not per Livra
+  // account, so clearing this on sign-out would re-arm OUR 120-day gate while
+  // Apple's still refuses to draw anything. The user would be silently
+  // re-asked and see nothing. It holds a timestamp, no personal data.
+  'livra_review_prompt_last_asked_v1',
   // IAP replay protection. Deliberately KEPT: these are device-level guards
   // against re-crediting a transaction Apple has already delivered. Clearing
   // them on sign-out would let one purchase be replayed onto a second account.
