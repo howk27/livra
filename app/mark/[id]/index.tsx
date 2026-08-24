@@ -36,6 +36,8 @@ import {
   healthValuePrompt,
 } from '../../../lib/health/healthConfigValue';
 import type { HealthValueKind } from '../../../lib/health/healthConfigValue';
+import { readAsleepMs } from '../../../lib/health/healthReader';
+import { sleepShortfallLine } from '../../../lib/health/sleepExplanation';
 import {
   scheduleSleepNotification,
   cancelSleepNotification,
@@ -352,6 +354,29 @@ function MarkDetailContent() {
 
   const dailyTarget = useMemo(() => (counter ? resolveDailyTarget(counter) : 1), [counter]);
   const completedToday = todayCount >= dailyTarget;
+
+  // Gap 2 of the 7-hour sleep bar (polish.md): when last night had asleep time
+  // but missed the target, say so instead of staying silent. Read-only and
+  // sleep-only; null whenever there is nothing honest to say (read failed, no
+  // data, target met) or the day is already closed by any means.
+  const [asleepMsToday, setAsleepMsToday] = useState<number | null>(null);
+  useEffect(() => {
+    // No reset branch on purpose (react-hooks/set-state-in-effect): a stale
+    // value after a disconnect is inert because sleepShortfall gates on the
+    // binding type before reading it.
+    if (Platform.OS !== 'ios' || healthBinding?.type !== 'sleep') return;
+    let cancelled = false;
+    void readAsleepMs(todayStr).then((ms) => {
+      if (!cancelled) setAsleepMsToday(ms);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [healthBinding?.type, todayStr]);
+  const sleepShortfall = useMemo(() => {
+    if (healthBinding?.type !== 'sleep' || completedToday) return null;
+    return sleepShortfallLine(asleepMsToday, resolveHealthValue('sleep', healthBinding.config));
+  }, [healthBinding, completedToday, asleepMsToday]);
 
   const weekDates = useMemo(() => currentWeekDates(), [appDateKey]);
 
@@ -872,6 +897,14 @@ function MarkDetailContent() {
                         resolveHealthValue(healthValueKind, healthBinding?.config),
                       )}
                     </Text>
+                    {/* The shortfall explanation (polish.md gap 2): a night
+                        that missed the bar used to fail SILENTLY. Only renders
+                        when Health measured asleep time under the target and
+                        today is not closed — sleepShortfallLine owns the
+                        honesty rules. */}
+                    {sleepShortfall !== null && (
+                      <Text style={styles.settingMeta}>{sleepShortfall}</Text>
+                    )}
                   </View>
                   <TouchableOpacity
                     style={styles.settingActionBox}

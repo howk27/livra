@@ -170,43 +170,90 @@ export async function readSleepQualifiedDays(
       { startDate: start.toISOString(), endDate: end.toISOString() } as any,
       (err: any, results: any[]) => {
         if (err || !results) { resolve(new Set()); return; }
-        const intervalsByDay = new Map<string, [number, number][]>();
-        for (const sample of results) {
-          if (sample.value === 'AWAKE' || sample.value === 'INBED') continue;
-          const wakeDate = sample.endDate?.slice(0, 10);
-          if (!wakeDate || !weekDates.includes(wakeDate)) continue;
-          const windowStart = new Date(`${wakeDate}T00:00:00`);
-          windowStart.setDate(windowStart.getDate() - 1);
-          windowStart.setHours(20, 0, 0, 0);
-          const windowEnd = new Date(`${wakeDate}T10:00:00`).getTime();
-          const clampedStart = Math.max(new Date(sample.startDate).getTime(), windowStart.getTime());
-          const clampedEnd = Math.min(new Date(sample.endDate).getTime(), windowEnd);
-          if (!(clampedEnd > clampedStart)) continue;
-          const list = intervalsByDay.get(wakeDate) ?? [];
-          list.push([clampedStart, clampedEnd]);
-          intervalsByDay.set(wakeDate, list);
-        }
+        const totals = mergedAsleepMsByDay(results, weekDates);
         const thresholdMs = sleepHours * 3_600_000;
         const days = new Set<string>();
-        for (const [day, intervals] of intervalsByDay) {
-          intervals.sort((a, b) => a[0] - b[0]);
-          let total = 0;
-          let mergedStart = intervals[0]![0];
-          let mergedEnd = intervals[0]![1];
-          for (let i = 1; i < intervals.length; i++) {
-            const [s, e] = intervals[i]!;
-            if (s <= mergedEnd) {
-              mergedEnd = Math.max(mergedEnd, e);
-            } else {
-              total += mergedEnd - mergedStart;
-              mergedStart = s;
-              mergedEnd = e;
-            }
-          }
-          total += mergedEnd - mergedStart;
+        for (const [day, total] of totals) {
           if (total >= thresholdMs) days.add(day);
         }
         resolve(days);
+      },
+    );
+  });
+}
+
+/**
+ * The single measurement behind both sleep surfaces: clamp each ASLEEP sample
+ * to its wake-day's 20:00 → 10:00 night window, merge overlaps per day, sum.
+ * `readSleepQualifiedDays` thresholds this to decide whether a day is LOGGED;
+ * `readAsleepMs` hands it to mark detail to EXPLAIN a day that was not — so
+ * the number the user reads is, structurally, the number that was enforced.
+ */
+export function mergedAsleepMsByDay(
+  results: { value?: string; startDate: string; endDate?: string }[],
+  weekDates: string[],
+): Map<string, number> {
+  const intervalsByDay = new Map<string, [number, number][]>();
+  for (const sample of results) {
+    if (sample.value === 'AWAKE' || sample.value === 'INBED') continue;
+    const wakeDate = sample.endDate?.slice(0, 10);
+    if (!wakeDate || !weekDates.includes(wakeDate)) continue;
+    const windowStart = new Date(`${wakeDate}T00:00:00`);
+    windowStart.setDate(windowStart.getDate() - 1);
+    windowStart.setHours(20, 0, 0, 0);
+    const windowEnd = new Date(`${wakeDate}T10:00:00`).getTime();
+    const clampedStart = Math.max(new Date(sample.startDate).getTime(), windowStart.getTime());
+    const clampedEnd = Math.min(new Date(sample.endDate!).getTime(), windowEnd);
+    if (!(clampedEnd > clampedStart)) continue;
+    const list = intervalsByDay.get(wakeDate) ?? [];
+    list.push([clampedStart, clampedEnd]);
+    intervalsByDay.set(wakeDate, list);
+  }
+  const totals = new Map<string, number>();
+  for (const [day, intervals] of intervalsByDay) {
+    intervals.sort((a, b) => a[0] - b[0]);
+    let total = 0;
+    let mergedStart = intervals[0]![0];
+    let mergedEnd = intervals[0]![1];
+    for (let i = 1; i < intervals.length; i++) {
+      const [s, e] = intervals[i]!;
+      if (s <= mergedEnd) {
+        mergedEnd = Math.max(mergedEnd, e);
+      } else {
+        total += mergedEnd - mergedStart;
+        mergedStart = s;
+        mergedEnd = e;
+      }
+    }
+    total += mergedEnd - mergedStart;
+    totals.set(day, total);
+  }
+  return totals;
+}
+
+/**
+ * Merged asleep milliseconds for one wake-day's night window — the read behind
+ * mark detail's shortfall explanation (polish.md gap 2, the silence).
+ *
+ * DELIBERATE DEVIATION from the readers' quiet-empty contract: an unavailable
+ * module or a read error resolves NULL, while a healthy read with no asleep
+ * samples resolves 0. The explanation must stay silent when it cannot know,
+ * and "cannot know" is not "slept nothing" — collapsing them would tell a
+ * user with denied permissions that they slept zero hours.
+ */
+export async function readAsleepMs(day: string): Promise<number | null> {
+  const start = new Date(`${day}T00:00:00`);
+  start.setDate(start.getDate() - 1);
+  start.setHours(20, 0, 0, 0);
+  const end = new Date(`${day}T10:00:00`);
+  return new Promise(resolve => {
+    const native = getHealthNative();
+    if (!native) { resolve(null); return; }
+    native.getSleepSamples(
+      { startDate: start.toISOString(), endDate: end.toISOString() } as any,
+      (err: any, results: any[]) => {
+        if (err || !results) { resolve(null); return; }
+        resolve(mergedAsleepMsByDay(results, [day]).get(day) ?? 0);
       },
     );
   });
