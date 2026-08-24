@@ -55,6 +55,11 @@ interface GoalPackageReviewProps {
   markHeadroom?: number;
   /** Soft paywall link target for the over-limit note. */
   onUpgrade?: () => void;
+  /** Optional "Save for later" quiet link (suggest flow only — onboarding's
+   *  single-goal walk deliberately omits it, so it renders nothing there). */
+  onSaveForLater?: () => void;
+  /** Disables the save link while the draft persists. */
+  savingDraft?: boolean;
 }
 
 export function GoalPackageReview({
@@ -65,6 +70,8 @@ export function GoalPackageReview({
   confirming,
   markHeadroom = Number.POSITIVE_INFINITY,
   onUpgrade,
+  onSaveForLater,
+  savingDraft,
 }: GoalPackageReviewProps) {
   const c = themedColors(useEffectiveTheme());
 
@@ -245,6 +252,20 @@ export function GoalPackageReview({
           disabled={selected.size === 0 || confirming}
           style={{ ...styles.primaryBtn, opacity: selected.size === 0 ? 0.4 : 1 }}
         />
+
+        {onSaveForLater && (
+          <TouchableOpacity
+            style={styles.dismissWrap}
+            onPress={onSaveForLater}
+            disabled={savingDraft || confirming}
+            accessibilityRole="button"
+            accessibilityLabel="Save this plan for later"
+          >
+            <Text style={[styles.dismissLink, { color: c.inkMid, opacity: savingDraft ? 0.5 : 1 }]}>
+              {savingDraft ? 'Saving…' : 'Save for later'}
+            </Text>
+          </TouchableOpacity>
+        )}
 
         <TouchableOpacity
           style={styles.dismissWrap}

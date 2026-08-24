@@ -5,7 +5,7 @@ export const ANALYTICS_EVENTS = {
   /**
    * Post-onboarding AI plan flow (FU-6). Properties:
    * source: 'goals' | 'goal_create_fallback' · confidence: 'high' | 'low' | null
-   * outcome: 'confirmed' | 'dismissed' | 'exhausted'
+   * outcome: 'confirmed' | 'dismissed' | 'exhausted' | 'saved' | 'resumed'
    */
   AI_PLAN_SUGGESTED: 'ai_plan_suggested',
   /** North star: real goals finished. */

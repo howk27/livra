@@ -27,6 +27,13 @@ import {
   type AIGoalPackage,
 } from '../lib/ai/goalGeneration';
 import type { GoalPackageReviewSelection } from '../components/ai/GoalPackageReview';
+import {
+  saveAiDraft,
+  listSavedAiDrafts,
+  deleteSavedAiDraft,
+  type SavedAiDraft,
+} from '../lib/data/mutations/aiDrafts';
+import { confirm } from '../components/ui/overlays';
 import { capture } from '../lib/analytics/posthog';
 import { ANALYTICS_EVENTS } from '../lib/analytics/events';
 import { logger } from '../lib/utils/logger';
@@ -39,7 +46,7 @@ export function useSuggestGoalFlow() {
   const c = themedColors(theme);
   const router = useRouter();
   const { user, initialized } = useAuth();
-  const { showError } = useNotification();
+  const { showError, showSuccess } = useNotification();
   const params = useLocalSearchParams<{ goalText?: string; source?: string }>();
 
   const source: SuggestSource =
@@ -74,6 +81,28 @@ export function useSuggestGoalFlow() {
     () => allowedPackageMarkCount(isPro, countActiveMarks(marks)),
     [isPro, marks],
   );
+
+  // Saved drafts (2026-08-24, founder call): plans kept via "Save for later",
+  // listed on the describe phase and reopened straight into review — no model
+  // call, no gate, same economics as the confirmed-cache read server-side.
+  const [drafts, setDrafts] = useState<SavedAiDraft[]>([]);
+  const [draftSaving, setDraftSaving] = useState(false);
+  const userId = user?.id;
+
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    // Best-effort surface: a failed list leaves the section empty rather than
+    // blocking the describe phase behind an error state.
+    listSavedAiDrafts(userId)
+      .then((d) => {
+        if (!cancelled) setDrafts(d);
+      })
+      .catch((err) => logger.warn('[suggest] drafts list failed:', err));
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
 
   // Authed-screen guard: bounce a signed-out session like other authed screens.
   useEffect(() => {
@@ -151,6 +180,65 @@ export function useSuggestGoalFlow() {
     setPkg(null); // back to phase 1, text preserved
   }, [source, pkg]);
 
+  // "Save for later" on the review: keep the plan without activating it.
+  // Leaves via router.back() like confirm does — the draft now lives on the
+  // describe phase's list, and staying on the review would invite a second
+  // save of the same thing.
+  const handleSaveForLater = useCallback(async () => {
+    if (!userId || !pkg) return;
+    setDraftSaving(true);
+    try {
+      await saveAiDraft(userId, goalText.trim(), pkg);
+      capture(ANALYTICS_EVENTS.AI_PLAN_SUGGESTED, {
+        source,
+        confidence: pkg.confidence,
+        outcome: 'saved',
+      });
+      showSuccess('Plan saved for later.');
+      router.back();
+    } catch (err) {
+      showError('Could not save the plan. Please try again.');
+      logger.error('[suggest] save-for-later failed:', err);
+    } finally {
+      setDraftSaving(false);
+    }
+  }, [userId, pkg, goalText, source, router, showError, showSuccess]);
+
+  // Reopen a saved plan straight into review. Free by design: the package is
+  // already paid for, exactly like the server's confirmed-cache read.
+  const handleOpenDraft = useCallback(
+    (draft: SavedAiDraft) => {
+      setGoalText(draft.goalText);
+      setPkg(draft.pkg);
+      capture(ANALYTICS_EVENTS.AI_PLAN_SUGGESTED, {
+        source,
+        confidence: draft.pkg.confidence,
+        outcome: 'resumed',
+      });
+    },
+    [source],
+  );
+
+  const handleDeleteDraft = useCallback(
+    async (draft: SavedAiDraft) => {
+      const ok = await confirm({
+        title: 'Delete this saved plan?',
+        message: `"${draft.goalText}" will be gone for good.`,
+        confirmLabel: 'Delete',
+        destructive: true,
+      });
+      if (!ok || !userId) return;
+      try {
+        await deleteSavedAiDraft(userId, draft.id);
+        setDrafts((prev) => prev.filter((d) => d.id !== draft.id));
+      } catch (err) {
+        showError('Could not delete the plan. Please try again.');
+        logger.error('[suggest] draft delete failed:', err);
+      }
+    },
+    [userId, showError],
+  );
+
   const handleConfirm = useCallback(
     async (selection: GoalPackageReviewSelection) => {
       if (!user?.id || !pkg) return;
@@ -210,5 +298,10 @@ export function useSuggestGoalFlow() {
     handleManualInstead,
     handleDismissReview,
     handleConfirm,
+    drafts,
+    draftSaving,
+    handleSaveForLater,
+    handleOpenDraft,
+    handleDeleteDraft,
   };
 }

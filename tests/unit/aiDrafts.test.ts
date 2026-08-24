@@ -4,7 +4,14 @@
 
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { deleteSavedAiDrafts, countSavedAiDrafts } from '@/lib/data/mutations/aiDrafts';
+import {
+  deleteSavedAiDrafts,
+  countSavedAiDrafts,
+  saveAiDraft,
+  listSavedAiDrafts,
+  deleteSavedAiDraft,
+} from '@/lib/data/mutations/aiDrafts';
+import { normalizeGoalText, type AIGoalPackage } from '@/lib/ai/goalGeneration';
 import { setSupabaseClientOverride } from '@/lib/supabase';
 
 jest.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: null }) }));
@@ -24,7 +31,7 @@ function makeClient(result: { data: unknown; error: unknown; count?: number }) {
         calls.push({ table, method, args });
         return builder;
       };
-    for (const m of ['select', 'delete', 'eq', 'insert', 'update']) {
+    for (const m of ['select', 'delete', 'eq', 'insert', 'update', 'upsert', 'order']) {
       builder[m] = jest.fn(chain(m));
     }
     builder.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) =>
@@ -79,6 +86,97 @@ describe('countSavedAiDrafts', () => {
   it('treats a null count as 0', async () => {
     makeClient({ data: null, error: null });
     await expect(countSavedAiDrafts(USER)).resolves.toBe(0);
+  });
+});
+
+// A minimally valid package for the drafts round-trip (validator repairs the
+// icon to the fallback; that is fine — the fixture only has to survive).
+const PKG: AIGoalPackage = {
+  goalTitle: 'Run a marathon',
+  timeframeWeeks: 12,
+  confidence: 'high',
+  marks: [{ name: 'Run', icon: 'run', frequency: 3, why: 'Base mileage builds the engine.' }],
+};
+
+describe('saveAiDraft (2026-08-24, real drafts)', () => {
+  it('upserts confirmed=false and NEVER updates on conflict — a confirmed cache row must not become a phantom draft', async () => {
+    const { calls } = makeClient({ data: null, error: null });
+    await saveAiDraft(USER, 'Run a marathon', PKG);
+
+    const upsert = calls.find((c) => c.method === 'upsert');
+    expect(upsert?.table).toBe('ai_goal_packages');
+    expect(upsert?.args[0]).toMatchObject({
+      user_id: USER,
+      goal_text: 'Run a marathon',
+      goal_text_normalized: normalizeGoalText('Run a marathon'),
+      confirmed: false,
+    });
+    expect(upsert?.args[1]).toMatchObject({
+      onConflict: 'goal_text_normalized,user_id',
+      ignoreDuplicates: true,
+    });
+  });
+
+  it('is a no-op for text that normalizes to nothing', async () => {
+    const { calls } = makeClient({ data: null, error: null });
+    await saveAiDraft(USER, '!!!', PKG);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('surfaces a refusal as a DataError', async () => {
+    makeClient({ data: null, error: { code: '42501', message: 'denied' } });
+    await expect(saveAiDraft(USER, 'Run a marathon', PKG)).rejects.toMatchObject({
+      kind: 'permission',
+    });
+  });
+});
+
+describe('listSavedAiDrafts', () => {
+  it('reads only unconfirmed rows for the user and validates each package', async () => {
+    const { calls } = makeClient({
+      data: [
+        {
+          id: 'd1',
+          goal_text: 'Run a marathon',
+          created_at: '2026-08-20T12:00:00Z',
+          package_json: PKG,
+        },
+        // An unsalvageable package must be DROPPED, not rendered.
+        { id: 'd2', goal_text: 'Bad row', created_at: '2026-08-19T12:00:00Z', package_json: {} },
+      ],
+      error: null,
+    });
+    const drafts = await listSavedAiDrafts(USER);
+
+    expect(drafts).toHaveLength(1);
+    expect(drafts[0]).toMatchObject({ id: 'd1', goalText: 'Run a marathon' });
+    expect(drafts[0].pkg.goalTitle).toBe('Run a marathon');
+
+    const eqs = calls.filter((c) => c.method === 'eq').map((c) => c.args);
+    expect(eqs).toContainEqual(['user_id', USER]);
+    expect(eqs).toContainEqual(['confirmed', false]);
+  });
+
+  it('returns empty for no rows', async () => {
+    makeClient({ data: [], error: null });
+    await expect(listSavedAiDrafts(USER)).resolves.toEqual([]);
+  });
+});
+
+describe('deleteSavedAiDraft (single row)', () => {
+  it('scopes by BOTH the draft id and the user id', async () => {
+    const { calls } = makeClient({ data: null, error: null });
+    await deleteSavedAiDraft(USER, 'd1');
+
+    expect(calls.some((c) => c.method === 'delete' && c.table === 'ai_goal_packages')).toBe(true);
+    const eqs = calls.filter((c) => c.method === 'eq').map((c) => c.args);
+    expect(eqs).toContainEqual(['id', 'd1']);
+    expect(eqs).toContainEqual(['user_id', USER]);
+  });
+
+  it('surfaces a refusal as a DataError', async () => {
+    makeClient({ data: null, error: { code: '42501', message: 'denied' } });
+    await expect(deleteSavedAiDraft(USER, 'd1')).rejects.toMatchObject({ kind: 'permission' });
   });
 });
 

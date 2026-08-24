@@ -32,6 +32,9 @@ import {
 } from '../../theme/tokens';
 import { AI_EXHAUSTED_COPY } from '../../lib/copy';
 import { CONTEXT_MAX_LENGTH } from '../../lib/ai/goalGeneration';
+import { format } from 'date-fns';
+import { X } from 'phosphor-react-native';
+import type { SavedAiDraft } from '../../lib/data/mutations/aiDrafts';
 import { useSuggestGoalFlow } from '../../hooks/useSuggestGoalFlow';
 import { useDeferredAutoFocus } from '../../hooks/useDeferredAutoFocus';
 import { useHalfRenderProbe } from '../../hooks/useHalfRenderProbe';
@@ -87,6 +90,57 @@ function SuggestExhaustedPanel({ c, panelWash, panelBorder, onUpgrade, onManual 
   );
 }
 
+// ─── Saved plans — reopenable drafts kept via "Save for later" ───────────────
+// Quiet by design: a section that exists only when there is something in it,
+// below the manual link so the primary describe→generate path stays the hero.
+
+interface SavedPlansSectionProps {
+  c: ReturnType<typeof themedColors>;
+  drafts: SavedAiDraft[];
+  onOpen: (draft: SavedAiDraft) => void;
+  onDelete: (draft: SavedAiDraft) => void;
+}
+
+function SavedPlansSection({ c, drafts, onOpen, onDelete }: SavedPlansSectionProps) {
+  if (drafts.length === 0) return null;
+  return (
+    <View style={styles.draftsSection}>
+      <Text style={[styles.draftsLabel, { color: c.inkMuted }]}>SAVED PLANS</Text>
+      {drafts.map((draft) => (
+        <View
+          key={draft.id}
+          style={[
+            styles.draftRow,
+            { backgroundColor: c.surfaceAlt, borderColor: c.borderLight },
+          ]}
+        >
+          <TouchableOpacity
+            style={styles.draftOpen}
+            onPress={() => onOpen(draft)}
+            accessibilityRole="button"
+            accessibilityLabel={`Open saved plan: ${draft.goalText}`}
+          >
+            <Text style={[styles.draftText, { color: c.inkDark }]} numberOfLines={1}>
+              {draft.goalText}
+            </Text>
+            <Text style={[styles.draftMeta, { color: c.inkMuted }]}>
+              Saved {format(new Date(draft.createdAt), 'MMM d')}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.draftDelete}
+            onPress={() => onDelete(draft)}
+            accessibilityRole="button"
+            accessibilityLabel={`Delete saved plan: ${draft.goalText}`}
+          >
+            <X size={14} color={c.inkMuted} weight="bold" />
+          </TouchableOpacity>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 // ─── Describe phase — goal text + AI hatch, or the exhausted panel ──────────
 
 interface SuggestDescribePhaseProps {
@@ -105,6 +159,9 @@ interface SuggestDescribePhaseProps {
   onGenerate: () => void;
   onUpgrade: () => void;
   onManualInstead: () => void;
+  drafts: SavedAiDraft[];
+  onOpenDraft: (draft: SavedAiDraft) => void;
+  onDeleteDraft: (draft: SavedAiDraft) => void;
 }
 
 function SuggestDescribePhase({
@@ -123,6 +180,9 @@ function SuggestDescribePhase({
   onGenerate,
   onUpgrade,
   onManualInstead,
+  drafts,
+  onOpenDraft,
+  onDeleteDraft,
 }: SuggestDescribePhaseProps) {
   // VD-6/QC2-D: focus only after the pageSheet transition settles so the
   // keyboard animation never overlaps the sheet presentation (calm entrance).
@@ -205,6 +265,7 @@ function SuggestDescribePhase({
           </TouchableOpacity>
         </>
       )}
+      <SavedPlansSection c={c} drafts={drafts} onOpen={onOpenDraft} onDelete={onDeleteDraft} />
     </ScrollView>
   );
 }
@@ -236,6 +297,11 @@ export default function SuggestGoalScreen() {
     handleManualInstead,
     handleDismissReview,
     handleConfirm,
+    drafts,
+    draftSaving,
+    handleSaveForLater,
+    handleOpenDraft,
+    handleDeleteDraft,
   } = useSuggestGoalFlow();
 
   // QC-FAIL-4: the free-goal cap (thrown by handleConfirm) shows Livra's own
@@ -265,6 +331,8 @@ export default function SuggestGoalScreen() {
           confirming={confirming}
           markHeadroom={markHeadroom}
           onUpgrade={() => router.push('/paywall')}
+          onSaveForLater={() => void handleSaveForLater()}
+          savingDraft={draftSaving}
         />
         {goalLimitDialog}
       </SafeAreaView>
@@ -298,6 +366,9 @@ export default function SuggestGoalScreen() {
           onGenerate={() => void handleGenerate()}
           onUpgrade={() => router.push('/paywall')}
           onManualInstead={handleManualInstead}
+          drafts={drafts}
+          onOpenDraft={handleOpenDraft}
+          onDeleteDraft={(d) => void handleDeleteDraft(d)}
         />
       </View>
     </SafeAreaView>
@@ -410,5 +481,43 @@ const styles = StyleSheet.create({
   exhaustedCta: {
     marginTop: spacing.md,
     height: 48,
+  },
+  draftsSection: {
+    marginTop: spacing.xl,
+  },
+  draftsLabel: {
+    fontFamily: fonts.sansMedium,
+    fontSize: fontSize.xs,
+    letterSpacing: 0.8,
+    marginBottom: spacing.sm,
+  },
+  draftRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: radius.md,
+    borderWidth: 1,
+    marginBottom: spacing.sm,
+  },
+  draftOpen: {
+    flex: 1,
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  draftText: {
+    fontFamily: fonts.sans,
+    fontSize: fontSize.md,
+  },
+  draftMeta: {
+    fontFamily: fonts.sans,
+    fontSize: fontSize.sm,
+    marginTop: 2,
+  },
+  draftDelete: {
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

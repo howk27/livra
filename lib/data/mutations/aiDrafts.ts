@@ -22,8 +22,111 @@
 // for the same goal again — the table is a cache, and no other feature reads it
 // as history.
 
+// ── 2026-08-24: the table stops being only a cache ───────────────────────────
+//
+// Founder call: real drafts. Until now every row was written confirmed=true at
+// goal-CREATE (a cache so re-asking the same goal is free), and Settings called
+// them "drafts" while nothing could reopen one. Now "Save for later" on the
+// plan review writes confirmed=false, the suggest screen lists those rows, and
+// reopening one costs nothing — the same economics as the cache-before-gate
+// read the edge function already does. Activating a saved draft goes through
+// the normal goal-CREATE path, whose writeGoalPackageCache upsert flips the
+// SAME row (unique on goal_text_normalized + user_id) to confirmed=true, so a
+// draft leaves the list by becoming a goal, with no second delete path.
+
 import { dataClient } from '@/lib/data/client';
 import { toDataError } from '@/lib/data/errors';
+import {
+  normalizeGoalText,
+  validateAIGoalPackage,
+  type AIGoalPackage,
+} from '@/lib/ai/goalGeneration';
+
+/** A reopenable saved plan: the row, already validated back into a package. */
+export interface SavedAiDraft {
+  id: string;
+  goalText: string;
+  createdAt: string;
+  pkg: AIGoalPackage;
+}
+
+/**
+ * Save a generated plan for later without activating it.
+ *
+ * `ignoreDuplicates` is load-bearing: the unique key (goal_text_normalized,
+ * user_id) is shared with the confirmed cache rows, and an upsert that UPDATED
+ * on conflict would let "Save for later" flip an already-confirmed row back to
+ * confirmed=false — resurrecting a plan the user already turned into a goal as
+ * a phantom draft. If the text is already saved (either kind), saving again is
+ * a quiet no-op; the plan is already kept.
+ */
+export async function saveAiDraft(
+  userId: string,
+  goalText: string,
+  pkg: AIGoalPackage,
+): Promise<void> {
+  const normalized = normalizeGoalText(goalText);
+  if (!normalized || !userId) return;
+  const { error } = await dataClient()
+    .from('ai_goal_packages')
+    .upsert(
+      {
+        user_id: userId,
+        goal_text: goalText,
+        goal_text_normalized: normalized,
+        package_json: pkg as unknown as import('@/lib/data/types').Json,
+        confirmed: false,
+      },
+      { onConflict: 'goal_text_normalized,user_id', ignoreDuplicates: true },
+    );
+  if (error) throw toDataError(error);
+}
+
+/**
+ * The user's reopenable drafts: confirmed=false rows only — confirmed rows are
+ * the cache of plans already activated, not pending work. Each package_json is
+ * re-validated on the way out (same validator the edge function trusts) and an
+ * invalid row is DROPPED rather than rendered: a draft that cannot round-trip
+ * into the review screen is not a draft, and surfacing it would trade a quiet
+ * absence for a crash inside GoalPackageReview.
+ */
+export async function listSavedAiDrafts(userId: string): Promise<SavedAiDraft[]> {
+  const { data, error } = await dataClient()
+    .from('ai_goal_packages')
+    .select('id, goal_text, created_at, package_json')
+    .eq('user_id', userId)
+    .eq('confirmed', false)
+    .order('created_at', { ascending: false });
+
+  if (error) throw toDataError(error);
+  const drafts: SavedAiDraft[] = [];
+  for (const row of data ?? []) {
+    const pkg = validateAIGoalPackage(row.package_json);
+    if (!pkg) continue;
+    drafts.push({
+      id: row.id,
+      goalText: row.goal_text,
+      createdAt: row.created_at,
+      pkg,
+    });
+  }
+  return drafts;
+}
+
+/**
+ * Delete ONE saved draft. Same D-8 exception, same reasoning, same module —
+ * the guard test allows hard deletes in this file alone, and per-draft erasure
+ * is the bulk control scoped down, not a new capability. Scoped by id AND
+ * user_id (belt to the RLS braces, like everything here).
+ */
+export async function deleteSavedAiDraft(userId: string, draftId: string): Promise<void> {
+  const { error } = await dataClient()
+    .from('ai_goal_packages')
+    .delete()
+    .eq('id', draftId)
+    .eq('user_id', userId);
+  if (error) throw toDataError(error);
+}
 
 /**
  * Delete every saved AI draft belonging to the signed-in user.
