@@ -249,10 +249,21 @@ export default function RootLayout() {
       }
     };
 
+    // WR-4: tapping the Sunday notification opens the review modal. The review
+    // computes at render time, so arriving late still shows the right week.
+    const handleWeeklyReviewResponse = (response: Notifications.NotificationResponse | null) => {
+      if (!response) return;
+      const data = response.notification.request.content.data as Record<string, unknown>;
+      if (data?.screen === 'review') {
+        router.push('/review');
+      }
+    };
+
     Notifications.getLastNotificationResponseAsync()
       .then((response) => {
         handleBehaviorResponse(response);
         handleMilestoneResponse(response);
+        handleWeeklyReviewResponse(response);
         void Notifications.clearLastNotificationResponse();
       })
       .catch(() => {});
@@ -260,6 +271,7 @@ export default function RootLayout() {
     const responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
       handleBehaviorResponse(response);
       handleMilestoneResponse(response);
+      handleWeeklyReviewResponse(response);
       void recordBehaviorAppForeground();
     });
 

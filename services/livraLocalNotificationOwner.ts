@@ -12,6 +12,13 @@ import { cancelAllLivraScheduledNotifications } from '../lib/notifications/livra
 import { getLivraRemindersEnabled } from '../lib/notifications/livraReminderPrefs';
 import { recordBehaviorAppForeground } from './behaviorNotifications';
 import { scheduleReengageNudge } from '../lib/notifications/reengageNudge';
+// WR-4: the weekly review rides the same coalesced foreground flush, so its
+// default-ON schedule arms (or clears when the last goal goes) without the
+// user ever visiting Settings. Goal count reads the query cache.
+import { reconcileWeeklyReview } from '../lib/notifications/weeklyReview';
+import { queryClient } from '../lib/data/queryClient';
+import { queryKeys } from '../lib/data/queryKeys';
+import type { GoalRow } from '../lib/data/types';
 
 const COALESCE_MS = 400;
 
@@ -51,6 +58,8 @@ async function flushCoalescedReschedule(): Promise<void> {
 
   try {
     await scheduleReengageNudge(userId);
+    const goals = queryClient.getQueryData<GoalRow[]>(queryKeys.goals(userId)) ?? [];
+    await reconcileWeeklyReview(goals.some((g) => g.status === 'active' && !g.deleted_at));
   } catch (e) {
     logger.error('[LivraNotifOwner] schedule failed', e);
   } finally {

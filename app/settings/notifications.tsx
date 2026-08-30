@@ -14,6 +14,15 @@ import {
   scheduleDailyReminder,
   cancelDailyReminder,
 } from '../../lib/notifications/dailyReminder';
+import {
+  getWeeklyReviewNotifEnabled,
+  setWeeklyReviewNotifEnabled,
+  reconcileWeeklyReview,
+} from '../../lib/notifications/weeklyReview';
+import { useAuth } from '../../hooks/useAuth';
+import { queryClient } from '../../lib/data/queryClient';
+import { queryKeys } from '../../lib/data/queryKeys';
+import type { GoalRow } from '../../lib/data/types';
 import { logger } from '../../lib/utils/logger';
 import { useNotification } from '../../contexts/NotificationContext';
 
@@ -33,10 +42,17 @@ export default function NotificationsScreen() {
   const { enabled, hydrated, setEnabled } = useNotificationsMaster();
   const { showError } = useNotification();
 
+  const { user } = useAuth();
+
   const [reminderEnabled, setReminderEnabled] = useState(false);
   const [reminderTime, setReminderTime] = useState<Date>(() => hhmmToDate('8:00'));
   const [reminderHydrated, setReminderHydrated] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
+
+  // WR-4: the weekly review row, default ON (a new row — the 2026-06-20 dead
+  // Weekly Summary toggle no longer exists in the repo).
+  const [weeklyReviewEnabled, setWeeklyReviewEnabledState] = useState(true);
+  const [weeklyReviewHydrated, setWeeklyReviewHydrated] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -48,8 +64,46 @@ export default function NotificationsScreen() {
       }
       setReminderHydrated(true);
     });
+    getWeeklyReviewNotifEnabled().then((v) => {
+      if (!active) return;
+      setWeeklyReviewEnabledState(v);
+      setWeeklyReviewHydrated(true);
+    });
     return () => { active = false; };
   }, []);
+
+  const userId = user?.id;
+
+  const handleWeeklyReviewToggle = useCallback(async (value: boolean) => {
+    const hasActiveGoals = (): boolean => {
+      const goals = userId
+        ? (queryClient.getQueryData<GoalRow[]>(queryKeys.goals(userId)) ?? [])
+        : [];
+      return goals.some((g) => g.status === 'active' && !g.deleted_at);
+    };
+    setWeeklyReviewEnabledState(value);
+    try {
+      if (value) {
+        // Scheduling silently fails without OS permission — ask first, once.
+        const { status: existing } = await Notifications.getPermissionsAsync();
+        let status = existing;
+        if (status !== 'granted') {
+          ({ status } = await Notifications.requestPermissionsAsync());
+        }
+        if (status !== 'granted') {
+          setWeeklyReviewEnabledState(false);
+          showError('Notifications are off for Livra. Allow them in your phone Settings to get the weekly review.');
+          return;
+        }
+      }
+      await setWeeklyReviewNotifEnabled(value);
+      await reconcileWeeklyReview(hasActiveGoals());
+    } catch (e) {
+      logger.error('[Notifications] weekly review toggle failed:', e);
+      setWeeklyReviewEnabledState(!value);
+      showError('Could not update the weekly review. Please try again.');
+    }
+  }, [userId, showError]);
 
   const handleReminderToggle = useCallback(async (value: boolean) => {
     setReminderEnabled(value);
@@ -153,6 +207,24 @@ export default function NotificationsScreen() {
               />
             </View>
           )}
+
+          <View style={[styles.rowDivider, { backgroundColor: c.borderLight }]} />
+
+          <View style={[styles.toggleRow, !enabled && styles.rowDisabled]}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.rowLabel, { color: c.inkDark }]}>Weekly review</Text>
+              <Text style={[styles.rowSubtitle, { color: c.inkMuted }]}>
+                Sunday evening, your week reflected back.
+              </Text>
+            </View>
+            <Switch
+              value={weeklyReviewEnabled}
+              onValueChange={handleWeeklyReviewToggle}
+              disabled={!weeklyReviewHydrated || !enabled}
+              trackColor={{ false: c.borderMid, true: c.forest }}
+              thumbColor={c.surface}
+            />
+          </View>
         </View>
       </ScrollView>
     </View>
