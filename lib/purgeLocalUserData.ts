@@ -68,6 +68,11 @@ export const ACCOUNT_SCOPED_STORAGE_KEYS = [
   '@livra_daily_reminder_time',
   '@livra_pace_notification_window',
   'livra_reminders_enabled_v1',
+  // WR-3/WR-4 (2026-08-29): the weekly review's viewed week references the
+  // signed-out account's data; the notification pref rides the same cadence
+  // class as the daily reminder time above.
+  '@livra_weekly_review_viewed',
+  '@livra_weekly_review_notif_enabled',
   'livra_bn_engagement_v1',
   'livra_bn_last_foreground_v1',
   'livra_mw_last_templates_v1',
@@ -198,6 +203,8 @@ export const NON_ASYNC_STORAGE_LITERALS = [
   'livra-bn-',
   'livra-mw-',
   'livra-reminder-',
+  // WR-4: the weekly review's stable notification identifier, not storage.
+  'livra-weekly-review',
 ] as const;
 
 export type PurgeLocalUserDataResult = {

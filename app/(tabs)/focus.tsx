@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 
 import { fonts, fontSize, spacing, radius, shadow, themedColors } from '../../theme/tokens';
@@ -76,6 +76,13 @@ import {
   ExpandedGoalCard,
   SpotlightGoalCard,
 } from '../../components/focus/GoalCards';
+import { WeeklyReviewCard } from '../../components/focus/WeeklyReviewCard';
+import {
+  getWeeklyReviewViewedWeek,
+  shouldShowWeeklyReviewCard,
+  weeklyReviewCardLine,
+} from '../../lib/weeklyReview/arrival';
+import { countMarksLogged, deriveDaysActive, reviewWeekDates } from '../../lib/weeklyReview/derive';
 
 import type { Counter, Mark, MarkEvent } from '../../types';
 import type { Goal } from '../../types/goal';
@@ -295,6 +302,34 @@ export default function FocusScreen() {
     () => shouldShowMomentumBanner(momentumSnapshots, bannerDismissedDate, todayStr),
     [momentumSnapshots, bannerDismissedDate, todayStr],
   );
+
+  // WR-3: the weekly review arrival card — Sunday 19:00 through the Mon–Tue
+  // lookback, cleared by VIEWING the review (no dismiss control). The viewed
+  // week is re-read on every screen focus so returning from the review clears
+  // the card immediately.
+  const [reviewViewedWeek, setReviewViewedWeek] = useState<string | null>(null);
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      void getWeeklyReviewViewedWeek().then((v) => {
+        if (active) setReviewViewedWeek(v);
+      });
+      return () => {
+        active = false;
+      };
+    }, []),
+  );
+  const reviewCardLine = useMemo(() => {
+    const weekDates = reviewWeekDates(todayStr);
+    const daysActiveCount = deriveDaysActive(allEvents, weekDates).filter(Boolean).length;
+    return weeklyReviewCardLine(daysActiveCount, countMarksLogged(allEvents, weekDates));
+  }, [allEvents, todayStr]);
+  const reviewCardVisible = shouldShowWeeklyReviewCard({
+    todayStr,
+    hour: getAppDate().getHours(),
+    viewedWeekStart: reviewViewedWeek,
+    hasActiveGoals: activeGoals.length > 0,
+  });
 
   const handleDismissBanner = useCallback(() => {
     setBannerDismissedDate(todayStr);
@@ -764,6 +799,10 @@ export default function FocusScreen() {
       >
         {bannerVisible && bannerText !== '' && (
           <MomentumBanner text={bannerText} onDismiss={handleDismissBanner} />
+        )}
+
+        {reviewCardVisible && (
+          <WeeklyReviewCard line={reviewCardLine} onPress={() => router.push('/review')} />
         )}
 
         {/* ── Greeting ── */}

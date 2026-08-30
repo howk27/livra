@@ -7,7 +7,7 @@
 // and draws. Presented as a modal (registered in app/_layout.tsx) — remember a
 // root-mounted RN <Modal> cannot present over it (OverlayPortal if ever needed).
 
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Redirect, useRouter } from 'expo-router';
@@ -40,6 +40,7 @@ import { selectAppDateKey, useAppDateStore } from '../../state/appDateSlice';
 import { getAppDate } from '../../lib/appDate';
 import { formatDate } from '../../lib/date';
 import { useIapSubscriptions } from '../../hooks/useIapSubscriptions';
+import { setWeeklyReviewViewedWeek } from '../../lib/weeklyReview/arrival';
 import { logger } from '../../lib/utils/logger';
 import {
   deriveWeeklyReview,
@@ -235,6 +236,13 @@ export default function WeeklyReviewScreen() {
       return null;
     }
   }, [loading, goalsQuery.data, marksByGoalQuery.data, checkinsQuery.data, snapshots, todayStr]);
+
+  // WR-3: viewing IS the dismissal — recording the reviewed weekStart clears
+  // the Focus arrival card for this week.
+  const viewedWeekStart = review?.weekStart ?? null;
+  useEffect(() => {
+    if (viewedWeekStart) void setWeeklyReviewViewedWeek(viewedWeekStart);
+  }, [viewedWeekStart]);
 
   // Nothing to review → quiet redirect to Focus (spec §8). Only after loading
   // settles, so a cold open never bounces mid-fetch.
