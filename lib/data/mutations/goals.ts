@@ -78,6 +78,8 @@ export interface CreateGoalInput {
   frequency?: string | null;
   targetMarkCount?: number | null;
   deadlineDate?: string | null;
+  /** Guided Programs (PG-4): the catalog card this goal follows, or absent. */
+  programId?: string | null;
   /** Position among active goals. The caller knows the current list; this module
    * does not read to write. */
   sortIndex: number;
@@ -122,6 +124,7 @@ export async function createGoal(input: CreateGoalInput): Promise<GoalRow> {
       current_mark_count: 0,
       sort_index: input.sortIndex,
       deadline_date: input.deadlineDate ?? null,
+      program_id: input.programId ?? null,
       created_at: now,
       updated_at: now,
     })

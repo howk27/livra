@@ -297,6 +297,12 @@ export default function RootLayout() {
               ),
             )
             .catch(() => {});
+          // PG-4: stage-mark reconcile for active program goals (additive,
+          // idempotent, never throws). Dynamic import — same lazy pattern as
+          // momentumWarningNotifications above.
+          void import('../lib/programs/reconcile')
+            .then(({ reconcileProgramStageMarks }) => reconcileProgramStageMarks(userId))
+            .catch(() => {});
         }
       }
     };

@@ -9,7 +9,6 @@
 // weekPositionOf (lib/moments/context.ts) and date arithmetic from lib/date.
 // Never add a fourth week helper.
 
-import type { MarkEvent } from '../../types';
 import { weekPositionOf } from '../moments/context';
 import { addDays, formatDate, parseISO } from '../date';
 import type { PaceLevel } from '../paceSetting';
@@ -17,10 +16,16 @@ import { DEFAULT_EASED_SCALE, type ProgramDefinition, type ProgramStage } from '
 
 export type ProgramWeekGrade = 'held' | 'partial' | 'quiet';
 
-export type ProgramEventInput = Pick<
-  MarkEvent,
-  'mark_id' | 'event_type' | 'occurred_local_date' | 'deleted_at'
->;
+// Structural on purpose: callers hold BOTH the hand-written MarkEvent (union
+// event_type) and the query layer's MarkEventRow (plain string — the DB does
+// not constrain the enum, lib/data/types.ts header). The row is the truth, so
+// the field is the wider string here and isCountedLog does the narrowing.
+export type ProgramEventInput = {
+  mark_id: string;
+  event_type: string;
+  occurred_local_date: string;
+  deleted_at: string | null;
+};
 
 export type ProgramState = {
   programId: string;
