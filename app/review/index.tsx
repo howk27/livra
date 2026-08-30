@@ -118,7 +118,9 @@ function GoalCard({ goal, c, theme }: { goal: ReviewGoalCard; c: ThemeColors; th
       {goal.marks.map((m) => (
         <View key={m.markId} style={styles.markRow}>
           <Text style={[styles.markName, { color: c.inkMid }]}>{m.name}</Text>
-          <Text style={[styles.markCount, { color: m.met ? c.ember : c.inkMuted }]}>
+          {/* emberInk, not ember: 15px medium on light cardRaised chrome is the
+              exact small-text duty plain ember is barred from (Tokens 2026-07-26). */}
+          <Text style={[styles.markCount, { color: m.met ? c.emberInk : c.inkMuted }]}>
             {/* a zero is never rendered (ux-psychology rule 2, hard) */}
             {m.done === 0 ? 'not yet' : `${m.done} of ${m.target}`}
             {m.met ? '  ✓' : ''}
