@@ -24,6 +24,7 @@ const COPY_MODULES = [
 const COPY_CARRYING_SOURCES = [
   'app/settings/profile.tsx',
   'lib/auth/emailVerification.ts',
+  'lib/weeklyReview/derive.ts',
 ];
 
 // Matches single-quoted, double-quoted, and backtick string literals (no escaped
