@@ -54,6 +54,9 @@ export const GOAL_COLUMNS = [
   'completed_at',
   'banked_momentum_days',
   'milestones_fired',
+  // Applied live 2026-08-30 (20260830_goals_program_id.sql) — selectable only
+  // since then; a select before the migration would have 42703'd every goals pull.
+  'program_id',
   'created_at',
   'updated_at',
   'deleted_at',

@@ -25,6 +25,14 @@
 // null`) are the generator's exact output shape for a nullable text column.
 // Fold into the next full regeneration.
 //
+// UPDATED 2026-08-30 for `goals.program_id` (migration
+// 20260830_goals_program_id.sql — APPLIED LIVE via MCP execute_sql and read
+// back from information_schema + column_privileges by the orchestrator before
+// this edit). Same goal_mark_links.why precedent: the three added lines (Row
+// `program_id: string | null`, Insert/Update `program_id?: string | null`) are
+// the generator's exact output shape for a nullable text column. Fold into the
+// next full regeneration.
+//
 // App-facing row types are DERIVED from that block (never re-typed by hand) below
 // the generated section.
 //
@@ -422,6 +430,7 @@ export type Database = {
           icon: string | null
           id: string
           milestones_fired: Json | null
+          program_id: string | null
           sort_index: number
           status: string
           target_mark_count: number | null
@@ -443,6 +452,7 @@ export type Database = {
           icon?: string | null
           id: string
           milestones_fired?: Json | null
+          program_id?: string | null
           sort_index?: number
           status?: string
           target_mark_count?: number | null
@@ -464,6 +474,7 @@ export type Database = {
           icon?: string | null
           id?: string
           milestones_fired?: Json | null
+          program_id?: string | null
           sort_index?: number
           status?: string
           target_mark_count?: number | null
