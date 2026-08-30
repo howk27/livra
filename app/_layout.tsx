@@ -724,6 +724,9 @@ function RootNavigator() {
         <Stack.Screen name="goal/suggest" options={{ presentation: 'modal', title: 'Suggest a plan', headerShown: false }} />
         <Stack.Screen name="goal/[id]" options={{ presentation: 'modal', headerShown: false }} />
         <Stack.Screen name="goal/journal/[id]" options={{ presentation: 'modal', headerShown: false }} />
+        {/* WR-2: the Weekly Review arrives as a modal, like every other detail
+            surface; the review itself computes at render time inside the screen. */}
+        <Stack.Screen name="review/index" options={{ presentation: 'modal', headerShown: false }} />
         <Stack.Screen
           name="goal/complete"
           options={{
