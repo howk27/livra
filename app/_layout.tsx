@@ -255,7 +255,7 @@ export default function RootLayout() {
       if (!response) return;
       const data = response.notification.request.content.data as Record<string, unknown>;
       if (data?.screen === 'review') {
-        router.push('/review');
+        router.push({ pathname: '/review', params: { source: 'notification' } });
       }
     };
 

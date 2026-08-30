@@ -23,6 +23,12 @@ export const ANALYTICS_EVENTS = {
   /** Auth funnel — distinguishes returning vs new users. */
   USER_SIGNED_IN: 'user_signed_in',
   USER_SIGNED_UP: 'user_signed_up',
+  /** WR-5: the Mark → Reflect → Review loop closing. Properties:
+   *  source: 'notification' | 'focus_card' | 'other' · week_start ·
+   *  days_active · marks_logged · first_week: boolean */
+  WEEKLY_REVIEW_OPENED: 'weekly_review_opened',
+  /** WR-5: the Livra+ tease footer tapped. Property: week_start. */
+  WEEKLY_REVIEW_PAYWALL_TAPPED: 'weekly_review_paywall_tapped',
 } as const;
 
 export type AnalyticsEvent = (typeof ANALYTICS_EVENTS)[keyof typeof ANALYTICS_EVENTS];

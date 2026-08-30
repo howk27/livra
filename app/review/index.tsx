@@ -10,7 +10,7 @@
 import React, { useEffect, useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Redirect, useRouter } from 'expo-router';
+import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { X } from 'phosphor-react-native';
 
 import {
@@ -41,6 +41,8 @@ import { getAppDate } from '../../lib/appDate';
 import { formatDate } from '../../lib/date';
 import { useIapSubscriptions } from '../../hooks/useIapSubscriptions';
 import { setWeeklyReviewViewedWeek } from '../../lib/weeklyReview/arrival';
+import { capture } from '../../lib/analytics/posthog';
+import { ANALYTICS_EVENTS } from '../../lib/analytics/events';
 import { logger } from '../../lib/utils/logger';
 import {
   deriveWeeklyReview,
@@ -238,10 +240,30 @@ export default function WeeklyReviewScreen() {
   }, [loading, goalsQuery.data, marksByGoalQuery.data, checkinsQuery.data, snapshots, todayStr]);
 
   // WR-3: viewing IS the dismissal — recording the reviewed weekStart clears
-  // the Focus arrival card for this week.
+  // the Focus arrival card for this week. WR-5: the same once-per-week moment
+  // is the opened event; effect deps make both fire once per weekStart.
+  const params = useLocalSearchParams<{ source?: string }>();
+  const source =
+    params.source === 'notification' || params.source === 'focus_card'
+      ? params.source
+      : 'other';
   const viewedWeekStart = review?.weekStart ?? null;
+  const daysActiveCount = review?.daysActiveCount ?? 0;
+  const marksLogged = review?.marksLogged ?? 0;
+  const firstWeek = review?.firstWeek ?? false;
   useEffect(() => {
-    if (viewedWeekStart) void setWeeklyReviewViewedWeek(viewedWeekStart);
+    if (!viewedWeekStart) return;
+    void setWeeklyReviewViewedWeek(viewedWeekStart);
+    capture(ANALYTICS_EVENTS.WEEKLY_REVIEW_OPENED, {
+      source,
+      week_start: viewedWeekStart,
+      days_active: daysActiveCount,
+      marks_logged: marksLogged,
+      first_week: firstWeek,
+    });
+    // The counts describe the week being opened; they ride the weekStart dep on
+    // purpose so a background refetch cannot double-fire the event.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewedWeekStart]);
 
   // Nothing to review → quiet redirect to Focus (spec §8). Only after loading
@@ -288,7 +310,12 @@ export default function WeeklyReviewScreen() {
             c={c}
             theme={theme}
             showTease={!isProUnlocked}
-            onTease={() => router.push('/paywall')}
+            onTease={() => {
+              capture(ANALYTICS_EVENTS.WEEKLY_REVIEW_PAYWALL_TAPPED, {
+                week_start: review.weekStart,
+              });
+              router.push('/paywall');
+            }}
           />
         )}
       </ScrollView>

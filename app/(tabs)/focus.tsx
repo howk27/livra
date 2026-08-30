@@ -802,7 +802,10 @@ export default function FocusScreen() {
         )}
 
         {reviewCardVisible && (
-          <WeeklyReviewCard line={reviewCardLine} onPress={() => router.push('/review')} />
+          <WeeklyReviewCard
+            line={reviewCardLine}
+            onPress={() => router.push({ pathname: '/review', params: { source: 'focus_card' } })}
+          />
         )}
 
         {/* ── Greeting ── */}
