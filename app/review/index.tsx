@@ -33,7 +33,10 @@ import { useUserCheckins } from '@/lib/data/checkins';
 import { asDataError } from '@/lib/data/errors';
 import { dataErrorCopy } from '@/lib/copy';
 import { resolveRowCadence } from '@/lib/markCadence';
-import type { GoalRow, MarkEventRow, MarkRow } from '@/lib/data/types';
+// Not a Phase 2 screen: this surface was born after the seam, so it takes the
+// SHARED adapter rather than growing another hand copy (lib/data/adapters.ts).
+import { toMarkEvent } from '@/lib/data/adapters';
+import type { GoalRow, MarkRow } from '@/lib/data/types';
 
 import { useMomentumStore } from '../../state/momentumSlice';
 import { selectAppDateKey, useAppDateStore } from '../../state/appDateSlice';
@@ -50,32 +53,12 @@ import {
   type ReviewGoalCard,
   type WeeklyReviewData,
 } from '../../lib/weeklyReview/derive';
-import type { MarkEvent } from '../../types';
 
 const DAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
 const EMPTY_GOAL_ROWS: GoalRow[] = [];
-const EMPTY_CHECKIN_ROWS: MarkEventRow[] = [];
+const EMPTY_CHECKIN_ROWS: Parameters<typeof toMarkEvent>[0][] = [];
 const EMPTY_MARKS_BY_GOAL: Record<string, MarkRow[]> = {};
-
-// Same strangler-seam bridge every reading screen carries (app/(tabs)/focus.tsx
-// precedent): query rows → the old event model the pure week helpers are typed
-// against. Deleted with the seam.
-function toMarkEvent(row: MarkEventRow): MarkEvent {
-  return {
-    id: row.id,
-    user_id: row.user_id,
-    mark_id: row.mark_id,
-    event_type: row.event_type as MarkEvent['event_type'],
-    amount: row.amount ?? 1,
-    occurred_at: row.occurred_at,
-    occurred_local_date: row.occurred_local_date,
-    meta: (row.meta ?? undefined) as Record<string, unknown> | undefined,
-    deleted_at: row.deleted_at,
-    created_at: row.created_at ?? '',
-    updated_at: row.updated_at ?? '',
-  };
-}
 
 type ThemeColors = ReturnType<typeof themedColors>;
 
@@ -163,13 +146,28 @@ function ReviewBody({ review, c, theme, showTease, onTease }: {
           accessibilityRole="button"
           accessibilityLabel="Livra Plus adds trends across your weeks"
           onPress={onTease}
-          style={[styles.teaseLine, { borderColor: c.borderLight }]}
+          style={({ pressed }) => [
+            styles.teaseLine,
+            { borderColor: c.borderLight, opacity: pressed ? 0.7 : 1 },
+          ]}
         >
           <Text style={[styles.teaseText, { color: c.inkMuted }]}>
             Livra+ adds the deeper story · trends across your weeks
           </Text>
         </Pressable>
       )}
+    </>
+  );
+}
+
+// One quiet fallback for both failure shapes (query error, derivation null) —
+// never a crash screen (spec §8).
+function QuietFallback({ c, body }: { c: ThemeColors; body: string }) {
+  return (
+    <>
+      <Text style={[styles.kicker, { color: c.inkMuted }]}>This week</Text>
+      <Text style={[styles.headline, { color: c.inkDark }]}>Your week is safe.</Text>
+      <Text style={[styles.body, { color: c.inkMid }]}>{body}</Text>
     </>
   );
 }
@@ -279,7 +277,7 @@ export default function WeeklyReviewScreen() {
           accessibilityRole="button"
           accessibilityLabel="Close"
           onPress={() => router.back()}
-          style={styles.headerBtn}
+          style={({ pressed }) => [styles.headerBtn, { opacity: pressed ? 0.6 : 1 }]}
           hitSlop={4}
         >
           <X size={24} color={c.inkMid} weight="regular" />
@@ -289,21 +287,14 @@ export default function WeeklyReviewScreen() {
       <ScrollView contentContainerStyle={styles.scroll}>
         {loading ? (
           <ReviewSkeleton />
-        ) : queryError ? (
-          <>
-            <Text style={[styles.kicker, { color: c.inkMuted }]}>This week</Text>
-            <Text style={[styles.headline, { color: c.inkDark }]}>Your week is safe.</Text>
-            <Text style={[styles.body, { color: c.inkMid }]}>{queryError}</Text>
-          </>
-        ) : review === null ? (
-          <>
-            <Text style={[styles.kicker, { color: c.inkMuted }]}>This week</Text>
-            <Text style={[styles.headline, { color: c.inkDark }]}>Your week is safe.</Text>
-            <Text style={[styles.body, { color: c.inkMid }]}>
-              The review could not be drawn just now. Everything you logged is
-              still here, and this page will be ready next time you open it.
-            </Text>
-          </>
+        ) : queryError || review === null ? (
+          <QuietFallback
+            c={c}
+            body={
+              queryError ??
+              'The review could not be drawn just now. Everything you logged is still here, and this page will be ready next time you open it.'
+            }
+          />
         ) : (
           <ReviewBody
             review={review}

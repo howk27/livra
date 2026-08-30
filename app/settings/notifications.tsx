@@ -37,6 +37,15 @@ function dateToHhmm(d: Date): string {
   return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
+// Scheduling silently fails (or throws) without OS permission — both per-feature
+// toggles ask first, through this one door.
+async function ensureNotificationPermission(): Promise<boolean> {
+  const { status: existing } = await Notifications.getPermissionsAsync();
+  if (existing === 'granted') return true;
+  const { status } = await Notifications.requestPermissionsAsync();
+  return status === 'granted';
+}
+
 export default function NotificationsScreen() {
   const c = themedColors(useEffectiveTheme());
   const { enabled, hydrated, setEnabled } = useNotificationsMaster();
@@ -83,18 +92,10 @@ export default function NotificationsScreen() {
     };
     setWeeklyReviewEnabledState(value);
     try {
-      if (value) {
-        // Scheduling silently fails without OS permission — ask first, once.
-        const { status: existing } = await Notifications.getPermissionsAsync();
-        let status = existing;
-        if (status !== 'granted') {
-          ({ status } = await Notifications.requestPermissionsAsync());
-        }
-        if (status !== 'granted') {
-          setWeeklyReviewEnabledState(false);
-          showError('Notifications are off for Livra. Allow them in your phone Settings to get the weekly review.');
-          return;
-        }
+      if (value && !(await ensureNotificationPermission())) {
+        setWeeklyReviewEnabledState(false);
+        showError('Notifications are off for Livra. Allow them in your phone Settings to get the weekly review.');
+        return;
       }
       await setWeeklyReviewNotifEnabled(value);
       await reconcileWeeklyReview(hasActiveGoals());
@@ -109,13 +110,7 @@ export default function NotificationsScreen() {
     setReminderEnabled(value);
     try {
       if (value) {
-        // Scheduling silently fails (or throws) without OS permission — ask first.
-        const { status: existing } = await Notifications.getPermissionsAsync();
-        let status = existing;
-        if (status !== 'granted') {
-          ({ status } = await Notifications.requestPermissionsAsync());
-        }
-        if (status !== 'granted') {
+        if (!(await ensureNotificationPermission())) {
           setReminderEnabled(false);
           showError('Notifications are off for Livra. Allow them in your phone Settings to get a daily reminder.');
           return;

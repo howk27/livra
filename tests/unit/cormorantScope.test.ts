@@ -30,6 +30,11 @@ const SANCTIONED = new Set<string>([
   // "Livra+" wordmark "in cursive, greyed out" — an explicit ask for the fancy
   // written face, so this is a sanctioned brand-wordmark site, not drift.
   'app/paywall.tsx',                                // subscriber "Livra+" wordmark
+  // Founder 2026-08-29 (Weekly Review, prototype D confirmed): the review is a
+  // moments-that-matter surface by contract — serif headline (the letter
+  // voice), serifSemibold goal titles, serifItalic why quote. All three are
+  // the sanctioned goal-title/moment classes, rendered weekly, not chrome.
+  'app/review/index.tsx',                           // weekly review letter voice
 ]);
 
 const CORMORANT = /fonts\.(serif|serifSemibold|serifItalic)\b/;
