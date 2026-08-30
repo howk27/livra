@@ -116,6 +116,38 @@ function activeDaysInWeek(
   return active.size;
 }
 
+/**
+ * Grade every closed week: a sequential fold, because week i's bar depends on
+ * whether week i-1 graded quiet (it enters eased). What the user was ASKED
+ * that week is what the week is graded against.
+ */
+function gradeClosedWeeks(
+  def: ProgramDefinition,
+  startMonday: string,
+  markIds: Set<string>,
+  events: ProgramEventInput[],
+  pace: PaceLevel,
+  closedWeeks: number,
+): ProgramWeekGrade[] {
+  const grades: ProgramWeekGrade[] = [];
+  let prevQuiet = false;
+  for (let i = 0; i < closedWeeks; i++) {
+    const stage = def.stages[i];
+    const eased = i > 0 && prevQuiet;
+    const bar = scaleTarget(
+      stage.bar.daysRequired,
+      pace,
+      eased ? (stage.easedScale ?? DEFAULT_EASED_SCALE) : undefined,
+    );
+    const weekMonday = formatDate(addDays(parseISO(startMonday), i * 7));
+    const active = activeDaysInWeek(events, markIds, weekMonday);
+    const grade: ProgramWeekGrade = active >= bar ? 'held' : active >= 1 ? 'partial' : 'quiet';
+    grades.push(grade);
+    prevQuiet = grade === 'quiet';
+  }
+  return grades;
+}
+
 // ── Assembly ─────────────────────────────────────────────────────────────────
 
 /**
@@ -146,22 +178,7 @@ export function deriveProgramState(
   const startMonday = programWeekStart(createdAt.slice(0, 10));
 
   const closedWeeks = Math.min(elapsed, def.durationWeeks);
-  const weekGrades: ProgramWeekGrade[] = [];
-  let prevQuiet = false;
-  for (let i = 0; i < closedWeeks; i++) {
-    const stage = def.stages[i];
-    const eased = i > 0 && prevQuiet;
-    const bar = scaleTarget(
-      stage.bar.daysRequired,
-      pace,
-      eased ? (stage.easedScale ?? DEFAULT_EASED_SCALE) : undefined,
-    );
-    const weekMonday = formatDate(addDays(parseISO(startMonday), i * 7));
-    const active = activeDaysInWeek(events, markIds, weekMonday);
-    const grade: ProgramWeekGrade = active >= bar ? 'held' : active >= 1 ? 'partial' : 'quiet';
-    weekGrades.push(grade);
-    prevQuiet = grade === 'quiet';
-  }
+  const weekGrades = gradeClosedWeeks(def, startMonday, markIds, events, pace, closedWeeks);
 
   const stage = def.stages[stageIndex];
   const lastClosed = weekGrades.length > 0 ? weekGrades[weekGrades.length - 1] : null;

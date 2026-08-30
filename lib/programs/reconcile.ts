@@ -10,20 +10,20 @@
 // foreground block). Best-effort: every failure is logged, never thrown.
 
 import { dataClient } from '../data/client';
-import { createMark, editMark } from '../data/mutations/marks';
+import { editMark } from '../data/mutations/marks';
 import { queryClient } from '../data/queryClient';
 import { queryKeys } from '../data/queryKeys';
 import { fetchGoals } from '../data/goals';
 import { readGoalDataSnapshot } from '../goals/momentumEvaluation';
 import { MARK_LIBRARY_BY_ID } from '../suggestedCounters';
-import { colorForSuggestedCounter } from '../markCategory';
-import { defaultDailyTargetForMarkId } from '../markQuantitative';
+import type { PaceLevel } from '../paceSetting';
 import { getPace } from '../paceSetting';
 import { todayISO } from '../features';
 import { logger } from '../utils/logger';
 import { PROGRAM_BY_ID } from './catalog';
-import { DEFAULT_EASED_SCALE } from './types';
-import { deriveProgramState, programMarkWeeklyTarget } from './derive';
+import { DEFAULT_EASED_SCALE, type ProgramDefinition } from './types';
+import { deriveProgramState, programMarkWeeklyTarget, type ProgramEventInput } from './derive';
+import { createProgramMark } from './programMarks';
 
 type LinkedMark = {
   id: string;
@@ -63,6 +63,72 @@ async function fetchLinkedMarksWithTombstones(goalId: string): Promise<LinkedMar
   }));
 }
 
+/**
+ * Apply ONE stage mark to the goal: create it when absent, rewrite a drifted
+ * variable target, skip tombstones. Returns true when something was written.
+ */
+async function applyStageMark(
+  userId: string,
+  goalId: string,
+  linked: LinkedMark[],
+  stageMark: { libraryId: string; weeklyTarget: number; dailyTarget?: number },
+  pace: PaceLevel,
+  easedScale: number | undefined,
+): Promise<boolean> {
+  const lib = MARK_LIBRARY_BY_ID[stageMark.libraryId];
+  if (!lib) return false;
+  const desired = programMarkWeeklyTarget(lib, stageMark.weeklyTarget, pace, easedScale);
+  // Library id -> mark row by NAME: creation copies the library name verbatim
+  // (startProgram / createFromAIPackage). A renamed mark no longer matches and
+  // is treated as absent from the stage; the tombstone check below still sees
+  // the original-named row.
+  const match = linked.find((m) => m.name === lib.name);
+
+  if (match && (match.markDeleted || match.linkDeleted)) return false; // never resurrect
+  if (!match) {
+    await createProgramMark({
+      userId,
+      goalId,
+      lib,
+      weeklyTarget: desired,
+      dailyTarget: stageMark.dailyTarget,
+    });
+    return true;
+  }
+  if (match.frequency_kind === 'variable' && match.weekly_target !== desired) {
+    await editMark(match.id, { cadence: { weekly_target: desired } });
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Reconcile ONE program goal against its current stage. Returns true when a
+ * mark was created or a target rewritten.
+ */
+async function reconcileGoal(
+  userId: string,
+  goal: { id: string; program_id: string | null; created_at: string | null },
+  def: ProgramDefinition,
+  events: ProgramEventInput[],
+  pace: PaceLevel,
+  todayStr: string,
+): Promise<boolean> {
+  const linked = await fetchLinkedMarksWithTombstones(goal.id);
+  const liveMarks = linked.filter((m) => !m.markDeleted && !m.linkDeleted);
+  const state = deriveProgramState(def, goal, liveMarks, events, pace, todayStr);
+  const easedScale =
+    state.mode === 'eased' ? (state.stage.easedScale ?? DEFAULT_EASED_SCALE) : undefined;
+
+  let changed = false;
+  for (const stageMark of state.stage.marks) {
+    if (await applyStageMark(userId, goal.id, linked, stageMark, pace, easedScale)) {
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 export async function reconcileProgramStageMarks(
   userId: string,
   todayStr: string = todayISO(),
@@ -84,50 +150,8 @@ export async function reconcileProgramStageMarks(
     for (const goal of programGoals) {
       try {
         const def = PROGRAM_BY_ID[goal.program_id as string];
-        const linked = await fetchLinkedMarksWithTombstones(goal.id);
-        const liveMarks = linked.filter((m) => !m.markDeleted && !m.linkDeleted);
-        const state = deriveProgramState(def, goal, liveMarks, snapshot.events, pace, todayStr);
-        const easedScale =
-          state.mode === 'eased' ? (state.stage.easedScale ?? DEFAULT_EASED_SCALE) : undefined;
-
-        for (const stageMark of state.stage.marks) {
-          const lib = MARK_LIBRARY_BY_ID[stageMark.libraryId];
-          if (!lib) continue;
-          const desired = programMarkWeeklyTarget(lib, stageMark.weeklyTarget, pace, easedScale);
-          // Library id -> mark row by NAME: creation copies the library name
-          // verbatim (startProgram / createFromAIPackage). A renamed mark no
-          // longer matches and is treated as absent from the stage; the
-          // tombstone check below still sees the original-named row.
-          const match = linked.find((m) => m.name === lib.name);
-
-          if (match && (match.markDeleted || match.linkDeleted)) continue; // never resurrect
-          if (!match) {
-            await createMark({
-              userId,
-              name: lib.name,
-              emoji: lib.emoji,
-              color: colorForSuggestedCounter(lib),
-              unit: lib.unit,
-              enableStreak: false,
-              sortIndex: 0,
-              goalId: goal.id,
-              cadence: {
-                frequency_kind: lib.frequencyKind,
-                frequency_min: lib.frequency_min,
-                frequency_recommended: lib.frequency_recommended,
-                frequency_max: lib.frequency_max,
-                weekly_target: desired,
-                dailyTarget: stageMark.dailyTarget ?? defaultDailyTargetForMarkId(lib.id),
-                maintenance_of: null,
-              },
-            });
-            changed = true;
-            continue;
-          }
-          if (match.frequency_kind === 'variable' && match.weekly_target !== desired) {
-            await editMark(match.id, { cadence: { weekly_target: desired } });
-            changed = true;
-          }
+        if (await reconcileGoal(userId, goal, def, snapshot.events, pace, todayStr)) {
+          changed = true;
         }
       } catch (err) {
         logger.error('[programs] reconcile failed for goal', goal.id, err);

@@ -10,13 +10,10 @@
 // data and stay fully usable (grandfathered, spec §5).
 
 import { createGoal } from '../data/mutations/goals';
-import { createMark } from '../data/mutations/marks';
 import { fetchGoals } from '../data/goals';
 import { queryClient } from '../data/queryClient';
 import { queryKeys } from '../data/queryKeys';
 import { MARK_LIBRARY_BY_ID } from '../suggestedCounters';
-import { colorForSuggestedCounter } from '../markCategory';
-import { defaultDailyTargetForMarkId } from '../markQuantitative';
 import { capture } from '../analytics/posthog';
 import { ANALYTICS_EVENTS } from '../analytics/events';
 import { logger } from '../utils/logger';
@@ -24,6 +21,7 @@ import type { PaceLevel } from '../paceSetting';
 import type { GoalRow } from '../data/types';
 import { PROGRAM_BY_ID } from './catalog';
 import { programMarkWeeklyTarget } from './derive';
+import { createProgramMark } from './programMarks';
 
 export class ProgramProGateError extends Error {
   constructor() {
@@ -86,27 +84,14 @@ export async function startProgram(args: StartProgramArgs): Promise<GoalRow> {
     const lib = MARK_LIBRARY_BY_ID[m.libraryId];
     if (!lib) continue; // guard test makes this unreachable; belt and braces
     try {
-      // Created AND linked in one call (goalId -> a goal_mark_links row).
-      await createMark({
+      // Fixed/abstinence keep recommended; variable takes the card's
+      // pace-scaled target (spec §3; the 2026-08-04 backfill precedent).
+      await createProgramMark({
         userId,
-        name: lib.name,
-        emoji: lib.emoji,
-        color: colorForSuggestedCounter(lib),
-        unit: lib.unit,
-        enableStreak: false,
-        sortIndex: 0,
         goalId: goal.id,
-        cadence: {
-          frequency_kind: lib.frequencyKind,
-          frequency_min: lib.frequency_min,
-          frequency_recommended: lib.frequency_recommended,
-          frequency_max: lib.frequency_max,
-          // Fixed/abstinence keep recommended; variable takes the card's
-          // pace-scaled target (spec §3; the 2026-08-04 backfill precedent).
-          weekly_target: programMarkWeeklyTarget(lib, m.weeklyTarget, pace),
-          dailyTarget: m.dailyTarget ?? defaultDailyTargetForMarkId(lib.id),
-          maintenance_of: null,
-        },
+        lib,
+        weeklyTarget: programMarkWeeklyTarget(lib, m.weeklyTarget, pace),
+        dailyTarget: m.dailyTarget,
       });
     } catch (err) {
       // A single mark failing must not abandon the goal or the other marks
