@@ -420,14 +420,24 @@ export default function RootLayout() {
         // Widget deep links — handle before the password-reset guard
         const isWidgetHome = incomingUrl === 'livra://home' || incomingUrl.startsWith('livra://home?');
         const isWidgetLogMark = incomingUrl.startsWith('livra://log-mark');
+        // livra://review — hand-routed like the widget links (2026-09-06,
+        // founder device: native scheme→route mapping left the URL unhandled
+        // and the app opened on Focus). Same push the Sunday notification uses.
+        const isReviewLink =
+          incomingUrl === 'livra://review' || incomingUrl.startsWith('livra://review?');
 
         // T4 security re-check (Critical): these branches route to the tabs and
         // fire on EVERY url event, so without this gate a recovery-session
         // holder could escape the set-password screen by opening livra://home —
         // the exact bypass the leash exists to close. While a reset is
         // pending, every deep link lands back on the set-password screen.
-        if ((isWidgetHome || isWidgetLogMark) && (await isRecoveryPending())) {
+        if ((isWidgetHome || isWidgetLogMark || isReviewLink) && (await isRecoveryPending())) {
           router.replace('/auth/reset-password-complete');
+          return;
+        }
+
+        if (isReviewLink) {
+          router.push({ pathname: '/review', params: { source: 'other' } });
           return;
         }
 

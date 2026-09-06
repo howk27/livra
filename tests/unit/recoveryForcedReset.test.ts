@@ -116,6 +116,16 @@ describe('the three enforcement points stay wired', () => {
     );
   });
 
+  it('the review deep link rides the SAME leash, never a parallel ungated branch', () => {
+    // 2026-09-06: livra://review is hand-routed like the widget links. Adding
+    // it as its own if-branch above the gate would recreate the exact T4
+    // bypass for a new URL — so the declaration must sit with the widget
+    // declarations and the leash condition must name it.
+    const layout = strip('app/_layout.tsx');
+    expect(layout).toMatch(/const isReviewLink/);
+    expect(layout).toMatch(/isWidgetHome \|\| isWidgetLogMark \|\| isReviewLink/);
+  });
+
   it('a persist failure is retried before the leash trusts memory alone', async () => {
     // Manual swap, NEVER spyOn/mockRestore on the shared AsyncStorage mock —
     // restore strips its implementation for every later test (decisions.md
