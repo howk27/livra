@@ -29,6 +29,10 @@ export const ANALYTICS_EVENTS = {
   WEEKLY_REVIEW_OPENED: 'weekly_review_opened',
   /** WR-5: the Livra+ tease footer tapped. Property: week_start. */
   WEEKLY_REVIEW_PAYWALL_TAPPED: 'weekly_review_paywall_tapped',
+  /** First-100 sprint: the review share card handed to the share sheet
+   *  (fired on capture, before the user picks a destination — the OS never
+   *  reports the outcome). Property: week_start. */
+  WEEKLY_REVIEW_SHARED: 'weekly_review_shared',
 } as const;
 
 export type AnalyticsEvent = (typeof ANALYTICS_EVENTS)[keyof typeof ANALYTICS_EVENTS];

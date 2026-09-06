@@ -35,6 +35,10 @@ const SANCTIONED = new Set<string>([
   // voice), serifSemibold goal titles, serifItalic why quote. All three are
   // the sanctioned goal-title/moment classes, rendered weekly, not chrome.
   'app/review/index.tsx',                           // weekly review letter voice
+  // First-100 sprint 2026-09-04: the review letter rendered as a shareable
+  // image is the same moments-that-matter surface (serif headline + wordmark),
+  // captured offscreen, never chrome.
+  'components/WeeklyReviewShareCard.tsx',           // weekly review share card
 ]);
 
 const CORMORANT = /fonts\.(serif|serifSemibold|serifItalic)\b/;

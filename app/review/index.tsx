@@ -7,11 +7,12 @@
 // and draws. Presented as a modal (registered in app/_layout.tsx) — remember a
 // root-mounted RN <Modal> cannot present over it (OverlayPortal if ever needed).
 
-import React, { useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
-import { X } from 'phosphor-react-native';
+import { Export, X } from 'phosphor-react-native';
+import * as Sharing from 'expo-sharing';
 
 import {
   fonts,
@@ -53,6 +54,8 @@ import {
   type ReviewGoalCard,
   type WeeklyReviewData,
 } from '../../lib/weeklyReview/derive';
+import { generateShareCard } from '../../lib/sharing/generateShareCard';
+import { WeeklyReviewShareCard } from '../../components/WeeklyReviewShareCard';
 
 const DAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
@@ -264,6 +267,25 @@ export default function WeeklyReviewScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewedWeekStart]);
 
+  // First-100 sprint: the review as a shareable image. The card renders
+  // offscreen (goal-title-free by construction, see WeeklyReviewShareCard) and
+  // the capture hands the file straight to the OS share sheet — no modal, no
+  // customization, the one committed look. Best-effort: a capture or sheet
+  // failure logs and does nothing (goal/complete.tsx precedent).
+  const shareCardRef = useRef<View>(null);
+  const shareWeekStart = review?.weekStart ?? null;
+  const handleShare = useCallback(async () => {
+    try {
+      const uri = await generateShareCard(shareCardRef as React.RefObject<View>);
+      if (shareWeekStart) {
+        capture(ANALYTICS_EVENTS.WEEKLY_REVIEW_SHARED, { week_start: shareWeekStart });
+      }
+      await Sharing.shareAsync(uri, { mimeType: 'image/jpeg', dialogTitle: 'Share your week' });
+    } catch (e) {
+      logger.debug('[WeeklyReview] share failed', e);
+    }
+  }, [shareWeekStart]);
+
   // Nothing to review → quiet redirect to Focus (spec §8). Only after loading
   // settles, so a cold open never bounces mid-fetch.
   if (!loading && !queryError && review === null && (goalsQuery.data ?? []).filter((g) => g.status === 'active' && !g.deleted_at).length === 0) {
@@ -273,6 +295,19 @@ export default function WeeklyReviewScreen() {
   return (
     <SafeAreaView style={[styles.fill, { backgroundColor: c.linen }]} edges={['top', 'bottom']}>
       <View style={styles.header}>
+        {review !== null ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Share your week"
+            onPress={handleShare}
+            style={({ pressed }) => [styles.headerBtn, { opacity: pressed ? 0.6 : 1 }]}
+            hitSlop={4}
+          >
+            <Export size={24} color={c.inkMid} weight="regular" />
+          </Pressable>
+        ) : (
+          <View style={styles.headerBtn} />
+        )}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Close"
@@ -310,6 +345,21 @@ export default function WeeklyReviewScreen() {
           />
         )}
       </ScrollView>
+
+      {/* Offscreen share card: mounted only when there is a review to share,
+          parked far off-canvas so captureRef has a laid-out view to shoot. */}
+      {review !== null && (
+        <View style={styles.offscreen} pointerEvents="none">
+          <WeeklyReviewShareCard
+            ref={shareCardRef}
+            weekLabel={review.weekLabel}
+            headline={review.headline}
+            daysActive={review.daysActive}
+            daysActiveCount={review.daysActiveCount}
+            marksLogged={review.marksLogged}
+          />
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -317,7 +367,9 @@ export default function WeeklyReviewScreen() {
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   header: {
-    alignItems: 'flex-end',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
     paddingTop: headerControl.topGap,
   },
@@ -394,4 +446,6 @@ const styles = StyleSheet.create({
 
   skelGap: { marginTop: spacing.md },
   skelGapLg: { marginTop: spacing.lg },
+
+  offscreen: { position: 'absolute', left: -9999, top: 0 },
 });
