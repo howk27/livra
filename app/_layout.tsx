@@ -437,7 +437,12 @@ export default function RootLayout() {
         }
 
         if (isReviewLink) {
-          router.push({ pathname: '/review', params: { source: 'other' } });
+          // Through Focus with a param, NEVER a direct push: on a cold start
+          // app/index.tsx's auth gate replaces to the tabs after this handler
+          // runs and clobbers a pushed route (founder device 2026-09-06 —
+          // the direct push landed on Focus). The widget links survive the
+          // same race this exact way; focus.tsx consumes openReview once.
+          router.replace({ pathname: '/(tabs)/focus' as any, params: { openReview: '1' } });
           return;
         }
 

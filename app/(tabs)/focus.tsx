@@ -191,7 +191,7 @@ export default function FocusScreen() {
   const c = themedColors(theme);
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const params = useLocalSearchParams<{ logMarkId?: string }>();
+  const params = useLocalSearchParams<{ logMarkId?: string; openReview?: string }>();
   const { user } = useAuth();
   // Reads come from the query layer (Phase 2); both writes this screen owns are
   // mutations now (Phase 3) — the check-in via `useCheckin`, the removal below.
@@ -690,6 +690,22 @@ export default function FocusScreen() {
     void handleQuickIncrement(logMarkId);
     router.setParams({ logMarkId: undefined });
   }, [params.logMarkId, user?.id, loading, activeCounters, handleQuickIncrement, router]);
+
+  // Review deep-link landing (livra://review, 2026-09-06): the deep-link
+  // handler routes through Focus with openReview=1 — the widget-link pattern
+  // above — because a direct push loses the cold-start race with index.tsx's
+  // auth replace. Consume once, clear the param so tab focus can't re-fire it.
+  const handledOpenReviewRef = useRef(false);
+  useEffect(() => {
+    if (params.openReview !== '1') {
+      handledOpenReviewRef.current = false;
+      return;
+    }
+    if (handledOpenReviewRef.current) return;
+    handledOpenReviewRef.current = true;
+    router.setParams({ openReview: undefined });
+    router.push({ pathname: '/review', params: { source: 'other' } });
+  }, [params.openReview, router]);
 
   const confirmDeleteMark = useCallback(async (markId: string, markName: string) => {
     const ok = await confirm({
