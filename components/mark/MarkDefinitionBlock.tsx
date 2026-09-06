@@ -40,9 +40,21 @@ function RevealRow({ question, answer }: { question: string; answer: string }) {
   );
 }
 
-export function MarkDefinitionBlock({ definition }: { definition: string }) {
+export function MarkDefinitionBlock({
+  definition,
+  howTo,
+}: {
+  definition: string;
+  howTo?: string | null;
+}) {
+  const c = themedColors(useEffectiveTheme());
   return (
     <View style={styles.wrap}>
+      {/* The how-to line is VISIBLE, not a disclosure: it answers "what do I
+          actually do?" and hiding it behind a tap was the gap (First-100
+          sprint 2026-09-04). Library marks only; custom marks pass null and
+          render nothing. inkMid for the same AA reason as RevealRow. */}
+      {howTo ? <Text style={[styles.howTo, { color: c.inkMid }]}>{howTo}</Text> : null}
       <RevealRow question="What counts here?" answer={definition} />
       <RevealRow question="What's a mark?" answer={TERMS.mark} />
     </View>
@@ -57,4 +69,5 @@ const styles = StyleSheet.create({
   caret: { transform: [{ rotate: '0deg' }] },
   caretOpen: { transform: [{ rotate: '90deg' }] },
   concept: { fontFamily: fonts.sansItalic, fontSize: fontSize.sm, lineHeight: 20 },
+  howTo: { fontFamily: fonts.sansItalic, fontSize: fontSize.base, lineHeight: 21 },
 });

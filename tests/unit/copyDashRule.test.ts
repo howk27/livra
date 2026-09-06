@@ -13,6 +13,7 @@ const COPY_MODULES = [
   'lib/auth/accountCredentials.ts',
   'lib/programs/catalog/sleepReset.ts',
   'lib/programs/catalog/deepWorkMonth.ts',
+  'lib/markHowTo.ts',
 ];
 
 /**

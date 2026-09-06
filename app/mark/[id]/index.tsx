@@ -77,6 +77,7 @@ import { useAuth } from '../../../hooks/useAuth';
 import { logger } from '../../../lib/utils/logger';
 import { resolveLibraryMark, resolveMarkAccent } from '@/lib/markCategoryResolve';
 import { resolveMarkDefinition } from '../../../lib/markDefinition';
+import { resolveMarkHowTo } from '../../../lib/markHowTo';
 import { MarkDefinitionBlock } from '../../../components/mark/MarkDefinitionBlock';
 import { resolveDailyTarget } from '../../../lib/markDailyTarget';
 import { getEmptyStateCopy } from '../../../lib/moments/emptyState';
@@ -940,7 +941,10 @@ function MarkDetailContent() {
 
           {/* ── Reference (tap-to-reveal "What counts here?" / "What's a mark?") ── */}
           <View style={styles.section}>
-            <MarkDefinitionBlock definition={resolveMarkDefinition(counter)} />
+            <MarkDefinitionBlock
+              definition={resolveMarkDefinition(counter)}
+              howTo={resolveMarkHowTo(counter)}
+            />
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
