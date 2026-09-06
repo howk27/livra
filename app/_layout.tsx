@@ -387,12 +387,25 @@ export default function RootLayout() {
       return out;
     };
 
+    // One physical open can deliver the SAME URL twice — once via
+    // getInitialURL and once via the url event (the doubled '[Deep Link]
+    // Received URL' logs). The second pass re-ran this handler's routing and
+    // replaced away the screen the first pass had just presented (founder
+    // device 2026-09-06: livra://review flashed the review, then landed on
+    // Focus). Each URL is processed once per short window.
+    let lastDeepLink: { url: string; at: number } | null = null;
+
     const handleDeepLink = async (incomingUrl: string) => {
       try {
         if (!incomingUrl || typeof incomingUrl !== 'string' || incomingUrl.trim().length === 0) {
           logger.warn('[Deep Link] Invalid URL received:', incomingUrl);
           return;
         }
+        if (lastDeepLink && lastDeepLink.url === incomingUrl && Date.now() - lastDeepLink.at < 3000) {
+          logger.log('[Deep Link] Duplicate delivery ignored:', incomingUrl);
+          return;
+        }
+        lastDeepLink = { url: incomingUrl, at: Date.now() };
 
         logger.log('[Deep Link] Received URL:', incomingUrl);
 

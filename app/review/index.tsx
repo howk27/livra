@@ -45,7 +45,7 @@ import { getAppDate } from '../../lib/appDate';
 import { formatDate } from '../../lib/date';
 import { useIapSubscriptions } from '../../hooks/useIapSubscriptions';
 import { setWeeklyReviewViewedWeek } from '../../lib/weeklyReview/arrival';
-import { capture } from '../../lib/analytics/posthog';
+import { capture, captureException } from '../../lib/analytics/posthog';
 import { ANALYTICS_EVENTS } from '../../lib/analytics/events';
 import { logger } from '../../lib/utils/logger';
 import {
@@ -234,7 +234,10 @@ export default function WeeklyReviewScreen() {
       });
     } catch (e) {
       // Derivation must never take the screen down — the quiet fallback below
-      // renders instead (spec §8).
+      // renders instead (spec §8). The exception ships to PostHog because a
+      // device-only derivation failure is otherwise invisible (2026-09-06:
+      // the review derived null on the founder device with no way to see why).
+      captureException(e, { surface: 'weekly_review_derive' });
       logger.warn('[WeeklyReview] derivation failed', { error: String(e) });
       return null;
     }
@@ -266,6 +269,24 @@ export default function WeeklyReviewScreen() {
     // purpose so a background refetch cannot double-fire the event.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewedWeekStart]);
+
+  // DIAGNOSTIC (2026-09-06, remove once the founder-device null is explained):
+  // the review derived null on device with active goals on the server and no
+  // visibility into which input was empty. Fires once per mount, only on the
+  // null path, and says exactly what the screen was looking at.
+  const nullReportedRef = useRef(false);
+  useEffect(() => {
+    if (loading || review !== null || nullReportedRef.current) return;
+    nullReportedRef.current = true;
+    const rows = goalsQuery.data ?? [];
+    capture('weekly_review_null', {
+      goal_rows: rows.length,
+      active_goals: rows.filter((g) => g.status === 'active' && !g.deleted_at).length,
+      marks_by_goal_keys: Object.keys(marksByGoalQuery.data ?? {}).length,
+      checkin_rows: (checkinsQuery.data ?? []).length,
+      had_query_error: queryError != null,
+    });
+  }, [loading, review, goalsQuery.data, marksByGoalQuery.data, checkinsQuery.data, queryError]);
 
   // First-100 sprint: the review as a shareable image. The card renders
   // offscreen (goal-title-free by construction, see WeeklyReviewShareCard) and
