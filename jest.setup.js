@@ -42,6 +42,16 @@ jest.mock('expo-secure-store', () => ({
   deleteItemAsync: jest.fn(),
 }));
 
+jest.mock('expo-updates', () => ({
+  isEnabled: true,
+  updateId: 'test-update-id',
+  channel: 'production',
+  runtimeVersion: 'exposdk:56.0.0',
+  isEmbeddedLaunch: false,
+  isEmergencyLaunch: false,
+  createdAt: new Date('2026-09-06T20:30:00.000Z'),
+}));
+
 jest.mock('expo-iap', () => ({
   initConnection: jest.fn(),
   endConnection: jest.fn(),

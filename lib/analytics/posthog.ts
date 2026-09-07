@@ -4,6 +4,7 @@
 // Event taxonomy: snake_case object_action (see core/skills/analytics/SKILL.md).
 import PostHog from 'posthog-react-native';
 import type { PostHogEventProperties } from '@posthog/core';
+import * as Updates from 'expo-updates';
 import { env } from '../env';
 import { logger } from '../utils/logger';
 
@@ -12,6 +13,38 @@ let initAttempted = false;
 
 export function isAnalyticsEnabled(): boolean {
   return !!env.posthogApiKey;
+}
+
+/**
+ * The identity of the JS bundle this launch is running: which OTA update, on
+ * which channel, or the binary's embedded bundle. Registered as super-properties
+ * so EVERY event names the code that produced it.
+ *
+ * Why: on 2026-09-06 the Weekly Review diagnostics never ingested while the
+ * screen demonstrably mounted 24 times, and nothing in the app could say which
+ * bundle the device was running. That question has to be answerable from the
+ * data, not inferred from publish timestamps.
+ *
+ * Best-effort by construction: these reads are native-backed and are stubs on
+ * web, so a throw returns an empty identity rather than costing us the client.
+ */
+function updateIdentity(): PostHogEventProperties {
+  try {
+    return {
+      updates_enabled: Updates.isEnabled,
+      update_id: Updates.updateId,
+      update_channel: Updates.channel,
+      runtime_version: Updates.runtimeVersion,
+      is_embedded_launch: Updates.isEmbeddedLaunch,
+      // True when the previous update crashed and the app fell back. A silent
+      // rollback looks exactly like "the OTA never arrived".
+      is_emergency_launch: Updates.isEmergencyLaunch,
+      update_created_at: Updates.createdAt?.toISOString() ?? null,
+    };
+  } catch (e) {
+    logger.warn('[Analytics] update identity unavailable:', e);
+    return {};
+  }
 }
 
 /** Call once, near app start (see app/_layout.tsx). Idempotent. */
@@ -33,6 +66,7 @@ export function initAnalytics(): PostHog | null {
     client.register({
       platform: 'app',
       environment: env.isProduction ? 'production' : env.isPreview ? 'preview' : 'development',
+      ...updateIdentity(),
     });
   } catch (e) {
     logger.error('[Analytics] initAnalytics failed:', e);

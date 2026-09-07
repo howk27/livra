@@ -67,6 +67,20 @@ describe('lib/analytics/posthog', () => {
       expect.objectContaining({ platform: 'app', environment: expect.any(String) }),
     );
 
+    // Every event must name the JS bundle that produced it. Without this the
+    // question "did the OTA reach the device" is unanswerable from the data,
+    // which is exactly what stalled the 2026-09-06 weekly-review investigation.
+    expect(client!.register).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update_id: 'test-update-id',
+        update_channel: 'production',
+        runtime_version: 'exposdk:56.0.0',
+        is_embedded_launch: false,
+        is_emergency_launch: false,
+        updates_enabled: true,
+      }),
+    );
+
     // Idempotent: calling init again does not construct a second client
     posthog.initAnalytics();
     expect(PostHogMock).toHaveBeenCalledTimes(1);
@@ -81,6 +95,34 @@ describe('lib/analytics/posthog', () => {
     expect(client!.reset).toHaveBeenCalledTimes(1);
 
     expect(posthog.getAnalyticsClient()).toBe(client);
+  });
+
+  it('still registers and returns a client when the update identity cannot be read', () => {
+    // expo-updates is native-backed: it is a stub on web and can throw where
+    // updates are not configured. A diagnostic must never be the reason
+    // analytics stops working.
+    let client: ReturnType<typeof import('../../lib/analytics/posthog').initAnalytics>;
+    jest.isolateModules(() => {
+      jest.doMock('expo-updates', () => ({
+        get isEnabled(): boolean {
+          throw new Error('updates not configured');
+        },
+        get updateId(): string | null {
+          throw new Error('updates not configured');
+        },
+      }));
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const envModule = require('../../lib/env');
+      envModule.env.posthogApiKey = 'phc_test';
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const posthog = require('../../lib/analytics/posthog');
+      client = posthog.initAnalytics();
+      expect(client).not.toBeNull();
+      expect(client!.register).toHaveBeenCalledWith(
+        expect.objectContaining({ platform: 'app' }),
+      );
+    });
+    jest.dontMock('expo-updates');
   });
 
   it('swallows a throwing capture instead of crashing the caller', () => {
