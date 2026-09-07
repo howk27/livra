@@ -375,9 +375,9 @@ export default function WeeklyReviewScreen() {
             ref={shareCardRef}
             weekLabel={review.weekLabel}
             headline={review.headline}
+            prose={review.prose}
             daysActive={review.daysActive}
-            daysActiveCount={review.daysActiveCount}
-            marksLogged={review.marksLogged}
+            goals={review.goals}
           />
         </View>
       )}
