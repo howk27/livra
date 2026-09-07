@@ -28,6 +28,7 @@ import { useEffectiveTheme } from '../../state/uiSlice';
 import { applyOpacity } from '../../src/components/icons/color';
 import { Skeleton } from '../../components/ui/Skeleton';
 
+import { useAuth } from '@/hooks/useAuth';
 import { useGoals } from '@/lib/data/goals';
 import { useMarksByGoal } from '@/lib/data/marks';
 import { useUserCheckins } from '@/lib/data/checkins';
@@ -54,6 +55,7 @@ import {
   type ReviewGoalCard,
   type WeeklyReviewData,
 } from '../../lib/weeklyReview/derive';
+import { weeklyReviewGate } from '../../lib/weeklyReview/gate';
 import { generateShareCard } from '../../lib/sharing/generateShareCard';
 import { WeeklyReviewShareCard } from '../../components/WeeklyReviewShareCard';
 
@@ -203,8 +205,11 @@ export default function WeeklyReviewScreen() {
   const appDateKey = useAppDateStore(selectAppDateKey);
   const todayStr = useMemo(() => formatDate(getAppDate()), [appDateKey]);
 
+  // `isPending`, never `isLoading`: all three reads are `enabled: userId !== ''`
+  // and a DISABLED query is pending but not fetching, so `isLoading` reads false
+  // while the data is genuinely absent. See lib/weeklyReview/gate.ts.
   const loading =
-    goalsQuery.isLoading || marksByGoalQuery.isLoading || checkinsQuery.isLoading;
+    goalsQuery.isPending || marksByGoalQuery.isPending || checkinsQuery.isPending;
   const queryError = dataErrorCopy(
     asDataError(goalsQuery.error ?? marksByGoalQuery.error ?? checkinsQuery.error),
   );
@@ -243,6 +248,24 @@ export default function WeeklyReviewScreen() {
     }
   }, [loading, goalsQuery.data, marksByGoalQuery.data, checkinsQuery.data, snapshots, todayStr]);
 
+  // Auth is upstream of all three reads (each is `enabled: userId !== ''`), so
+  // the gate needs to know whether it has landed — otherwise "no goals" is
+  // indistinguishable from "not asked yet".
+  const { user, initialized: authSettled } = useAuth();
+  const activeGoalCount = (goalsQuery.data ?? EMPTY_GOAL_ROWS).filter(
+    (g) => g.status === 'active' && !g.deleted_at,
+  ).length;
+  const gate = weeklyReviewGate({
+    authSettled,
+    hasUser: user != null,
+    goalsPending: goalsQuery.isPending,
+    marksPending: marksByGoalQuery.isPending,
+    checkinsPending: checkinsQuery.isPending,
+    hasError: queryError != null,
+    hasReview: review !== null,
+    activeGoalCount,
+  });
+
   // WR-3: viewing IS the dismissal — recording the reviewed weekStart clears
   // the Focus arrival card for this week. WR-5: the same once-per-week moment
   // is the opened event; effect deps make both fire once per weekStart.
@@ -276,7 +299,7 @@ export default function WeeklyReviewScreen() {
   // null path, and says exactly what the screen was looking at.
   const nullReportedRef = useRef(false);
   useEffect(() => {
-    if (loading || review !== null || nullReportedRef.current) return;
+    if (gate === 'waiting' || review !== null || nullReportedRef.current) return;
     nullReportedRef.current = true;
     const rows = goalsQuery.data ?? [];
     capture('weekly_review_null', {
@@ -286,7 +309,7 @@ export default function WeeklyReviewScreen() {
       checkin_rows: (checkinsQuery.data ?? []).length,
       had_query_error: queryError != null,
     });
-  }, [loading, review, goalsQuery.data, marksByGoalQuery.data, checkinsQuery.data, queryError]);
+  }, [gate, review, goalsQuery.data, marksByGoalQuery.data, checkinsQuery.data, queryError]);
 
   // First-100 sprint: the review as a shareable image. The card renders
   // offscreen (goal-title-free by construction, see WeeklyReviewShareCard) and
@@ -307,9 +330,11 @@ export default function WeeklyReviewScreen() {
     }
   }, [shareWeekStart]);
 
-  // Nothing to review → quiet redirect to Focus (spec §8). Only after loading
-  // settles, so a cold open never bounces mid-fetch.
-  if (!loading && !queryError && review === null && (goalsQuery.data ?? []).filter((g) => g.status === 'active' && !g.deleted_at).length === 0) {
+  // Nothing to review → quiet redirect to Focus (spec §8). The gate is what
+  // guarantees "only after the reads settle" — the inline version of this test
+  // used `isLoading` and so fired on the very first render, before auth had
+  // hydrated, which is why `livra://review` bounced (decisions.md 2026-09-08).
+  if (gate === 'redirect') {
     return <Redirect href="/(tabs)/focus" />;
   }
 
@@ -341,9 +366,9 @@ export default function WeeklyReviewScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
-        {loading ? (
+        {gate === 'waiting' ? (
           <ReviewSkeleton />
-        ) : queryError || review === null ? (
+        ) : gate === 'fallback' || review === null ? (
           <QuietFallback
             c={c}
             body={
