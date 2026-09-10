@@ -79,6 +79,7 @@ import { reVerifyProOnLaunch } from '../lib/iap/iapReVerify';
 import { useGoalCompletionStore } from '../state/goalCompletionStore';
 import { GoalCompletionOverlay } from '../components/overlays/GoalCompletionOverlay';
 import { initAnalytics, identify, resetAnalytics, screenTrack } from '../lib/analytics/posthog';
+import { safeScreenParams } from '../lib/analytics/screenParams';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -321,7 +322,13 @@ export default function RootLayout() {
   // Manual screen tracking for Expo Router
   useEffect(() => {
     if (previousPathnameRef.current !== pathname) {
-      screenTrack(pathname, { previous_screen: previousPathnameRef.current ?? null, ...params });
+      // Params are allowlisted, never spread: several routes carry user-authored
+      // free text (goalText / title / goalTitle) and one declares a recovery
+      // token. See lib/analytics/screenParams.ts.
+      screenTrack(pathname, {
+        previous_screen: previousPathnameRef.current ?? null,
+        ...safeScreenParams(params),
+      });
       previousPathnameRef.current = pathname;
     }
   }, [pathname, params]);
