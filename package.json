@@ -105,7 +105,8 @@
   },
   "overrides": {
     "@tootallnate/once": ">=3.0.1",
-    "@expo/fingerprint": "0.19.8"
+    "@expo/fingerprint": "0.19.8",
+    "nanoid": "^3.3.18"
   },
   "expo": {
     "doctor": {
