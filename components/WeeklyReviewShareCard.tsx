@@ -14,29 +14,53 @@
 //   with no goal on it says nothing about the person's actual week. The OS
 //   share sheet previews the image before it leaves the phone, which is the
 //   review step, so no in-app confirmation modal was added.
-// - It is a CROP OF THE LETTER, not the whole letter: kicker, headline, prose,
-//   day strip, ONE goal block. 4:5 stays fixed at 340x425pt (the feed-native
-//   ratio), so what fits is a design constraint, not an accident. MARK_LINE_CAP
-//   and the single block are what keep it from overflowing.
+// - THE CARD IS CONTENT-DRIVEN, NOT A FIXED CROP (founder ruling 2026-09-13).
+//   It used to be pinned to 340x425pt (4:5) and everything was cut to fit: the
+//   prose at two lines, the goal title at one, the marks at three, and only the
+//   first goal. Device QA found the result both TRUNCATED and CLUMPED - the
+//   quiet-week prose was cut mid-sentence at "...The thread..." while ~190px of
+//   dead linen sat between the goal block and the footer, because a fixed
+//   height plus space-between dumps every bit of slack into one hole. The ratio
+//   is gone. Width is fixed so the exported image has a predictable size;
+//   HEIGHT FOLLOWS THE CONTENT. Nothing here may reintroduce a height or a
+//   numberOfLines cap - those are the two shapes the clumping came in.
+// - Up to TWO goals (founder ruling 2026-09-13). This is the only remaining
+//   content cap, and it is about what a reader will take in, not about what
+//   fits: the card can grow as tall as it needs to.
 // - NO counts line. The letter has none, and with a goal block carrying the
 //   substance a "5 days showed up" line would be a third progress vocabulary on
 //   one surface (design-decisions Principles: one progress voice per surface).
 //   The day strip already shows those same days, visually.
 // - A zero is never rendered: an unstarted mark reads "not yet" (the letter's
 //   own wording), never "0 of 3".
+// - allowFontScaling is OFF everywhere, via CardText. This is an image, not a
+//   screen: whoever reads the shared PNG is not the person whose Dynamic Type
+//   setting produced it, so the card must render identically from every phone.
 import React, { forwardRef } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, type TextProps } from 'react-native';
 import type { ReviewGoalCard } from '../lib/weeklyReview/derive';
 import { themedColors, spacing, radius, fonts, fontSize, shadow } from '../theme/tokens';
 import { applyOpacity } from '../src/components/icons/color';
 
 const DAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
-/** The card is a fixed height, so the goal block is cropped, never scrolled. */
-export const MARK_LINE_CAP = 3;
+/** How many goal blocks the card carries. Readability, not layout. */
+export const GOAL_BLOCK_CAP = 2;
 
 export const SHARE_CARD_WIDTH = 340;
-export const SHARE_CARD_HEIGHT = 425;
+
+/**
+ * Every line on the card goes through here. Pinning allowFontScaling in one
+ * place rather than at each call site means a newly added line cannot quietly
+ * start scaling with the device.
+ */
+function CardText({ style, children, ...rest }: TextProps) {
+  return (
+    <Text {...rest} allowFontScaling={false} style={style}>
+      {children}
+    </Text>
+  );
+}
 
 export type WeeklyReviewShareCardProps = {
   weekLabel: string;
@@ -49,17 +73,13 @@ export type WeeklyReviewShareCardProps = {
 export const WeeklyReviewShareCard = forwardRef<View, WeeklyReviewShareCardProps>(
   function WeeklyReviewShareCard({ weekLabel, headline, prose, daysActive, goals }, ref) {
     const c = themedColors('light');
-    const goal = goals[0] ?? null;
+    const shown = goals.slice(0, GOAL_BLOCK_CAP);
     return (
       <View ref={ref} collapsable={false} style={[styles.card, { backgroundColor: c.linen }]}>
         <View style={styles.body}>
-          <Text style={[styles.kicker, { color: c.inkMuted }]}>{weekLabel}</Text>
-          <Text style={[styles.headline, { color: c.inkDark }]} numberOfLines={2}>
-            {headline}
-          </Text>
-          <Text style={[styles.prose, { color: c.inkMid }]} numberOfLines={2}>
-            {prose}
-          </Text>
+          <CardText style={[styles.kicker, { color: c.inkMuted }]}>{weekLabel}</CardText>
+          <CardText style={[styles.headline, { color: c.inkDark }]}>{headline}</CardText>
+          <CardText style={[styles.prose, { color: c.inkMid }]}>{prose}</CardText>
 
           <View style={styles.dayStrip}>
             {daysActive.map((active, i) => (
@@ -72,44 +92,42 @@ export const WeeklyReviewShareCard = forwardRef<View, WeeklyReviewShareCardProps
                       : { backgroundColor: applyOpacity(c.inkMuted, 0.18) },
                   ]}
                 />
-                <Text style={[styles.dayLabel, { color: c.inkMuted }]}>{DAY_LETTERS[i]}</Text>
+                <CardText style={[styles.dayLabel, { color: c.inkMuted }]}>
+                  {DAY_LETTERS[i]}
+                </CardText>
               </View>
             ))}
           </View>
 
-          {goal !== null && (
+          {shown.map((goal) => (
             // A raised card is lighter than its page in both themes; this card is
             // always light, so it always earns the warm shadow (cardRaised rule).
-            <View style={[styles.goalCard, { backgroundColor: c.cardRaised }, shadow.card]}>
-              <Text style={[styles.goalTitle, { color: c.inkDark }]} numberOfLines={1}>
-                {goal.title}
-              </Text>
-              <Text style={[styles.goalMeta, { color: c.inkMuted }]}>
+            <View
+              key={goal.goalId}
+              style={[styles.goalCard, { backgroundColor: c.cardRaised }, shadow.card]}
+            >
+              <CardText style={[styles.goalTitle, { color: c.inkDark }]}>{goal.title}</CardText>
+              <CardText style={[styles.goalMeta, { color: c.inkMuted }]}>
                 {goal.weeksIn === 0 ? 'week one' : `week ${goal.weeksIn}`}
-              </Text>
-              {goal.marks.slice(0, MARK_LINE_CAP).map((m) => (
+              </CardText>
+              {goal.marks.map((m) => (
                 <View key={m.markId} style={styles.markRow}>
-                  <Text style={[styles.markName, { color: c.inkMid }]} numberOfLines={1}>
-                    {m.name}
-                  </Text>
+                  <CardText style={[styles.markName, { color: c.inkMid }]}>{m.name}</CardText>
                   {/* emberInk, not ember: small text on light chrome is the exact
                       duty plain ember is barred from (Tokens 2026-07-26). */}
-                  <Text
-                    numberOfLines={1}
-                    style={[styles.markCount, { color: m.met ? c.emberInk : c.inkMuted }]}
-                  >
+                  <CardText style={[styles.markCount, { color: m.met ? c.emberInk : c.inkMuted }]}>
                     {m.done === 0 ? 'not yet' : `${m.done} of ${m.target}`}
                     {m.met ? '  ✓' : ''}
-                  </Text>
+                  </CardText>
                 </View>
               ))}
             </View>
-          )}
+          ))}
         </View>
 
         <View style={[styles.footer, { borderTopColor: applyOpacity(c.inkMuted, 0.25) }]}>
-          <Text style={[styles.wordmark, { color: c.forest }]}>Livra</Text>
-          <Text style={[styles.site, { color: c.inkMuted }]}>livralife.com</Text>
+          <CardText style={[styles.wordmark, { color: c.forest }]}>Livra</CardText>
+          <CardText style={[styles.site, { color: c.inkMuted }]}>livralife.com</CardText>
         </View>
       </View>
     );
@@ -119,14 +137,13 @@ export const WeeklyReviewShareCard = forwardRef<View, WeeklyReviewShareCardProps
 const styles = StyleSheet.create({
   card: {
     width: SHARE_CARD_WIDTH,
-    height: SHARE_CARD_HEIGHT,
+    // NO height, and NO justifyContent: the card is as tall as what it has to
+    // say, so there is no leftover space to distribute (ruling 2026-09-13).
     borderRadius: radius.lg,
     padding: spacing.lg,
-    justifyContent: 'space-between',
-    // The crop is the design: content that does not fit is cut, never spilled.
     overflow: 'hidden',
   },
-  body: { flexShrink: 1, overflow: 'hidden' },
+  body: {},
   kicker: {
     fontFamily: fonts.sansMedium,
     fontSize: fontSize.sm,
@@ -146,13 +163,13 @@ const styles = StyleSheet.create({
     fontFamily: fonts.sans,
     fontSize: fontSize.md,
     lineHeight: 21,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.md,
   },
   dayStrip: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.xs,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.md,
   },
   dayCell: { alignItems: 'center', gap: 6 },
   dayDot: { width: 18, height: 18, borderRadius: radius.full },
@@ -161,9 +178,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     padding: spacing.md,
     // The mark rows carry their own top margin, so the block needs less below
-    // than beside. Measured: this is the 8pt that keeps the worst case (two-line
-    // headline + three mark lines) clear of the footer rule instead of flush.
+    // than beside.
     paddingBottom: spacing.sm,
+    // A second block clears the first, and the last one clears the footer rule.
+    marginBottom: spacing.md,
   },
   goalTitle: {
     fontFamily: fonts.serifSemibold,
