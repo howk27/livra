@@ -199,7 +199,11 @@ const styles = StyleSheet.create({
     alignItems: 'baseline',
     justifyContent: 'space-between',
     gap: spacing.sm,
-    marginTop: spacing.xs,
+    // 8, not the 4 the fixed-height card used: at 4 a mark name that wraps to
+    // two lines runs straight into the next row and you cannot see where one
+    // mark ends. The old value was buying vertical space this card no longer
+    // has to ration.
+    marginTop: spacing.sm,
   },
   markName: { fontFamily: fonts.sans, fontSize: fontSize.base, flexShrink: 1 },
   markCount: { fontFamily: fonts.sansMedium, fontSize: fontSize.base, flexShrink: 0 },
