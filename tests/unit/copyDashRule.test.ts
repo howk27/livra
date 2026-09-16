@@ -14,6 +14,7 @@ const COPY_MODULES = [
   'lib/programs/catalog/sleepReset.ts',
   'lib/programs/catalog/deepWorkMonth.ts',
   'lib/markHowTo.ts',
+  'lib/weeklyReview/archetype.ts',
 ];
 
 /**
