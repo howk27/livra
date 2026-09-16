@@ -201,10 +201,10 @@ const styles = StyleSheet.create({
     fontSize: 10,
     lineHeight: 10,
     marginTop: 9,
-    color: applyOpacity(STORY_LINEN, 0.4),
+    color: applyOpacity(STORY_LINEN, 0.5),
   },
   hairline: { height: StyleSheet.hairlineWidth, backgroundColor: applyOpacity(STORY_LINEN, 0.12), marginTop: 29 },
   meta: { fontFamily: fonts.sans, fontSize: 13, lineHeight: 18, color: applyOpacity(STORY_LINEN, 0.55), marginTop: 21 },
   footer: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 28 },
-  footText: { fontFamily: fonts.sans, fontSize: 11, lineHeight: 12, color: applyOpacity(STORY_LINEN, 0.35) },
+  footText: { fontFamily: fonts.sans, fontSize: 11, lineHeight: 12, color: applyOpacity(STORY_LINEN, 0.5) },
 });
