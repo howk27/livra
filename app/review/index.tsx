@@ -7,12 +7,11 @@
 // and draws. Presented as a modal (registered in app/_layout.tsx) — remember a
 // root-mounted RN <Modal> cannot present over it (OverlayPortal if ever needed).
 
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Export, X } from 'phosphor-react-native';
-import * as Sharing from 'expo-sharing';
 
 import {
   fonts,
@@ -56,8 +55,9 @@ import {
   type WeeklyReviewData,
 } from '../../lib/weeklyReview/derive';
 import { weeklyReviewGate } from '../../lib/weeklyReview/gate';
-import { generateShareCard } from '../../lib/sharing/generateShareCard';
-import { WeeklyReviewShareCard } from '../../components/WeeklyReviewShareCard';
+import { archetypeSignalsFrom, deriveArchetype } from '../../lib/weeklyReview/archetype';
+import { StoryShareSheet } from '../../components/StoryShareSheet';
+import { useShareCardStore } from '../../state/shareCardSlice';
 
 const DAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
@@ -311,24 +311,41 @@ export default function WeeklyReviewScreen() {
     });
   }, [gate, review, goalsQuery.data, marksByGoalQuery.data, checkinsQuery.data, queryError]);
 
-  // First-100 sprint: the review as a shareable image. The card renders
-  // offscreen (goal-title-free by construction, see WeeklyReviewShareCard) and
-  // the capture hands the file straight to the OS share sheet — no modal, no
-  // customization, the one committed look. Best-effort: a capture or sheet
-  // failure logs and does nothing (goal/complete.tsx precedent).
-  const shareCardRef = useRef<View>(null);
-  const shareWeekStart = review?.weekStart ?? null;
-  const handleShare = useCallback(async () => {
-    try {
-      const uri = await generateShareCard(shareCardRef as React.RefObject<View>);
-      if (shareWeekStart) {
-        capture(ANALYTICS_EVENTS.WEEKLY_REVIEW_SHARED, { week_start: shareWeekStart });
-      }
-      await Sharing.shareAsync(uri, { mimeType: 'image/jpeg', dialogTitle: 'Share your week' });
-    } catch (e) {
-      logger.debug('[WeeklyReview] share failed', e);
-    }
-  }, [shareWeekStart]);
+  // Weekly Story card (spec 2026-09-15). Export opens a sheet; the card is
+  // mounted only inside it and the capture lives there too. Analytics carries
+  // ids and counts, never the goal title or the archetype's words.
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const storyPalette = useShareCardStore((s) => s.storyPalette);
+  const setStoryPalette = useShareCardStore((s) => s.setStoryPalette);
+  const loadStoryPalette = useShareCardStore((s) => s.loadStoryPalette);
+  useEffect(() => {
+    loadStoryPalette();
+  }, [loadStoryPalette]);
+
+  const archetype = useMemo(
+    () => (review ? deriveArchetype(archetypeSignalsFrom(review)) : null),
+    [review],
+  );
+
+  const handleShare = useCallback(() => {
+    if (!review || !archetype) return;
+    capture(ANALYTICS_EVENTS.WEEKLY_STORY_SHEET_OPENED, {
+      week_start: review.weekStart,
+      archetype_id: archetype.id,
+      days_active: review.daysActiveCount,
+    });
+    setSheetOpen(true);
+  }, [review, archetype]);
+
+  const handleShared = useCallback(() => {
+    if (!review || !archetype) return;
+    capture(ANALYTICS_EVENTS.WEEKLY_REVIEW_SHARED, {
+      week_start: review.weekStart,
+      archetype_id: archetype.id,
+      palette: storyPalette,
+      days_active: review.daysActiveCount,
+    });
+  }, [review, archetype, storyPalette]);
 
   // Nothing to review → quiet redirect to Focus (spec §8). The gate is what
   // guarantees "only after the reads settle" — the inline version of this test
@@ -392,19 +409,24 @@ export default function WeeklyReviewScreen() {
         )}
       </ScrollView>
 
-      {/* Offscreen share card: mounted only when there is a review to share,
-          parked far off-canvas so captureRef has a laid-out view to shoot. */}
-      {review !== null && (
-        <View style={styles.offscreen} pointerEvents="none">
-          <WeeklyReviewShareCard
-            ref={shareCardRef}
-            weekLabel={review.weekLabel}
-            headline={review.headline}
-            prose={review.prose}
-            daysActive={review.daysActive}
-            goals={review.goals}
-          />
-        </View>
+      {review !== null && archetype !== null && (
+        <StoryShareSheet
+          visible={sheetOpen}
+          card={{
+            weekLabel: review.weekLabel,
+            archetype,
+            daysActive: review.daysActive,
+            daysActiveCount: review.daysActiveCount,
+            marksLogged: review.marksLogged,
+            goalTitles: review.goals.map((g) => g.title),
+          }}
+          palette={storyPalette}
+          onPaletteChange={(id) => {
+            setStoryPalette(id);
+          }}
+          onShared={handleShared}
+          onClose={() => setSheetOpen(false)}
+        />
       )}
     </SafeAreaView>
   );
@@ -493,5 +515,4 @@ const styles = StyleSheet.create({
   skelGap: { marginTop: spacing.md },
   skelGapLg: { marginTop: spacing.lg },
 
-  offscreen: { position: 'absolute', left: -9999, top: 0 },
 });

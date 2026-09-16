@@ -14,6 +14,7 @@ const COPY_MODULES = [
   'lib/programs/catalog/sleepReset.ts',
   'lib/programs/catalog/deepWorkMonth.ts',
   'lib/markHowTo.ts',
+  'lib/weeklyReview/archetype.ts',
 ];
 
 /**
@@ -29,6 +30,8 @@ const COPY_CARRYING_SOURCES = [
   'lib/auth/emailVerification.ts',
   'lib/weeklyReview/derive.ts',
   'app/review/index.tsx',
+  'components/WeeklyStoryCard.tsx',
+  'components/StoryShareSheet.tsx',
 ];
 
 // Matches single-quoted, double-quoted, and backtick string literals (no escaped

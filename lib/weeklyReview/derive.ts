@@ -79,6 +79,12 @@ export type WeeklyReviewData = {
   /** Mon–Sun; true when at least one counted log landed that day. */
   daysActive: boolean[];
   daysActiveCount: number;
+  /**
+   * Active days in the seven days BEFORE weekStart (Weekly Story card, spec
+   * 2026-09-15 §3). Same counting rule as daysActive; only the archetype
+   * engine reads it, the letter never mentions last week.
+   */
+  prevDaysActiveCount: number;
   /** Counted log events in the reviewed week. */
   marksLogged: number;
   firstWeek: boolean;
@@ -263,6 +269,10 @@ export function deriveWeeklyReview(inputs: DeriveWeeklyReviewInputs): WeeklyRevi
   const daysActive = deriveDaysActive(weekEvents, weekDates);
   const daysActiveCount = daysActive.filter(Boolean).length;
   const marksLogged = countMarksLogged(weekEvents, weekDates);
+  // The week before, for the archetype engine. deriveDaysActive keys on the
+  // dates it is handed, so passing every event is safe.
+  const prevWeekDates = weekDates.map((d) => formatDate(addDays(parseISO(d), -7)));
+  const prevDaysActiveCount = deriveDaysActive(inputs.events, prevWeekDates).filter(Boolean).length;
   const firstWeek = deriveFirstWeek(goals, inputs.todayStr);
   const momentumHeld = deriveMomentumHeld(goals, inputs.snapshots);
 
@@ -301,6 +311,7 @@ export function deriveWeeklyReview(inputs: DeriveWeeklyReviewInputs): WeeklyRevi
       : `Week of ${format(parseISO(weekStart), 'MMMM d')}`,
     daysActive,
     daysActiveCount,
+    prevDaysActiveCount,
     marksLogged,
     firstWeek,
     momentumHeld,
