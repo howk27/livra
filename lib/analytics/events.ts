@@ -29,10 +29,14 @@ export const ANALYTICS_EVENTS = {
   WEEKLY_REVIEW_OPENED: 'weekly_review_opened',
   /** WR-5: the Livra+ tease footer tapped. Property: week_start. */
   WEEKLY_REVIEW_PAYWALL_TAPPED: 'weekly_review_paywall_tapped',
-  /** First-100 sprint: the review share card handed to the share sheet
-   *  (fired on capture, before the user picks a destination — the OS never
-   *  reports the outcome). Property: week_start. */
+  /** First-100 sprint / Weekly Story card: the card handed to the OS share
+   *  sheet (fired on capture; the OS never reports the outcome). Properties:
+   *  week_start · archetype_id · palette: 'amber' | 'green' · days_active.
+   *  Never goal titles, never the archetype's words (2026-09-10 PII rule). */
   WEEKLY_REVIEW_SHARED: 'weekly_review_shared',
+  /** Weekly Story card: Export tapped, the sheet opened. Properties:
+   *  week_start · archetype_id · days_active. Open -> share is the drop-off. */
+  WEEKLY_STORY_SHEET_OPENED: 'weekly_story_sheet_opened',
 } as const;
 
 export type AnalyticsEvent = (typeof ANALYTICS_EVENTS)[keyof typeof ANALYTICS_EVENTS];
