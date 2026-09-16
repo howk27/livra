@@ -30,6 +30,8 @@ const COPY_CARRYING_SOURCES = [
   'lib/auth/emailVerification.ts',
   'lib/weeklyReview/derive.ts',
   'app/review/index.tsx',
+  'components/WeeklyStoryCard.tsx',
+  'components/StoryShareSheet.tsx',
 ];
 
 // Matches single-quoted, double-quoted, and backtick string literals (no escaped
