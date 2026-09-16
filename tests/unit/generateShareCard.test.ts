@@ -22,4 +22,26 @@ describe('generateShareCard', () => {
     const fakeRef = { current: {} } as any;
     await expect(generateShareCard(fakeRef)).rejects.toThrow('capture failed');
   });
+
+  it('passes png + pixel size through for the story card (spec 2026-09-15 §7)', async () => {
+    const fakeRef = { current: {} } as any;
+    await generateShareCard(fakeRef, { format: 'png', width: 1080, height: 1920 });
+    expect(captureRef).toHaveBeenCalledWith(fakeRef, {
+      format: 'png',
+      quality: 0.95,
+      result: 'tmpfile',
+      width: 1080,
+      height: 1920,
+    });
+  });
+
+  it('never sends a half size: width without height is dropped', async () => {
+    const fakeRef = { current: {} } as any;
+    await generateShareCard(fakeRef, { width: 1080 });
+    expect(captureRef).toHaveBeenLastCalledWith(fakeRef, {
+      format: 'jpg',
+      quality: 0.95,
+      result: 'tmpfile',
+    });
+  });
 });
