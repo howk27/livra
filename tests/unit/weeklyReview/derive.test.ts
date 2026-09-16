@@ -317,3 +317,49 @@ describe('deriveWeeklyReview assembly', () => {
     expect(r!.prose).toBe('1 day in, you have already logged 1 mark. Most people never write the first one down.');
   });
 });
+
+describe('prevDaysActiveCount (Weekly Story card, spec 2026-09-15 §3)', () => {
+  const inputs = (events: MarkEvent[]): DeriveWeeklyReviewInputs => ({
+    todayStr: '2026-08-27',
+    goals: [goal({ id: 'g1' })],
+    marksByGoal: { g1: [] },
+    events,
+    snapshots: {},
+  });
+
+  it('counts distinct active days in the seven days before weekStart', () => {
+    const r = deriveWeeklyReview(
+      inputs([
+        ev({ occurred_local_date: '2026-08-17' }),
+        ev({ occurred_local_date: '2026-08-19' }),
+        ev({ occurred_local_date: '2026-08-19' }), // same day twice
+        ev({ occurred_local_date: '2026-08-25' }), // this week, not counted here
+      ]),
+    );
+    expect(r?.prevDaysActiveCount).toBe(2);
+    expect(r?.daysActiveCount).toBe(1);
+  });
+
+  it('ignores soft deleted and non increment events like the current window does', () => {
+    const r = deriveWeeklyReview(
+      inputs([
+        ev({ occurred_local_date: '2026-08-18', deleted_at: '2026-08-18T13:00:00.000Z' }),
+        ev({ occurred_local_date: '2026-08-20', event_type: 'decrement' }),
+      ]),
+    );
+    expect(r?.prevDaysActiveCount).toBe(0);
+  });
+
+  it('is 0 with no prior events and never exceeds 7', () => {
+    expect(deriveWeeklyReview(inputs([]))?.prevDaysActiveCount).toBe(0);
+    const full = ['17', '18', '19', '20', '21', '22', '23'].map((d) =>
+      ev({ occurred_local_date: `2026-08-${d}` }),
+    );
+    expect(deriveWeeklyReview(inputs(full))?.prevDaysActiveCount).toBe(7);
+  });
+
+  it('does not touch the window boundary: 2026-08-16 (Sunday before) is outside', () => {
+    const r = deriveWeeklyReview(inputs([ev({ occurred_local_date: '2026-08-16' })]));
+    expect(r?.prevDaysActiveCount).toBe(0);
+  });
+});
