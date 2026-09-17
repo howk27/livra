@@ -23,6 +23,31 @@ const base: ArchetypeSignals = {
 
 const sig = (o: Partial<ArchetypeSignals>): ArchetypeSignals => ({ ...base, ...o });
 
+const range = (n: number): number[] => Array.from({ length: n + 1 }, (_, i) => i);
+const bools = [false, true];
+
+// Every signal combination the engine can see, built flat so the exhaustive
+// test is one loop instead of six nested ones.
+const everySignals = (): ArchetypeSignals[] =>
+  range(7).flatMap((daysActiveCount) =>
+    range(7).flatMap((prevDaysActiveCount) =>
+      bools.flatMap((firstWeek) =>
+        bools.flatMap((allMarksMet) =>
+          bools.flatMap((momentumHeld) =>
+            [0, 8].map((maxWeeksIn) => ({
+              daysActiveCount,
+              prevDaysActiveCount,
+              firstWeek,
+              allMarksMet,
+              momentumHeld,
+              maxWeeksIn,
+            })),
+          ),
+        ),
+      ),
+    ),
+  );
+
 // One fixture per rule, in table order. Reused by the copy-constraint suite.
 const cases: Array<[ArchetypeId, Partial<ArchetypeSignals>]> = [
     ['strong_open', { firstWeek: true, daysActiveCount: 4 }],
@@ -67,24 +92,14 @@ describe('deriveArchetype: one fixture per rule, in table order', () => {
 
 describe('deriveArchetype: exhaustive and deterministic', () => {
   it('every signal combination maps to exactly one known id', () => {
+    const combos = everySignals();
+    expect(combos).toHaveLength(8 * 8 * 2 * 2 * 2 * 2);
     const seen = new Set<ArchetypeId>();
-    for (let days = 0; days <= 7; days++)
-      for (let prev = 0; prev <= 7; prev++)
-        for (const firstWeek of [false, true])
-          for (const allMarksMet of [false, true])
-            for (const momentumHeld of [false, true])
-              for (const maxWeeksIn of [0, 8]) {
-                const a = deriveArchetype({
-                  daysActiveCount: days,
-                  prevDaysActiveCount: prev,
-                  firstWeek,
-                  allMarksMet,
-                  momentumHeld,
-                  maxWeeksIn,
-                });
-                expect(ARCHETYPE_IDS).toContain(a.id);
-                seen.add(a.id);
-              }
+    for (const s of combos) {
+      const a = deriveArchetype(s);
+      expect(ARCHETYPE_IDS).toContain(a.id);
+      seen.add(a.id);
+    }
     // Every rule is reachable.
     expect([...seen].sort()).toEqual([...ARCHETYPE_IDS].sort());
   });
