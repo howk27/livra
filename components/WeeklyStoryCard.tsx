@@ -1,6 +1,8 @@
 // components/WeeklyStoryCard.tsx
-// The Weekly Review as a 9:16 story image (spec 2026-09-15 §5). Rendered
-// inside StoryShareSheet and captured by generateShareCard; never a screen.
+// The Weekly Review as a 9:16 story image (spec 2026-09-15 §5). Since
+// 2026-09-18 it is ALSO the top of the Weekly Review screen: the founder ruled
+// the in-app review must look like what gets shared, so the screen shows this
+// exact component and Share captures it in place.
 //
 // FIXED FRAME, on purpose. The 2026-09-13 ruling made the letter-crop card
 // height-follows-content because prose cannot fit a frame. This card has no
@@ -9,17 +11,28 @@
 // and the frame is what makes it read as an object rather than a screenshot.
 //
 // One left edge (24pt), one right edge (24pt). Numeral row centred on the
-// frame (320pt). Bottom group anchored to the bottom edge. Measured on the
-// design pass, not eyeballed (tests pin the frame; the grid is verified on a
-// web harness against the locked reference).
+// frame (320pt). Bottom group anchored to the bottom edge.
 //
 // Colour is the person's choice (palette), never the archetype's. Fixed
 // values, always the same image from every phone; allowFontScaling is off on
 // every line via CardText.
-import React, { forwardRef } from 'react';
+//
+// `animate` runs the in-app reveal. The capture must be the settled frame, so
+// the screen holds Share until onEntranceDone.
+import React, { forwardRef, useEffect, useState } from 'react';
 import { StyleSheet, Text, View, type TextProps } from 'react-native';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
+import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
 import type { Archetype } from '../lib/weeklyReview/archetype';
 import { STORY_GROUND, STORY_LINEN, type StoryPalette } from '../lib/sharing/storyPalettes';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 import { fonts } from '../theme/tokens';
 import { applyOpacity } from '../src/components/icons/color';
 
@@ -31,11 +44,22 @@ export const STORY_GOAL_CAP = 2;
 const EDGE = 24;
 const DAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
-// Numeral geometry: 123pt DM Sans at line-height 0.8 is a 98pt box; centring
-// that box on 320 puts its top at 271.
+// Numeral: 123pt DM Sans at its NATURAL line box, centred on the frame by a
+// full-frame flex column. It used to sit in a 98pt line box, which iOS clips
+// at the top: on device the "0" rendered as its bottom half (2026-09-18; the
+// web harness let the glyph overflow, so the design pass never saw it).
+// DM Sans's box centre sits within ~1pt of a digit's ink centre, so centring
+// the box still puts the numeral on 320.
 const NUMERAL_SIZE = 123;
-const NUMERAL_LINE = 98;
-const NUMERAL_TOP = STORY_CARD_HEIGHT / 2 - NUMERAL_LINE / 2;
+
+// Entrance: the name fades up, then the seven days light Monday to Sunday
+// and the numeral counts each active one. About 1s end to end, over the
+// 500ms baseline on purpose: every single motion is 300ms or less, and the
+// length is the week being walked, one beat per day.
+const HEAD_MS = 300;
+const DAYS_START_MS = 260;
+const DAY_STEP_MS = 90;
+const SETTLE_MS = 200;
 
 function CardText({ style, children, ...rest }: TextProps) {
   return (
@@ -53,6 +77,10 @@ export type WeeklyStoryCardProps = {
   marksLogged: number;
   goalTitles: string[];
   palette: StoryPalette;
+  /** In-app reveal. Off (the default) = the settled frame. */
+  animate?: boolean;
+  /** Once the card shows its final numbers (next tick when not animating). */
+  onEntranceDone?: () => void;
 };
 
 export function storyMetaLine(marksLogged: number, goalTitles: string[]): string {
@@ -60,18 +88,84 @@ export function storyMetaLine(marksLogged: number, goalTitles: string[]): string
   return [marks, ...goalTitles.slice(0, STORY_GOAL_CAP)].join(' · ');
 }
 
+/** How many days have lit so far; 7 = settled. */
+// Not running reads as settled (7) by derivation, not by a setState: the
+// reduced-motion flag resolves asynchronously, so `run` can flip to false
+// after the first frame and the card must jump straight to its final numbers.
+function useDayStep(run: boolean, onDone?: () => void): number {
+  const [step, setStep] = useState(0);
+  useEffect(() => {
+    if (!run) {
+      const t = setTimeout(() => onDone?.(), 0);
+      return () => clearTimeout(t);
+    }
+    const timers: ReturnType<typeof setTimeout>[] = [setTimeout(() => setStep(0), 0)];
+    for (let i = 1; i <= 7; i++) {
+      timers.push(setTimeout(() => setStep(i), DAYS_START_MS + i * DAY_STEP_MS));
+    }
+    timers.push(setTimeout(() => onDone?.(), DAYS_START_MS + 7 * DAY_STEP_MS + SETTLE_MS));
+    return () => timers.forEach(clearTimeout);
+    // onDone is a callback prop: restarting on its identity would replay the
+    // reveal on every parent render, so only `run` restarts it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [run]);
+  return run ? step : 7;
+}
+
+function FadeUp({ run, delay, children }: { run: boolean; delay: number; children: React.ReactNode }) {
+  const p = useSharedValue(run ? 0 : 1);
+  useEffect(() => {
+    p.value = run
+      ? withDelay(delay, withTiming(1, { duration: HEAD_MS, easing: Easing.out(Easing.cubic) }))
+      : 1;
+  }, [run, delay, p]);
+  const style = useAnimatedStyle(() => ({
+    opacity: p.value,
+    transform: [{ translateY: (1 - p.value) * 10 }],
+  }));
+  return <Animated.View style={style}>{children}</Animated.View>;
+}
+
+function DayDot({ active, lit, tint, run }: { active: boolean; lit: boolean; tint: string; run: boolean }) {
+  const s = useSharedValue(1);
+  useEffect(() => {
+    if (run && lit && active) {
+      s.value = withSequence(withTiming(1.45, { duration: 120 }), withTiming(1, { duration: 180 }));
+    }
+  }, [run, lit, active, s]);
+  const pop = useAnimatedStyle(() => ({ transform: [{ scale: s.value }] }));
+  return (
+    <Animated.View
+      testID="story-day-dot"
+      style={[styles.dot, { backgroundColor: active && lit ? tint : applyOpacity(STORY_LINEN, 0.1) }, pop]}
+    />
+  );
+}
+
 export const WeeklyStoryCard = forwardRef<View, WeeklyStoryCardProps>(function WeeklyStoryCard(
-  { weekLabel, archetype, daysActive, daysActiveCount, marksLogged, goalTitles, palette },
+  { weekLabel, archetype, daysActive, daysActiveCount, marksLogged, goalTitles, palette, animate = false, onEntranceDone },
   ref,
 ) {
   const tint = palette.tint;
+  const reducedMotion = useReducedMotion();
+  const run = animate && !reducedMotion;
+  const step = useDayStep(run, onEntranceDone);
+  // Settled, the number is the derived count, never a recount of the dots.
+  const shown = step >= 7 ? daysActiveCount : daysActive.slice(0, step).filter(Boolean).length;
   return (
     <View ref={ref} collapsable={false} testID="story-card" style={styles.card}>
-      {/* Glow: three stacked discs approximate a radial falloff with no
-          image asset (a PNG would have needed tooling the repo lacks). */}
-      <View pointerEvents="none" style={[styles.glow, styles.glowOuter, { backgroundColor: applyOpacity(tint, 0.08) }]} />
-      <View pointerEvents="none" style={[styles.glow, styles.glowMid, { backgroundColor: applyOpacity(tint, 0.08) }]} />
-      <View pointerEvents="none" style={[styles.glow, styles.glowInner, { backgroundColor: applyOpacity(tint, 0.1) }]} />
+      {/* Glow: one radial gradient centred on the numeral. It replaced three
+          stacked flat discs that read as hard rings on device (2026-09-18). */}
+      <Svg pointerEvents="none" style={StyleSheet.absoluteFill} width={STORY_CARD_WIDTH} height={STORY_CARD_HEIGHT}>
+        <Defs>
+          <RadialGradient id="storyGlow" cx="50%" cy="50%" r="50%">
+            <Stop offset="0" stopColor={tint} stopOpacity={0.24} />
+            <Stop offset="0.45" stopColor={tint} stopOpacity={0.09} />
+            <Stop offset="1" stopColor={tint} stopOpacity={0} />
+          </RadialGradient>
+        </Defs>
+        <Circle cx={STORY_CARD_WIDTH / 2} cy={STORY_CARD_HEIGHT / 2} r={290} fill="url(#storyGlow)" />
+      </Svg>
 
       <View style={styles.header}>
         <CardText style={styles.wordmark}>Livra</CardText>
@@ -79,33 +173,33 @@ export const WeeklyStoryCard = forwardRef<View, WeeklyStoryCardProps>(function W
       </View>
 
       <View style={styles.archetype}>
-        <CardText style={[styles.kicker, { color: tint }]}>Your week was</CardText>
-        <CardText testID="story-name" numberOfLines={2} style={[styles.name, { color: tint }]}>
-          {archetype.name}
-        </CardText>
-        <CardText style={styles.line}>{archetype.line}</CardText>
+        <FadeUp run={run} delay={0}>
+          <CardText style={[styles.kicker, { color: tint }]}>Your week was</CardText>
+          <CardText testID="story-name" numberOfLines={2} style={[styles.name, { color: tint }]}>
+            {archetype.name}
+          </CardText>
+        </FadeUp>
+        <FadeUp run={run} delay={120}>
+          <CardText style={styles.line}>{archetype.line}</CardText>
+        </FadeUp>
       </View>
 
-      <View style={styles.numeralRow}>
-        <CardText testID="story-numeral" style={styles.numeral}>
-          {String(daysActiveCount)}
-        </CardText>
-        <CardText testID="story-fraction" style={styles.fraction}>
-          / 7 days
-        </CardText>
+      <View pointerEvents="none" style={styles.numeralFrame}>
+        <View testID="story-numeral-row" style={styles.numeralRow}>
+          <CardText testID="story-numeral" style={styles.numeral}>
+            {String(shown)}
+          </CardText>
+          <CardText testID="story-fraction" style={styles.fraction}>
+            / 7 days
+          </CardText>
+        </View>
       </View>
 
       <View style={styles.bottom}>
         <View style={styles.dots}>
           {daysActive.map((active, i) => (
             <View key={i} style={styles.dayCell}>
-              <View
-                testID="story-day-dot"
-                style={[
-                  styles.dot,
-                  { backgroundColor: active ? tint : applyOpacity(STORY_LINEN, 0.1) },
-                ]}
-              />
+              <DayDot active={active} lit={i < step} tint={tint} run={run} />
               <CardText style={styles.dayLetter}>{DAY_LETTERS[i]}</CardText>
             </View>
           ))}
@@ -132,10 +226,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: EDGE,
     paddingTop: EDGE,
   },
-  glow: { position: 'absolute', alignSelf: 'center' },
-  glowOuter: { width: 560, height: 560, borderRadius: 280, top: STORY_CARD_HEIGHT / 2 - 280 },
-  glowMid: { width: 380, height: 380, borderRadius: 190, top: STORY_CARD_HEIGHT / 2 - 190 },
-  glowInner: { width: 220, height: 220, borderRadius: 110, top: STORY_CARD_HEIGHT / 2 - 110 },
 
   header: {
     height: 24,
@@ -162,34 +252,33 @@ const styles = StyleSheet.create({
     marginTop: 13,
   },
 
-  // Absolute so the archetype group above and the bottom group below can be
-  // anchored independently; the row's box is centred on the frame.
-  numeralRow: {
+  // A full-frame column centres the numeral row on the frame, so the
+  // archetype group above and the bottom group below stay anchored
+  // independently and nothing hand-computes the row's top.
+  numeralFrame: {
     position: 'absolute',
+    top: 0,
+    bottom: 0,
     left: EDGE,
     right: EDGE,
-    top: NUMERAL_TOP,
-    height: NUMERAL_LINE,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
+    justifyContent: 'center',
   },
+  // Baseline, so "/ 7 days" sits on the numeral's baseline whatever the
+  // font's metrics, instead of a padding tuned against the clipped box.
+  numeralRow: { flexDirection: 'row', alignItems: 'baseline' },
   numeral: {
     fontFamily: fonts.sansBold,
     fontSize: NUMERAL_SIZE,
-    lineHeight: NUMERAL_LINE,
     letterSpacing: -4.9,
     color: STORY_LINEN,
-    includeFontPadding: false,
   },
   // 8pt off the numeral's INK edge: DM Sans "5" carries ~4pt of right
   // side-bearing at this size, so the box gap is 4.
   fraction: {
     fontFamily: fonts.serifSemibold,
     fontSize: 27,
-    lineHeight: 27,
     color: applyOpacity(STORY_LINEN, 0.55),
     marginLeft: 4,
-    paddingBottom: 16,
   },
 
   bottom: { position: 'absolute', left: EDGE, right: EDGE, bottom: EDGE },
