@@ -1,17 +1,19 @@
 // app/review/index.tsx — the Weekly Review (WR-2).
-// Spec: docs/superpowers/specs/2026-08-29-weekly-review-design.md §3 — the
-// confirmed prototype D "Letter at a Glance" is the visual contract: A's voice
-// opens and closes (serif headline + prose + the why in ember), B's structure
-// carries the middle (7-day dot strip + per-goal cards). Everything is derived
+// Spec: docs/superpowers/specs/2026-08-29-weekly-review-design.md §3, with the
+// 2026-09-18 founder ruling on top: the review OPENS ON THE STORY CARD, the
+// same WeeklyStoryCard that gets shared, animated in, with the colour chips
+// and Share under it. The card replaced the old serif headline and 7-day dot
+// strip (it carries both); prose, per-goal cards, the why in ember, the
+// closing and the Livra+ tease stay below, in the app theme. Everything is derived
 // at RENDER time by lib/weeklyReview/derive.ts; this file only reads, adapts
 // and draws. Presented as a modal (registered in app/_layout.tsx) — remember a
 // root-mounted RN <Modal> cannot present over it (OverlayPortal if ever needed).
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
-import { Export, X } from 'phosphor-react-native';
+import { X } from 'phosphor-react-native';
 
 import {
   fonts,
@@ -24,7 +26,6 @@ import {
   themedColors,
 } from '../../theme/tokens';
 import { useEffectiveTheme } from '../../state/uiSlice';
-import { applyOpacity } from '../../src/components/icons/color';
 import { Skeleton } from '../../components/ui/Skeleton';
 
 import { useAuth } from '@/hooks/useAuth';
@@ -56,10 +57,10 @@ import {
 } from '../../lib/weeklyReview/derive';
 import { weeklyReviewGate } from '../../lib/weeklyReview/gate';
 import { archetypeSignalsFrom, deriveArchetype } from '../../lib/weeklyReview/archetype';
-import { StoryShareSheet } from '../../components/StoryShareSheet';
+import { StoryShareControls } from '../../components/StoryShareControls';
+import { STORY_CARD_HEIGHT, STORY_CARD_WIDTH, WeeklyStoryCard } from '../../components/WeeklyStoryCard';
+import { STORY_PALETTES } from '../../lib/sharing/storyPalettes';
 import { useShareCardStore } from '../../state/shareCardSlice';
-
-const DAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
 const EMPTY_GOAL_ROWS: GoalRow[] = [];
 const EMPTY_CHECKIN_ROWS: Parameters<typeof toMarkEvent>[0][] = [];
@@ -68,28 +69,6 @@ const EMPTY_MARKS_BY_GOAL: Record<string, MarkRow[]> = {};
 type ThemeColors = ReturnType<typeof themedColors>;
 
 // ── Sections (prototype D order, top to bottom) ──────────────────────────────
-
-function DayStrip({ daysActive, c }: { daysActive: boolean[]; c: ThemeColors }) {
-  return (
-    <View style={styles.dayStrip}>
-      {daysActive.map((active, i) => (
-        <View key={i} style={styles.dayCell}>
-          <View
-            style={[
-              styles.dayDot,
-              // A quiet day is visually NEUTRAL (consistency-engine precedent) —
-              // never red or amber.
-              active
-                ? { backgroundColor: c.forest }
-                : { backgroundColor: applyOpacity(c.inkMuted, 0.18) },
-            ]}
-          />
-          <Text style={[styles.dayLabel, { color: c.inkMuted }]}>{DAY_LETTERS[i]}</Text>
-        </View>
-      ))}
-    </View>
-  );
-}
 
 function GoalCard({ goal, c, theme }: { goal: ReviewGoalCard; c: ThemeColors; theme: 'light' | 'dark' }) {
   return (
@@ -131,11 +110,7 @@ function ReviewBody({ review, c, theme, showTease, onTease }: {
 }) {
   return (
     <>
-      <Text style={[styles.kicker, { color: c.inkMuted }]}>{review.weekLabel}</Text>
-      <Text style={[styles.headline, { color: c.inkDark }]}>{review.headline}</Text>
-      <Text style={[styles.body, { color: c.inkMid }]}>{review.prose}</Text>
-
-      <DayStrip daysActive={review.daysActive} c={c} />
+      <Text style={[styles.body, styles.prose, { color: c.inkMid }]}>{review.prose}</Text>
 
       {review.goals.map((g) => (
         <GoalCard key={g.goalId} goal={g} c={c} theme={theme} />
@@ -311,10 +286,18 @@ export default function WeeklyReviewScreen() {
     });
   }, [gate, review, goalsQuery.data, marksByGoalQuery.data, checkinsQuery.data, queryError]);
 
-  // Weekly Story card (spec 2026-09-15). Export opens a sheet; the card is
-  // mounted only inside it and the capture lives there too. Analytics carries
-  // ids and counts, never the goal title or the archetype's words.
-  const [sheetOpen, setSheetOpen] = useState(false);
+  // Weekly Story card (spec 2026-09-15; top of the screen since 2026-09-18).
+  // Share captures the on-screen card in place: no overlay, so the OS share
+  // sheet presents on top of this modal (StoryShareControls header has the
+  // freeze this replaced). Analytics carries ids and counts, never the goal
+  // title or the archetype's words.
+  const storyCardRef = useRef<View>(null);
+  const [storySettled, setStorySettled] = useState(false);
+  const onStorySettled = useCallback(() => setStorySettled(true), []);
+  const { width: windowWidth } = useWindowDimensions();
+  const heroWidth = windowWidth - spacing.lg * 2;
+  const heroScale = heroWidth / STORY_CARD_WIDTH;
+  const heroHeight = Math.round(STORY_CARD_HEIGHT * heroScale);
   const storyPalette = useShareCardStore((s) => s.storyPalette);
   const setStoryPalette = useShareCardStore((s) => s.setStoryPalette);
   const loadStoryPalette = useShareCardStore((s) => s.loadStoryPalette);
@@ -326,16 +309,6 @@ export default function WeeklyReviewScreen() {
     () => (review ? deriveArchetype(archetypeSignalsFrom(review)) : null),
     [review],
   );
-
-  const handleShare = useCallback(() => {
-    if (!review || !archetype) return;
-    capture(ANALYTICS_EVENTS.WEEKLY_STORY_SHEET_OPENED, {
-      week_start: review.weekStart,
-      archetype_id: archetype.id,
-      days_active: review.daysActiveCount,
-    });
-    setSheetOpen(true);
-  }, [review, archetype]);
 
   const handleShared = useCallback(() => {
     if (!review || !archetype) return;
@@ -358,19 +331,7 @@ export default function WeeklyReviewScreen() {
   return (
     <SafeAreaView style={[styles.fill, { backgroundColor: c.linen }]} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        {review !== null ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Share your week"
-            onPress={handleShare}
-            style={({ pressed }) => [styles.headerBtn, { opacity: pressed ? 0.6 : 1 }]}
-            hitSlop={4}
-          >
-            <Export size={24} color={c.inkMid} weight="regular" />
-          </Pressable>
-        ) : (
-          <View style={styles.headerBtn} />
-        )}
+        <View style={styles.headerBtn} />
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Close"
@@ -394,8 +355,49 @@ export default function WeeklyReviewScreen() {
             }
           />
         ) : (
-          <ReviewBody
-            review={review}
+          <>
+            {archetype !== null && (
+              <>
+                {/* The card is laid out at its true 360x640 and only this
+                    wrapper scales it to the column, so the capture (the
+                    card's own layer at its own bounds) exports full size. */}
+                <View style={[styles.hero, { width: heroWidth, height: heroHeight }]}>
+                  <View
+                    style={{
+                      width: STORY_CARD_WIDTH,
+                      height: STORY_CARD_HEIGHT,
+                      transform: [
+                        { translateX: -(STORY_CARD_WIDTH - heroWidth) / 2 },
+                        { translateY: -(STORY_CARD_HEIGHT - heroHeight) / 2 },
+                        { scale: heroScale },
+                      ],
+                    }}
+                  >
+                    <WeeklyStoryCard
+                      ref={storyCardRef}
+                      weekLabel={review.weekLabel}
+                      archetype={archetype}
+                      daysActive={review.daysActive}
+                      daysActiveCount={review.daysActiveCount}
+                      marksLogged={review.marksLogged}
+                      goalTitles={review.goals.map((g) => g.title)}
+                      palette={STORY_PALETTES[storyPalette]}
+                      animate
+                      onEntranceDone={onStorySettled}
+                    />
+                  </View>
+                </View>
+                <StoryShareControls
+                  cardRef={storyCardRef}
+                  palette={storyPalette}
+                  onPaletteChange={setStoryPalette}
+                  ready={storySettled}
+                  onShared={handleShared}
+                />
+              </>
+            )}
+            <ReviewBody
+              review={review}
             c={c}
             theme={theme}
             showTease={!isProUnlocked}
@@ -405,29 +407,11 @@ export default function WeeklyReviewScreen() {
               });
               router.push('/paywall');
             }}
-          />
+            />
+          </>
         )}
       </ScrollView>
 
-      {review !== null && archetype !== null && (
-        <StoryShareSheet
-          visible={sheetOpen}
-          card={{
-            weekLabel: review.weekLabel,
-            archetype,
-            daysActive: review.daysActive,
-            daysActiveCount: review.daysActiveCount,
-            marksLogged: review.marksLogged,
-            goalTitles: review.goals.map((g) => g.title),
-          }}
-          palette={storyPalette}
-          onPaletteChange={(id) => {
-            setStoryPalette(id);
-          }}
-          onShared={handleShared}
-          onClose={() => setSheetOpen(false)}
-        />
-      )}
     </SafeAreaView>
   );
 }
@@ -464,17 +448,8 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     marginBottom: spacing.md,
   },
-
-  dayStrip: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: spacing.md,
-    marginBottom: spacing.lg,
-    paddingHorizontal: spacing.sm,
-  },
-  dayCell: { alignItems: 'center', gap: 6 },
-  dayDot: { width: 18, height: 18, borderRadius: radius.full },
-  dayLabel: { fontFamily: fonts.sansMedium, fontSize: fontSize.xs },
+  prose: { marginTop: spacing.lg },
+  hero: { borderRadius: radius.lg, overflow: 'hidden' },
 
   goalCard: {
     borderRadius: radius.lg,

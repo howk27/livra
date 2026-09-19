@@ -31,7 +31,7 @@ const COPY_CARRYING_SOURCES = [
   'lib/weeklyReview/derive.ts',
   'app/review/index.tsx',
   'components/WeeklyStoryCard.tsx',
-  'components/StoryShareSheet.tsx',
+  'components/StoryShareControls.tsx',
 ];
 
 // Matches single-quoted, double-quoted, and backtick string literals (no escaped

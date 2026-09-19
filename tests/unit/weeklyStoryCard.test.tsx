@@ -4,7 +4,24 @@
 // is fixed or capped, so a fixed 9:16 frame is what makes it an object and
 // the test now pins the frame INSTEAD of forbidding it.
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { act, render } from '@testing-library/react-native';
+
+jest.mock('react-native-reanimated', () => {
+  const Rn = require('react-native');
+  const Animated = { View: Rn.View, createAnimatedComponent: (C: any) => C };
+  return {
+    __esModule: true,
+    default: Animated,
+    ...Animated,
+    useSharedValue: (v: any) => ({ value: v }),
+    useAnimatedStyle: () => ({}),
+    withTiming: (v: any) => v,
+    withDelay: (_: any, v: any) => v,
+    withSequence: (...v: any[]) => v[v.length - 1],
+    Easing: { out: (e: any) => e, cubic: (t: number) => t },
+  };
+});
+jest.mock('../../hooks/useReducedMotion', () => ({ useReducedMotion: () => false }));
 import { StyleSheet, Text } from 'react-native';
 import {
   STORY_CARD_HEIGHT,
@@ -101,5 +118,42 @@ describe('WeeklyStoryCard', () => {
       ]),
     );
     expect(capped).toHaveLength(2);
+  });
+
+  // Device bug 2026-09-18: a 123pt numeral in a 98pt line box was CUT IN HALF
+  // on iOS (the web harness let the glyph overflow, so the design pass never
+  // saw it). The numeral must carry no line box shorter than its font size,
+  // and the fraction must sit on the numeral's baseline, not a padded guess.
+  it('never gives the numeral a line box shorter than its glyphs; fraction rides the baseline', () => {
+    const { getByTestId } = render(<WeeklyStoryCard {...props} />);
+    const n = flat(getByTestId('story-numeral').props.style);
+    if (n.lineHeight != null) expect(n.lineHeight).toBeGreaterThanOrEqual(n.fontSize);
+    const row = flat(getByTestId('story-numeral-row').props.style);
+    expect(row.alignItems).toBe('baseline');
+    expect(flat(getByTestId('story-fraction').props.style).paddingBottom).toBeUndefined();
+  });
+
+  describe('entrance (the in-app reveal)', () => {
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => jest.useRealTimers());
+
+    it('counts the numeral up from 0 as the active days light, then reports done once', () => {
+      const onEntranceDone = jest.fn();
+      const { getByTestId } = render(
+        <WeeklyStoryCard {...props} animate onEntranceDone={onEntranceDone} />,
+      );
+      expect(getByTestId('story-numeral').props.children).toBe('0');
+      act(() => jest.advanceTimersByTime(5000));
+      expect(getByTestId('story-numeral').props.children).toBe('5');
+      expect(onEntranceDone).toHaveBeenCalledTimes(1);
+    });
+
+    it('a static card (the default) is final on the first frame and reports done', () => {
+      const onEntranceDone = jest.fn();
+      const { getByTestId } = render(<WeeklyStoryCard {...props} onEntranceDone={onEntranceDone} />);
+      expect(getByTestId('story-numeral').props.children).toBe('5');
+      act(() => jest.runOnlyPendingTimers());
+      expect(onEntranceDone).toHaveBeenCalledTimes(1);
+    });
   });
 });
