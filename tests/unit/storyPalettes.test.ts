@@ -48,9 +48,18 @@ describe('storyPalettes', () => {
 // (signature, the last day of the week).
 describe('story gradient', () => {
   it('each palette leads with its own colour and closes on the other', () => {
-    expect(STORY_PALETTES.amber.tint).toBe('#E3B463');
     expect(STORY_PALETTES.amber.tintEnd).toBe(STORY_PALETTES.green.tint);
     expect(STORY_PALETTES.green.tintEnd).toBe(STORY_PALETTES.amber.tint);
+  });
+
+  // Founder 2026-09-20: the amber read dimmer than the green. It did — 8.66:1
+  // against 9.79:1 — so one end of every gradient was quieter than the other.
+  // Measured parity, not a hex, so a future retune cannot reopen the gap.
+  it('neither end of the gradient reads dimmer than the other', () => {
+    const amber = contrast(STORY_PALETTES.amber.tint, STORY_GROUND);
+    const green = contrast(STORY_PALETTES.green.tint, STORY_GROUND);
+    expect(Math.abs(amber - green)).toBeLessThan(0.5);
+    expect(amber).toBeGreaterThan(9);
   });
 
   it('blendTint walks from one end to the other and never leaves the pair', () => {

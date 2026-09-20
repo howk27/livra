@@ -711,6 +711,7 @@ function DetailFooter({
  *  mounted and toggles via `visible`; Android mounts the dialog on demand. */
 function TargetDateSheet({
   c,
+  theme,
   visible,
   date,
   onChangeDate,
@@ -718,6 +719,7 @@ function TargetDateSheet({
   onSave,
 }: {
   c: ThemeColors;
+  theme: 'light' | 'dark';
   visible: boolean;
   date: Date;
   onChangeDate: (date: Date) => void;
@@ -742,10 +744,14 @@ function TargetDateSheet({
             activeOpacity={1}
           >
             <Text style={[styles.modalLabel, { color: c.inkMuted }]}>TARGET DATE</Text>
+            {/* Same native default as the daily reminder: the spinner follows
+                the PHONE's appearance unless told otherwise (2026-09-20). */}
             <DateTimePicker
               value={date}
               mode="date"
               display="spinner"
+              themeVariant={theme}
+              textColor={c.inkDark}
               minimumDate={new Date()}
               onChange={(_, picked) => { if (picked) onChangeDate(picked); }}
               style={{ width: '100%' }}
@@ -768,6 +774,7 @@ function TargetDateSheet({
       value={date}
       mode="date"
       display="default"
+      themeVariant={theme}
       minimumDate={new Date()}
       onChange={(event, picked) => {
         onClose();
@@ -1425,6 +1432,7 @@ export default function GoalDetailScreen() {
       />
 
       <TargetDateSheet
+        theme={theme}
         c={c}
         visible={showDatePicker}
         date={pickerDate}
