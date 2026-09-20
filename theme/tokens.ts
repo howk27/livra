@@ -330,6 +330,10 @@ export const fonts = {
   sansMedium: 'DMSans_500Medium',
   sansSemibold: 'DMSans_600SemiBold',
   sansBold: 'DMSans_700Bold',
+  // The person's own name on the Weekly Story card, and nowhere else
+  // (founder 2026-09-20: a signature, not a typeface for chrome). Loaded
+  // in app/_layout.tsx; scope pinned by tests/unit/signatureScope.test.ts.
+  signature: 'Allura_400Regular',
   mono: 'monospace', // diagnostics / code display only
   // Backward compat aliases used by theme/typography.ts
   heading: 'CormorantGaramond_700Bold',

@@ -38,8 +38,8 @@ import { applyOpacity } from '../src/components/icons/color';
 
 export const STORY_CARD_WIDTH = 360;
 export const STORY_CARD_HEIGHT = 640;
-/** Goal titles on the meta line. Readability, not layout. */
-export const STORY_GOAL_CAP = 2;
+/** The numeral sits this far BELOW frame centre (founder 2026-09-20). */
+export const STORY_NUMERAL_DROP = 28;
 
 const EDGE = 24;
 const DAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -51,6 +51,7 @@ const DAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 // DM Sans's box centre sits within ~1pt of a digit's ink centre, so centring
 // the box still puts the numeral on 320.
 const NUMERAL_SIZE = 123;
+const SIGNATURE_SIZE = 26;
 
 // Entrance: the name fades up, then the seven days light Monday to Sunday
 // and the numeral counts each active one. About 1s end to end, over the
@@ -69,13 +70,28 @@ function CardText({ style, children, ...rest }: TextProps) {
   );
 }
 
+/** The goal the week is deepest into; null when there are no goals. */
+export type StoryGoal = { title: string; weeksIn: number };
+
+/** What the person left switched on (spec 2026-09-20). */
+export type StoryMetaPrefs = { showWeeksIn: boolean; showGoalTitle: boolean };
+
 export type WeeklyStoryCardProps = {
   weekLabel: string;
   archetype: Archetype;
   daysActive: boolean[];
   daysActiveCount: number;
   marksLogged: number;
-  goalTitles: string[];
+  deepestGoal: StoryGoal | null;
+  /**
+   * First name for the signature; null signs nothing and restores the older
+   * two-slot footer. PRIVACY: only a genuinely saved display name may arrive
+   * here — never the email-prefix fallback, which would put a handle on a
+   * publicly shared image (spec 2026-09-20; pinned by the review-wiring test).
+   */
+  signatureName: string | null;
+  showWeeksIn: boolean;
+  showGoalTitle: boolean;
   palette: StoryPalette;
   /** In-app reveal. Off (the default) = the settled frame. */
   animate?: boolean;
@@ -83,9 +99,18 @@ export type WeeklyStoryCardProps = {
   onEntranceDone?: () => void;
 };
 
-export function storyMetaLine(marksLogged: number, goalTitles: string[]): string {
+export function storyMetaLine(
+  marksLogged: number,
+  goal: StoryGoal | null,
+  { showWeeksIn, showGoalTitle }: StoryMetaPrefs,
+): string {
   const marks = `${marksLogged} ${marksLogged === 1 ? 'mark' : 'marks'}`;
-  return [marks, ...goalTitles.slice(0, STORY_GOAL_CAP)].join(' · ');
+  if (goal === null) return marks;
+  // weeksIn counts whole weeks elapsed, so week one is weeksIn 0.
+  const week = showWeeksIn ? `Week ${goal.weeksIn + 1}` : null;
+  const title = showGoalTitle ? goal.title : null;
+  const depth = week && title ? `${week} of ${title}` : week ?? title;
+  return depth ? `${marks} · ${depth}` : marks;
 }
 
 /** How many days have lit so far; 7 = settled. */
@@ -143,7 +168,20 @@ function DayDot({ active, lit, tint, run }: { active: boolean; lit: boolean; tin
 }
 
 export const WeeklyStoryCard = forwardRef<View, WeeklyStoryCardProps>(function WeeklyStoryCard(
-  { weekLabel, archetype, daysActive, daysActiveCount, marksLogged, goalTitles, palette, animate = false, onEntranceDone },
+  {
+    weekLabel,
+    archetype,
+    daysActive,
+    daysActiveCount,
+    marksLogged,
+    deepestGoal,
+    signatureName,
+    showWeeksIn,
+    showGoalTitle,
+    palette,
+    animate = false,
+    onEntranceDone,
+  },
   ref,
 ) {
   const tint = palette.tint;
@@ -184,7 +222,7 @@ export const WeeklyStoryCard = forwardRef<View, WeeklyStoryCardProps>(function W
         </FadeUp>
       </View>
 
-      <View pointerEvents="none" style={styles.numeralFrame}>
+      <View pointerEvents="none" testID="story-numeral-frame" style={styles.numeralFrame}>
         <View testID="story-numeral-row" style={styles.numeralRow}>
           <CardText testID="story-numeral" style={styles.numeral}>
             {String(shown)}
@@ -206,11 +244,28 @@ export const WeeklyStoryCard = forwardRef<View, WeeklyStoryCardProps>(function W
         </View>
         <View style={styles.hairline} />
         <CardText testID="story-meta" numberOfLines={1} ellipsizeMode="tail" style={styles.meta}>
-          {storyMetaLine(marksLogged, goalTitles)}
+          {storyMetaLine(marksLogged, deepestGoal, { showWeeksIn, showGoalTitle })}
         </CardText>
+        {/* Signed, the right slot is the name and livralife.com moves left:
+            the signature is the invitation the prompt used to be. Unsigned,
+            the footer is exactly the card as it shipped. */}
         <View style={styles.footer}>
-          <CardText style={styles.footText}>what was your week?</CardText>
-          <CardText style={styles.footText}>livralife.com</CardText>
+          <CardText style={styles.footText}>
+            {signatureName === null ? 'what was your week?' : 'livralife.com'}
+          </CardText>
+          {signatureName === null ? (
+            <CardText style={styles.footText}>livralife.com</CardText>
+          ) : (
+            <CardText
+              testID="story-signature"
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.7}
+              style={[styles.signature, { color: tint }]}
+            >
+              {signatureName}
+            </CardText>
+          )}
         </View>
       </View>
     </View>
@@ -265,7 +320,7 @@ const styles = StyleSheet.create({
   },
   // Baseline, so "/ 7 days" sits on the numeral's baseline whatever the
   // font's metrics, instead of a padding tuned against the clipped box.
-  numeralRow: { flexDirection: 'row', alignItems: 'baseline' },
+  numeralRow: { flexDirection: 'row', alignItems: 'baseline', transform: [{ translateY: STORY_NUMERAL_DROP }] },
   numeral: {
     fontFamily: fonts.sansBold,
     fontSize: NUMERAL_SIZE,
@@ -294,6 +349,14 @@ const styles = StyleSheet.create({
   },
   hairline: { height: StyleSheet.hairlineWidth, backgroundColor: applyOpacity(STORY_LINEN, 0.12), marginTop: 29 },
   meta: { fontFamily: fonts.sans, fontSize: 13, lineHeight: 18, color: applyOpacity(STORY_LINEN, 0.55), marginTop: 21 },
-  footer: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 28 },
+  // flex-end: the script's baseline lines up with the 11pt line beside it
+  // instead of floating off its much taller box.
+  footer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 22, minHeight: 26 },
+  signature: {
+    fontFamily: fonts.signature,
+    fontSize: SIGNATURE_SIZE,
+    lineHeight: SIGNATURE_SIZE + 4,
+    maxWidth: 170,
+  },
   footText: { fontFamily: fonts.sans, fontSize: 11, lineHeight: 12, color: applyOpacity(STORY_LINEN, 0.5) },
 });

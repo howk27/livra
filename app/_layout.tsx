@@ -14,6 +14,7 @@ import {
   DMSans_600SemiBold,
   DMSans_700Bold,
 } from '@expo-google-fonts/dm-sans';
+import { Allura_400Regular } from '@expo-google-fonts/allura';
 import * as SplashScreen from 'expo-splash-screen';
 import { AppState, AppStateStatus, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -165,6 +166,7 @@ if (typeof window !== 'undefined' && window.addEventListener) {
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
+    Allura_400Regular,
     CormorantGaramond_400Regular_Italic,
     CormorantGaramond_600SemiBold,
     CormorantGaramond_700Bold,
