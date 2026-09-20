@@ -47,7 +47,8 @@ async function ensureNotificationPermission(): Promise<boolean> {
 }
 
 export default function NotificationsScreen() {
-  const c = themedColors(useEffectiveTheme());
+  const theme = useEffectiveTheme();
+  const c = themedColors(theme);
   const { enabled, hydrated, setEnabled } = useNotificationsMaster();
   const { showError } = useNotification();
 
@@ -194,10 +195,16 @@ export default function NotificationsScreen() {
 
           {enabled && reminderEnabled && showTimePicker && (
             <View style={styles.pickerWrap}>
+              {/* The iOS spinner paints itself from the SYSTEM appearance, not
+                  ours: on a dark phone it drew white digits onto this light
+                  sheet and the time was unreadable (founder 2026-09-20). The
+                  app's theme has to be handed over explicitly. */}
               <DateTimePicker
                 value={reminderTime}
                 mode="time"
                 display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                themeVariant={theme}
+                textColor={c.inkDark}
                 onChange={handleReminderTimeChange}
               />
             </View>

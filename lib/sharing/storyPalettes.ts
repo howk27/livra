@@ -32,7 +32,10 @@ export const STORY_LINEN = '#F0EDE8';
 
 export const STORY_PALETTE_IDS: readonly StoryPaletteId[] = ['amber', 'green'];
 
-const AMBER = '#E3B463';
+// Founder 2026-09-20: "make the amber slightly more visible". It measured
+// 8.66:1 on the ground against green's 9.79 — the pair was uneven, so one
+// end of every gradient read dimmer. Raised to sit level with green.
+const AMBER = '#EDC073';
 const GREEN = '#A9CFC3';
 
 export const STORY_PALETTES: Record<StoryPaletteId, StoryPalette> = {
