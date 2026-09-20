@@ -32,10 +32,12 @@ export const STORY_LINEN = '#F0EDE8';
 
 export const STORY_PALETTE_IDS: readonly StoryPaletteId[] = ['amber', 'green'];
 
-// Founder 2026-09-20: "make the amber slightly more visible". It measured
-// 8.66:1 on the ground against green's 9.79 — the pair was uneven, so one
-// end of every gradient read dimmer. Raised to sit level with green.
-const AMBER = '#EDC073';
+// Founder 2026-09-20, twice. First "slightly more visible": the amber
+// measured 8.66:1 on the ground against green's 9.79, so one end of every
+// gradient read dimmer. Then "slightly stronger": brightness was no longer
+// the problem, presence was. This is 9.81:1 — still level with green — at
+// 88% saturation against the first pass's 77%, so it gained colour, not light.
+const AMBER = '#F4BF57';
 const GREEN = '#A9CFC3';
 
 export const STORY_PALETTES: Record<StoryPaletteId, StoryPalette> = {
