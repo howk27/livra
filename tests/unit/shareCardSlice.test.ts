@@ -1,5 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useShareCardStore, SHARE_CARD_STYLE_KEY, STORY_PALETTE_KEY } from '../../state/shareCardSlice';
+import {
+  useShareCardStore,
+  DEFAULT_STORY_PREFS,
+  SHARE_CARD_STYLE_KEY,
+  STORY_PALETTE_KEY,
+  STORY_PREFS_KEY,
+} from '../../state/shareCardSlice';
 import { DEFAULT_SHARE_CARD_STYLE } from '../../lib/sharing/shareCardThemes';
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
@@ -72,6 +78,59 @@ describe('shareCardSlice', () => {
       (AsyncStorage.getItem as jest.Mock).mockRejectedValueOnce(new Error('disk'));
       await useShareCardStore.getState().loadStoryPalette();
       expect(useShareCardStore.getState().storyPalette).toBe('amber');
+    });
+  });
+
+  // Story card personalization (spec 2026-09-20). Defaults ON: the card ships
+  // rich and the toggles only ever take things away, so someone who never
+  // touches them still shares in one tap.
+  describe('storyPrefs', () => {
+    beforeEach(() => {
+      useShareCardStore.setState({ storyPrefs: DEFAULT_STORY_PREFS });
+    });
+
+    it('defaults every switch on', () => {
+      expect(DEFAULT_STORY_PREFS).toEqual({ showName: true, showWeeksIn: true, showGoalTitle: true });
+      expect(useShareCardStore.getState().storyPrefs).toEqual(DEFAULT_STORY_PREFS);
+    });
+
+    it('setStoryPref flips one switch and persists the whole set', async () => {
+      await useShareCardStore.getState().setStoryPref('showGoalTitle', false);
+      const { storyPrefs } = useShareCardStore.getState();
+      expect(storyPrefs).toEqual({ showName: true, showWeeksIn: true, showGoalTitle: false });
+      expect(AsyncStorage.setItem).toHaveBeenCalledWith(STORY_PREFS_KEY, JSON.stringify(storyPrefs));
+    });
+
+    it('loadStoryPrefs rehydrates a stored set', async () => {
+      (AsyncStorage.getItem as jest.Mock).mockResolvedValueOnce(
+        JSON.stringify({ showName: false, showWeeksIn: false, showGoalTitle: true }),
+      );
+      await useShareCardStore.getState().loadStoryPrefs();
+      expect(useShareCardStore.getState().storyPrefs).toEqual({
+        showName: false,
+        showWeeksIn: false,
+        showGoalTitle: true,
+      });
+    });
+
+    it('a partial, junk or unreadable blob falls back switch by switch', async () => {
+      (AsyncStorage.getItem as jest.Mock).mockResolvedValueOnce(
+        JSON.stringify({ showName: false, showWeeksIn: 'yes' }),
+      );
+      await useShareCardStore.getState().loadStoryPrefs();
+      expect(useShareCardStore.getState().storyPrefs).toEqual({
+        showName: false,
+        showWeeksIn: true,
+        showGoalTitle: true,
+      });
+
+      (AsyncStorage.getItem as jest.Mock).mockResolvedValueOnce('{not json');
+      await useShareCardStore.getState().loadStoryPrefs();
+      expect(useShareCardStore.getState().storyPrefs).toEqual(DEFAULT_STORY_PREFS);
+
+      (AsyncStorage.getItem as jest.Mock).mockRejectedValueOnce(new Error('disk'));
+      await useShareCardStore.getState().loadStoryPrefs();
+      expect(useShareCardStore.getState().storyPrefs).toEqual(DEFAULT_STORY_PREFS);
     });
   });
 });

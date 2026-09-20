@@ -60,6 +60,7 @@ import { archetypeSignalsFrom, deriveArchetype } from '../../lib/weeklyReview/ar
 import { StoryShareControls } from '../../components/StoryShareControls';
 import { STORY_CARD_HEIGHT, STORY_CARD_WIDTH, WeeklyStoryCard } from '../../components/WeeklyStoryCard';
 import { STORY_PALETTES } from '../../lib/sharing/storyPalettes';
+import { resolveInitialDisplayName } from '../../lib/profile/displayName';
 import { useShareCardStore } from '../../state/shareCardSlice';
 
 const EMPTY_GOAL_ROWS: GoalRow[] = [];
@@ -301,9 +302,28 @@ export default function WeeklyReviewScreen() {
   const storyPalette = useShareCardStore((s) => s.storyPalette);
   const setStoryPalette = useShareCardStore((s) => s.setStoryPalette);
   const loadStoryPalette = useShareCardStore((s) => s.loadStoryPalette);
+  const storyPrefs = useShareCardStore((s) => s.storyPrefs);
+  const setStoryPref = useShareCardStore((s) => s.setStoryPref);
+  const loadStoryPrefs = useShareCardStore((s) => s.loadStoryPrefs);
   useEffect(() => {
     loadStoryPalette();
-  }, [loadStoryPalette]);
+    loadStoryPrefs();
+  }, [loadStoryPalette, loadStoryPrefs]);
+
+  // PRIVACY: the signature takes a genuinely SAVED display name only.
+  // resolveFirstName (the greeting's resolver) falls back to the email prefix
+  // — fine on the person's own screen, a handle published to strangers on a
+  // shared image. Never swap this for that (spec 2026-09-20).
+  const savedName = useMemo(() => resolveInitialDisplayName(null, user?.user_metadata), [user]);
+  const signatureName = savedName ? (savedName.split(' ')[0] ?? null) : null;
+
+  // The goal the week is deepest into carries the most meaning on the card.
+  const deepestGoal = useMemo(() => {
+    const goals = review?.goals ?? [];
+    if (goals.length === 0) return null;
+    const deepest = goals.reduce((a, b) => (b.weeksIn > a.weeksIn ? b : a));
+    return { title: deepest.title, weeksIn: deepest.weeksIn };
+  }, [review]);
 
   const archetype = useMemo(
     () => (review ? deriveArchetype(archetypeSignalsFrom(review)) : null),
@@ -317,8 +337,12 @@ export default function WeeklyReviewScreen() {
       archetype_id: archetype.id,
       palette: storyPalette,
       days_active: review.daysActiveCount,
+      // Booleans only: what people keep on, never what it said.
+      show_name: storyPrefs.showName && signatureName !== null,
+      show_weeks_in: storyPrefs.showWeeksIn,
+      show_goal_title: storyPrefs.showGoalTitle,
     });
-  }, [review, archetype, storyPalette]);
+  }, [review, archetype, storyPalette, storyPrefs, signatureName]);
 
   // Nothing to review → quiet redirect to Focus (spec §8). The gate is what
   // guarantees "only after the reads settle" — the inline version of this test
@@ -380,7 +404,10 @@ export default function WeeklyReviewScreen() {
                       daysActive={review.daysActive}
                       daysActiveCount={review.daysActiveCount}
                       marksLogged={review.marksLogged}
-                      goalTitles={review.goals.map((g) => g.title)}
+                      deepestGoal={deepestGoal}
+                      signatureName={storyPrefs.showName ? signatureName : null}
+                      showWeeksIn={storyPrefs.showWeeksIn}
+                      showGoalTitle={storyPrefs.showGoalTitle}
                       palette={STORY_PALETTES[storyPalette]}
                       animate
                       onEntranceDone={onStorySettled}
@@ -391,6 +418,9 @@ export default function WeeklyReviewScreen() {
                   cardRef={storyCardRef}
                   palette={storyPalette}
                   onPaletteChange={setStoryPalette}
+                  prefs={storyPrefs}
+                  onPrefChange={setStoryPref}
+                  canSign={signatureName !== null}
                   ready={storySettled}
                   onShared={handleShared}
                 />

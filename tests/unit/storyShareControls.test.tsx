@@ -26,6 +26,9 @@ const props = () => ({
   cardRef: { current: null },
   palette: 'amber' as const,
   onPaletteChange: jest.fn(),
+  prefs: { showName: true, showWeeksIn: true, showGoalTitle: true },
+  onPrefChange: jest.fn(),
+  canSign: true,
   ready: true,
   onShared: jest.fn(),
 });
@@ -98,5 +101,35 @@ describe('StoryShareControls', () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+  // Personalization (spec 2026-09-20): the toggles only ever SUBTRACT from a
+  // card that ships complete, so one-tap sharing survives.
+  describe('personalize toggles', () => {
+    it('offers one switch per element, all on, announced as switches', () => {
+      const { getByTestId } = render(<StoryShareControls {...props()} />);
+      for (const key of ['showName', 'showWeeksIn', 'showGoalTitle']) {
+        expect(getByTestId(`story-toggle-${key}`).props.accessibilityState).toEqual({ checked: true });
+      }
+    });
+
+    it('a tap reports the flipped value', () => {
+      const p = props();
+      const { getByTestId } = render(<StoryShareControls {...p} />);
+      fireEvent.press(getByTestId('story-toggle-showGoalTitle'));
+      expect(p.onPrefChange).toHaveBeenCalledWith('showGoalTitle', false);
+    });
+
+    it('an off switch reads as unchecked', () => {
+      const p = { ...props(), prefs: { showName: true, showWeeksIn: true, showGoalTitle: false } };
+      const { getByTestId } = render(<StoryShareControls {...p} />);
+      expect(getByTestId('story-toggle-showGoalTitle').props.accessibilityState).toEqual({ checked: false });
+    });
+
+    it('a name-less account is never offered the Name switch', () => {
+      const p = { ...props(), canSign: false };
+      const { queryByTestId, getByTestId } = render(<StoryShareControls {...p} />);
+      expect(queryByTestId('story-toggle-showName')).toBeNull();
+      expect(getByTestId('story-toggle-showWeeksIn')).toBeTruthy();
+    });
   });
 });

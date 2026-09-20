@@ -13,10 +13,16 @@
 //
 // The capture has a deadline so a stalled snapshot surfaces as the error
 // line instead of a button that never comes back.
+//
+// The toggles (spec 2026-09-20) are the bounded form of the founder's
+// "personalize your own sharecard": they only ever SUBTRACT from a card
+// that ships complete, so the one-tap share the 09-15 spec protected is
+// still the default path. `Goal name` doubles as the privacy control.
 import React, { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import * as Sharing from 'expo-sharing';
 import { STORY_PALETTES, STORY_PALETTE_IDS, type StoryPaletteId } from '../lib/sharing/storyPalettes';
+import type { StoryPrefKey, StoryPrefs } from '../state/shareCardSlice';
 import { generateShareCard } from '../lib/sharing/generateShareCard';
 import { captureException } from '../lib/analytics/posthog';
 import { useEffectiveTheme } from '../state/uiSlice';
@@ -28,10 +34,21 @@ export const STORY_CAPTURE_TIMEOUT_MS = 8000;
 
 const EXPORT = { format: 'png' as const, width: 1080, height: 1920 };
 
+/** Label order is the order they appear on the card, top to bottom. */
+export const STORY_TOGGLES: { key: StoryPrefKey; label: string }[] = [
+  { key: 'showGoalTitle', label: 'Goal name' },
+  { key: 'showWeeksIn', label: 'Week count' },
+  { key: 'showName', label: 'Name' },
+];
+
 export type StoryShareControlsProps = {
   cardRef: React.RefObject<View | null>;
   palette: StoryPaletteId;
   onPaletteChange: (id: StoryPaletteId) => void;
+  prefs: StoryPrefs;
+  onPrefChange: (key: StoryPrefKey, value: boolean) => void;
+  /** No saved name → the Name switch has nothing to show, so it is not offered. */
+  canSign: boolean;
   /** False while the card is still animating in: the capture must be the settled frame. */
   ready: boolean;
   /** After the OS share sheet has been handed the file. Analytics lives in the caller. */
@@ -54,7 +71,16 @@ function withDeadline<T>(p: Promise<T>, ms: number, stage: string): Promise<T> {
   });
 }
 
-export function StoryShareControls({ cardRef, palette, onPaletteChange, ready, onShared }: StoryShareControlsProps) {
+export function StoryShareControls({
+  cardRef,
+  palette,
+  onPaletteChange,
+  prefs,
+  onPrefChange,
+  canSign,
+  ready,
+  onShared,
+}: StoryShareControlsProps) {
   const theme = useEffectiveTheme();
   const c = themedColors(theme);
   const [busy, setBusy] = useState(false);
@@ -88,8 +114,7 @@ export function StoryShareControls({ cardRef, palette, onPaletteChange, ready, o
 
   return (
     <View testID="story-share-controls" style={styles.root}>
-      <View style={styles.row}>
-        <View style={styles.chips}>
+      <View style={styles.pills}>
           {STORY_PALETTE_IDS.map((id) => {
             const p = STORY_PALETTES[id];
             const selected = id === palette;
@@ -111,8 +136,33 @@ export function StoryShareControls({ cardRef, palette, onPaletteChange, ready, o
               </Pressable>
             );
           })}
-        </View>
 
+        {STORY_TOGGLES.filter((t) => t.key !== 'showName' || canSign).map(({ key, label }) => {
+          const on = prefs[key];
+          return (
+            <Pressable
+              key={key}
+              testID={`story-toggle-${key}`}
+              accessibilityRole="switch"
+              accessibilityLabel={label}
+              accessibilityState={{ checked: on }}
+              onPress={() => onPrefChange(key, !on)}
+              style={({ pressed }) => [
+                styles.chip,
+                {
+                  borderColor: on ? c.inkDark : applyOpacity(c.inkMuted, 0.4),
+                  backgroundColor: on ? applyOpacity(c.forest, 0.1) : 'transparent',
+                  opacity: pressed ? 0.7 : 1,
+                },
+              ]}
+            >
+              <Text style={[styles.chipLabel, { color: on ? c.inkDark : c.inkMuted }]}>{label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <View style={styles.row}>
         <Pressable
           testID="story-share-button"
           accessibilityRole="button"
@@ -137,8 +187,8 @@ export function StoryShareControls({ cardRef, palette, onPaletteChange, ready, o
 
 const styles = StyleSheet.create({
   root: { marginTop: spacing.md },
-  row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
-  chips: { flexDirection: 'row', gap: spacing.sm },
+  pills: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  row: { flexDirection: 'row', marginTop: spacing.md },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -151,12 +201,13 @@ const styles = StyleSheet.create({
   swatch: { width: 12, height: 12, borderRadius: 6 },
   chipLabel: { fontFamily: fonts.sansMedium, fontSize: fontSize.base },
   share: {
+    flex: 1,
     minHeight: headerControl.minTarget,
     paddingHorizontal: spacing.lg,
     borderRadius: radius.full,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  shareLabel: { fontFamily: fonts.sansSemibold, fontSize: fontSize.base },
+  shareLabel: { fontFamily: fonts.sansSemibold, fontSize: fontSize.lg },
   error: { fontFamily: fonts.sans, fontSize: fontSize.sm, marginTop: spacing.sm },
 });

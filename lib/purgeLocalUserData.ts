@@ -154,6 +154,7 @@ export const DEVICE_SCOPED_STORAGE_KEYS = [
   'fab_hint_shown', // one-off UI hint, device-level
   'livra_share_card_style_v1', // share-card style preference
   'livra_story_palette_v1', // weekly story card palette preference (2026-09-16)
+  'livra_story_prefs_v1', // weekly story card personalization switches (2026-09-20)
   'livra_feature_flags', // experiment assignment, device-level
   'biometric_lock_enabled', // device lock — dropping it would REMOVE protection
   // M9 Phase 5A cutover flag (lib/data/cutover.ts): "this device has been cut

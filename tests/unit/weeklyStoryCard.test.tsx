@@ -26,12 +26,13 @@ import { StyleSheet, Text } from 'react-native';
 import {
   STORY_CARD_HEIGHT,
   STORY_CARD_WIDTH,
-  STORY_GOAL_CAP,
+  STORY_NUMERAL_DROP,
   WeeklyStoryCard,
   storyMetaLine,
   type WeeklyStoryCardProps,
 } from '../../components/WeeklyStoryCard';
 import { STORY_PALETTES } from '../../lib/sharing/storyPalettes';
+import { fonts } from '../../theme/tokens';
 
 const props: WeeklyStoryCardProps = {
   weekLabel: 'Week of September 8',
@@ -40,6 +41,10 @@ const props: WeeklyStoryCardProps = {
   daysActiveCount: 5,
   marksLogged: 11,
   goalTitles: ['Marathon Prep', 'Read 20 pages', 'A third goal past the cap'],
+  deepestGoal: { title: 'Marathon Prep', weeksIn: 5 },
+  signatureName: 'Deivi',
+  showWeeksIn: true,
+  showGoalTitle: true,
   palette: STORY_PALETTES.amber,
 };
 
@@ -63,8 +68,7 @@ describe('WeeklyStoryCard', () => {
     expect(getByText('Not loud. Not gone. Still going.')).toBeTruthy();
     expect(getByTestId('story-numeral').props.children).toBe('5');
     expect(getByText('/ 7 days')).toBeTruthy();
-    expect(getByText('11 marks · Marathon Prep · Read 20 pages')).toBeTruthy();
-    expect(getByText('what was your week?')).toBeTruthy();
+    expect(getByText('11 marks · Week 6 of Marathon Prep')).toBeTruthy();
     expect(getByText('livralife.com')).toBeTruthy();
   });
 
@@ -85,11 +89,68 @@ describe('WeeklyStoryCard', () => {
     expect(active).toHaveLength(5);
   });
 
-  it('caps the meta line at two goals and pluralises marks', () => {
-    expect(STORY_GOAL_CAP).toBe(2);
-    expect(storyMetaLine(11, ['A', 'B', 'C'])).toBe('11 marks · A · B');
-    expect(storyMetaLine(1, ['A'])).toBe('1 mark · A');
-    expect(storyMetaLine(0, [])).toBe('0 marks');
+  // 2026-09-20: the two-goal list became one DEPTH line — "week 6 of X" is the
+  // stakes the card had none of. Each half is a toggle, so every combination
+  // has to read as a sentence.
+  it('builds the depth line, and each toggle removes exactly its half', () => {
+    const goal = { title: 'Marathon Prep', weeksIn: 5 };
+    expect(storyMetaLine(11, goal, { showWeeksIn: true, showGoalTitle: true })).toBe(
+      '11 marks · Week 6 of Marathon Prep',
+    );
+    expect(storyMetaLine(11, goal, { showWeeksIn: false, showGoalTitle: true })).toBe(
+      '11 marks · Marathon Prep',
+    );
+    expect(storyMetaLine(11, goal, { showWeeksIn: true, showGoalTitle: false })).toBe(
+      '11 marks · Week 6',
+    );
+    expect(storyMetaLine(11, goal, { showWeeksIn: false, showGoalTitle: false })).toBe('11 marks');
+    // Week one is "Week 1", never "Week 0".
+    expect(
+      storyMetaLine(3, { title: 'Read daily', weeksIn: 0 }, { showWeeksIn: true, showGoalTitle: true }),
+    ).toBe('3 marks · Week 1 of Read daily');
+    // No goals at all, and the singular.
+    expect(storyMetaLine(1, null, { showWeeksIn: true, showGoalTitle: true })).toBe('1 mark');
+    expect(storyMetaLine(0, null, { showWeeksIn: true, showGoalTitle: true })).toBe('0 marks');
+  });
+
+  describe('signature (founder 2026-09-20: the card must be MINE)', () => {
+    it('signs the footer in the script face, in the palette tint', () => {
+      const { getByTestId, queryByText } = render(<WeeklyStoryCard {...props} />);
+      const sig = getByTestId('story-signature');
+      expect(sig.props.children).toBe('Deivi');
+      expect(flat(sig.props.style).fontFamily).toBe(fonts.signature);
+      expect(flat(sig.props.style).color).toBe(STORY_PALETTES.amber.tint);
+      // The signature took the prompt's job.
+      expect(queryByText('what was your week?')).toBeNull();
+    });
+
+    it('a name-less account keeps TODAY\'s footer, never an empty slot', () => {
+      const { queryByTestId, getByText } = render(<WeeklyStoryCard {...props} signatureName={null} />);
+      expect(queryByTestId('story-signature')).toBeNull();
+      expect(getByText('what was your week?')).toBeTruthy();
+      expect(getByText('livralife.com')).toBeTruthy();
+    });
+
+    it('a long name shrinks to fit rather than running into livralife.com', () => {
+      const { getByTestId } = render(<WeeklyStoryCard {...props} signatureName="Jacqueline" />);
+      const sig = getByTestId('story-signature');
+      expect(sig.props.adjustsFontSizeToFit).toBe(true);
+      expect(sig.props.numberOfLines).toBe(1);
+    });
+  });
+
+  // Founder 2026-09-20: the numeral sits lower than frame centre. The
+  // frame-centred column stays — it is what stopped the iOS clip on 09-18 —
+  // so the drop is a transform on top of it, never a recomputed top.
+  it('drops the numeral below centre without reintroducing a hand-computed top', () => {
+    const { getByTestId } = render(<WeeklyStoryCard {...props} />);
+    const row = flat(getByTestId('story-numeral-row').props.style);
+    expect(row.transform).toEqual([{ translateY: STORY_NUMERAL_DROP }]);
+    expect(STORY_NUMERAL_DROP).toBe(28);
+    const frame = flat(getByTestId('story-numeral-frame').props.style);
+    expect(frame.justifyContent).toBe('center');
+    expect(frame.top).toBe(0);
+    expect(frame.bottom).toBe(0);
   });
 
   it('a zero day week renders "0 / 7 days" under its name, never "not yet"', () => {
@@ -115,9 +176,10 @@ describe('WeeklyStoryCard', () => {
       expect.arrayContaining([
         ['story-name', 2],
         ['story-meta', 1],
+        ['story-signature', 1],
       ]),
     );
-    expect(capped).toHaveLength(2);
+    expect(capped).toHaveLength(3);
   });
 
   // Device bug 2026-09-18: a 123pt numeral in a 98pt line box was CUT IN HALF
