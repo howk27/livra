@@ -3,9 +3,11 @@
 // FullWindowOverlay, so the OS share sheet opened UNDER it and Share froze.
 import React from 'react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
+import { processColor } from 'react-native';
 import * as Sharing from 'expo-sharing';
 import { generateShareCard } from '../../lib/sharing/generateShareCard';
 import { captureException } from '../../lib/analytics/posthog';
+import { STORY_PALETTES } from '../../lib/sharing/storyPalettes';
 import {
   STORY_CAPTURE_TIMEOUT_MS,
   STORY_SHARE_ERROR,
@@ -35,6 +37,16 @@ const props = () => ({
 
 describe('StoryShareControls', () => {
   beforeEach(() => jest.clearAllMocks());
+
+  it('each chip previews the gradient it chooses, not a flat colour', () => {
+    const { getByTestId } = render(<StoryShareControls {...props()} />);
+    // LinearGradient hands colours down already processed, so compare in the
+    // same currency rather than against the hex we wrote.
+    const asColours = (id: 'amber' | 'green') =>
+      [STORY_PALETTES[id].tint, STORY_PALETTES[id].tintEnd].map((hex) => processColor(hex));
+    expect(getByTestId('story-swatch-amber').props.colors).toEqual(asColours('amber'));
+    expect(getByTestId('story-swatch-green').props.colors).toEqual(asColours('green'));
+  });
 
   it('a chip tap reports the palette; the selected chip is marked', () => {
     const p = props();
@@ -105,24 +117,32 @@ describe('StoryShareControls', () => {
   // Personalization (spec 2026-09-20): the toggles only ever SUBTRACT from a
   // card that ships complete, so one-tap sharing survives.
   describe('personalize toggles', () => {
-    it('offers one switch per element, all on, announced as switches', () => {
-      const { getByTestId } = render(<StoryShareControls {...props()} />);
+    // Founder 2026-09-20: these are I/O switches, not pills — the control
+    // should look like what it does.
+    it('offers one labelled switch per element, all on', () => {
+      const { getByTestId, getByText } = render(<StoryShareControls {...props()} />);
       for (const key of ['showName', 'showWeeksIn', 'showGoalTitle']) {
-        expect(getByTestId(`story-toggle-${key}`).props.accessibilityState).toEqual({ checked: true });
+        expect(getByTestId(`story-toggle-${key}`).props.value).toBe(true);
       }
+      expect(getByText('Name')).toBeTruthy();
+      expect(getByText('Week count')).toBeTruthy();
+      expect(getByText('Goal name')).toBeTruthy();
     });
 
-    it('a tap reports the flipped value', () => {
+    it('flipping a switch off reports it', () => {
       const p = props();
       const { getByTestId } = render(<StoryShareControls {...p} />);
-      fireEvent.press(getByTestId('story-toggle-showGoalTitle'));
+      fireEvent(getByTestId('story-toggle-showGoalTitle'), 'valueChange', false);
       expect(p.onPrefChange).toHaveBeenCalledWith('showGoalTitle', false);
     });
 
-    it('an off switch reads as unchecked', () => {
+    it('an off switch renders off, and flipping it back reports on', () => {
       const p = { ...props(), prefs: { showName: true, showWeeksIn: true, showGoalTitle: false } };
       const { getByTestId } = render(<StoryShareControls {...p} />);
-      expect(getByTestId('story-toggle-showGoalTitle').props.accessibilityState).toEqual({ checked: false });
+      const sw = getByTestId('story-toggle-showGoalTitle');
+      expect(sw.props.value).toBe(false);
+      fireEvent(sw, 'valueChange', true);
+      expect(p.onPrefChange).toHaveBeenCalledWith('showGoalTitle', true);
     });
 
     it('a name-less account is never offered the Name switch', () => {

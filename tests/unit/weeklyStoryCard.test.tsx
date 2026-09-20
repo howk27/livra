@@ -31,7 +31,8 @@ import {
   storyMetaLine,
   type WeeklyStoryCardProps,
 } from '../../components/WeeklyStoryCard';
-import { STORY_PALETTES } from '../../lib/sharing/storyPalettes';
+import { Stop } from 'react-native-svg';
+import { STORY_PALETTES, blendTint } from '../../lib/sharing/storyPalettes';
 import { fonts } from '../../theme/tokens';
 
 const props: WeeklyStoryCardProps = {
@@ -81,12 +82,36 @@ describe('WeeklyStoryCard', () => {
     expect(flat(getByTestId('story-numeral').props.style).color).toBe('#F0EDE8');
   });
 
-  it('draws seven day dots, active ones in the tint', () => {
+  // The week walks the gradient: Monday wears the lead colour, Sunday the
+  // far end, every active day in between a step along it (founder 2026-09-20).
+  it('draws seven day dots that walk the gradient, quiet days neutral', () => {
     const { getAllByTestId } = render(<WeeklyStoryCard {...props} />);
     const dots = getAllByTestId('story-day-dot');
     expect(dots).toHaveLength(7);
-    const active = dots.filter((d) => flat(d.props.style).backgroundColor === STORY_PALETTES.amber.tint);
-    expect(active).toHaveLength(5);
+    const bg = (i: number) => flat(dots[i].props.style).backgroundColor;
+    const { tint, tintEnd } = STORY_PALETTES.amber;
+    expect(bg(0)).toBe(blendTint(tint, tintEnd, 0));
+    expect(bg(6)).toBe(blendTint(tint, tintEnd, 1));
+    expect(bg(3)).toBe(blendTint(tint, tintEnd, 3 / 6));
+    // Wednesday and Saturday were quiet: neutral, never a colour.
+    expect(bg(2)).not.toMatch(/^#[0-9A-F]{6}$/);
+    expect(bg(5)).toBe(bg(2));
+  });
+
+  it('signs in the far end of the gradient, so the card reads amber to green', () => {
+    const { getByTestId } = render(<WeeklyStoryCard {...props} />);
+    expect(flat(getByTestId('story-signature').props.style).color).toBe(STORY_PALETTES.amber.tintEnd);
+    // The name still leads: gradient TEXT needs masked-view, which this repo
+    // does not have (ruling 2026-09-16), so the name is the lead colour flat.
+    expect(flat(getByTestId('story-name').props.style).color).toBe(STORY_PALETTES.amber.tint);
+  });
+
+  it('the glow carries both ends of the gradient', () => {
+    const { UNSAFE_getAllByType } = render(<WeeklyStoryCard {...props} />);
+    const stops = UNSAFE_getAllByType(Stop as never);
+    const colors = stops.map((s: { props: Record<string, unknown> }) => s.props.stopColor);
+    expect(colors).toContain(STORY_PALETTES.amber.tint);
+    expect(colors).toContain(STORY_PALETTES.amber.tintEnd);
   });
 
   // 2026-09-20: the two-goal list became one DEPTH line — "week 6 of X" is the
@@ -119,7 +144,8 @@ describe('WeeklyStoryCard', () => {
       const sig = getByTestId('story-signature');
       expect(sig.props.children).toBe('Deivi');
       expect(flat(sig.props.style).fontFamily).toBe(fonts.signature);
-      expect(flat(sig.props.style).color).toBe(STORY_PALETTES.amber.tint);
+      // The far end of the gradient: the card opens amber and signs green.
+      expect(flat(sig.props.style).color).toBe(STORY_PALETTES.amber.tintEnd);
       // The signature took the prompt's job.
       expect(queryByText('what was your week?')).toBeNull();
     });

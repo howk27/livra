@@ -19,7 +19,8 @@
 // that ships complete, so the one-tap share the 09-15 spec protected is
 // still the default path. `Goal name` doubles as the privacy control.
 import React, { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as Sharing from 'expo-sharing';
 import { STORY_PALETTES, STORY_PALETTE_IDS, type StoryPaletteId } from '../lib/sharing/storyPalettes';
 import type { StoryPrefKey, StoryPrefs } from '../state/shareCardSlice';
@@ -131,33 +132,37 @@ export function StoryShareControls({
                   { borderColor: selected ? c.inkDark : applyOpacity(c.inkMuted, 0.4), opacity: pressed ? 0.7 : 1 },
                 ]}
               >
-                <View style={[styles.swatch, { backgroundColor: p.swatch }]} />
+                <LinearGradient
+                  testID={`story-swatch-${id}`}
+                  colors={[p.tint, p.tintEnd]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.swatch}
+                />
                 <Text style={[styles.chipLabel, { color: c.inkDark }]}>{p.label}</Text>
               </Pressable>
             );
           })}
 
-        {STORY_TOGGLES.filter((t) => t.key !== 'showName' || canSign).map(({ key, label }) => {
+      </View>
+
+      <View style={styles.switches}>
+        {STORY_TOGGLES.filter((t) => t.key !== 'showName' || canSign).map(({ key, label }, i) => {
           const on = prefs[key];
           return (
-            <Pressable
+            <View
               key={key}
-              testID={`story-toggle-${key}`}
-              accessibilityRole="switch"
-              accessibilityLabel={label}
-              accessibilityState={{ checked: on }}
-              onPress={() => onPrefChange(key, !on)}
-              style={({ pressed }) => [
-                styles.chip,
-                {
-                  borderColor: on ? c.inkDark : applyOpacity(c.inkMuted, 0.4),
-                  backgroundColor: on ? applyOpacity(c.forest, 0.1) : 'transparent',
-                  opacity: pressed ? 0.7 : 1,
-                },
-              ]}
+              style={[styles.switchRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.borderLight }]}
             >
-              <Text style={[styles.chipLabel, { color: on ? c.inkDark : c.inkMuted }]}>{label}</Text>
-            </Pressable>
+              <Text style={[styles.switchLabel, { color: on ? c.inkDark : c.inkMuted }]}>{label}</Text>
+              <Switch
+                testID={`story-toggle-${key}`}
+                accessibilityLabel={label}
+                value={on}
+                onValueChange={(next) => onPrefChange(key, next)}
+                trackColor={{ false: applyOpacity(c.inkMuted, 0.3), true: c.forest }}
+              />
+            </View>
           );
         })}
       </View>
@@ -189,6 +194,14 @@ const styles = StyleSheet.create({
   root: { marginTop: spacing.md },
   pills: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   row: { flexDirection: 'row', marginTop: spacing.md },
+  switches: { marginTop: spacing.md },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: headerControl.minTarget,
+  },
+  switchLabel: { fontFamily: fonts.sans, fontSize: fontSize.lg },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -198,7 +211,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     borderWidth: 1,
   },
-  swatch: { width: 12, height: 12, borderRadius: 6 },
+  swatch: { width: 14, height: 14, borderRadius: 7 },
   chipLabel: { fontFamily: fonts.sansMedium, fontSize: fontSize.base },
   share: {
     flex: 1,

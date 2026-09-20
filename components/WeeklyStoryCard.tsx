@@ -31,7 +31,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
 import type { Archetype } from '../lib/weeklyReview/archetype';
-import { STORY_GROUND, STORY_LINEN, type StoryPalette } from '../lib/sharing/storyPalettes';
+import { STORY_GROUND, STORY_LINEN, blendTint, type StoryPalette } from '../lib/sharing/storyPalettes';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { fonts } from '../theme/tokens';
 import { applyOpacity } from '../src/components/icons/color';
@@ -185,6 +185,7 @@ export const WeeklyStoryCard = forwardRef<View, WeeklyStoryCardProps>(function W
   ref,
 ) {
   const tint = palette.tint;
+  const tintEnd = palette.tintEnd;
   const reducedMotion = useReducedMotion();
   const run = animate && !reducedMotion;
   const step = useDayStep(run, onEntranceDone);
@@ -193,13 +194,15 @@ export const WeeklyStoryCard = forwardRef<View, WeeklyStoryCardProps>(function W
   return (
     <View ref={ref} collapsable={false} testID="story-card" style={styles.card}>
       {/* Glow: one radial gradient centred on the numeral. It replaced three
-          stacked flat discs that read as hard rings on device (2026-09-18). */}
+          stacked flat discs that read as hard rings on device (2026-09-18),
+          and since 2026-09-20 it carries BOTH ends of the palette's gradient:
+          the lead colour at its centre, the far end at its reach. */}
       <Svg pointerEvents="none" style={StyleSheet.absoluteFill} width={STORY_CARD_WIDTH} height={STORY_CARD_HEIGHT}>
         <Defs>
           <RadialGradient id="storyGlow" cx="50%" cy="50%" r="50%">
             <Stop offset="0" stopColor={tint} stopOpacity={0.24} />
-            <Stop offset="0.45" stopColor={tint} stopOpacity={0.09} />
-            <Stop offset="1" stopColor={tint} stopOpacity={0} />
+            <Stop offset="0.45" stopColor={blendTint(tint, tintEnd, 0.5)} stopOpacity={0.11} />
+            <Stop offset="1" stopColor={tintEnd} stopOpacity={0} />
           </RadialGradient>
         </Defs>
         <Circle cx={STORY_CARD_WIDTH / 2} cy={STORY_CARD_HEIGHT / 2} r={290} fill="url(#storyGlow)" />
@@ -237,7 +240,12 @@ export const WeeklyStoryCard = forwardRef<View, WeeklyStoryCardProps>(function W
         <View style={styles.dots}>
           {daysActive.map((active, i) => (
             <View key={i} style={styles.dayCell}>
-              <DayDot active={active} lit={i < step} tint={tint} run={run} />
+              <DayDot
+                active={active}
+                lit={i < step}
+                tint={blendTint(tint, tintEnd, i / (DAY_LETTERS.length - 1))}
+                run={run}
+              />
               <CardText style={styles.dayLetter}>{DAY_LETTERS[i]}</CardText>
             </View>
           ))}
@@ -261,7 +269,7 @@ export const WeeklyStoryCard = forwardRef<View, WeeklyStoryCardProps>(function W
               numberOfLines={1}
               adjustsFontSizeToFit
               minimumFontScale={0.7}
-              style={[styles.signature, { color: tint }]}
+              style={[styles.signature, { color: tintEnd }]}
             >
               {signatureName}
             </CardText>

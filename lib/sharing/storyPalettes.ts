@@ -14,9 +14,16 @@ export type StoryPaletteId = 'amber' | 'green';
 export type StoryPalette = {
   id: StoryPaletteId;
   label: 'Amber' | 'Green';
-  /** Archetype name, kicker, active day dots. */
+  /** Leads: archetype name, kicker, Monday's dot, the glow's centre. */
   tint: string;
-  /** The chip swatch in the share sheet: the app token, not the tint. */
+  /**
+   * Closes: the signature, Sunday's dot, the glow's outer reach. The palette
+   * id chose a flat colour until 2026-09-20; it now chooses the DIRECTION of
+   * one amber-to-green gradient (founder: "make it a gradient that changes
+   * between the Amber & Green").
+   */
+  tintEnd: string;
+  /** The chip swatch: the app token, not the tint. */
   swatch: string;
 };
 
@@ -25,10 +32,29 @@ export const STORY_LINEN = '#F0EDE8';
 
 export const STORY_PALETTE_IDS: readonly StoryPaletteId[] = ['amber', 'green'];
 
+const AMBER = '#E3B463';
+const GREEN = '#A9CFC3';
+
 export const STORY_PALETTES: Record<StoryPaletteId, StoryPalette> = {
-  amber: { id: 'amber', label: 'Amber', tint: '#E3B463', swatch: colors.ember },
-  green: { id: 'green', label: 'Green', tint: '#A9CFC3', swatch: colors.mint },
+  amber: { id: 'amber', label: 'Amber', tint: AMBER, tintEnd: GREEN, swatch: colors.ember },
+  green: { id: 'green', label: 'Green', tint: GREEN, tintEnd: AMBER, swatch: colors.mint },
 };
+
+/**
+ * A colour `position` of the way from `from` to `to` (0..1, clamped), as an
+ * uppercase #RRGGBB. Straight sRGB interpolation: both ends are light, low
+ * saturation tints on the same dark ground, so the midpoint stays legible and
+ * needs no perceptual space to avoid a muddy centre.
+ */
+export function blendTint(from: string, to: string, position: number): string {
+  const t = Math.min(1, Math.max(0, position));
+  const channel = (hex: string, i: number) => parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16);
+  const mixed = [0, 1, 2].map((i) => {
+    const value = Math.round(channel(from, i) + (channel(to, i) - channel(from, i)) * t);
+    return value.toString(16).padStart(2, '0');
+  });
+  return `#${mixed.join('')}`.toUpperCase();
+}
 
 export const DEFAULT_STORY_PALETTE: StoryPaletteId = 'amber';
 
