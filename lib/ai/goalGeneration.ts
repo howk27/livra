@@ -21,7 +21,7 @@ import { getSupabaseClient } from '../supabase';
 import { MARK_LIBRARY } from '../suggestedCounters';
 import { colorForSuggestedCounter, getCategoryColor } from '../markCategory';
 import { tokenize, inferDomains } from '../goalMarkSuggestions';
-import { isMarkAllowedForGoal } from '../markRelevance';
+import { isMarkAllowedForGoal, isSportNamedByGoal } from '../markRelevance';
 import { FREE_MARKS_PER_GOAL, remainingMarkAllowance } from '../gating';
 import { logger } from '../utils/logger';
 
@@ -502,10 +502,14 @@ export async function generateGoalPackage(
       // screen-time/gratitude to a goal that is not about their domain. Never
       // return an empty mark list — if the gate would strip everything, keep the
       // model's package as-is rather than ship a mark-less goal.
-      const domains = inferDomains(tokenize(trimmed));
-      const allowed = pkg.marks.filter((m) =>
-        isMarkAllowedForGoal(resolveMarkForAIIcon(m.icon).markId, domains),
-      );
+      const goalTokens = tokenize(trimmed);
+      const domains = inferDomains(goalTokens);
+      // Equipment sports too (2026-09-21): the prompt asks the model not to add
+      // a second sport, this makes it impossible.
+      const allowed = pkg.marks.filter((m) => {
+        const markId = resolveMarkForAIIcon(m.icon).markId;
+        return isMarkAllowedForGoal(markId, domains) && isSportNamedByGoal(markId, goalTokens);
+      });
       const gated: AIGoalPackage = { ...pkg, marks: allowed.length > 0 ? allowed : pkg.marks };
       return { ok: true, package: gated, source: res.source === 'cache' ? 'cache' : 'api' };
     }

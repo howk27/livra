@@ -335,3 +335,27 @@ describe('getMarksForGoal — one mark per metric family', () => {
     }
   });
 });
+
+// Founder 2026-09-21 (device): the 5K goal offered Swim and Cycling. They were
+// zero-score in-domain FILLER, winning the top-up slots alphabetically.
+describe('equipment sports never pad a goal that did not name them', () => {
+  const { getMarksForGoal: suggest } = require('../../lib/goalMarkSuggestions');
+  const ids = (title: string) => suggest(title).map((m: { id: string }) => m.id);
+
+  it.each(['Run a 5K', 'Run my first 5K', 'Run a marathon', 'Get fit'])('%s', (title) => {
+    expect(ids(title)).not.toContain('swim');
+    expect(ids(title)).not.toContain('cycling');
+  });
+
+  it('still leads a 5K with run', () => {
+    expect(ids('Run a 5K')[0]).toBe('run');
+  });
+
+  it('a triathlon still gets all three sports', () => {
+    expect(ids('Complete a triathlon')).toEqual(expect.arrayContaining(['swim', 'cycling', 'run']));
+  });
+
+  it('a cycling goal still gets cycling', () => {
+    expect(ids('Bike to work every day')).toContain('cycling');
+  });
+});

@@ -1,5 +1,5 @@
 import { MARK_LIBRARY, MarkDefinition } from './suggestedCounters';
-import { isMarkAllowedForGoal } from './markRelevance';
+import { isMarkAllowedForGoal, isSportNamedByGoal } from './markRelevance';
 
 // ─── Commitment system types ──────────────────────────────────────────────────
 
@@ -304,6 +304,8 @@ export function getMarksForGoal(goalTitle: string): MarkDefinition[] {
     // Domain-gate restricted marks (cold-shower/screen-time/gratitude) BEFORE the
     // slice, so dropping an off-domain restricted mark frees a real slot.
     .filter(({ mark }) => isMarkAllowedForGoal(mark.id, domains))
+    // Same early position, same reason: a pool or a bike is never filler.
+    .filter(({ mark }) => isSportNamedByGoal(mark.id, tokens))
     // Ties break on mark id, never on MARK_LIBRARY array order.
     .sort((a, b) => b.tier - a.tier || b.score - a.score || a.mark.id.localeCompare(b.mark.id))
     // One mark per metric family, AFTER the sort so the winner is the
