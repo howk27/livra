@@ -61,6 +61,7 @@ import { StoryShareControls } from '../../components/StoryShareControls';
 import { STORY_CARD_HEIGHT, STORY_CARD_WIDTH, WeeklyStoryCard } from '../../components/WeeklyStoryCard';
 import { STORY_PALETTES } from '../../lib/sharing/storyPalettes';
 import { resolveInitialDisplayName } from '../../lib/profile/displayName';
+import { closeOrHome } from '../../lib/navigation/closeOrHome';
 import { useShareCardStore } from '../../state/shareCardSlice';
 
 const EMPTY_GOAL_ROWS: GoalRow[] = [];
@@ -359,7 +360,7 @@ export default function WeeklyReviewScreen() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Close"
-          onPress={() => router.back()}
+          onPress={() => closeOrHome(router)}
           style={({ pressed }) => [styles.headerBtn, { opacity: pressed ? 0.6 : 1 }]}
           hitSlop={4}
         >
