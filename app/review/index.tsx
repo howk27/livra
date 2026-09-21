@@ -296,6 +296,19 @@ export default function WeeklyReviewScreen() {
   const storyCardRef = useRef<View>(null);
   const [storySettled, setStorySettled] = useState(false);
   const onStorySettled = useCallback(() => setStorySettled(true), []);
+  // Breathing glow (2026-09-21): Share photographs the live card, so the glow
+  // stops before the snapshot. Switching `breathe` off snaps the card to rest;
+  // two frames later that rest frame is what is on glass.
+  const [capturing, setCapturing] = useState(false);
+  const settleForCapture = useCallback(
+    () =>
+      new Promise<void>((resolve) => {
+        setCapturing(true);
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+    [],
+  );
+  const releaseAfterCapture = useCallback(() => setCapturing(false), []);
   const { width: windowWidth } = useWindowDimensions();
   const heroWidth = windowWidth - spacing.lg * 2;
   const heroScale = heroWidth / STORY_CARD_WIDTH;
@@ -412,6 +425,7 @@ export default function WeeklyReviewScreen() {
                       palette={STORY_PALETTES[storyPalette]}
                       animate
                       onEntranceDone={onStorySettled}
+                      breathe={storySettled && !capturing}
                     />
                   </View>
                 </View>
@@ -424,6 +438,8 @@ export default function WeeklyReviewScreen() {
                   canSign={signatureName !== null}
                   ready={storySettled}
                   onShared={handleShared}
+                  onBeforeCapture={settleForCapture}
+                  onAfterCapture={releaseAfterCapture}
                 />
               </>
             )}

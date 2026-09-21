@@ -60,4 +60,13 @@ describe('review screen share wiring', () => {
     expect(src).not.toMatch(/signature_name|(?<!show_)goal_title:/);
     expect(ANALYTICS_EVENTS.WEEKLY_REVIEW_SHARED).toBe('weekly_review_shared');
   });
+
+  // Breathing glow (2026-09-21). The capture photographs the live card, so
+  // the glow may only move while no capture is in flight, and Share must be
+  // given the settle hook or every exported image lands on a different frame.
+  it('breathes only once settled and never during a capture', () => {
+    expect(src).toMatch(/breathe={storySettled && !capturing}/);
+    expect(src).toMatch(/onBeforeCapture={settleForCapture}/);
+    expect(src).toMatch(/onAfterCapture={releaseAfterCapture}/);
+  });
 });

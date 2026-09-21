@@ -18,10 +18,12 @@ jest.mock('react-native-reanimated', () => {
     withTiming: (v: any) => v,
     withDelay: (_: any, v: any) => v,
     withSequence: (...v: any[]) => v[v.length - 1],
-    Easing: { out: (e: any) => e, cubic: (t: number) => t },
+    withRepeat: jest.fn((v: any) => v),
+    cancelAnimation: jest.fn(),
+    Easing: { out: (e: any) => e, inOut: (e: any) => e, cubic: (t: number) => t, sin: (t: number) => t },
   };
 });
-jest.mock('../../hooks/useReducedMotion', () => ({ useReducedMotion: () => false }));
+jest.mock('../../hooks/useReducedMotion', () => ({ useReducedMotion: jest.fn(() => false) }));
 import { StyleSheet, Text } from 'react-native';
 import {
   STORY_CARD_HEIGHT,
@@ -243,5 +245,48 @@ describe('WeeklyStoryCard', () => {
       act(() => jest.runOnlyPendingTimers());
       expect(onEntranceDone).toHaveBeenCalledTimes(1);
     });
+  });
+});
+
+// Breathing glow (founder 2026-09-21). An AMBIENT loop, so three things are
+// pinned: it is opt-in, it never runs under reduced motion, and its rest state
+// is the settled frame the capture has always exported.
+describe('WeeklyStoryCard breathing glow', () => {
+  const reanimated = require('react-native-reanimated');
+  const { useReducedMotion } = require('../../hooks/useReducedMotion');
+  beforeEach(() => {
+    reanimated.withRepeat.mockClear();
+    reanimated.cancelAnimation.mockClear();
+    useReducedMotion.mockReturnValue(false);
+  });
+
+  it('wraps the glow so only transform and opacity ever move', () => {
+    const { getByTestId } = render(<WeeklyStoryCard {...props} />);
+    expect(getByTestId('story-glow')).toBeTruthy();
+  });
+
+  it('does not breathe unless asked (the capture default is the still frame)', () => {
+    render(<WeeklyStoryCard {...props} />);
+    expect(reanimated.withRepeat).not.toHaveBeenCalled();
+  });
+
+  it('breathes forever, there and back, when asked', () => {
+    render(<WeeklyStoryCard {...props} breathe />);
+    expect(reanimated.withRepeat).toHaveBeenCalledTimes(1);
+    const [, reps, reverse] = reanimated.withRepeat.mock.calls[0];
+    expect(reps).toBe(-1);
+    expect(reverse).toBe(true);
+  });
+
+  it('never breathes under reduced motion', () => {
+    useReducedMotion.mockReturnValue(true);
+    render(<WeeklyStoryCard {...props} breathe />);
+    expect(reanimated.withRepeat).not.toHaveBeenCalled();
+  });
+
+  it('snaps back to rest the moment breathing is switched off (capture safety)', () => {
+    const { rerender } = render(<WeeklyStoryCard {...props} breathe />);
+    rerender(<WeeklyStoryCard {...props} breathe={false} />);
+    expect(reanimated.cancelAnimation).toHaveBeenCalled();
   });
 });
