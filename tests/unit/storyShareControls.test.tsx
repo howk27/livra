@@ -152,4 +152,40 @@ describe('StoryShareControls', () => {
       expect(getByTestId('story-toggle-showWeeksIn')).toBeTruthy();
     });
   });
+
+  // Breathing glow (2026-09-21): the card moves now, so Share must let the
+  // screen bring it to rest BEFORE the snapshot, and release it afterwards
+  // even when the capture fails.
+  it('waits for onBeforeCapture to finish before it captures', async () => {
+    const order: string[] = [];
+    (generateShareCard as jest.Mock).mockImplementationOnce(async () => {
+      order.push('capture');
+      return 'file:///tmp/story.png';
+    });
+    const p = {
+      ...props(),
+      onBeforeCapture: jest.fn(async () => {
+        await Promise.resolve();
+        order.push('settled');
+      }),
+      onAfterCapture: jest.fn(),
+    };
+    const { getByTestId } = render(<StoryShareControls {...p} />);
+    await act(async () => {
+      fireEvent.press(getByTestId('story-share-button'));
+    });
+    await waitFor(() => expect(p.onShared).toHaveBeenCalledTimes(1));
+    expect(order).toEqual(['settled', 'capture']);
+    expect(p.onAfterCapture).toHaveBeenCalledTimes(1);
+  });
+
+  it('releases the card after a failed capture too', async () => {
+    (generateShareCard as jest.Mock).mockRejectedValueOnce(new Error('boom'));
+    const p = { ...props(), onBeforeCapture: jest.fn(), onAfterCapture: jest.fn() };
+    const { getByTestId } = render(<StoryShareControls {...p} />);
+    await act(async () => {
+      fireEvent.press(getByTestId('story-share-button'));
+    });
+    await waitFor(() => expect(p.onAfterCapture).toHaveBeenCalledTimes(1));
+  });
 });

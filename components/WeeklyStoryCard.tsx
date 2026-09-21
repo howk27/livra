@@ -22,10 +22,12 @@
 import React, { forwardRef, useEffect, useState } from 'react';
 import { StyleSheet, Text, View, type TextProps } from 'react-native';
 import Animated, {
+  cancelAnimation,
   Easing,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
+  withRepeat,
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
@@ -61,6 +63,14 @@ const HEAD_MS = 300;
 const DAYS_START_MS = 260;
 const DAY_STEP_MS = 90;
 const SETTLE_MS = 200;
+// Breathing glow (founder 2026-09-21). Ambient, not an interaction: one slow
+// swell-and-dim of the glow behind the numeral, 4s there and back. Over the
+// motion baseline's 500ms on purpose, because a fast loop reads as a loading
+// state and this has to read as calm. Rest (0) IS the settled frame, so the
+// exported image is the one it has always been.
+const BREATHE_HALF_MS = 2000;
+const BREATHE_SWELL = 0.06;
+const BREATHE_DIM = 0.22;
 
 function CardText({ style, children, ...rest }: TextProps) {
   return (
@@ -97,6 +107,11 @@ export type WeeklyStoryCardProps = {
   animate?: boolean;
   /** Once the card shows its final numbers (next tick when not animating). */
   onEntranceDone?: () => void;
+  /**
+   * The glow breathes while true. The screen turns it off before a capture
+   * (the card snaps to rest at once) and it never runs under reduced motion.
+   */
+  breathe?: boolean;
 };
 
 export function storyMetaLine(
@@ -181,6 +196,7 @@ export const WeeklyStoryCard = forwardRef<View, WeeklyStoryCardProps>(function W
     palette,
     animate = false,
     onEntranceDone,
+    breathe = false,
   },
   ref,
 ) {
@@ -189,6 +205,26 @@ export const WeeklyStoryCard = forwardRef<View, WeeklyStoryCardProps>(function W
   const reducedMotion = useReducedMotion();
   const run = animate && !reducedMotion;
   const step = useDayStep(run, onEntranceDone);
+  const breathing = breathe && !reducedMotion;
+  const breath = useSharedValue(0);
+  useEffect(() => {
+    if (breathing) {
+      breath.value = withRepeat(
+        withTiming(1, { duration: BREATHE_HALF_MS, easing: Easing.inOut(Easing.sin) }),
+        -1,
+        true,
+      );
+    } else {
+      cancelAnimation(breath);
+      breath.value = 0;
+    }
+    return () => cancelAnimation(breath);
+  }, [breathing, breath]);
+  // Transform and opacity only, on a wrapper: the SVG itself never re-renders.
+  const glowStyle = useAnimatedStyle(() => ({
+    opacity: 1 - BREATHE_DIM * breath.value,
+    transform: [{ scale: 1 + BREATHE_SWELL * breath.value }],
+  }));
   // Settled, the number is the derived count, never a recount of the dots.
   const shown = step >= 7 ? daysActiveCount : daysActive.slice(0, step).filter(Boolean).length;
   return (
@@ -197,16 +233,18 @@ export const WeeklyStoryCard = forwardRef<View, WeeklyStoryCardProps>(function W
           stacked flat discs that read as hard rings on device (2026-09-18),
           and since 2026-09-20 it carries BOTH ends of the palette's gradient:
           the lead colour at its centre, the far end at its reach. */}
-      <Svg pointerEvents="none" style={StyleSheet.absoluteFill} width={STORY_CARD_WIDTH} height={STORY_CARD_HEIGHT}>
-        <Defs>
-          <RadialGradient id="storyGlow" cx="50%" cy="50%" r="50%">
-            <Stop offset="0" stopColor={tint} stopOpacity={0.24} />
-            <Stop offset="0.45" stopColor={blendTint(tint, tintEnd, 0.5)} stopOpacity={0.11} />
-            <Stop offset="1" stopColor={tintEnd} stopOpacity={0} />
-          </RadialGradient>
-        </Defs>
-        <Circle cx={STORY_CARD_WIDTH / 2} cy={STORY_CARD_HEIGHT / 2} r={290} fill="url(#storyGlow)" />
-      </Svg>
+      <Animated.View testID="story-glow" pointerEvents="none" style={[StyleSheet.absoluteFill, glowStyle]}>
+        <Svg pointerEvents="none" style={StyleSheet.absoluteFill} width={STORY_CARD_WIDTH} height={STORY_CARD_HEIGHT}>
+          <Defs>
+            <RadialGradient id="storyGlow" cx="50%" cy="50%" r="50%">
+              <Stop offset="0" stopColor={tint} stopOpacity={0.24} />
+              <Stop offset="0.45" stopColor={blendTint(tint, tintEnd, 0.5)} stopOpacity={0.11} />
+              <Stop offset="1" stopColor={tintEnd} stopOpacity={0} />
+            </RadialGradient>
+          </Defs>
+          <Circle cx={STORY_CARD_WIDTH / 2} cy={STORY_CARD_HEIGHT / 2} r={290} fill="url(#storyGlow)" />
+        </Svg>
+      </Animated.View>
 
       <View style={styles.header}>
         <CardText style={styles.wordmark}>Livra</CardText>

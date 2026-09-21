@@ -54,6 +54,13 @@ export type StoryShareControlsProps = {
   ready: boolean;
   /** After the OS share sheet has been handed the file. Analytics lives in the caller. */
   onShared: () => void;
+  /**
+   * The card moves (breathing glow), so the screen brings it to rest here and
+   * resolves once that frame is on glass. Awaited BEFORE the snapshot.
+   */
+  onBeforeCapture?: () => void | Promise<void>;
+  /** Always runs once the share attempt ends, failed or not. */
+  onAfterCapture?: () => void;
 };
 
 function withDeadline<T>(p: Promise<T>, ms: number, stage: string): Promise<T> {
@@ -81,6 +88,8 @@ export function StoryShareControls({
   canSign,
   ready,
   onShared,
+  onBeforeCapture,
+  onAfterCapture,
 }: StoryShareControlsProps) {
   const theme = useEffectiveTheme();
   const c = themedColors(theme);
@@ -91,8 +100,10 @@ export function StoryShareControls({
     if (busy || !ready) return;
     setBusy(true);
     setError(null);
-    let stage = 'capture';
+    let stage = 'settle';
     try {
+      await onBeforeCapture?.();
+      stage = 'capture';
       const uri = await withDeadline(
         generateShareCard(cardRef as React.RefObject<View>, EXPORT),
         STORY_CAPTURE_TIMEOUT_MS,
@@ -108,8 +119,9 @@ export function StoryShareControls({
       setError(STORY_SHARE_ERROR);
     } finally {
       setBusy(false);
+      onAfterCapture?.();
     }
-  }, [busy, ready, cardRef, onShared]);
+  }, [busy, ready, cardRef, onShared, onBeforeCapture, onAfterCapture]);
 
   const disabled = busy || !ready;
 
