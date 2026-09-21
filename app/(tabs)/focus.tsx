@@ -17,9 +17,7 @@ import { fonts, fontSize, spacing, radius, shadow, themedColors } from '../../th
 import { useEffectiveTheme, useUIStore } from '../../state/uiSlice';
 import { LivraHeader } from '../../components/ui/LivraHeader';
 import { MarkRow } from '../../components/ui/MarkRow';
-import { Breathing } from '../../components/ui/Breathing';
 import { Skeleton } from '../../components/ui/Skeleton';
-import { Plus } from 'phosphor-react-native';
 import { SectionLabel } from '../../components/ui/SectionLabel';
 import { SpeedDialFAB } from '../../components/ui/SpeedDialFAB';
 import { VoiceLine } from '../../components/ui/VoiceLine';
@@ -1047,9 +1045,6 @@ export default function FocusScreen() {
             accessibilityRole="button"
             accessibilityLabel={emptyCtaLabel}
           >
-            <Breathing>
-              <Plus size={20} color={c.inkMuted} weight="duotone" />
-            </Breathing>
             <Text style={[styles.emptyMarksText, { color: c.inkMid }]}>
               {emptyMarksLine}
             </Text>
