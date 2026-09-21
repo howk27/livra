@@ -24,3 +24,35 @@ describe('markRelevance', () => {
     expect(isMarkAllowedForGoal('cold-shower', new Set(['Discipline']))).toBe(true);
   });
 });
+
+// Founder 2026-09-21: "Run a 5K" suggested Swim and Cycling. Both need a pool or
+// a bike, so they may only appear when the goal itself names the sport. The
+// 2026-08-04 fix was a PROMPT rule on the AI path only; the local scorer was
+// never covered, and a prompt is not a guard.
+describe('isSportNamedByGoal (equipment sports are opt-in by name)', () => {
+  const { isSportNamedByGoal } = require('../../lib/markRelevance');
+
+  it('a running goal never names swim or cycling', () => {
+    for (const tokens of [['run', '5k'], ['run', 'first', '5k'], ['run', 'marathon'], ['get', 'fit']]) {
+      expect(isSportNamedByGoal('swim', tokens)).toBe(false);
+      expect(isSportNamedByGoal('cycling', tokens)).toBe(false);
+    }
+  });
+
+  it('the sport is allowed when the goal names it, in any common form', () => {
+    expect(isSportNamedByGoal('swim', ['swim', 'mile'])).toBe(true);
+    expect(isSportNamedByGoal('swim', ['swimming', 'lessons'])).toBe(true);
+    expect(isSportNamedByGoal('cycling', ['bike', 'work'])).toBe(true);
+    expect(isSportNamedByGoal('cycling', ['cycling', 'century'])).toBe(true);
+  });
+
+  it('a triathlon names all three', () => {
+    expect(isSportNamedByGoal('swim', ['complete', 'triathlon'])).toBe(true);
+    expect(isSportNamedByGoal('cycling', ['complete', 'triathlon'])).toBe(true);
+  });
+
+  it('marks with no equipment rule are never blocked', () => {
+    expect(isSportNamedByGoal('run', ['save', 'money'])).toBe(true);
+    expect(isSportNamedByGoal('sleep', [])).toBe(true);
+  });
+});
